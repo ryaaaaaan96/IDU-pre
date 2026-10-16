@@ -1,0 +1,14 @@
+identifier: idu_pre
+name: IDU-pre MV-IO GD32E505
+type: mcu
+arch: arm
+ram: 128
+flash: 512
+toolchain:
+  - zephyr
+  - gnuarmemb
+supported:
+  - gpio
+  - uart
+  - spi
+vendor: others

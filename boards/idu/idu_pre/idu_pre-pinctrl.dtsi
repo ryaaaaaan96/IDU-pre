@@ -1,0 +1,24 @@
+/* The E505 and E507 share these E50x AFIO pin/remap encodings. */
+#include <dt-bindings/pinctrl/gd32e507v(e-c)xx-pinctrl.h>
+
+&pinctrl {
+    debug_uart_default: debug-uart-default {
+        tx { pinmux = <USART0_TX_PA9_NORMP>; };
+        rx { pinmux = <USART0_RX_PA10_NORMP>; };
+    };
+    rs485_uart_default: rs485-uart-default {
+        tx { pinmux = <USART2_TX_PC10_PRMP>; };
+        rx { pinmux = <USART2_RX_PC11_PRMP>; };
+    };
+    flash_spi_default: flash-spi-default {
+        output { pinmux = <SPI1_SCK_PB13_OUT>, <SPI1_MOSI_PB15_OUT>; };
+        input { pinmux = <SPI1_MISO_PB14_INP>; };
+    };
+    analog_default: analog-default {
+        inputs {
+            pinmux = <ADC01_IN13_PC3>, <ADC01_IN0_PA0>, <ADC01_IN1_PA1>,
+                     <ADC01_IN2_PA2>, <ADC01_IN3_PA3>, <ADC01_IN4_PA4>,
+                     <ADC01_IN11_PC1>, <ADC01_IN12_PC2>;
+        };
+    };
+};

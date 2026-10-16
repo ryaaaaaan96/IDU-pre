@@ -1,0 +1,2 @@
+config BOARD_IDU_PRE
+    select SOC_GD32E505

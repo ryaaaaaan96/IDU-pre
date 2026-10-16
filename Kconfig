@@ -1,0 +1,20 @@
+mainmenu "IDU-pre"
+
+# First matching range wins; extend only the isolated legacy IAP profile.
+config MODBUS_BUFFER_SIZE
+    range 64 1100 if IDU_IAPV3
+
+source "Kconfig.zephyr"
+rsource "cfg/Kconfig"
+
+config IDU_PRE
+    bool
+    default y
+    select USE_GD32_ADC
+
+config IDU_ADC_AVERAGE_COUNT
+    int "Samples averaged per analog input"
+    default 10
+    range 1 64
+
+rsource "src/iap/Kconfig"

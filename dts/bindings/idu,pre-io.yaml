@@ -1,0 +1,21 @@
+description: IDU-pre direct digital inputs, address switches, and watchdog feed
+compatible: "idu,pre-io"
+include: base.yaml
+properties:
+  di-gpios:
+    type: phandle-array
+    required: true
+    description: Sixteen digital inputs in DI1 to DI16 order
+  address-gpios:
+    type: phandle-array
+    required: true
+    description: Four switches in most-significant to least-significant bit order
+  watchdog-gpios:
+    type: phandle-array
+    required: true
+  watchdog-feed-ms:
+    type: int
+    required: true
+  watchdog-health-ms:
+    type: int
+    required: true

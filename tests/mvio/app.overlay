@@ -1,0 +1,13 @@
+/ {
+    aliases {
+        idu-settings = &storage_partition;
+        idu-legacy-primary = &legacy_primary;
+        idu-legacy-backup = &legacy_backup;
+    };
+};
+&flash0 {
+    partitions {
+        legacy_primary: partition@100000 { reg = <0x100000 0x1000>; };
+        legacy_backup: partition@101000 { reg = <0x101000 0x1000>; };
+    };
+};

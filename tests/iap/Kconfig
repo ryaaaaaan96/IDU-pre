@@ -1,0 +1,11 @@
+mainmenu "IAPv3 native receiver tests"
+config MODBUS_BUFFER_SIZE
+    range 64 1100
+source "Kconfig.zephyr"
+# Native executable tests the production receiver without chain-loading it.
+config IDU_IAPV3
+    bool
+    default y
+config IDU_POINT_WORDS
+    int
+    default 16

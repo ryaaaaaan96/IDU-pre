@@ -1,0 +1,35 @@
+choice IDU_COLLECT_BACKEND
+    prompt "Acquisition Modbus transport"
+    default IDU_COLLECT_VIRTUAL
+
+config IDU_COLLECT_VIRTUAL
+    bool "Virtual Modbus ADU loopback (demo device)"
+    select MODBUS_RAW_ADU
+
+config IDU_COLLECT_RTU
+    bool "Physical Modbus RTU via idu-collect DT alias"
+    depends on MODBUS_SERIAL
+
+endchoice
+
+config MODBUS_NUMOF_RAW_ADU
+    default 2 if IDU_COLLECT_VIRTUAL
+
+config IDU_SAMPLE_PERIOD_MS
+    int "Acquisition period in milliseconds"
+    default 500
+    range 100 1000
+
+
+config IDU_AIDC_PROFILE
+    bool "Imported AIDC business tables with virtual UPP acquisition"
+    depends on IDU_COLLECT_VIRTUAL
+    help
+      Preserves original IDs, point types/defaults and register addresses.
+      Hardware-only product services remain explicitly unavailable.
+
+config IDU_AIDC_VIRTUAL_PERIOD_MS
+    int "Virtual UPP sampling period (not a decoded legacy cycle code)"
+    depends on IDU_AIDC_PROFILE
+    default 1000
+    range 100 60000

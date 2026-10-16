@@ -1,0 +1,169 @@
+{
+  "audit_date": "2026-10-14",
+  "method": "Comment-stripped designated initializer inventory; symbolic IDs are not macro-expanded; rows are configurations, not unique runtime points or compatibility percentages. No old firmware or closed library was executed.",
+  "roots": {
+    "aidc": "/home/ryan/Documents/AIDC_CODE/CODE",
+    "mv_io": "/home/ryan/Documents/io-interface-board",
+    "current": "/home/ryan/Documents/zephyrproject"
+  },
+  "counts": {
+    "process": 219,
+    "collect": 445,
+    "transmit": 107,
+    "range": 49
+  },
+  "tables": {
+    "g_arm_data_table": {
+      "kind": "process",
+      "entries": 178,
+      "distinct_unexpanded_sig_id_tokens": 172,
+      "duplicate_unexpanded_sig_id_tokens": {
+        "LOCAL_SIG_DSP_ON_LINE_NUM": 3,
+        "LOCAL_SIG_VERSION": 2,
+        "LOCAL_SIG_5378": 3,
+        "LOCAL_SIG_5487": 2
+      }
+    },
+    "g_dsp_data_table": {
+      "kind": "process",
+      "entries": 41,
+      "distinct_unexpanded_sig_id_tokens": 41,
+      "duplicate_unexpanded_sig_id_tokens": {}
+    },
+    "g_dsp_upp_collect_1": {
+      "kind": "collect",
+      "entries": 1,
+      "distinct_unexpanded_sig_id_tokens": 1,
+      "duplicate_unexpanded_sig_id_tokens": {}
+    },
+    "g_dsp_upp_collect_2": {
+      "kind": "collect",
+      "entries": 5,
+      "distinct_unexpanded_sig_id_tokens": 5,
+      "duplicate_unexpanded_sig_id_tokens": {}
+    },
+    "g_dsp_upp_collect_99": {
+      "kind": "collect",
+      "entries": 46,
+      "distinct_unexpanded_sig_id_tokens": 46,
+      "duplicate_unexpanded_sig_id_tokens": {}
+    },
+    "g_dsp_upp_collect_100": {
+      "kind": "collect",
+      "entries": 100,
+      "distinct_unexpanded_sig_id_tokens": 100,
+      "duplicate_unexpanded_sig_id_tokens": {}
+    },
+    "g_dsp_upp_collect_102": {
+      "kind": "collect",
+      "entries": 36,
+      "distinct_unexpanded_sig_id_tokens": 36,
+      "duplicate_unexpanded_sig_id_tokens": {}
+    },
+    "g_dsp_upp_collect_103": {
+      "kind": "collect",
+      "entries": 257,
+      "distinct_unexpanded_sig_id_tokens": 257,
+      "duplicate_unexpanded_sig_id_tokens": {}
+    },
+    "g_arm_transmit_table_t": {
+      "kind": "transmit",
+      "entries": 107,
+      "distinct_unexpanded_sig_id_tokens": 101,
+      "duplicate_unexpanded_sig_id_tokens": {
+        "LOCAL_SIG_DSP_ON_LINE_NUM": 3,
+        "LOCAL_SIG_VERSION": 2,
+        "LOCAL_SIG_5378": 3,
+        "LOCAL_SIG_5487": 2
+      }
+    },
+    "g_local_range_table": {
+      "kind": "range",
+      "entries": 12,
+      "distinct_unexpanded_sig_id_tokens": 12,
+      "duplicate_unexpanded_sig_id_tokens": {}
+    },
+    "g_dsp_range_table": {
+      "kind": "range",
+      "entries": 37,
+      "distinct_unexpanded_sig_id_tokens": 37,
+      "duplicate_unexpanded_sig_id_tokens": {}
+    }
+  },
+  "io_git_head": "a595b3b2d2e68f35051cac8672ff4f382d18401e",
+  "io_git_status": [
+    " M code/APP/Makefile",
+    " M code/APP/Project/APP/MainTask.c",
+    "?? code/APP/debug.sh",
+    "?? dvt/MV-IO_56002.01.02/"
+  ],
+  "sha256": {
+    "aidc": {
+      "app/cfg/equip/callback_fuction.c": "61aa9d78747fcd8e9815c304b84f775fdd63f768d64b7d64fa8d694ab87ab8d6",
+      "app/cfg/equip/dev_cfg.c": "0f912bedb27fbfe2bedf71e908ccae034b81434ad971ff0e7e50c2337b7fcd80",
+      "app/cfg/equip/range/signal_range.c": "be0f797877680bc38482160ac900d458e091d613e61fca0598f5bfeb69074c16",
+      "app/cfg/equip/table/collect.c": "a84dab4b25a1b541bc387da58f9b2963f1291301e5891720fdb841552ec28318",
+      "app/cfg/equip/table/process.c": "318d52187f5e5d82a153d848be58128bf4d848b2d86547ac06c94de1424a644a",
+      "app/cfg/equip/table/transmit.c": "b3678863c07a69daee9eea0f291b1bb99d68ce0c1c988995f21709ced17e1005",
+      "app/cfg/inc/aidc_local_config.h": "a81458dcdcbbd79a0b8b1bf07377713d0ecab893a88545db519dc4a7a1966484",
+      "app/cfg/inc/sunshine_mini.h": "52fd339696da45c297fbbfe48a2321c6c335e85d57d1647bc721721acb49e4d7",
+      "app/main.c": "956e986abc466a780e11154bef5cbf085ad7de55fc91946189e68ca96a217f18",
+      "platform/inc/arc_byte_order.h": "757f613a57ece1cef805e80a2f4004e666ce3d9e93540853ca6fc31917d2bb6e",
+      "platform/inc/arc_public.h": "e51cda1ec9beffb1a68e7a0479f84bf843a3e8235a08340c119a2401c0bca893",
+      "platform/inc/collect_lib.h": "8bc3b2f38759c40712539103f57f594fab2fe3cc20914380a333b0d4ddb54760",
+      "platform/inc/data_process.h": "b27e281540031a08ddea4d0b1e1853bf5a061f517e56dfa8070060fa7e84c01d",
+      "platform/inc/platform_callback.h": "2876cccdc059fc9125b134409f6896c77dda83486b684b9adf4a223e4c02fe4c",
+      "platform/inc/transmit_lib.h": "c4c32449eb335c95128a119f956107d00479ff2ad6e57447cd9af9104b6f3bad",
+      "platform/libs/plateform.lib": "4762b9a9db877edb73cba48c078c80d379a262bf42e40ec2a96488bdc72cae43",
+      "product/APP_H745.uvprojx": "8cdedc30cf1e0b32527e52a8780feff150594053de4a074e6835b7d750d661e8",
+      "product/build/keil/List/ARM_APP.map": "8d4ff2dc07af0f1ec515a48d12167a8cdc780db84d80796b4a23f10400120970",
+      "product/build/keil/Obj/ARM_APP.axf": "5abe5202bf11fc8c28526b4c15e9b2e6f175429ff756dd4e27f181fc75cb8642",
+      "sunshine_mini_c/platform/libs/plateform.lib": "fc8a3c5ec49733aa6561b61ac0d209b8491f52eb824f231dc649bbdf5161cf1c"
+    },
+    "mv_io": {
+      "code/APP/Project/APP/MainTask.c": "96ddff5e4eadb004d8108d3d8dea4d766de94a98563a32faadb78da9c01fb07a",
+      "code/APP/Project/APP/include/device_config.h": "817fa21759255c9734ceee1f2c7b16e554bbbc09de7fb4ff1e273eb9ec5240e4",
+      "code/APP/Project/APP/include/mvsfunction.h": "10344aff06aa274c4643b6096887d82df2fadd88cada9ec6b38d0adef542d3be",
+      "code/APP/Project/Drivers/Adc.c": "cf97e4ffdb8b2f022b91f81976fcad398fa3a407bb91a8db18ac742e1db54739",
+      "code/APP/Project/Drivers/Sci.c": "baadad87d9c51ac99ac2d6605b4d2a54b269e42f8235c13524bc34fb615743c1",
+      "code/APP/Project/FreeRTOS/src/OS.c": "70f5d83366029fa9f3830ec0ae55159c77705ab7e39ac4db1404567dc140dbe0",
+      "code/APP/Project/Peripheral/AdcDriver.c": "22141ad550d182a0d2009dbd6c675f4e05f33edddab408a0162ba5f0e63cfbe0",
+      "code/APP/Project/Peripheral/W25Qx.c": "f608c515f2fb581ab27955b11a118d8487d8307ab339eaba5bc6132069cf1545",
+      "code/APP/Project/Peripheral/include/AdcDriver.h": "8eb4cb07d727d562aabec3a36228d3adbf224aa2c3459be423491b1d323134c0",
+      "code/APP/Project/Peripheral/wDog.c": "ef650a8e7535de0f49f79b77f082b847e8ebc2fcfe4b79a140257cab7d94f193",
+      "code/APP/Project/Protocol/Modbus.c": "0bfadd5adaed465502a0e3f628d85f35da3ff0210f7365206f788f62674f4e75",
+      "code/APP/Project/Protocol/ModbusCallBackFun.c": "275409527cf4b77da495d8947932e7a31d81ea0db997cd51c916c03691987692",
+      "code/APP/Project/Protocol/include/Modbus.h": "329638e041b520fdb03ac84169f05d4aeaf26e2a1de2a472849ed799f7ef609c"
+    },
+    "current": {
+      "applications/IDU-pre/boards/idu/idu_pre/idu_pre.dts": "8120128cceb7d82ed456836df5cca48a5a9b25dad16dcb905b985b86aee0aff7",
+      "applications/IDU-pre/cfg/equip/dev_cfg.c": "43d91e755cbf5e000f39cc692c399a75225eb3b7da01e48e6072f3c8c28bc053",
+      "applications/IDU-pre/cfg/equip/table/collect.c": "24a7da4f5f62bbe8c5f2ebc5526f9a85902f391b64254ff10f02962bb39f9bb2",
+      "applications/IDU-pre/cfg/equip/table/process.c": "423ba2f75a455489f3222fd4e20b5264b616cfbb92266d931c165947c595a2cc",
+      "applications/IDU-pre/cfg/equip/table/transmit.c": "79d85b1b3ca4e7ab850e3ec31298944a9d9739f062eaf6dddb3f49f372bfa1ce",
+      "applications/IDU-pre/src/analog.c": "6d2c6421d6f899f8a8168af19305de12e40c839a67c8c891848c9ae27ee7360e",
+      "applications/IDU-pre/src/equip.c": "7dd76f0abccb32f94bcaf930091f2a2c8ecc4b0181bb3613121c408b785b0643",
+      "applications/IDU-pre/src/health.c": "72d4732ab9387b59ede63bb5334002973fa17970812c75a91ddd53d46912d1cd",
+      "applications/IDU-pre/src/io.c": "9e2450d8e3ee30d7da27f0da02d06b5b768dd02a7924f28d4edfa2b44be4b74f",
+      "applications/IDU-pre/src/main.c": "845ffe89c33af22d6b03b64bbe872ad69f0d97ea45f8433f50edfe4fec9d8817",
+      "applications/IDU-pre/src/parameter_protocol.c": "7070718b9067feedbd4fb26f953556a6d819132e825074b199b5c557e6e43891",
+      "applications/IDU-pre/src/ports/acquisition.c": "93196aee4b4de3a56e19f05bff4e9e07471d2a7afacb1a434d284c4d5525b2d6",
+      "applications/IDU-pre/src/ports/virtual.c": "62d3745bf82730a2a651317c476635b686444ae7cc5bb81ec4de93cb1c450d05",
+      "applications/IDU-pre/src/protocol.c": "2191f139db10ac3fe3f7786e531d013fca8935a57dbbd643f1a68141a39dcae8",
+      "applications/IDU-pre/src/registers.c": "d14d0fc0b8e816d8156708bfecb4157c5af98f8743a6e6c92343bfaf99c65ef4",
+      "applications/IDU-pre/tests/legacy_registers.c": "4bde10022c191d0286b37f422a1bbb22dd479f7b422a252f5efe61eef0b8248a",
+      "applications/common/idu_points/Kconfig": "fad65d535630d84b158a8e255a6e2503ff4834ffeb88f2ba6c2fa7d529824b16",
+      "applications/common/idu_points/compat/modbus_hooks.h": "8f04793519134a1de562d31f2fa46fb8347423ccc647bf514d596d2d4bbed14f",
+      "applications/common/idu_points/compat/prepare_modbus.py": "748cfbf1299dac48ca5d6b854ca982e332c466ea121681e2da7b6155bd2a99a8",
+      "applications/common/idu_points/include/idu/modbus_adapter.h": "518e08c86ff263f750542c43ce2095ced515faeb249a2d88665cc395400248bc",
+      "applications/common/idu_points/include/idu/params.h": "d80c51b485b90cc74e070640df7c0c9447a45fca0249f8836aaff371dd1d785d",
+      "applications/common/idu_points/include/idu/points.h": "da9d6c188d12bdb3a0a0bad9f3bd6065684aac0e0c4f9e84aacdcbe395f13b57",
+      "applications/common/idu_points/src/collect.c": "58541852d0c8caf217eba4473c4643d34530c40af6e1d90f59fce8771c325efd",
+      "applications/common/idu_points/src/forward.c": "c409bef843cc83d979c86b231824f945cea2a082b86fab74b027024560d34085",
+      "applications/common/idu_points/src/modbus_adapter.c": "b207745fe9c36f412c1d8484d086fbdc903ea6a0de2c2c61e0427727b4267559",
+      "applications/common/idu_points/src/params.c": "f163435da7a1d113fb6dcfa32ebc6c1b82ca7a3ccef24ce59075fef019f7beba",
+      "applications/common/idu_points/src/points.c": "2f6f4af29156d20c29128072afcbadb36933f269b1cb6baa1f91b1bb97fc8845"
+    },
+    "inventory": "5a4ab702eafd9358c66308a1c78bca0d93d84ca962333d6cce56a9444da08e7c"
+  }
+}

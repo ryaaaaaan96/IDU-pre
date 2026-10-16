@@ -1,0 +1,25 @@
+# Generated build trees and test output
+build/
+build-*/
+twister-out*/
+
+# Local Python environments and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local credentials / signing material (keep a separate private backup)
+.env
+.env.*
+!.env.example
+keys/
+*-private.pem
+*-dev.pem
+
+# Editor / OS temporary files
+*.swp
+*.swo
+*~
+.DS_Store

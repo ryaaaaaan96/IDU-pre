@@ -1,0 +1,198 @@
+/dts-v1/;
+
+#include <mem.h>
+#include <arm/gd/gd32e50x/gd32e50x.dtsi>
+#include "idu_pre-pinctrl.dtsi"
+
+/ {
+    model = "IDU-pre MV-IO GD32E505";
+    compatible = "idu,pre";
+
+    hxtal: hxtal-clock {
+        compatible = "fixed-clock";
+        #clock-cells = <0>;
+        clock-frequency = <20000000>; /* Active oscillator into OSC_IN; bypass required. */
+    };
+
+    chosen {
+        zephyr,sram = &sram0;
+        zephyr,flash = &flash0;
+        zephyr,flash-controller = &fmc;
+        zephyr,console = &usart0;
+        zephyr,code-partition = &app_partition;
+    };
+
+    aliases {
+        idu-settings = &idu_settings;
+        idu-legacy-primary = &params_primary;
+        idu-legacy-backup = &params_backup;
+        idu-aidc-settings = &idu_aidc_settings;
+        led0 = &run_led;
+        idu-forward = &modbus0;
+        /* idu-collect will reference a second physical Modbus node when fitted.
+         * The current virtual link is software-only and has no fake UART pins.
+         */
+    };
+
+    leds {
+        compatible = "gpio-leds";
+        run_led: run-led { gpios = <&gpioa 8 GPIO_ACTIVE_LOW>; };
+    };
+
+    idu_io: idu-io {
+        compatible = "idu,pre-io";
+        di-gpios = <&gpioc 6 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,
+                   <&gpioc 7 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,
+                   <&gpioc 8 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,
+                   <&gpioc 9 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,
+                   <&gpiob 1 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,
+                   <&gpiob 2 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,
+                   <&gpiob 10 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,
+                   <&gpiob 11 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,
+                   <&gpioe 1 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,
+                   <&gpiob 8 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,
+                   <&gpiob 9 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,
+                   <&gpioe 0 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,
+                   <&gpioe 2 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,
+                   <&gpioe 3 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,
+                   <&gpioe 4 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,
+                   <&gpioe 5 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+        address-gpios = <&gpiod 8 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,
+                        <&gpiod 9 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,
+                        <&gpiod 10 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,
+                        <&gpiod 11 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+        watchdog-gpios = <&gpioc 13 GPIO_ACTIVE_HIGH>;
+        watchdog-feed-ms = <10>;
+        watchdog-health-ms = <1500>;
+    };
+
+    /* Old source contains TCA9535 helpers, but current MV-IO reads direct DI.
+     * Leave this bus disabled until its presence on this PCB is confirmed.
+     */
+    expansion_i2c: expansion-i2c {
+        compatible = "i2c-gpio";
+        status = "disabled";
+        #address-cells = <1>;
+        #size-cells = <0>;
+        scl-gpios = <&gpioc 14 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+        sda-gpios = <&gpioc 15 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+        clock-frequency = <100000>;
+        expander: gpio@24 {
+            compatible = "ti,tca9535";
+            reg = <0x24>; /* Legacy 0x48 is the eight-bit write address. */
+            gpio-controller;
+            #gpio-cells = <2>;
+        };
+    };
+
+    soc {
+        idu_analog: adc@40012400 {
+            compatible = "idu,gd32e50x-analog";
+            reg = <0x40012400 0x400>;
+            channel-order = <13 0 1 2 3 4 11 12>;
+            vref-mv = <3300>;
+            pinctrl-0 = <&analog_default>;
+            pinctrl-names = "default";
+            status = "okay";
+        };
+        spi1: spi@40003800 {
+            compatible = "gd,gd32-spi";
+            reg = <0x40003800 0x400>;
+            interrupts = <36 0>;
+            clocks = <&cctl GD32_CLOCK_SPI1>;
+            resets = <&rctl GD32_RESET_SPI1>;
+            #address-cells = <1>;
+            #size-cells = <0>;
+            pinctrl-0 = <&flash_spi_default>;
+            pinctrl-names = "default";
+            cs-gpios = <&gpiob 12 GPIO_ACTIVE_LOW>;
+            status = "okay";
+            external_flash: flash@0 {
+                compatible = "jedec,spi-nor";
+                reg = <0>;
+                spi-max-frequency = <10000000>;
+                spi-cpol;
+                spi-cpha;
+                size = <33554432>; /* W25Q32: 32 Mbit, check fitted part. */
+                partitions {
+                    compatible = "fixed-partitions";
+                    #address-cells = <1>;
+                    #size-cells = <1>;
+                    params_primary: partition@0 {
+                        label = "legacy-params-primary";
+                        reg = <0x0 0x1000>;
+                        read-only;
+                    };
+                    params_backup: partition@1000 {
+                        label = "legacy-params-backup";
+                        reg = <0x1000 0x1000>;
+                        read-only;
+                    };
+                    /* Independent Zephyr NVS; preserve both legacy parameter blocks. */
+                    idu_settings: partition@10000 {
+                        label = "idu-settings";
+                        reg = <0x10000 0x4000>;
+                    };
+                    /* Optional AIDC profile has a different parameter schema. */
+                    idu_aidc_settings: partition@14000 {
+                        label = "idu-aidc-settings";
+                        reg = <0x14000 0x4000>;
+                    };
+                    upgrade_config: partition@200000 {
+                        label = "legacy-upgrade-config";
+                        reg = <0x200000 0x100000>;
+                        read-only;
+                    };
+                    upgrade_image: partition@300000 {
+                        label = "legacy-upgrade-image";
+                        reg = <0x300000 0x100000>;
+                        read-only;
+                    };
+                };
+            };
+        };
+    };
+};
+
+&flash0 {
+    reg = <0x08000000 DT_SIZE_K(512)>;
+    write-block-size = <4>; /* E505 FMC supports word programming. */
+    erase-block-size = <8192>; /* GD32E50x user manual, section 2.3.1. */
+    partitions {
+        compatible = "fixed-partitions";
+        #address-cells = <1>;
+        #size-cells = <1>;
+        boot_partition: partition@0 {
+            label = "legacy-boot";
+            reg = <0x0 0x4000>;
+            read-only;
+        };
+        app_partition: partition@4000 {
+            label = "application";
+            reg = <0x4000 0x7c000>;
+        };
+    };
+};
+&sram0 { reg = <0x20000000 DT_SIZE_K(128)>; };
+&gpioa { status = "okay"; };
+&gpiob { status = "okay"; };
+&gpioc { status = "okay"; };
+&gpiod { status = "okay"; };
+&gpioe { status = "okay"; };
+&usart0 {
+    status = "okay";
+    current-speed = <115200>;
+    pinctrl-0 = <&debug_uart_default>;
+    pinctrl-names = "default";
+};
+&usart2 {
+    status = "okay";
+    current-speed = <115200>;
+    pinctrl-0 = <&rs485_uart_default>;
+    pinctrl-names = "default";
+    modbus0: modbus {
+        compatible = "zephyr,modbus-serial";
+        de-gpios = <&gpioa 15 GPIO_ACTIVE_HIGH>;
+        status = "okay";
+    };
+};

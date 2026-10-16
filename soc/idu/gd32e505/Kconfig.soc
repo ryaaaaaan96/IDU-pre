@@ -1,0 +1,6 @@
+config SOC_GD32E505
+    bool
+    select SOC_SERIES_GD32E50X
+
+config SOC
+    default "gd32e505" if SOC_GD32E505

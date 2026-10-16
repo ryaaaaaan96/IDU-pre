@@ -1,0 +1,6 @@
+board:
+  name: idu_pre
+  full_name: IDU-pre MV-IO GD32E505
+  vendor: others
+  socs:
+    - name: gd32e505
