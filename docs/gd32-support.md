@@ -83,3 +83,60 @@ Flash 还有一处具体兼容原因：当前 [上游 `flash_gd32_v1.c`](https:/
 | 厂商下游 HAL | 与上述分支配套的 HAL，不保证可独立替换本地固定版本 | [hal_gigadevice_zephyr](https://github.com/GD32-MCU-IOT/hal_gigadevice_zephyr) |
 
 本地复核命令：`git -C zephyr describe --tags --always`、`git -C modules/hal/gigadevice rev-parse HEAD`，并检查 `manifest/west.yml`、`zephyr/west.yml`、`zephyr/soc/gd/gd32/gd32e50x/`。本报告仅新增文档；没有进行依赖升级、修改 SoC/ADC，或声称新的实板验证已经完成。
+
+## Issue、PR 与版本追踪
+
+2026-10-19 补充检查了官方 GitHub 的 issue/PR、提交、审查评论及各版本源码。
+**E505 曾被明确讨论，但没有找到完整 E505 SoC/DTS 移植已经合入的证据。**
+不能把共用 HAL、系列名称、开放提案或未合入 PR 当成某个版本可直接支持本板。
+下表记录日期采用 GitHub UTC 日期。
+
+| 官方记录 | 日期 / 状态 | 对 E505 的实际含义 |
+| --- | --- | --- |
+| [PR #38661 的审查讨论](https://github.com/zephyrproject-rtos/zephyr/pull/38661#discussion_r736515708) | 2021-10-26 评论 | 列举 E503/E505/E507 共用 E50X HAL，讨论 `SOC_SERIES` 命名；没有交付 E505 SoC |
+| [HAL PR #22](https://github.com/zephyrproject-rtos/hal_gigadevice/pull/22) | 2022-08-11 合入 | 加入 E50x HAL 和 E507X 引脚配置；HAL 支持范围宽于 Zephyr SoC 集成 |
+| [Zephyr PR #48663](https://github.com/zephyrproject-rtos/zephyr/pull/48663) | 2022-08-12 合入 | E50x 初始支持实际新增 `SOC_GD32E507`、E507 DTS 和 E507V-START |
+| [Zephyr PR #49547](https://github.com/zephyrproject-rtos/zephyr/pull/49547) | 2022-08-31 合入 | 增加 E507Z-EVAL，仍不是 E505 |
+| [ADC PR #42215](https://github.com/zephyrproject-rtos/zephyr/pull/42215) | 2022-07-04 合入 | 引入 GD32 ADC，测试 F350/F450/VF103；未提供 E50x ADC DTS 集成 |
+| [时钟 PR #49880](https://github.com/zephyrproject-rtos/zephyr/pull/49880) | 2022-09-06 合入 | 明确管理外设时钟，不配置 PLL 或 SYS_CK；不能替代本板早期时钟初始化 |
+| [时钟 PR #41855](https://github.com/zephyrproject-rtos/zephyr/pull/41855) | 2022-09-08 关闭，未合入 | 早期时钟驱动方案，不是某个发行版已有能力 |
+| [HXTAL PR #111496](https://github.com/zephyrproject-rtos/zephyr/pull/111496) | 2026-08-08 合入 | 改进 GD32F4xx 的 8 MHz 输入 / 168 MHz 配置，不适用于 E505 的 20 MHz bypass |
+| [厂商维护提案 #111834](https://github.com/zephyrproject-rtos/zephyr/issues/111834) | 2026-06-23 创建，当前 Open | 兆易创新团队提出上游贡献与长期维护；未承诺 E505 发布版本 |
+
+初始 [SoC 提交 `ffc90592f8b`](https://github.com/zephyrproject-rtos/zephyr/commit/ffc90592f8ba9312e5f5d4cb8c7befe9966423a2)
+的说明明确限定当时仅支持 507；配套 [DTS 提交 `13a071ea74d`](https://github.com/zephyrproject-rtos/zephyr/commit/13a071ea74d3a57b3191365ee86234e12fc69354)
+也只新增 E507X。因此 E50x 的 PR 标题不是全系列支持承诺。
+
+维护者在 #111834 的 [2026-07-01 评论](https://github.com/zephyrproject-rtos/zephyr/issues/111834#issuecomment-4849407825)
+中进一步指出，GD32 系统时钟初始化依赖 HAL `SystemInit()`，尚不能按 Zephyr
+DeviceTree 方式配置，需要改进统一抽象。[2026-10-18 的后续评论](https://github.com/zephyrproject-rtos/zephyr/issues/111834#issuecomment-6251813610)
+仍在询问厂商维护者参与，没有宣布 E505 完成集成。
+
+ADC 的 [2022-05-15 审查评论](https://github.com/zephyrproject-rtos/zephyr/pull/42215#discussion_r873123172)
+确实将 E50x 列入中断布局比较；这是设计参考，不能代替实际驱动分支和 DTS。
+本次没有找到完成 E505/E50x ADC 集成的独立官方 issue 或已合入 PR。
+
+**换版本的实际结果。** 使用 `git show` / `git grep` 核对以下上游标签的
+SoC Kconfig、设备树、板定义和 HAL 接入，不切换工作区 checkout；厂商标签
+和分支另用官方源码核查。
+
+| 候选版本 | E50x SoC 登记 | 能否直接获得 E505 支持 |
+| --- | --- | --- |
+| 上游 3.2.0、3.3.0、3.6.0 | E507 | 否 |
+| 上游 [3.7.0](https://github.com/zephyrproject-rtos/zephyr/blob/v3.7.0/soc/gd/gd32/soc.yml)、[3.7.2 LTS](https://github.com/zephyrproject-rtos/zephyr/blob/v3.7.2/soc/gd/gd32/soc.yml) | E507 | 否，回退 LTS 不会补出 E505 |
+| 上游 4.0.0、4.1.0、4.2.2、4.3.1、[4.4.2](https://github.com/zephyrproject-rtos/zephyr/blob/v4.4.2/soc/gd/gd32/soc.yml) | E507 | 否；本项目已固定 4.4.2 |
+| 上游 [4.5.0-rc2](https://github.com/zephyrproject-rtos/zephyr/blob/v4.5.0-rc2/soc/gd/gd32/soc.yml)、本次 main `a915b2f1267` | E507 | 否，候选版本和开发分支也未补齐 |
+| 厂商 [v4.3.0_gd32.1](https://github.com/GD32-MCU-IOT/gd32_zephyr/blob/v4.3.0_gd32.1/soc/gd/gd32/gd32e50x/Kconfig.soc)、[v4.4.0_gd32.1](https://github.com/GD32-MCU-IOT/gd32_zephyr/blob/v4.4.0_gd32.1/soc/gd/gd32/gd32e50x/Kconfig.soc) | E507 | 否 |
+| 厂商 main `9a6008df`，`VERSION=4.4.99` | E507、E508 | 否，新增的是 E508 |
+
+截至本次核查，官方 [latest release](https://github.com/zephyrproject-rtos/zephyr/releases/tag/v4.4.2)
+仍为 4.4.2。未发现“只改 West revision 就能删除 E505 适配”的官方版本。
+当前 `transmit/compat` 还对 Zephyr 4.4.2 的 Modbus 源码校验固定哈希；更换版本
+需同时审核该适配、MCUboot、Flash 和驱动行为。对于解决 E505 支持这一目的，
+继续使用现有固定版本、维护最小本地适配更合适；若准备贡献上游，可沿 #111834
+沟通 E505 SoC/DTS 与时钟/ADC 的具体缺口。
+
+检索边界：精确 `GD32E505` 搜索未命中专门的移植 issue/PR 或提交，扩大为
+`E505` 后找到上述 HAL 命名讨论；厂商两个仓库的 issue/PR 与提交搜索也未命中
+E505。以上不覆盖私有分支或未公开计划，不应表述为“从来无人提过 E505”。
+本次没有切换依赖、发布 issue 或验证其他版本的实板运行。
