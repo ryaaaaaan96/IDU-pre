@@ -13,13 +13,13 @@ import argparse, ast, collections, hashlib, json, operator, re
 
 CONFIG_DIR = Path(__file__).resolve().parents[1] / 'src/cfg'
 TABLE_FILES = {
-    'points': 'process.c',
-    'transmit': 'transmit.c',
-    'models': 'point_metadata.c',
-    'handlers': 'point_metadata.c',
-    'fields': 'collect.c',
-    'collect': 'collect.c',
-    'devices': 'device_config.c',
+    'points': 'tables/process.c',
+    'transmit': 'tables/transmit.c',
+    'models': 'tables/point_metadata.c',
+    'handlers': 'tables/point_metadata.c',
+    'fields': 'tables/collect.c',
+    'collect': 'tables/collect.c',
+    'devices': 'devices/device_config.c',
 }
 
 
@@ -44,11 +44,17 @@ def replace_imported_tables(text, tables, filename):
     return text
 
 
-def write_tables(output, tables, symbols, metadata, template_dir=None):
+def write_tables(output, tables, symbols, metadata, template_dir=None, report_path=None):
     """Prepare every C file before writing; missing files use repository templates."""
     if set(tables) != set(TABLE_FILES):
         raise ValueError('Incomplete imported table set')
+    output = Path(output)
     template_dir = CONFIG_DIR if template_dir is None else Path(template_dir)
+    if report_path is None:
+        report_path = (CONFIG_DIR.parents[1] / 'docs/point-table-import.json'
+                       if output.resolve() == CONFIG_DIR.resolve()
+                       else output / 'migration.json')
+    report_path = Path(report_path)
     grouped = collections.defaultdict(dict)
     for name, filename in TABLE_FILES.items():
         grouped[filename][name] = tables[name]
@@ -59,8 +65,10 @@ def write_tables(output, tables, symbols, metadata, template_dir=None):
         # Decode bytes directly so existing CRLF outside the regions is retained.
         original = source.read_bytes().decode('utf-8')
         prepared[target] = replace_imported_tables(original, regions, filename)
-    prepared[output / 'generated/symbols.h'] = symbols
-    prepared[output / 'generated/migration.json'] = json.dumps(metadata, ensure_ascii=False, indent=2) + '\n'
+    prepared[output / 'tables/imported_signals.h'] = symbols
+    if report_path.resolve() in {target.resolve() for target in prepared}:
+        raise ValueError(f'Report path conflicts with table output: {report_path}')
+    prepared[report_path] = json.dumps(metadata, ensure_ascii=False, indent=2) + '\n'
     for target, content in prepared.items():
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(content.encode('utf-8'))
@@ -134,7 +142,7 @@ class Symbols:
         return walk(tree)
 
 
-def generate(root, output):
+def generate(root, output, report_path=None):
     source_paths = ['platform/inc/pub_sig_def.h','platform/inc/data_process.h','platform/inc/arc_public.h',
                     'platform/inc/arc_byte_order.h','platform/inc/port.h','platform/inc/local_equip.h',
                     'app/globalfunction.h','app/cfg/inc/signal_id_map.h','app/cfg/inc/dev_cfg.h',
@@ -249,7 +257,7 @@ def generate(root, output):
               'process_descriptors':descriptor,'all_upp_fields':all_models,'transmit':mapping,
               'unresolved_mappings':unresolved,'type_width_mismatches':type_mismatches,'point_count':len(cfg),'parameter_count':sum(r['parameter'] for r in descriptor),'model_poll_count':len(polls)*8,
               'scope':'UPP fields retain original model offsets/cycle codes. Virtual backend timing is an explicit test setting, not a decoded legacy scheduler.'}
-    write_tables(output, generated, generated_symbols, metadata)
+    write_tables(output, generated, generated_symbols, metadata, report_path=report_path)
     print({k:metadata[k] for k in ['point_count','parameter_count','model_poll_count']},'maps',len(mapping),'duplicates',len(duplicates))
 
 
@@ -258,4 +266,6 @@ if __name__=='__main__':
     parser.add_argument('--source',type=Path,required=True,help='Path to the reference AIDC CODE checkout; only needed to regenerate tables')
     parser.add_argument('--output',type=Path,default=CONFIG_DIR,
                         help='Configuration directory containing marked C tables (default: src/cfg); missing files use repository templates')
-    args=parser.parse_args();generate(args.source,args.output)
+    parser.add_argument('--report',type=Path,
+                        help='Import report path (default: docs/point-table-import.json for repository output, otherwise OUTPUT/migration.json)')
+    args=parser.parse_args();generate(args.source,args.output,args.report)

@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest import mock
 
 
 spec = importlib.util.spec_from_file_location(
@@ -30,53 +31,56 @@ class ImportTablesTest(unittest.TestCase):
         self.templates.mkdir()
         self.output = self.root / "output"
         self.contents = {
-            "process.c": "manual points before\n" + region("points") + "manual points after\n",
-            "transmit.c": "manual mapping\n" + region("transmit"),
+            "tables/process.c": "manual points before\n" + region("points") + "manual points after\n",
+            "tables/transmit.c": "manual mapping\n" + region("transmit"),
             # Deliberately different from the generator's mapping order.
-            "point_metadata.c": region("handlers") + "manual between\n" + region("models"),
-            "collect.c": region("fields") + "manual polls\n" + region("collect"),
-            "device_config.c": "manual device\n" + region("devices"),
+            "tables/point_metadata.c": region("handlers") + "manual between\n" + region("models"),
+            "tables/collect.c": region("fields") + "manual polls\n" + region("collect"),
+            "devices/device_config.c": "manual device\n" + region("devices"),
         }
         for filename, content in self.contents.items():
-            (self.templates / filename).write_text(content)
+            target = self.templates / filename
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content)
         self.rows = {name: f"new {name} rows\n" for name in importer.TABLE_FILES}
         self.symbols = "#define EXAMPLE_SIGNAL 42\n"
         self.metadata = {"source_root": "/reference", "point_count": 7}
 
-    def write(self):
+    def write(self, report_path=None):
         importer.write_tables(self.output, self.rows, self.symbols, self.metadata,
-                              template_dir=self.templates)
+                              template_dir=self.templates, report_path=report_path)
 
     def test_empty_destination_uses_templates_and_updates_multiple_regions(self):
         self.write()
         expected = (region("handlers", self.rows["handlers"]) + "manual between\n" +
                     region("models", self.rows["models"]))
-        self.assertEqual((self.output / "point_metadata.c").read_text(), expected)
+        self.assertEqual((self.output / "tables/point_metadata.c").read_text(), expected)
         expected = (region("fields", self.rows["fields"]) + "manual polls\n" +
                     region("collect", self.rows["collect"]))
-        self.assertEqual((self.output / "collect.c").read_text(), expected)
-        self.assertEqual((self.output / "generated/symbols.h").read_text(), self.symbols)
-        self.assertEqual(json.loads((self.output / "generated/migration.json").read_text()),
+        self.assertEqual((self.output / "tables/collect.c").read_text(), expected)
+        self.assertEqual((self.output / "tables/imported_signals.h").read_text(), self.symbols)
+        self.assertEqual(json.loads((self.output / "migration.json").read_text()),
                          self.metadata)
+        self.assertFalse((self.output / "generated").exists())
         self.assertEqual(list(self.output.rglob("*.inc")), [])
         for filename, content in self.contents.items():
             self.assertEqual((self.templates / filename).read_text(), content)
 
     def test_existing_manual_content_is_preserved_and_reimport_is_stable(self):
-        self.output.mkdir()
+        (self.output / "tables").mkdir(parents=True)
         manual = ("// custom CRLF prefix\r\n" + region("points") +
                   "// custom CRLF suffix\r\n")
-        (self.output / "process.c").write_bytes(manual.encode())
+        (self.output / "tables/process.c").write_bytes(manual.encode())
         self.write()
         expected = manual.replace("old rows\n", self.rows["points"])
-        self.assertEqual((self.output / "process.c").read_bytes(), expected.encode())
+        self.assertEqual((self.output / "tables/process.c").read_bytes(), expected.encode())
         before = snapshot(self.output)
         self.write()
         self.assertEqual(snapshot(self.output), before)
 
     def test_missing_marker_in_last_destination_does_not_write_any_files(self):
         self.write()
-        target = self.output / "device_config.c"
+        target = self.output / "devices/device_config.c"
         target.write_text(target.read_text().replace("/* END IMPORTED TABLE: devices */", ""))
         before = snapshot(self.output)
         self.rows = {name: "changed rows\n" for name in importer.TABLE_FILES}
@@ -93,7 +97,7 @@ class ImportTablesTest(unittest.TestCase):
         ]
         for content in invalid:
             with self.subTest(content=content):
-                (self.templates / "device_config.c").write_text(content)
+                (self.templates / "devices/device_config.c").write_text(content)
                 with self.assertRaises(ValueError):
                     self.write()
                 self.assertFalse(self.output.exists())
@@ -103,16 +107,57 @@ class ImportTablesTest(unittest.TestCase):
             with self.subTest(end_order=end_order):
                 content = "/* BEGIN IMPORTED TABLE: fields */\n/* BEGIN IMPORTED TABLE: collect */\n"
                 content += "".join(f"/* END IMPORTED TABLE: {name} */\n" for name in end_order)
-                (self.templates / "collect.c").write_text(content)
+                (self.templates / "tables/collect.c").write_text(content)
                 with self.assertRaisesRegex(ValueError, "overlap"):
                     self.write()
                 self.assertFalse(self.output.exists())
 
     def test_missing_template_does_not_create_partial_destination(self):
-        (self.templates / "device_config.c").unlink()
+        (self.templates / "devices/device_config.c").unlink()
         with self.assertRaises(FileNotFoundError):
             self.write()
         self.assertFalse(self.output.exists())
+
+    def test_repository_output_writes_report_to_project_docs(self):
+        project = self.root / "project"
+        self.output = project / "src/cfg"
+        with mock.patch.object(importer, "CONFIG_DIR", self.output):
+            self.write()
+        report = project / "docs/point-table-import.json"
+        self.assertEqual(json.loads(report.read_text()), self.metadata)
+        self.assertFalse((self.output / "migration.json").exists())
+        self.assertFalse((self.output / "generated").exists())
+
+    def test_custom_report_overrides_repository_default(self):
+        project = self.root / "project"
+        self.output = project / "src/cfg"
+        report = self.root / "custom/report.json"
+        with mock.patch.object(importer, "CONFIG_DIR", self.output):
+            self.write(report_path=report)
+        self.assertEqual(json.loads(report.read_text()), self.metadata)
+        self.assertFalse((project / "docs/point-table-import.json").exists())
+        self.assertFalse((self.output / "migration.json").exists())
+
+    def test_invalid_marker_preserves_existing_custom_report(self):
+        report = self.root / "custom/report.json"
+        self.write(report_path=report)
+        target = self.output / "devices/device_config.c"
+        target.write_text(target.read_text().replace("/* END IMPORTED TABLE: devices */", ""))
+        before = snapshot(self.root)
+        self.metadata = {"point_count": 99}
+        with self.assertRaisesRegex(ValueError, "device_config.c.*devices"):
+            self.write(report_path=report)
+        self.assertEqual(snapshot(self.root), before)
+
+    def test_report_cannot_replace_a_generated_table_or_symbol_header(self):
+        before = snapshot(self.root)
+        for relative in ("tables/process.c", "tables/../tables/process.c",
+                         "tables/imported_signals.h"):
+            with self.subTest(relative=relative):
+                with self.assertRaisesRegex(ValueError, "Report path conflicts with table output"):
+                    self.write(report_path=self.output / relative)
+                self.assertEqual(snapshot(self.root), before)
+                self.assertFalse(self.output.exists())
 
 
 if __name__ == "__main__":

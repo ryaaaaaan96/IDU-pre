@@ -11,12 +11,12 @@ No legacy platform library is linked.
 | `transmit` | `transmit/transmit.h`, `transmit/modbus_adapter.h` | `tr_*` register mappings, port modes and Modbus workqueues |
 
 Product point-table configuration lives in [`src/cfg/`](../src/cfg/README.md),
-outside these modules. Its sources and headers share one directory:
-`device_config.c` and `instances.h` bind devices, while `collect.c`, `process.c`
-and `transmit.c` hold the tables and local entries. `mvio_model.h` groups reusable
-model definitions. Imported data is inline in marked C sections; `generated/`
-only holds `symbols.h` and `migration.json`.
-`point_metadata.h` and `point_metadata.c` expose collection models and
+outside these modules. `devices/` binds device instances and reusable models;
+`tables/` holds collection, processing and forwarding tables, signal IDs and
+metadata. Imported data is inline in marked C sections, with symbols in
+`tables/imported_signals.h` and provenance in
+[`docs/point-table-import.json`](../docs/point-table-import.json).
+`tables/point_metadata.h` and `tables/point_metadata.c` expose collection models and
 processing bindings; a binding's `callback` holds the original callback name as
 a string. Execution remains in `src/process/`. Register-to-signal mappings belong
 to the tables. Protocol routing, command dispatch and their contracts
@@ -26,6 +26,10 @@ remain in `src/process/`; hardware and transport code remain in their applicatio
 layers. Moving the configuration preserves its data and behavior. `dataprocess` has no
 Modbus or collector dependency. The other two depend on its data contracts;
 downstream forwarding is optional when `collect` is absent.
+
+`src/equipment/` remains an application service: its startup, sample mappings and
+conversion dependencies are specific to IDU. There is no separate generic
+equipment module; the three modules above provide the reusable engines.
 
 ## Integration
 
@@ -229,7 +233,7 @@ its 552-point profile. `ZBUS_MSG_SUBSCRIBER_NET_BUF_STATIC_DATA_SIZE` must cover
 lookup is linear. Measure timing and stack margins on the target before release.
 
 The application's reusable MV-IO model binds device instances at compile time
-through `src/cfg/instances.h`. The three tables stay const and collection field
+through `src/cfg/devices/instances.h`. The three tables stay const and collection field
 arrays are shared; no runtime copy of model definitions or heap allocation is
 needed. See [the model and pipeline design](../docs/collect-process-transmit.md).
 
