@@ -6,7 +6,7 @@
 转发、参数下发和 NVS 持久化。点表配置参考 AIDC 的 equip/process 设计；详见
 [点表设计、库接口分析和换串口步骤](docs/point-tables.md)。
 对照 MCUdemo 的设备实例与三表设计，通讯点表按采集、处理、转发拆分在
-`src/cfg/tables/`，由 `equipment/instances.h` 统一绑定设备、总线和转发窗口。
+`src/cfg/` 的三个 `.c` 文件，由 `instances.h` 统一绑定设备、总线和转发窗口。
 信号、采集和转发映射由点表维护，协议策略归 `src/communication/config/`，
 业务执行放在 `src/process/`；新增点和设备见 [通讯点表配置指南](src/cfg/README.md)。
 Process 支持无 Flash/NVS 的独立运行，采集线程使用事件与截止时间唤醒。
@@ -114,11 +114,15 @@ IDU-pre/
 │   ├── main.c              # 入口与采样周期，周期可通过参数修改
 │   ├── Kconfig             # 产品选项、采集后端及采样周期
 │   ├── cfg/
-│   │   ├── include/       # signal_ids.h、device_config.h、point_metadata.h
-│   │   ├── equipment/     # device_config.c、instances.h 和 models/
-│   │   └── tables/        # collect / process / transmit 三表
-│   │       ├── point_metadata.c # 采集模型和处理绑定描述
-│   │       └── generated/ # 生成的点表、字段、符号及来源记录
+│   │   ├── collect.c      # 采集字段、读块与周期
+│   │   ├── process.c      # 信号、参数与处理绑定
+│   │   ├── transmit.c     # 北向寄存器映射
+│   │   ├── device_config.c/.h # 设备与三表装配接口
+│   │   ├── instances.h    # 设备、总线、地址窗口与周期
+│   │   ├── signal_ids.h   # 应用设备和信号 ID
+│   │   ├── mvio_model.h   # 共享型号的三表宏
+│   │   ├── point_metadata.c/.h # 采集模型和处理绑定描述
+│   │   └── generated/    # 导入符号与来源记录
 │   ├── app/
 │   │   └── boot.c          # MCUboot 试运行健康确认
 │   ├── hardware/
@@ -151,7 +155,8 @@ IDU-pre/
 `modules/transmit/`，通过 `modules/modules.cmake` 注册到 Zephyr。产品点表留在
 `src/cfg/`，模块不依赖本板 BSP；详见 [模块接口](modules/README.md)。
 `src/cfg/` 仅保存点表定义及装配所需的设备、信号和生成元数据。
-内部按实际功能命名，导入数据统一在 `tables/generated/`，来源标注保留。
+文件平铺，三表直接在各自 `.c` 中维护，不再拆分 `.inc`。导入工具仅更新
+标记区域，`generated/` 保留符号和来源记录。
 协议策略在 `src/communication/config/`，产品选项在 `src/Kconfig`，
 `conf/` 保存可选的 Kconfig 配置组合。目录调整保持既有数据、点序和行为。
 

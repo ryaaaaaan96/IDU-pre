@@ -1,3 +1,67 @@
+#include "signal_ids.h"
+#include "device_config.h"
+#include "mvio_model.h"
+#include "instances.h"
+
+IDU_MVIO_COLLECT_FIELDS(mvio);
+
+#define MVIO_COLLECT(dev, bus, unit, north, address_reg, period, identity, stale, identity_stale) \
+    IDU_MVIO_COLLECT(mvio, dev, period, identity),
+
+/* Placeholder downstream device uses the known MV-IO map. Replace these
+ * blocks with the actual downstream equipment's register specification.
+ */
+#if defined(CONFIG_IDU_AIDC_PROFILE)
+/* BEGIN IMPORTED TABLE: fields */
+/* Generated from user-provided AIDC source tables. Original tables: SUNGROW.
+ * Regenerate with tools/import_aidc.py; no closed library is linked. */
+static const struct co_field aidc_field_0[] = {{.sig_id=2582,.width=15,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_1[] = {{.sig_id=2516,.width=8,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_2[] = {{.sig_id=2524,.width=10,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_3[] = {{.sig_id=2515,.width=1,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_4[] = {{.sig_id=1481,.width=1,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_5[] = {{.sig_id=14,.width=10,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_6[] = {{.sig_id=1007,.width=1,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_7[] = {{.sig_id=1008,.width=1,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_8[] = {{.sig_id=1009,.width=1,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_9[] = {{.sig_id=1010,.width=1,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_10[] = {{.sig_id=1011,.width=1,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_11[] = {{.sig_id=1012,.width=1,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_12[] = {{.sig_id=1013,.width=1,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_13[] = {{.sig_id=1014,.width=1,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_14[] = {{.sig_id=1039,.width=1,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_15[] = {{.sig_id=1040,.width=1,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_16[] = {{.sig_id=1041,.width=1,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_17[] = {{.sig_id=1021,.width=2,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_18[] = {{.sig_id=1022,.width=2,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_19[] = {{.sig_id=1023,.width=2,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_20[] = {{.sig_id=1024,.width=2,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_21[] = {{.sig_id=1025,.width=2,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_22[] = {{.sig_id=1026,.width=2,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_23[] = {{.sig_id=1027,.width=2,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_24[] = {{.sig_id=1028,.width=2,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_25[] = {{.sig_id=1029,.width=2,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_26[] = {{.sig_id=1030,.width=2,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_27[] = {{.sig_id=1031,.width=1,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_28[] = {{.sig_id=1032,.width=1,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_29[] = {{.sig_id=1033,.width=1,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_30[] = {{.sig_id=1034,.width=1,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_31[] = {{.sig_id=1015,.width=1,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_32[] = {{.sig_id=1016,.width=2,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_33[] = {{.sig_id=1017,.width=2,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_34[] = {{.sig_id=1018,.width=2,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_35[] = {{.sig_id=1019,.width=2,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_36[] = {{.sig_id=1020,.width=1,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_37[] = {{.sig_id=1035,.width=2,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_38[] = {{.sig_id=1036,.width=2,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_39[] = {{.sig_id=1038,.width=2,.order=DP_LOW_WORD_FIRST}};
+static const struct co_field aidc_field_40[] = {{.sig_id=1037,.width=2,.order=DP_LOW_WORD_FIRST}};
+/* END IMPORTED TABLE: fields */
+#endif
+static const struct co_cfg table[] = {
+    IDU_MVIO_INSTANCES(MVIO_COLLECT)
+#if defined(CONFIG_IDU_AIDC_PROFILE)
+/* BEGIN IMPORTED TABLE: collect */
 /* Generated from user-provided AIDC source tables. Original tables: SUNGROW.
  * Regenerate with tools/import_aidc.py; no closed library is linked. */
     {.dev_id=11,.model_protocol=true,.model_id=1,.address=48,.count=15,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_0,.field_count=1},
@@ -328,3 +392,12 @@
     {.dev_id=18,.model_protocol=true,.model_id=103,.address=10,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_38,.field_count=1},
     {.dev_id=18,.model_protocol=true,.model_id=103,.address=14,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_39,.field_count=1},
     {.dev_id=18,.model_protocol=true,.model_id=103,.address=18,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_40,.field_count=1},
+/* END IMPORTED TABLE: collect */
+#endif
+};
+
+const struct co_cfg *idu_collect_table(size_t *count)
+{
+    *count = ARRAY_SIZE(table);
+    return table;
+}

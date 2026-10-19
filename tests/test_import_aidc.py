@@ -1,0 +1,119 @@
+import importlib.util
+import json
+from pathlib import Path
+import tempfile
+import unittest
+
+
+spec = importlib.util.spec_from_file_location(
+    "import_aidc", Path(__file__).resolve().parents[1] / "tools/import_aidc.py")
+importer = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(importer)
+
+
+def region(name, content="old rows\n"):
+    return (f"/* BEGIN IMPORTED TABLE: {name} */\n"
+            f"{content}/* END IMPORTED TABLE: {name} */\n")
+
+
+def snapshot(directory):
+    return {str(path.relative_to(directory)): path.read_bytes()
+            for path in directory.rglob("*") if path.is_file()}
+
+
+class ImportTablesTest(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.templates = self.root / "templates"
+        self.templates.mkdir()
+        self.output = self.root / "output"
+        self.contents = {
+            "process.c": "manual points before\n" + region("points") + "manual points after\n",
+            "transmit.c": "manual mapping\n" + region("transmit"),
+            # Deliberately different from the generator's mapping order.
+            "point_metadata.c": region("handlers") + "manual between\n" + region("models"),
+            "collect.c": region("fields") + "manual polls\n" + region("collect"),
+            "device_config.c": "manual device\n" + region("devices"),
+        }
+        for filename, content in self.contents.items():
+            (self.templates / filename).write_text(content)
+        self.rows = {name: f"new {name} rows\n" for name in importer.TABLE_FILES}
+        self.symbols = "#define EXAMPLE_SIGNAL 42\n"
+        self.metadata = {"source_root": "/reference", "point_count": 7}
+
+    def write(self):
+        importer.write_tables(self.output, self.rows, self.symbols, self.metadata,
+                              template_dir=self.templates)
+
+    def test_empty_destination_uses_templates_and_updates_multiple_regions(self):
+        self.write()
+        expected = (region("handlers", self.rows["handlers"]) + "manual between\n" +
+                    region("models", self.rows["models"]))
+        self.assertEqual((self.output / "point_metadata.c").read_text(), expected)
+        expected = (region("fields", self.rows["fields"]) + "manual polls\n" +
+                    region("collect", self.rows["collect"]))
+        self.assertEqual((self.output / "collect.c").read_text(), expected)
+        self.assertEqual((self.output / "generated/symbols.h").read_text(), self.symbols)
+        self.assertEqual(json.loads((self.output / "generated/migration.json").read_text()),
+                         self.metadata)
+        self.assertEqual(list(self.output.rglob("*.inc")), [])
+        for filename, content in self.contents.items():
+            self.assertEqual((self.templates / filename).read_text(), content)
+
+    def test_existing_manual_content_is_preserved_and_reimport_is_stable(self):
+        self.output.mkdir()
+        manual = ("// custom CRLF prefix\r\n" + region("points") +
+                  "// custom CRLF suffix\r\n")
+        (self.output / "process.c").write_bytes(manual.encode())
+        self.write()
+        expected = manual.replace("old rows\n", self.rows["points"])
+        self.assertEqual((self.output / "process.c").read_bytes(), expected.encode())
+        before = snapshot(self.output)
+        self.write()
+        self.assertEqual(snapshot(self.output), before)
+
+    def test_missing_marker_in_last_destination_does_not_write_any_files(self):
+        self.write()
+        target = self.output / "device_config.c"
+        target.write_text(target.read_text().replace("/* END IMPORTED TABLE: devices */", ""))
+        before = snapshot(self.output)
+        self.rows = {name: "changed rows\n" for name in importer.TABLE_FILES}
+        with self.assertRaisesRegex(ValueError, "device_config.c.*devices"):
+            self.write()
+        self.assertEqual(snapshot(self.output), before)
+
+    def test_duplicate_or_reversed_markers_are_rejected(self):
+        invalid = [
+            region("devices") + region("devices"),
+            "/* END IMPORTED TABLE: devices */\n/* BEGIN IMPORTED TABLE: devices */\n",
+            region("devices").replace("/* END IMPORTED TABLE: devices */",
+                                      "/* BEGIN IMPORTED TABLE: devices */"),
+        ]
+        for content in invalid:
+            with self.subTest(content=content):
+                (self.templates / "device_config.c").write_text(content)
+                with self.assertRaises(ValueError):
+                    self.write()
+                self.assertFalse(self.output.exists())
+
+    def test_overlapping_regions_are_rejected(self):
+        for end_order in (("fields", "collect"), ("collect", "fields")):
+            with self.subTest(end_order=end_order):
+                content = "/* BEGIN IMPORTED TABLE: fields */\n/* BEGIN IMPORTED TABLE: collect */\n"
+                content += "".join(f"/* END IMPORTED TABLE: {name} */\n" for name in end_order)
+                (self.templates / "collect.c").write_text(content)
+                with self.assertRaisesRegex(ValueError, "overlap"):
+                    self.write()
+                self.assertFalse(self.output.exists())
+
+    def test_missing_template_does_not_create_partial_destination(self):
+        (self.templates / "device_config.c").unlink()
+        with self.assertRaises(FileNotFoundError):
+            self.write()
+        self.assertFalse(self.output.exists())
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,102 +1,63 @@
 # 通讯点表配置
 
-这里按参考工程 `MCUdemo/CODE/app/cfg/equip` 的方式组织设备与三表：
-设备实例关联采集、处理和转发定义，具体业务由应用回调执行。
-`src/cfg/` 只保留点表相关内容，按 `include`、`equipment`、`tables` 三类职责
-组织：信号定义、设备装配、采集描述、处理绑定、寄存器映射及生成元数据。
-下列相对路径以本目录为准。
-运行时使用本仓库的 Zephyr 模块，不依赖参考工程目录或预编译库。
+参考工程 `MCUdemo/CODE/app/cfg/equip` 用设备实例关联采集、处理和转发表。
+这里保留这一关系，源码和头文件直接放在 `src/cfg/`，本地条目直接写在对应
+`.c` 中。运行时使用本仓库的 Zephyr 模块，不依赖参考工程目录或预编译库。
 
-## 文件职责
-
-| 文件 | 修改内容 |
+| 文件 | 职责 |
 | --- | --- |
-| [`include/signal_ids.h`](include/signal_ids.h) | 应用设备 ID、信号 ID；共同组成内部测点键 |
-| [`include/device_config.h`](include/device_config.h) | `idu_equipment_config()` 与三表获取接口 |
-| [`include/point_metadata.h`](include/point_metadata.h) | 采集模型、处理绑定元数据的类型和获取接口 |
-| [`equipment/device_config.c`](equipment/device_config.c)、[`equipment/instances.h`](equipment/instances.h) | 装配设备和三表；绑定设备、总线、从机 unit、北向窗口、周期及过期时间 |
-| [`tables/process.c`](tables/process.c) | 装配本地点、型号点和可选的生成处理表 |
-| [`tables/process_local.inc`](tables/process_local.inc) | 本地信号、常量和演示参数，保持现有存储顺序 |
-| [`tables/process_mvio.h`](tables/process_mvio.h) | MV-IO 型号的类型、宽度、范围和质量过期配置 |
-| [`tables/collect.c`](tables/collect.c)、[`tables/collect_mvio.h`](tables/collect_mvio.h) | 采集块装配、南向功能码/地址、字段偏移、字序与周期 |
-| [`tables/transmit.c`](tables/transmit.c) | 装配当前 profile 的北向映射 |
-| [`tables/transmit_local.inc`](tables/transmit_local.inc)、[`tables/transmit_mvio.h`](tables/transmit_mvio.h) | 本地及型号信号的北向地址、别名与质量映射 |
-| [`tables/point_metadata.c`](tables/point_metadata.c) | 通过 `idu_collect_models()`、`idu_process_bindings()` 提供采集模型和处理绑定 |
-| [`tables/generated/`](tables/generated/) | 生成的三表片段、信号采集模型、处理绑定及来源元数据 |
+| [`signal_ids.h`](signal_ids.h) | 应用设备 ID、信号 ID，共同组成内部测点键 |
+| [`device_config.c`](device_config.c)、[`device_config.h`](device_config.h)、[`instances.h`](instances.h) | 装配设备和三表；绑定总线、unit、北向窗口、周期及过期时间 |
+| [`process.c`](process.c) | 信号类型、宽度、范围、默认值、存储属性及处理绑定；包含本地点和参数 |
+| [`collect.c`](collect.c) | 采集块、字段、南向地址、字序和周期 |
+| [`transmit.c`](transmit.c) | 北向寄存器到信号的映射，包含本地条目 |
+| [`mvio_model.h`](mvio_model.h) | MV-IO 信号 ID 和采集、处理、转发三组复用宏，多实例共享采集字段 |
+| [`point_metadata.c`](point_metadata.c)、[`point_metadata.h`](point_metadata.h) | 通过 `idu_collect_models()`、`idu_process_bindings()` 提供采集模型和处理绑定 |
+| [`generated/symbols.h`](generated/symbols.h)、[`generated/migration.json`](generated/migration.json) | 导入符号与来源、诊断记录；这是唯一保留的子目录 |
 
-[`equipment/models/mvio.h`](equipment/models/mvio.h) 保留型号信号 ID，并聚合三个 `*_mvio.h`，
-供现有模型使用者继续包含；三类宏分别展开为所属表的静态数据。
-`IDU_MVIO_COLLECT_FIELDS` 只声明一份字段数组，各设备实例共享。
-这对应参考工程多个设备引用同一型号点表的做法，实例值和调度状态仍各自独立。
+业务回调在 [`src/process/`](../process/) 执行。端口和报文处理在
+[`src/communication/`](../communication/)，协议路由、控制命令及兼容窗口在
+[`src/communication/config/`](../communication/config/)，应用选项在
+[`src/Kconfig`](../Kconfig)。点表只声明数据及绑定，不创建线程或操作串口。
 
-处理表绑定的函数放在 [`src/process/`](../process/)：
-`point_callbacks.c` 负责电流换算和参数操作，`mvio_process.c` 负责旧保存地址
-导入及校验，`aidc_process.c` 负责 AIDC 业务处理。
-[`src/communication/`](../communication/) 负责端口配置、报文解析/编码，
-`ports/` 提供真实或虚拟采集后端。点表配置文件不创建线程或操作串口。
+## 修改设备或测点
 
-协议回调选择、路由窗口和控制命令在
-[`src/communication/config/`](../communication/config/)；它们控制请求如何进入
-点表或触发动作，点表的 `transmit` 映射则描述寄存器对应哪个信号。
-应用功能选项统一在 [`src/Kconfig`](../Kconfig)，符号与默认值保持不变。
-
-`tables/generated/models.inc` 描述信号采集模型，`handlers.inc` 描述处理绑定，
-对应 `struct idu_collect_model` 和 `struct idu_process_binding`。绑定中的
-`callback` 保存原回调名称字符串；执行函数仍由 `src/process/` 实现和选择。
-三表装配文件包含 `tables/generated/` 中相应片段，生成元数据不代表相关业务
-已实现，目录和接口命名调整保持原有支持范围与错误返回。
-
-这些生成数据来源于已有 AIDC 点表。`CONFIG_IDU_AIDC_PROFILE`、
-`tools/import_aidc.py`、生成内容中的 `AIDC_*` 宏及已有业务函数名保留兼容；
-来源记录和版权注释保留，不作为配置目录的分类依据。
-
-## 新增设备
-
-同型号 MV-IO 设备按以下步骤增加：
-
-1. 在 `src/cfg/include/signal_ids.h` 分配唯一逻辑设备 ID，在 `equipment/instances.h` 增加一行
-   `IDU_MVIO_INSTANCES`：设备 ID、总线 ID、unit、FC04 基址、FC03 地址窗口、
-   快速/身份周期、快速/身份过期时间。时间单位均为毫秒。
-2. 确认相应总线已通过 `co_init_bus()` 注册后端；物理端口配置在
-   `src/communication/ports/`。同总线不能重复 unit，不同总线可以相同。
-   添加实例不会自动建立串口或虚拟从机。
-3. 为北向选择不冲突的窗口。默认 MV-IO 兼容配置只显式开放现有扩展入口，
-   **新窗口必须同时加入 `src/communication/config/mvio_config.c` 的 `extensions[]`**。
-   只增加实例/映射不保证请求能够进入普通转发处理。
-4. 检查 `CONFIG_DP_MAX_DEVICES`、`CONFIG_DP_MAX_BUSES`、
-   `CONFIG_DP_POINTS_MAX_POINTS` 和 `CONFIG_DP_POINTS_MAX_POLLS` 的容量，
-   验证设备注册、采集、北向读取与掉线隔离；可参考 `tests/models` 的双实例用例。
-
-新型号在 `tables/` 按 `process_<name>.h`、`collect_<name>.h`、
-`transmit_<name>.h` 的职责建立声明，接入对应装配文件，并在 `equipment/device_config.c` 注册实例。不要复制 MV-IO 的
-协议地址、演示写地址或旧广播规则作为新设备协议。
-
-## 新增测点
-
-1. 先确定内部 `(dev_id, sig_id)`、南向地址和北向地址，三者分别配置。
-2. 本地定义放 `tables/process_local.inc`，型号定义放所属 `tables/process_<name>.h`；
-   指定来源、类型、宽度、范围、初值及过期时间。需要处理时，在 `src/process/`
-   实现函数并由表绑定；纯换算不得阻塞或递归访问引擎，事务业务使用已有
-   `dp_process_ctx` / `dp_txn_*` 接口。
-3. 采集点加入所属 `tables/collect_<name>.h` 的字段及连续读块，明确宽度和字序；
-   不跨设备未定义的寄存器空洞合帧。本地点同时修改对应采样发布方。
-4. 在 `tables/transmit_local.inc` 或所属 `tables/transmit_<name>.h` 增加映射；新地址超出
-   MV-IO 兼容 profile 的已有扩展入口时，同步修改 `extensions[]`。
-5. 覆盖配置冲突、完整/部分长度、字序、错误质量及实际报文路由；新增持久点
-   还需考虑 schema、旧快照和重启恢复。测试入口见
+1. 在 `signal_ids.h` 分配应用 ID；同型号 MV-IO 实例直接加入 `instances.h`。
+   每行配置设备、总线、unit、北向窗口、采集周期和过期时间。新总线还需在
+   通信层注册 `co_init_bus()` 后端；添加实例不会自动建立串口或虚拟从机。
+2. 本地点和参数在 `process.c` 修改，MV-IO 型号点在 `mvio_model.h` 的处理
+   定义中修改。需要业务计算时，在 `src/process/` 实现函数并由点表绑定。
+3. 同步调整 `collect.c` 或型号的采集宏，明确字段宽度、地址和字序；不要
+   跨未定义的寄存器空洞合帧。本地采样点还需修改对应发布方。
+4. 在 `transmit.c` 或型号的转发宏中增加映射。**新增北向窗口还需同步调整
+   `src/communication/config/mvio_config.c` 的 `extensions[]`**；只有映射
+   不保证请求能进入点表。控制命令放通信层的 `parameter_config.c`。
+5. 检查设备、总线、测点和采集块容量，验证宽度、字序、质量、路由和设备隔离。
+   新增持久点还需考虑 NVS schema、旧快照及重启恢复；测试入口见
    [模块设计](../../docs/collect-process-transmit.md#验证入口)。
 
-恢复默认、刷新存储等控制命令在
-[`src/communication/config/parameter_config.c`](../communication/config/parameter_config.c)
-配置，由通信层解析并调用业务动作。命令表本身不新增持久化参数；需要保存的
-值应另建参数点。
+其他型号可先直接在对应 `.c` 中声明三表；需要多个实例共享定义时，再参考
+`mvio_model.h`。型号地址、演示参数和旧广播规则应按实际设备协议配置。
 
-## 兼容约束
+## 更新导入点表
 
-此次文件拆分保持点序、默认值、flags、字序和 NVS schema。后续增删或重排
-持久点属于存储格式变更，不能把“目录重构不变”当成自动迁移能力。
+导入数据直接位于 `.c` 的标记区段中：`process.c` 的 `points`，`transmit.c`
+的 `transmit`，`collect.c` 的 `fields/collect`，`device_config.c` 的 `devices`，
+以及 `point_metadata.c` 的 `models/handlers`。区段由
+`/* BEGIN IMPORTED TABLE: points */` 与 `/* END IMPORTED TABLE: points */`
+这样的成对注释界定；重新导入会更新区段内容，保留标记外的手写配置。
 
-通信层保留 MV-IO 旧回调按条目顺序跨地址空洞读取的语义；它与本目录的普通
-寄存器映射分别维护，不能将旧回调表排序或合并成连续地址段。扩展窗口仍需在
-通信配置中显式开放；进入窗口也不等于存在可读点。详细协议和历史证据见
-[点表说明](../../docs/point-tables.md)，历史审计与当前文件位置分开记录。
+从工作区运行：
+
+```bash
+python applications/IDU-pre/tools/import_aidc.py --source /path/to/AIDC_CODE/CODE
+```
+
+`--output` 默认是 `src/cfg`；工具同步更新上述区段和 `generated/` 中的两个
+文件。处理绑定的 `callback` 是原回调名称字符串，实际执行仍在 `src/process/`。
+现有 AIDC 来源、版权注释、`CONFIG_IDU_AIDC_PROFILE`、生成宏和业务函数名
+保持兼容，生成元数据本身不代表相关业务已实现。
+
+此次整理保持点序、默认值、flags、字序和 NVS schema。MV-IO 旧回调按条目
+顺序跨地址空洞读取的规则仍在通信层维护，不能将其排序为普通连续地址段。
+协议细节与历史证据见[点表说明](../../docs/point-tables.md)。

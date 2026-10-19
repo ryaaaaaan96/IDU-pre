@@ -2,7 +2,7 @@
 #define IDU_POINT_METADATA_H
 
 #include <dataprocess/points.h>
-#include "../tables/generated/symbols.h"
+#include "generated/symbols.h"
 
 struct idu_collect_model {
     uint16_t sig, model, offset, legacy_cycle;

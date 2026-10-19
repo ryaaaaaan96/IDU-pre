@@ -45,6 +45,7 @@ for phase in import verify; do
         -flash="$flash_test_file" -test=mvio::test_reboot_probe
 done
 python3 applications/IDU-pre/tests/test_boot_image.py
+python3 applications/IDU-pre/tests/test_import_aidc.py
 
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/boot -d "$test_dir/boot"

@@ -4,9 +4,66 @@
 Only integer enum/define expressions are evaluated (AST allowlist). Identical
 rows are deduplicated; conflicting IDs/mappings abort. Original source attribution
 and hashes are retained. Runtime firmware never reads the reference repository.
+Generated rows replace marked regions in complete C tables; text outside those
+regions is preserved. All destination markers are checked before any file is written.
 """
 from pathlib import Path
 import argparse, ast, collections, hashlib, json, operator, re
+
+
+CONFIG_DIR = Path(__file__).resolve().parents[1] / 'src/cfg'
+TABLE_FILES = {
+    'points': 'process.c',
+    'transmit': 'transmit.c',
+    'models': 'point_metadata.c',
+    'handlers': 'point_metadata.c',
+    'fields': 'collect.c',
+    'collect': 'collect.c',
+    'devices': 'device_config.c',
+}
+
+
+def replace_imported_tables(text, tables, filename):
+    """Replace unique, disjoint marker pairs without changing surrounding C."""
+    replacements = []
+    for name, content in tables.items():
+        begin = f'/* BEGIN IMPORTED TABLE: {name} */'
+        end = f'/* END IMPORTED TABLE: {name} */'
+        if text.count(begin) != 1 or text.count(end) != 1:
+            raise ValueError(f'{filename}: expected one BEGIN/END marker pair for {name}')
+        first = text.index(begin)
+        last = text.index(end)
+        if last < first:
+            raise ValueError(f'{filename}: reversed marker pair for {name}')
+        replacements.append((first, first + len(begin), last, last + len(end), content))
+    replacements.sort()
+    if any(left[3] > right[0] for left, right in zip(replacements, replacements[1:])):
+        raise ValueError(f'{filename}: imported table regions overlap')
+    for _, first, last, _, content in reversed(replacements):
+        text = text[:first] + '\n' + content + text[last:]
+    return text
+
+
+def write_tables(output, tables, symbols, metadata, template_dir=None):
+    """Prepare every C file before writing; missing files use repository templates."""
+    if set(tables) != set(TABLE_FILES):
+        raise ValueError('Incomplete imported table set')
+    template_dir = CONFIG_DIR if template_dir is None else Path(template_dir)
+    grouped = collections.defaultdict(dict)
+    for name, filename in TABLE_FILES.items():
+        grouped[filename][name] = tables[name]
+    prepared = {}
+    for filename, regions in grouped.items():
+        target = output / filename
+        source = target if target.exists() else template_dir / filename
+        # Decode bytes directly so existing CRLF outside the regions is retained.
+        original = source.read_bytes().decode('utf-8')
+        prepared[target] = replace_imported_tables(original, regions, filename)
+    prepared[output / 'generated/symbols.h'] = symbols
+    prepared[output / 'generated/migration.json'] = json.dumps(metadata, ensure_ascii=False, indent=2) + '\n'
+    for target, content in prepared.items():
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(content.encode('utf-8'))
 
 
 def clean(s):
@@ -175,28 +232,30 @@ def generate(root, output):
         if m['id'] not in tables['g_arm_data_table']:
             unresolved.append(m)
             cfg.append(f'    {{.key={{247,{m["id"]}}},.source=DP_SOURCE_LOCAL,.type=DP_WORDS,.width={m["count"]}}}, /* missing original process definition: unavailable until explicitly supplied */')
-    output.mkdir(parents=True,exist_ok=True)
     notice='/* Generated from user-provided AIDC source tables. Original tables: SUNGROW.\n * Regenerate with tools/import_aidc.py; no closed library is linked. */\n'
-    (output/'points.inc').write_text(notice+'\n'.join(cfg)+'\n')
-    (output/'transmit.inc').write_text(notice+'\n'.join(f'    {{.function={m["function"]},.address={m["address"]},.count={m["count"]},.key={{{m["device"]},{m["id"]}}},.order=DP_LOW_WORD_FIRST}},' for m in mapping)+'\n')
-    (output/'models.inc').write_text(notice+'\n'.join(f'    {{.sig={r["sig"]},.model={r["model"]},.offset={r["offset"]},.width={r["width"]},.legacy_cycle={r["original_cycle"]},.initial.words={{{",".join(map(str,r["initial"]))}}}}},' for r in polls)+'\n')
-    (output/'handlers.inc').write_text(notice+'\n'.join(f'    {{.sig={r["id"]},.name="{r["sig_id"]}",.callback="{r["pf_sig_proc"]}"}},' for r in descriptor if r['device']==247)+'\n')
-    (output/'fields.inc').write_text(notice+'\n'.join(f'static const struct co_field aidc_field_{i}[] = {{{{.sig_id={r["sig"]},.width={r["width"]},.order=DP_LOW_WORD_FIRST}}}};' for i,r in enumerate(polls))+'\n')
-    (output/'collect.inc').write_text(notice+'\n'.join(f'    {{.dev_id={dev},.model_protocol=true,.model_id={r["model"]},.address={r["offset"]},.count={r["width"]},.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_{i},.field_count=1}},' for dev in range(11,19) for i,r in enumerate(polls))+'\n')
-    (output/'devices.inc').write_text(notice+'\n'.join(f'    {{.dev_id={dev},.unit_id={dev-10},.bus_id=1}},' for dev in range(11,19))+'\n')
+    generated = {
+        'points': notice+'\n'.join(cfg)+'\n',
+        'transmit': notice+'\n'.join(f'    {{.function={m["function"]},.address={m["address"]},.count={m["count"]},.key={{{m["device"]},{m["id"]}}},.order=DP_LOW_WORD_FIRST}},' for m in mapping)+'\n',
+        'models': notice+'\n'.join(f'    {{.sig={r["sig"]},.model={r["model"]},.offset={r["offset"]},.width={r["width"]},.legacy_cycle={r["original_cycle"]},.initial.words={{{",".join(map(str,r["initial"]))}}}}},' for r in polls)+'\n',
+        'handlers': notice+'\n'.join(f'    {{.sig={r["id"]},.name="{r["sig_id"]}",.callback="{r["pf_sig_proc"]}"}},' for r in descriptor if r['device']==247)+'\n',
+        'fields': notice+'\n'.join(f'static const struct co_field aidc_field_{i}[] = {{{{.sig_id={r["sig"]},.width={r["width"]},.order=DP_LOW_WORD_FIRST}}}};' for i,r in enumerate(polls))+'\n',
+        'collect': notice+'\n'.join(f'    {{.dev_id={dev},.model_protocol=true,.model_id={r["model"]},.address={r["offset"]},.count={r["width"]},.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_{i},.field_count=1}},' for dev in range(11,19) for i,r in enumerate(polls))+'\n',
+        'devices': notice+'\n'.join(f'    {{.dev_id={dev},.unit_id={dev-10},.bus_id=1}},' for dev in range(11,19))+'\n',
+    }
     required={k:val(k) for k in symbols.expr if k.startswith('LOCAL_SIG_') or k.startswith('E_USART_') or k.startswith('PORT_WORK_MODE_')}
-    (output/'symbols.h').write_text(notice+'#pragma once\n'+'\n'.join(f'#define AIDC_{k} ({v})' for k,v in required.items())+'\n')
+    generated_symbols=notice+'#pragma once\n'+'\n'.join(f'#define AIDC_{k} ({v})' for k,v in required.items())+'\n'
     metadata={'source_root':str(root),'source_sha256':{p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in sources},
               'duplicates_collapsed':duplicates,'map_duplicates_collapsed':map_duplicates,'overlapping_maps':overlaps,
               'process_descriptors':descriptor,'all_upp_fields':all_models,'transmit':mapping,
               'unresolved_mappings':unresolved,'type_width_mismatches':type_mismatches,'point_count':len(cfg),'parameter_count':sum(r['parameter'] for r in descriptor),'model_poll_count':len(polls)*8,
               'scope':'UPP fields retain original model offsets/cycle codes. Virtual backend timing is an explicit test setting, not a decoded legacy scheduler.'}
-    (output/'migration.json').write_text(json.dumps(metadata,ensure_ascii=False,indent=2)+'\n')
+    write_tables(output, generated, generated_symbols, metadata)
     print({k:metadata[k] for k in ['point_count','parameter_count','model_poll_count']},'maps',len(mapping),'duplicates',len(duplicates))
 
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source',type=Path,required=True,help='Path to the reference AIDC CODE checkout; only needed to regenerate tables')
-    parser.add_argument('--output',type=Path,default=Path(__file__).resolve().parents[1]/'src/cfg/tables/generated')
+    parser.add_argument('--output',type=Path,default=CONFIG_DIR,
+                        help='Configuration directory containing marked C tables (default: src/cfg); missing files use repository templates')
     args=parser.parse_args();generate(args.source,args.output)

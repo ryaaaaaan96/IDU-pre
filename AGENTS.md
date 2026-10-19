@@ -14,7 +14,7 @@
 - 通用模块使用 `modules/dataprocess`、`modules/collect`、`modules/transmit`，接口分别为 `dp_*`、`co_*`、`tr_*`；产品接口继续使用 `idu_*`。
 - `src/main.c` 负责采样周期和休眠，`src/app/runtime.c` 编排启动、采集和故障策略；硬件访问归 `src/hardware/`，设备服务与工程量换算归 `src/equipment/`，端口和协议适配归 `src/communication/`，升级实现归 `src/iap/`。
 - 源码由 `src/CMakeLists.txt` 及各功能目录的 CMakeLists 集中管理；公开头文件继续放在 `include/`，通用 `dp_*`、`co_*`、`tr_*` 实现留在 `modules/`。
-- `src/cfg/` 仅保存点表相关内容，按实际功能命名：`include/` 定义信号、点表及元数据契约，`equipment/` 装配设备实例，`tables/` 声明三表和采集/处理元数据，`tables/generated/` 保存生成数据及来源记录。协议选择、控制命令和旧协议路由配置归 `src/communication/config/`，产品选项归 `src/Kconfig`。`src/process/` 执行测点处理和参数命令，协议编码及 Zephyr 端口适配归 `src/communication/`；扩展步骤见 `src/cfg/README.md`。`conf/` 保存可选 Kconfig 配置组合。目录整理保持既有配置内容；重排持久化点或旧协议回调顺序前，必须核对 NVS 和线协议兼容性。
+- `src/cfg/` 仅保存点表相关内容，按实际功能命名：文件平铺，`collect.c`、`process.c`、`transmit.c` 直接维护三表，`device_config.c` 和 `instances.h` 装配实例，`mvio_model.h` 复用型号定义，`point_metadata.c/.h` 提供采集/处理元数据。当前不使用 `.inc` 片段；导入工具只更新 `.c` 中标记的导入区域，`generated/` 仅保存符号和来源记录。协议选择、控制命令和旧协议路由配置归 `src/communication/config/`，产品选项归 `src/Kconfig`。`src/process/` 执行测点处理和参数命令，协议编码及 Zephyr 端口适配归 `src/communication/`；扩展步骤见 `src/cfg/README.md`。`conf/` 保存可选 Kconfig 配置组合。目录整理保持既有配置内容；重排持久化点或旧协议回调顺序前，必须核对 NVS 和线协议兼容性。
 - 在应用目录执行 `./build.sh` 构建默认固件，或 `./build.sh --mcuboot --iapv3` 构建兼容升级配置。
 - 在应用目录执行 `bash tests/run.sh` 运行完整回归；按改动范围选择必要验证。文档修改检查内容、路径和格式即可。
 - 构建与测试产物放在工作区 `build/`，签名私钥放在 `build/keys/`，均不提交。

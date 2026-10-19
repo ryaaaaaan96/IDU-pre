@@ -1,3 +1,20 @@
+#include "signal_ids.h"
+#include "device_config.h"
+#include "mvio_model.h"
+#include "instances.h"
+
+#define MAP(fc, reg, words, dev, sig) \
+    {.function = fc, .address = reg, .count = words, .key = {dev, sig}}
+#define ZERO(reg, words) \
+    {.function = 4, .address = reg, .count = words, .kind = DP_MAP_ZERO}
+#define CURRENT(n) MAP(4, 8163 + n, 1, IDU_DEV_LOCAL, IDU_SIG_CURRENT_1 + n)
+
+#define MVIO_TRANSMIT(dev, bus, unit, north, address_reg, period, identity, stale, identity_stale) \
+    IDU_MVIO_TRANSMIT(dev, north, address_reg),
+
+static const struct dp_transmit_cfg table[] = {
+#if defined(CONFIG_IDU_AIDC_PROFILE)
+/* BEGIN IMPORTED TABLE: transmit */
 /* Generated from user-provided AIDC source tables. Original tables: SUNGROW.
  * Regenerate with tools/import_aidc.py; no closed library is linked. */
     {.function=3,.address=41654,.count=1,.key={247,1},.order=DP_LOW_WORD_FIRST},
@@ -107,3 +124,42 @@
     {.function=3,.address=43017,.count=2,.key={247,1017},.order=DP_LOW_WORD_FIRST},
     {.function=3,.address=43018,.count=2,.key={247,1018},.order=DP_LOW_WORD_FIRST},
     {.function=3,.address=43019,.count=2,.key={247,1019},.order=DP_LOW_WORD_FIRST},
+/* END IMPORTED TABLE: transmit */
+    MAP(4, 10012, 1, IDU_DEV_LOCAL, IDU_SIG_VIRTUAL_MODE),
+#else
+/* Local MV-IO protocol windows and demo parameter mappings, in lookup order. */
+    MAP(3, 31000, 1, IDU_DEV_LOCAL, IDU_SIG_SAMPLE_PERIOD),
+    MAP(3, 31001, 8, IDU_DEV_LOCAL, IDU_SIG_LABEL),
+#if defined(CONFIG_IDU_COLLECT_VIRTUAL)
+    MAP(3, 31500, 1, IDU_DEV_REMOTE_IO, IDU_SIG_REMOTE_SETPOINT),
+    MAP(3, 31501, 2, IDU_DEV_REMOTE_IO, IDU_SIG_REMOTE_OFFSET),
+#endif
+    MAP(4, 2503, 1, IDU_DEV_LOCAL, 2503),
+    MAP(4, 2504, 10, IDU_DEV_LOCAL, 2504),
+    MAP(4, 4989, 10, IDU_DEV_LOCAL, 2504),
+    MAP(4, 4805, 8, IDU_DEV_LOCAL, 2504),
+    MAP(4, 2581, 15, IDU_DEV_LOCAL, 2581),
+    MAP(4, 2568, 4, IDU_DEV_LOCAL, 2568),
+    MAP(4, 8149, 1, IDU_DEV_LOCAL, 8149),
+    MAP(4, 4813, 1, IDU_DEV_LOCAL, 8149),
+    MAP(4, 4814, 1, IDU_DEV_LOCAL, IDU_SIG_SAVED_ADDRESS),
+    MAP(4, 8150, 2, IDU_DEV_LOCAL, IDU_SIG_PROTOCOL),
+    MAP(4, 8152, 1, IDU_DEV_LOCAL, IDU_SIG_DI),
+    CURRENT(0), CURRENT(1), CURRENT(2), CURRENT(3),
+    CURRENT(4), CURRENT(5), CURRENT(6), CURRENT(7),
+    MAP(4, 5486, 1, IDU_DEV_LOCAL, 5486),
+    ZERO(2514, 19), ZERO(4999, 16), ZERO(5487, 1),
+    ZERO(8153, 10), ZERO(8171, 29),
+    MAP(3, 30459, 1, IDU_DEV_LOCAL, IDU_SIG_SAVED_ADDRESS),
+
+    /* IDU extension: separate remote data from physical local inputs. */
+    IDU_MVIO_INSTANCES(MVIO_TRANSMIT)
+    MAP(4, 10012, 1, IDU_DEV_LOCAL, IDU_SIG_VIRTUAL_MODE),
+#endif
+};
+
+const struct dp_transmit_cfg *idu_transmit_table(size_t *count)
+{
+    *count = ARRAY_SIZE(table);
+    return table;
+}

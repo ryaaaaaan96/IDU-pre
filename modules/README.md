@@ -11,10 +11,12 @@ No legacy platform library is linked.
 | `transmit` | `transmit/transmit.h`, `transmit/modbus_adapter.h` | `tr_*` register mappings, port modes and Modbus workqueues |
 
 Product point-table configuration lives in [`src/cfg/`](../src/cfg/README.md),
-outside these modules: `include/` defines point-table contracts, `equipment/`
-binds instances, and `tables/` assembles the three tables and contains generated
-signal acquisition/processing metadata in `tables/generated/`.
-`point_metadata.h` and `tables/point_metadata.c` expose collection models and
+outside these modules. Its sources and headers share one directory:
+`device_config.c` and `instances.h` bind devices, while `collect.c`, `process.c`
+and `transmit.c` hold the tables and local entries. `mvio_model.h` groups reusable
+model definitions. Imported data is inline in marked C sections; `generated/`
+only holds `symbols.h` and `migration.json`.
+`point_metadata.h` and `point_metadata.c` expose collection models and
 processing bindings; a binding's `callback` holds the original callback name as
 a string. Execution remains in `src/process/`. Register-to-signal mappings belong
 to the tables. Protocol routing, command dispatch and their contracts
@@ -227,7 +229,7 @@ its 552-point profile. `ZBUS_MSG_SUBSCRIBER_NET_BUF_STATIC_DATA_SIZE` must cover
 lookup is linear. Measure timing and stack margins on the target before release.
 
 The application's reusable MV-IO model binds device instances at compile time
-through `src/cfg/equipment/instances.h`. The three tables stay const and collection field
+through `src/cfg/instances.h`. The three tables stay const and collection field
 arrays are shared; no runtime copy of model definitions or heap allocation is
 needed. See [the model and pipeline design](../docs/collect-process-transmit.md).
 

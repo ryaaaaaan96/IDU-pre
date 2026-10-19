@@ -9,9 +9,9 @@
 
 | 参考工程 | 设计含义 | IDU 实现 |
 | --- | --- | --- |
-| `app/cfg/inc/` | 信号身份和项目配置契约 | 点表契约在 `src/cfg/include/`；协议契约在 `src/communication/config/protocol_config.h` |
-| `app/cfg/equip/dev_cfg.c` 的设备列表 | 多个实例复用同型号的表 | `src/cfg/equipment/device_config.c` 装配，`src/cfg/equipment/instances.h` 绑定实例 |
-| `app/cfg/equip/table/*` | 采集、处理、转发分别声明 | `src/cfg/tables/*_mvio.h`、`*_local.inc` 与三表装配文件 |
+| `app/cfg/inc/` | 信号身份和项目配置契约 | 点表契约在 `src/cfg/`；协议契约在 `src/communication/config/protocol_config.h` |
+| `app/cfg/equip/dev_cfg.c` 的设备列表 | 多个实例复用同型号的表 | `src/cfg/device_config.c` 装配，`src/cfg/instances.h` 绑定实例 |
+| `app/cfg/equip/table/*` | 采集、处理、转发分别声明 | `src/cfg/{collect,process,transmit}.c`，复用型号定义在 `mvio_model.h` |
 | `app/process/*` 的业务回调 | 配置绑定行为，执行代码独立维护 | `src/process/` |
 | `platform/inc/collect_lib.h` | 采集地址、周期、优先级和编码独立配置 | `co_cfg`、字段表、每总线采集线程 |
 | `platform/inc/data_process.h` | 共享数据池、类型/范围、旧值、回调及多输出 | `dp_point_cfg`、`dp_process_ctx`、`dp_txn_*` |
@@ -45,23 +45,23 @@ UPP、逆变器专用命令及其日志/加密扩展不属于通用三模块接�
 
 ## 通讯点表的文件职责
 
-`src/cfg/` 只保留点表相关配置，分为 `include/` 契约、`equipment/` 实例、
-`tables/` 三表与生成元数据。这里描述设备和信号、采集地址与编码、
+`src/cfg/` 只保留点表相关配置，源码和头文件平铺。本地条目与导入点表直接
+放在所属 `.c` 中。这里描述设备和信号、采集地址与编码、
 处理绑定及寄存器到信号的映射。协议路由、控制命令和应用功能选项分别归属
 通信层与 `src/Kconfig`；配置内容与功能保持不变，三模块内核保持独立。
 
 | 位置 | 内容 |
 | --- | --- |
-| `src/cfg/include/signal_ids.h` | 应用设备 ID 和信号 ID；内部键不等同于报文地址 |
-| `src/cfg/include/device_config.h` | 设备配置及三表获取接口 |
-| `src/cfg/include/point_metadata.h` | 信号采集模型、处理绑定元数据的类型和获取接口 |
-| `src/cfg/equipment/device_config.c`、`src/cfg/equipment/instances.h` | 装配三表；绑定型号实例的设备、总线、unit、北向窗口和周期 |
-| `src/cfg/tables/process_local.inc`、`process_mvio.h` | 本地信号/演示参数与 MV-IO 型号点定义；绑定处理函数 |
-| `src/cfg/tables/collect_mvio.h` | 南向读块、字段偏移、字序与周期参数 |
-| `src/cfg/tables/transmit_local.inc`、`transmit_mvio.h` | 本地及型号的北向值、别名与质量映射 |
-| `src/cfg/tables/{collect,process,transmit}.c` | 将所属声明与可选的生成片段装配为静态数组 |
-| `src/cfg/tables/point_metadata.c` | 提供 `idu_collect_models()` 和 `idu_process_bindings()` 获取接口 |
-| `src/cfg/tables/generated/` | 三表生成片段，以及采集模型、处理绑定和导入来源元数据 |
+| `src/cfg/signal_ids.h` | 应用设备 ID 和信号 ID；内部键不等同于报文地址 |
+| `src/cfg/device_config.h` | 设备配置及三表获取接口 |
+| `src/cfg/point_metadata.h` | 信号采集模型、处理绑定元数据的类型和获取接口 |
+| `src/cfg/device_config.c`、`src/cfg/instances.h` | 装配三表；绑定型号实例的设备、总线、unit、北向窗口和周期 |
+| `src/cfg/process.c` | 本地信号/参数与型号点装配；类型、默认值、存储属性及处理绑定 |
+| `src/cfg/collect.c` | 南向读块、字段偏移、字序与周期参数 |
+| `src/cfg/transmit.c` | 本地及型号的北向值、别名与质量映射 |
+| `src/cfg/mvio_model.h` | MV-IO 信号 ID，以及采集、处理、转发三组复用宏 |
+| `src/cfg/point_metadata.c` | 提供 `idu_collect_models()` 和 `idu_process_bindings()` 获取接口 |
+| `src/cfg/generated/` | 仅保留导入符号 `symbols.h` 与来源诊断 `migration.json` |
 
 点表之外，`src/communication/config/protocol_config.h` 声明协议配置契约，
 同目录的 `protocol_config.c` 选择 MV-IO 路由或 AIDC 串口参数回调；
@@ -73,15 +73,17 @@ UPP、逆变器专用命令及其日志/加密扩展不属于通用三模块接�
 `src/communication/` 执行端口配置、解析/编码及路由，`ports/` 提供采集后端。
 应用功能选项统一在 `src/Kconfig`，原符号和默认值保持不变。
 
-`src/cfg/equipment/models/mvio.h` 保留型号信号 ID，聚合三个 `*_mvio.h`，兼容现有模型使用者。
-`include/idu_equip.h` 继续聚合应用接口；新增配置代码使用 `src/cfg/include` 的对应契约。
+`src/cfg/mvio_model.h` 集中维护型号信号 ID 和三组宏，三表分别展开所属定义。
+`include/idu_equip.h` 继续聚合应用接口；新增配置代码使用 `src/cfg/` 中的对应头文件。
 
-`src/cfg/tables/point_metadata.c` 提供 `generated/models.inc` 的信号采集模型与
-`handlers.inc` 的处理绑定，类型分别为 `idu_collect_model`、`idu_process_binding`。
+`src/cfg/point_metadata.c` 直接保存信号采集模型和处理绑定，类型分别为
+`idu_collect_model`、`idu_process_binding`。
 绑定的 `callback` 是原回调名称字符串，实际处理仍在 `src/process/` 执行。
 现有生成数据来源于 AIDC；外部 `CONFIG_IDU_AIDC_PROFILE`、导入工具
 `tools/import_aidc.py`、生成宏及业务函数名保留兼容，来源与版权记录保留。
-目录按实际职责命名，不改变生成文件内容、支持范围或未实现动作的返回行为。
+导入工具的 `--output` 默认指向 `src/cfg`，更新各 `.c` 中成对的
+`BEGIN IMPORTED TABLE` / `END IMPORTED TABLE` 区段，并保留区段外的手写内容。
+7 组导入数据内联保存，支持范围和未实现动作的返回行为保持不变。
 
 点序、默认值、flags、字序及 NVS schema 保持原样。MV-IO 的 `input/holding`
 是按旧回调表顺序遍历的条目，允许读取时跳过地址空洞；它们不是连续寄存器段。
@@ -163,10 +165,10 @@ Zephyr Modbus 接收。zbus 消息订阅者保存样本副本，避免仅通知�
 ## 增加设备与业务
 
 具体文件和操作步骤见 [`src/cfg/README.md`](../src/cfg/README.md)。
-现有 MV-IO 型号由 `src/cfg/tables/process_mvio.h`、`collect_mvio.h`、`transmit_mvio.h`
-分别声明；`IDU_MVIO_COLLECT_FIELDS` 只创建一份共享字段数组。
+现有 MV-IO 型号在 `src/cfg/mvio_model.h` 中集中声明三组宏；
+`IDU_MVIO_COLLECT_FIELDS` 只创建一份共享字段数组。
 
-[`src/cfg/equipment/instances.h`](../src/cfg/equipment/instances.h) 的每行依次为：
+[`src/cfg/instances.h`](../src/cfg/instances.h) 的每行依次为：
 
 ```text
 逻辑设备 ID，总线 ID，从机 unit，FC04 北向基址，FC03 地址读窗口，
@@ -229,7 +231,7 @@ MCUboot/IAPv3 构建、签名校验通过。补充 profile 绑定及双字命令
 固件、MCUboot/IAPv3 构建和签名校验通过，暂存代码独立构建及启动布局检查
 通过。沿用上述沙箱设置，本次未进行实板验证。
 
-点表功能命名调整验证（2026-10-19）：9 份生成数据逐字节不变，导入工具默认
+前次点表功能命名调整验证（2026-10-19）：9 份生成数据逐字节不变，导入工具默认
 输出已核对为 `src/cfg/tables/generated/`。完整回归及默认固件构建通过；另将
 暂存内容单独导出，构建并运行导入点表配置的 native_sim 测试，3 项全部通过。
 沿用上述沙箱设置，本次未进行实板验证。
