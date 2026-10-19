@@ -5,8 +5,8 @@
 #include "idu_iap.h"
 #include "idu_sgz.h"
 #include "iap_public_key.h"
-#include <idu/modbus_adapter.h>
-#include <idu/params.h>
+#include <transmit/modbus_adapter.h>
+#include <dataprocess/params.h>
 #include <zephyr/dfu/flash_img.h>
 #include <zephyr/dfu/mcuboot.h>
 #include <zephyr/kvss/nvs.h>
@@ -116,10 +116,10 @@ static int finish(void)
         k_mutex_lock(&lock, K_FOREVER); state_set(IAP_UPGRADING, NO_CAUSE); k_mutex_unlock(&lock);
     }
     /* Freeze parameter transactions only for the short commit/reboot window. */
-    if (!err) { err = idu_params_prepare_reboot(); frozen = !err; }
+    if (!err) { err = dp_params_prepare_reboot(); frozen = !err; }
     if (!err) { err = journal_save(2, size, hash); }
     if (!err) { err = boot_request_upgrade(BOOT_UPGRADE_TEST); }
-    if (err) { if (frozen) { idu_params_cancel_reboot(); } return err; }
+    if (err) { if (frozen) { dp_params_cancel_reboot(); } return err; }
     k_mutex_lock(&lock, K_FOREVER);
     state_set(IAP_JUMP, NO_CAUSE);
     k_mutex_unlock(&lock);
@@ -241,7 +241,7 @@ static int read_regs(uint16_t address, uint16_t count, struct modbus_adu *tx)
         20063,20071,20083,20088,20089,20090,20091,20093,20094,20099,20100,20102,20103};
     bool valid = false;
     for (size_t i = 0; i < ARRAY_SIZE(starts); ++i) { valid |= address == starts[i]; }
-    if (!valid || !count || address + (uint32_t)count > 20104) { return IDU_MODBUS_SILENT; }
+    if (!valid || !count || address + (uint32_t)count > 20104) { return TR_MODBUS_SILENT; }
     uint8_t regs[110];
     memset(regs, 0xff, sizeof(regs));
 #define REG(a) (regs + ((a) - 20049) * 2)
@@ -349,13 +349,13 @@ static int write_regs(int iface, uint16_t address, const uint8_t *data, size_t b
 
 int idu_iap_route(int iface, const struct modbus_adu *rx, struct modbus_adu *tx)
 {
-    if (rx->length < 4 || rx->length > sizeof(rx->data)) { return IDU_MODBUS_SILENT; }
+    if (rx->length < 4 || rx->length > sizeof(rx->data)) { return TR_MODBUS_SILENT; }
     uint16_t address = sys_get_be16(rx->data), count = sys_get_be16(rx->data + 2);
     if (address < 20049 || address > 20104) { return -ENOENT; }
     if (!receiver.ready || rx->unit_id == 247 ||
-        (rx->unit_id == 0 && rx->fc != 4 && rx->fc != 16)) { return IDU_MODBUS_SILENT; }
+        (rx->unit_id == 0 && rx->fc != 4 && rx->fc != 16)) { return TR_MODBUS_SILENT; }
     k_mutex_lock(&lock, K_FOREVER);
-    int err = IDU_MODBUS_SILENT;
+    int err = TR_MODBUS_SILENT;
     if (rx->fc == 3 || rx->fc == 4) {
         if (rx->length == 4 && count && count <= 55 &&
             (receiver.owner < 0 || receiver.owner == iface)) { err = read_regs(address, count, tx); }
@@ -370,5 +370,5 @@ int idu_iap_route(int iface, const struct modbus_adu *rx, struct modbus_adu *tx)
         }
     }
     k_mutex_unlock(&lock);
-    return rx->unit_id == 0 && rx->fc == 16 ? IDU_MODBUS_SILENT : err;
+    return rx->unit_id == 0 && rx->fc == 16 ? TR_MODBUS_SILENT : err;
 }

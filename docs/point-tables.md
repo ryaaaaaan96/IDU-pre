@@ -10,6 +10,12 @@ RT-Thread 平台中的这条数据链，当前没有完成整个 AIDC 固件或�
 [旧模块逐项对照](#legacy-audit)保留为改动前的审计记录，不代表扩展后的状态。
 2026-10-15 的旧硬件协议迁移状态见[MV-IO 兼容迁移](#mvio-migration)。
 
+当前代码已拆分为 `modules/dataprocess`、`modules/collect` 和
+`modules/transmit`，公共 API 分别使用 `dp_*`、`co_*`、`tr_*` 前缀。
+独立配置、启动计划和端口控制契约见[公共模块说明](../modules/README.md)，
+设备模型复用和模块依赖见[采集、处理与转发设计](collect-process-transmit.md)。
+下文带日期的测试数量、容量和旧模块审计保留对应时点，不代表本轮验证结果。
+
 <a id="mvio-migration"></a>
 
 ## MV-IO 兼容迁移（2026-10-15）
@@ -61,11 +67,11 @@ NVS 签名为 `0xfa1be938`，测试使用冻结的 4 参数快照，升级为 5 
 
 ### 端口恢复与启动检查
 
-`idu_modbus_reconfigure()` 的正常参数切换继续等待旧响应完成；
-`idu_modbus_recover()` 用于端口故障。两者先停止新工作提交，工作回调
+`tr_modbus_reconfigure()` 的正常参数切换继续等待旧响应完成；
+`tr_modbus_recover()` 用于端口故障。两者先停止新工作提交，工作回调
 最多等待 2 s，超时即返回，不无限阻塞控制队列，也不中途取消 Flash 事务。
-`idu_modbus_service()` 由主循环调用，持续忙超过 20 s 报错，PC13 喂狗
-随主循环停止。恢复尝试次数/最近错误可通过 `idu_modbus_get_health()` 查询。
+`tr_modbus_service()` 由主循环调用，持续忙超过 20 s 报错，PC13 喂狗
+随主循环停止。恢复尝试次数/最近错误可通过 `tr_modbus_get_health()` 查询。
 native_sim 测试覆盖 TX 状态注入、工作线程停滞、初始化失败及回退失败；
 它不模拟 UART/DE 的物理时序，真实断线、丢中断和长期运行仍须上板验证。
 
@@ -113,21 +119,27 @@ RAM 115,832 B。HEX、测试摘要和源码/参考文件指纹在 `build/hex/`�
 
 | 项目 | 已实现 | 主入口 |
 | --- | --- | --- |
-| process | READ/INIT/WRITE/SAMPLE/TIMER；旧值/候选值；输入集合；一次输入发出多个输出；来源端口/功能码/地址上下文 | `modules/idu_points/include/idu/process.h` |
-| 参数操作 | NO_COLLECT、NO_DM、NO_STORE、DEFER 独立组合；异步请求复制与完成回调；1 s 延后保存；成功保存后重启 | `process.c`、`params.c` |
-| 采集 | 每总线独立调度；优先级与等待时间；模式选择；初始化读与设定值同步；设备状态/事件；同从机地址跨总线隔离 | `include/idu/collect.h` |
-| 转发 | 通用地址段回调；四种字序；Modbus ADU 透传与地址重映射；串口参数异步生效及失败恢复 | `include/idu/forward.h`、`modbus_adapter.h` |
+| process | READ/INIT/WRITE/SAMPLE/TIMER；旧值/候选值；输入集合；一次输入发出多个输出；来源端口/功能码/地址上下文 | `modules/dataprocess/include/dataprocess/process.h` |
+| 参数操作 | NO_COLLECT、NO_DM、NO_STORE、DEFER 独立组合；异步请求复制与完成回调；1 s 延后保存；成功保存后重启 | `modules/dataprocess/include/dataprocess/params.h`、`process.h` |
+| 采集 | 每总线独立调度；优先级与等待时间；模式选择；初始化读与设定值同步；设备状态/事件；同从机地址跨总线隔离 | `modules/collect/include/collect/collect.h` |
+| 转发 | 通用地址段回调；四种字序；Modbus ADU 透传与地址重映射；串口参数异步生效及失败恢复 | `modules/transmit/include/transmit/transmit.h`、`modbus_adapter.h` |
 | 点表 | 导入原 process/range/transmit 及 UPP 字段元数据；自动展开 8 台 DSP；保留原 ID/地址和问题诊断 | `tools/import_aidc.py`、`cfg/equip/aidc/generated/` |
 
 ### 业务调用与效果边界
 
-业务回调通过 `idu_txn_get(ctx,key,false,...)` 读取本次候选值，`true` 读取
-事务捕获的旧值；`idu_txn_contains()` 查询原始输入，`idu_txn_emit()` 追加或
+业务回调通过 `dp_txn_get(ctx,key,false,...)` 读取本次候选值，`true` 读取
+事务捕获的旧值；`dp_txn_contains()` 查询原始输入，`dp_txn_emit()` 追加或
 替换输出。同一请求的输入在第一个回调前已准备好，派生输出不递归调用回调。
-读取依赖的可用性时用 `idu_txn_get_state()`，不能把未初始化的数值当成有效值。
+读取依赖的可用性时用 `dp_txn_get_state()`，不能把未初始化的数值当成有效值。
 
-业务写入使用 `idu_process_execute()` 或 `idu_process_submit()`；读回调通过
-`idu_process_read()` / 转发层触发。底层 `idu_params_set_values()` 仍是参数
+启动先调用 `dp_init()`，注册采集总线并按需恢复参数，再用
+`dp_process_start()` 执行 `dp_process_plan` 中的 INIT/TIMER 配置，之后
+启动采集。启动计划验证并预留计时器槽后执行 INIT；全部 INIT 成功才启动
+计划计时器。失败可重试，但已成功的 INIT 事务不会回滚；成功后再次启动
+返回 `-EALREADY`。此接口依赖 `CONFIG_DP_PROCESS`，不依赖 Flash/NVS。
+
+业务写入使用 `dp_process_execute()` 或 `dp_process_submit()`；读回调通过
+`dp_process_read()` / 转发层触发。底层 `dp_params_set_values()` 仍是参数
 存储接口，直接调用会绕过业务 handler。原纯转换 `process` / `prepare_write`
 保留原约束：不阻塞、不做 I/O、不重入点表。事务 handler 使用 txn 接口。
 
@@ -137,7 +149,7 @@ RAM 115,832 B。HEX、测试摘要和源码/参考文件指纹在 `build/hex/`�
 | 只下发，缓存和持久值保持原状 | `NO_DM` |
 | 入池并下发，不保存参数值 | `NO_STORE` |
 | 入池并保存，不下发 | `NO_COLLECT` |
-| 入池/下发后延后保存 | `DEFER`，或点属性 `IDU_PARAM_DEFER_STORE` |
+| 入池/下发后延后保存 | `DEFER`，或点属性 `DP_PARAM_DEFER_STORE` |
 
 异步 API 接收成功不等于操作完成，应检查 completion 中的整体及逐输出结果。
 请求被复制；完成回调中的结果指针只在回调期间有效。
@@ -147,7 +159,7 @@ RAM 115,832 B。HEX、测试摘要和源码/参考文件指纹在 `build/hex/`�
 
 NO_STORE 的暂态值不会被其他参数保存时带入快照。远端 NO_STORE/NO_DM
 仍会写事务日志用于掉电对账，但不会改写该参数的持久目标值。
-`idu_process_save_reboot(100)` 可在成功完成后调用；延时至少 100 ms，
+`dp_process_save_reboot(100)` 可在成功完成后调用；延时至少 100 ms，
 刷盘失败则不重启，通过参数状态查错。定时回调在业务线程执行，忙时重试；
 它不是硬实时定时器。延后保存是 Zephyr 本实现明确规定的 1 s 防抖策略，
 并非已证实旧闭源库也使用同一时限。
@@ -242,7 +254,7 @@ Flash 故障注入。原 `legacy_registers.c` 是早期 Zephyr 重构对照，�
 最终文件为 `build/hex/IDU-pre.hex` 和 `build/hex/IDU-pre-AIDC-virtual.hex`；
 测试摘要、源码指纹及 HEX SHA-256 记录在 `build/hex/IDU-pre-validation.json`。
 
-详细 API 约束见 [公共模块说明](../modules/idu_points/README.md)。
+详细 API 约束见 [公共模块说明](../modules/README.md)。
 
 ## 参考依据与逆向分析的边界
 
@@ -300,23 +312,27 @@ flowchart LR
 用户已确认：**现有 USART2/RS485 转发，缺少的一路作为采集口**。
 USART0 仍是日志控制台。
 
-- 本地采集在主线程；Modbus 采集有独立线程，按块配置周期轮询。
-- 所有业务转换在优先级 5 的 process 线程执行。采集线程优先级为 7。
+- 本地采集在主线程；Modbus 采集每总线使用独立线程，按块配置周期轮询。
+- 采样消息由处理线程消费；同步业务 API 在调用线程执行，异步请求和
+  TIMER 回调由独立业务线程执行。回调应遵守各自的锁和重入约束。
 - 北向转发使用优先级 6 的独立工作队列；南向接收仍用系统工作队列。
   参数写回调可以等待南向 Modbus，避免在系统工作队列内自锁。
-  读请求只读取缓存；同一北向接口按请求串行处理，正在执行的参数
+  普通读读取缓存；声明 `read_callback` 的点通过 process 读回调生成值。
+  同一北向接口按请求串行处理，正在执行的参数
   写事务会占用该接口到成功或失败，不承诺写事务期间并行处理读请求。
 - 处理线程使用 zbus **message subscriber** 接收消息副本，避免不同
   来源的采集批次被“只读最新频道值”的方式覆盖。
 - 一个采集块在持锁期间整体更新；不同轮询块可以有不同采样时间。
-  API 的寄存器读取按单寄存器提供，不承诺任意线程配置下整张点表的
-  多寄存器事务快照。参数内部缓存提交受同一互斥锁保护。
+  `tr_read_register()` 提供单寄存器映射读取，`tr_read()` 提供带来源端口的
+  多寄存器读取；二者均在 `transmit/transmit.h`，不属于 dataprocess。
+  按信号键读取使用 `dp_read()`。不承诺任意线程配置下整张点表的多寄存器
+  事务快照；参数内部缓存提交受同一互斥锁保护。
 - 默认最多排队 6 批，批次最多 12 点，每点最多 16 个 16 位字。
   采集频道使用独立固定缓冲池，发布 API 用信号量预留容量、互斥锁
   串行发布；队列满时按指定超时返回错误。没有动态分配采集消息。
-- `idu_processed_chan` 是可合并的处理完成通知，可加普通 subscriber
+- `dp_processed_chan` 是可合并的处理完成通知，可加普通 subscriber
   或快速 listener。不要给它添加保留消息副本的 message subscriber，
-  也不要绕过 `idu_points_publish()` 直接发布内部采集频道。
+  也不要绕过 `dp_publish()` 直接发布内部采集频道。
 - 主循环同时检查处理线程进展；本地发布失败或处理停滞会停止喂狗。
   下游掉线只改变远程测点质量，不使本地采集或上位机转发停止。
 
@@ -385,7 +401,7 @@ Zephyr 4.4.2 的标准输入/保持寄存器读回调把应用读错误统一转
 采集表分四块：DI、电流每 500 ms；协议号、远程地址每 5000 ms。
 周期从上次完成开始计算；失败在下个周期重试，不做无间隔重试。
 默认响应超时 100 ms，经接口转换为 Zephyr Modbus 所需的微秒。
-修改 `CONFIG_IDU_COLLECT_TIMEOUT_MS` 时要同时评估总线负载和点的过期时间。
+修改 `CONFIG_CO_TIMEOUT_MS` 时要同时评估总线负载和点的过期时间。
 
 ### 新增一个测点
 
@@ -399,7 +415,7 @@ Zephyr 4.4.2 的标准输入/保持寄存器读回调把应用读错误统一转
 5. 运行测试。启动会拒绝重复信号、重叠转发地址、无设备的采集块、
    不匹配的宽度、重复采集所有者及越过 65535 的地址范围。
 
-`IDU_WORDS` 的数值范围不检查；浮点、变长字符串、动态设备表和在线
+`DP_WORDS` 的数值范围不检查；浮点、变长字符串、动态设备表和在线
 修改点表尚未实现。三张表及设备表必须具有静态生命周期。
 
 ## 第二路串口补上后
@@ -463,27 +479,31 @@ Flash 故障注入/进程重启也不能代替实机掉电测试。当前实机�
 
 ### 点表与 API
 
-`IDU_SOURCE_PARAMETER` 与采集点分开，表示期望配置，而非实时反馈。
+`DP_SOURCE_PARAMETER` 与采集点分开，表示期望配置，而非实时反馈。
 `param_flags` 支持 WRITE（可写）、PERSIST（保存）、RESTORE（可恢复
 默认）、FORWARD（下发）。转发参数必须持久化，并指定从机设备、
 `write_address`、`write_order`。`prepare_write` 只能校验/变换候选值，
 不得 I/O、修改外部状态或递归调用点表 API。全部点校验通过后才产生
 Flash 或总线操作；校验变换后的数值也再次检查范围。
 
-- `idu_params_set_values()`：业务层按 `{dev_id,sig_id}` 批量设置，
-  使用与 Modbus 相同的权限、校验和事务路径。
-- `idu_params_write_registers()`：解析转发表的 FC03 映射，供北向 FC06/16 使用。
-- `idu_params_restore(dev_id)`：只恢复标记 RESTORE 的点，经过同样的下发与保存路径。
-- `idu_params_flush()`：同步保存当前配置。当前 PERSIST 参数每次写入已同步保存，
-  没有后台延迟落盘窗口，也没有仿造旧库的全部 flags/ABI。
-- `idu_params_recover()`：只回读待确认事务，绝不自动重发写命令。
-- `idu_params_reload()`：在业务调用静止时重挂载并重读存储；不通过普通 Modbus 开放。
+- `dp_process_execute()` / `dp_process_submit()`：业务层按键写入并运行
+  事务 handler；北向整点写入由 `tr_write()` 解析映射后进入该流程。
+- `dp_params_set_values()`：按 `{dev_id,sig_id}` 批量设置的底层参数接口，
+  执行权限、校验和持久化事务，但绕过业务 handler。
+- `dp_params_write_registers()`：按 FC03 映射调用底层参数事务，绕过业务
+  handler；正常北向 FC06/16 使用 transmit 的 `tr_write()`。
+- `dp_params_restore(dev_id)`：只恢复标记 RESTORE 的点，经过同样的下发与保存路径。
+- `dp_params_flush()`：同步保存持久目标值，包括待提交的延后保存值。
+  普通持久写同步保存；`DP_OP_DEFER` / `DP_PARAM_DEFER_STORE` 使用 1 s 防抖，
+  `DP_OP_NO_STORE` 的暂态值不会进入后续快照。
+- `dp_params_recover()`：只回读待确认事务，绝不自动重发写命令。
+- `dp_params_reload()`：在业务调用静止时重挂载并重读存储；不通过普通 Modbus 开放。
 
 参数 API 是线程同步 API，不能从 ISR、系统工作队列或准备回调调用。
 事务锁冲突返回 busy；不隐式排队或自动重试。完成后通过
-`idu_param_events` 发布状态通知，使用普通 subscriber/快速 listener；
+`dp_param_events` 发布状态通知，使用普通 subscriber/快速 listener；
 不要绑定保留消息副本的 message subscriber。通知可合并/丢弃，业务
-以函数返回值和 `idu_params_get_status()` 为准；listener 不得重入参数 API。
+以函数返回值和 `dp_params_get_status()` 为准；listener 不得重入参数 API。
 
 上位机一次可写最多 32 个寄存器，参数点上限默认 16，每点最多 16 字。
 32 位数/标签必须完整写入。请求可以包含多个本机参数，或者同一
@@ -566,7 +586,7 @@ NVS 相同数据不会重复写入；同值远程写仍需实际确认设备，�
 ### Zephyr Modbus 适配与升级
 
 Zephyr 4.4.2 的 FC16 服务按寄存器调用回调，且接收工作默认放在系统
-工作队列。因此 `modules/idu_points/compat` 在构建目录生成三份适配文件：
+工作队列。因此 `modules/transmit/compat` 在构建目录生成三份适配文件：
 北向独立工作队列、FC06/16 整包写入入口，以及 RAW 单字节异常响应
 长度修正，并增加按接口配置的 unit/广播策略。没有修改 west 管理的 Zephyr 源码。RAW 异常码现已真实到达
 客户端，不再期望 `-EMSGSIZE`。
@@ -601,7 +621,7 @@ Zephyr 4.4.2 的 FC16 服务按寄存器调用回调，且接收工作默认放�
 | --- | --- | --- |
 | `/home/ryan/Documents/io-interface-board` 的 MV-IO 分支 | GD32E505 板级引脚、采集、RS485 协议、旧 Flash/BOOT/IAP 行为 | 用户确认已在实际硬件运行；旧固件用 FreeRTOS |
 | `/home/ryan/Documents/AIDC_CODE/CODE` | equip 三张表、process 回调、参数/采集/转发模块的功能契约 | RT-Thread 平台；DSP 主链路为 CAN/UPP，与 MV-IO 的硬件和协议不同 |
-| 当前 `IDU-pre` + `modules/idu_points` | 被对照实现 | Zephyr 4.4.2；现有口转发、虚拟口采集，按用户已确认的分工 |
+| 当前 `IDU-pre` + `modules/dataprocess` | 被对照实现 | Zephyr 4.4.2；现有口转发、虚拟口采集，按用户已确认的分工 |
 
 旧硬件已验证这一事实作为迁移前提。仍需验证的是 Zephyr 新驱动、
 调度、时钟初始化和协议实现的实际表现。不能把 AIDC 的全部 CAN、
@@ -668,7 +688,7 @@ Zephyr 4.4.2 的 FC16 服务按寄存器调用回调，且接收工作默认放�
   旧头文件 `MPP_SIG_SIZE_MAX=144`；当前每点最多 32 字节且宽度以
   16 位寄存器计，不能原样表示这些配置。
 - 按默认设备展开为 `178 + 8 × 41 = 506` 条处理配置，包含上述重复。
-  当前 `CONFIG_IDU_POINTS_MAX_POINTS` 默认 64、允许上限 256；参数点
+  当前 `CONFIG_DP_POINTS_MAX_POINTS` 默认 64、允许上限 256；参数点
   默认 16、上限 32。完整迁表需要重新核算容量、内存和队列吞吐。
 - UPP 采集表有 445 条，DSP process 表只有 41 条；不能假定每个模型
   字段都已有数据池信号。透传与入池覆盖关系需要按信号及模型分别验证。
@@ -677,7 +697,7 @@ Zephyr 4.4.2 的 FC16 服务按寄存器调用回调，且接收工作默认放�
 
 以下旧接口见 `platform/inc/data_process.h`，配置例子见
 `app/cfg/equip/table/process.c`。当前入口是
-`modules/idu_points/include/idu/points.h`、`params.h` 及对应实现。
+`modules/dataprocess/include/dataprocess/points.h`、`params.h` 及对应实现。
 
 | 项目 | 旧方案及证据 | 当前 Zephyr 状态 / 缺口 |
 | --- | --- | --- |
@@ -797,4 +817,4 @@ Zephyr 4.4.2 的 FC16 服务按寄存器调用回调，且接收工作默认放�
 - [DP 上下文及接口](/home/ryan/Documents/AIDC_CODE/CODE/platform/inc/data_process.h:133)、[采集接口](/home/ryan/Documents/AIDC_CODE/CODE/platform/inc/collect_lib.h:64)、[转发接口](/home/ryan/Documents/AIDC_CODE/CODE/platform/inc/transmit_lib.h:66)、[平台回调](/home/ryan/Documents/AIDC_CODE/CODE/platform/inc/platform_callback.h:37)。
 - [AIDC 处理表](/home/ryan/Documents/AIDC_CODE/CODE/app/cfg/equip/table/process.c:16)、[范围与恢复默认](/home/ryan/Documents/AIDC_CODE/CODE/app/cfg/equip/range/signal_range.c:209)、[Keil 工程](/home/ryan/Documents/AIDC_CODE/CODE/product/APP_H745.uvprojx:1638)。
 - [MV-IO 真实收包分发](/home/ryan/Documents/io-interface-board/code/APP/Project/Protocol/Modbus.c:111)、[保持寄存器表](/home/ryan/Documents/io-interface-board/code/APP/Project/Protocol/ModbusCallBackFun.c:155)、[保存地址读写](/home/ryan/Documents/io-interface-board/code/APP/Project/Protocol/ModbusCallBackFun.c:968)、[旧参数恢复](/home/ryan/Documents/io-interface-board/code/APP/Project/APP/MainTask.c:174)。
-- [当前点表契约](../modules/idu_points/include/idu/points.h)、[当前参数契约](../modules/idu_points/include/idu/params.h)、[当前引擎容量](../modules/idu_points/Kconfig)。
+- [当前点表契约](../modules/dataprocess/include/dataprocess/points.h)、[当前参数契约](../modules/dataprocess/include/dataprocess/params.h)、[当前引擎容量](../modules/dataprocess/Kconfig)。

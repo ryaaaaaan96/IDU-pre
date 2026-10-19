@@ -51,3 +51,28 @@ env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
 timeout 30s "$test_dir/boot/zephyr/zephyr.exe"
 
 bash applications/IDU-pre/tests/iap/run.sh
+
+# Modular telemetry pipeline, reusable device models and event-driven polling.
+for suite in pipeline models collector transmit dataprocess; do
+    env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
+        "applications/IDU-pre/tests/$suite" -d "$test_dir/$suite"
+    timeout 30s "$test_dir/$suite/zephyr/zephyr.exe"
+done
+
+# Storage and transport are independently optional in the processing module.
+for variant in params transport; do
+    env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
+        applications/IDU-pre/tests/dataprocess -d "$test_dir/dataprocess-$variant" \
+        -- -DEXTRA_CONF_FILE="$variant.conf"
+    timeout 30s "$test_dir/dataprocess-$variant/zephyr/zephyr.exe" -flash_in_ram
+done
+
+env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
+    applications/IDU-pre/tests/pipeline -d "$test_dir/pipeline-no-adapter" \
+    -- -DEXTRA_CONF_FILE=adapter-off.conf
+timeout 30s "$test_dir/pipeline-no-adapter/zephyr/zephyr.exe"
+
+env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
+    applications/IDU-pre/tests/pipeline -d "$test_dir/pipeline-basic" \
+    -- -DEXTRA_CONF_FILE=process-off.conf
+timeout 30s "$test_dir/pipeline-basic/zephyr/zephyr.exe"

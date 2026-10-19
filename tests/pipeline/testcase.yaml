@@ -1,0 +1,27 @@
+tests:
+  idu.pipeline.telemetry:
+    platform_allow: native_sim/native/64
+    integration_platforms:
+      - native_sim/native/64
+    tags:
+      - modbus
+      - zbus
+      - idu
+  idu.pipeline.telemetry_without_adapter:
+    platform_allow: native_sim/native/64
+    integration_platforms:
+      - native_sim/native/64
+    extra_args: EXTRA_CONF_FILE=adapter-off.conf
+    tags:
+      - modbus
+      - zbus
+      - idu
+  idu.pipeline.basic_points:
+    platform_allow: native_sim/native/64
+    integration_platforms:
+      - native_sim/native/64
+    extra_args: EXTRA_CONF_FILE=process-off.conf
+    tags:
+      - modbus
+      - zbus
+      - idu

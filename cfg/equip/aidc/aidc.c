@@ -1,6 +1,6 @@
 #include "idu_aidc.h"
-#include <idu/collect.h>
-#include <idu/params.h>
+#include <collect/collect.h>
+#include <dataprocess/params.h>
 #include <errno.h>
 #include <string.h>
 #include "generated/symbols.h"
@@ -8,7 +8,7 @@
 struct model_point {
     uint16_t sig, model, offset, legacy_cycle;
     uint8_t width;
-    struct idu_value initial;
+    struct dp_value initial;
 };
 static const struct model_point models[] = {
 #include "generated/models.inc"
@@ -32,13 +32,13 @@ static int model_read(void *user, uint16_t dev, uint16_t model, uint16_t offset,
     return -ENOENT;
 }
 
-int idu_aidc_bus_init(const struct idu_equip_cfg *cfg)
+int idu_aidc_bus_init(const struct dp_equip_cfg *cfg)
 {
-    struct idu_bus_cfg bus = {.id=1,.iface=-1,.simulated=true,.read_model=model_read};
-    return idu_collect_init_bus(cfg, &bus);
+    struct co_bus_cfg bus = {.id=1,.iface=-1,.simulated=true,.read_model=model_read};
+    return co_init_bus(cfg, &bus);
 }
 
-static void string_value(struct idu_value *v, const char *text, size_t bytes)
+static void string_value(struct dp_value *v, const char *text, size_t bytes)
 {
     memset(v,0,sizeof(*v));
     for (size_t i=0;i<bytes && text[i];++i) {
@@ -46,15 +46,15 @@ static void string_value(struct idu_value *v, const char *text, size_t bytes)
     }
 }
 
-int idu_aidc_process(struct idu_process_ctx *ctx, struct idu_key key)
+int idu_aidc_process(struct dp_process_ctx *ctx, struct dp_key key)
 {
     const struct legacy_handler *h = NULL;
     for (size_t i=0;i<ARRAY_SIZE(handlers);++i) { if (handlers[i].sig==key.sig_id) { h=&handlers[i]; break; } }
     if (!h) { return -ENOENT; }
-    struct idu_value v;
-    int err = idu_txn_get(ctx,key,false,&v);
+    struct dp_value v;
+    int err = dp_txn_get(ctx,key,false,&v);
     if (err) { return err; }
-    bool write = ctx->request->operation == IDU_OP_WRITE;
+    bool write = ctx->request->operation == DP_OP_WRITE;
     if (!strcmp(h->callback,"local_equip_take_sig_effect")) {
         if (!write) { return 0; }
         /* Only the current north UART has a physical binding. Other legacy
@@ -85,11 +85,11 @@ int idu_aidc_process(struct idu_process_ctx *ctx, struct idu_key key)
     } else if (!strcmp(h->callback,"property_prtol_3X_2582_2657")) {
         if (key.sig_id==2582) { string_value(&v,"IDU-pre_Zephyr_0.1.0",30); }
         else if (key.sig_id>=2597 && key.sig_id<=2702 && (key.sig_id-2597)%15==0) {
-            struct idu_key source={11+(key.sig_id-2597)/15,2582};
-            struct idu_point_state state;
-            err=idu_txn_get_state(ctx,source,&state); if (err) { return err; }
-            if ((state.quality & 0xff) != IDU_QUALITY_GOOD) {
-                return ctx->request->operation == IDU_OP_INIT ? 0 : -ENODATA;
+            struct dp_key source={11+(key.sig_id-2597)/15,2582};
+            struct dp_point_state state;
+            err=dp_txn_get_state(ctx,source,&state); if (err) { return err; }
+            if ((state.quality & 0xff) != DP_QUALITY_GOOD) {
+                return ctx->request->operation == DP_OP_INIT ? 0 : -ENODATA;
             }
             v = state.value;
         } else { return -ENOENT; }
@@ -98,13 +98,13 @@ int idu_aidc_process(struct idu_process_ctx *ctx, struct idu_key key)
          * product services. Do not acknowledge unsupported actions as success. */
         return write ? -ENOTSUP : 0;
     }
-    return idu_txn_emit(ctx,key,&v,IDU_OP_NO_COLLECT|IDU_OP_NO_STORE);
+    return dp_txn_emit(ctx,key,&v,DP_OP_NO_COLLECT|DP_OP_NO_STORE);
 }
 
 static uint16_t parameter(uint16_t sig, uint16_t fallback)
 {
-    struct idu_point_state state;
-    return idu_params_read((struct idu_key){247,sig},&state) ? fallback : state.value.words[0];
+    struct dp_point_state state;
+    return dp_params_read((struct dp_key){247,sig},&state) ? fallback : state.value.words[0];
 }
 
 int idu_aidc_serial(struct modbus_iface_param *param)

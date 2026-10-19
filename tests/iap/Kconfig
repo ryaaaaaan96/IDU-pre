@@ -6,6 +6,6 @@ source "Kconfig.zephyr"
 config IDU_IAPV3
     bool
     default y
-config IDU_POINT_WORDS
+config DP_POINT_WORDS
     int
     default 16

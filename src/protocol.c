@@ -1,8 +1,8 @@
 #include "idu_pre.h"
 #include "idu_equip.h"
 #include "idu_mvio.h"
-#include <idu/modbus_adapter.h>
-#include <idu/forward.h>
+#include <transmit/modbus_adapter.h>
+#include <transmit/transmit.h>
 #include <errno.h>
 #include <zephyr/kernel.h>
 #include <zephyr/modbus/modbus.h>
@@ -35,7 +35,7 @@ int idu_protocol_set_address(uint8_t address)
         interface=modbus_iface_get_by_name(DEVICE_DT_NAME(DT_ALIAS(idu_forward)));
         if (interface < 0) { k_mutex_unlock(&protocol_lock); return interface; }
 #if defined(CONFIG_IDU_AIDC_PROFILE)
-        int attach_err = idu_forward_attach(interface,NULL);
+        int attach_err = tr_attach(interface,NULL);
 #else
         int attach_err = idu_mvio_attach(interface);
 #endif
@@ -51,17 +51,17 @@ int idu_protocol_set_address(uint8_t address)
     int err=0;
 #endif
     if (!err && !configured) {
-        err=idu_modbus_init_server(interface,param,idu_parameter_write,true);
+        err=tr_modbus_init_server(interface,param,idu_parameter_write,true);
         if (!err) { active=param; configured=true; }
     } else if (!err && !changing && (active.server.unit_id!=param.server.unit_id ||
                 active.serial.baud!=param.serial.baud || active.serial.parity!=param.serial.parity ||
                 active.serial.stop_bits!=param.serial.stop_bits)) {
         pending=param;
-        err=idu_modbus_reconfigure(interface,param,changed,NULL);
+        err=tr_modbus_reconfigure(interface,param,changed,NULL);
         changing=!err;
         if (err == -EBUSY) { err = 0; } /* A recovery owns the port; retry next sample. */
     }
     k_mutex_unlock(&protocol_lock);
     /* Legacy idle/TX recovery interval: 2000 ten-millisecond ticks. */
-    return err ? err : idu_modbus_service(interface, 20000);
+    return err ? err : tr_modbus_service(interface, 20000);
 }

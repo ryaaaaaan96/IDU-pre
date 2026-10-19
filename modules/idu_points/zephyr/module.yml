@@ -1,4 +1,0 @@
-name: idu_points
-build:
-  cmake: .
-  kconfig: Kconfig

@@ -1,0 +1,6 @@
+mainmenu "Standalone dataprocess tests"
+source "Kconfig.zephyr"
+
+config DP_TEST_TRANSPORT
+    bool "Inject a test parameter transport"
+    depends on DP_PARAMS

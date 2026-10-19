@@ -1,0 +1,26 @@
+menuconfig TRANSMIT
+    bool "Equipment mapping and protocol forwarding"
+    depends on DATAPROCESS && MODBUS_SERVER
+    default y
+
+if TRANSMIT
+
+config TR_MODBUS_ADAPTER
+    bool "Whole-PDU Modbus routing and isolated forwarding workers"
+    default y if DP_PARAMS
+    help
+      Enable the reviewed build-local Zephyr Modbus adapter for complete-request
+      routing and isolated workers. This is also available without NVS storage.
+
+config TR_STACK_SIZE
+    int "Isolated Modbus forwarding workqueue stack"
+    default 4096
+    depends on TR_MODBUS_ADAPTER
+
+config TR_PORTS
+    int "Independent forwarding workqueues"
+    default 2
+    range 1 4
+    depends on TR_MODBUS_ADAPTER
+
+endif

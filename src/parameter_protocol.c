@@ -1,17 +1,17 @@
 #include "idu_equip.h"
-#include <idu/forward.h>
+#include <transmit/transmit.h>
 #include <errno.h>
 
 static int input_read(uint16_t address, uint16_t *value)
 {
-    return idu_points_read_register(4, address, value);
+    return tr_read_register(4, address, value);
 }
 
 static int holding_read(uint16_t address, uint16_t *value)
 {
     if (address >= 32000 && address <= 32003) {
-        struct idu_param_status status;
-        idu_params_get_status(&status);
+        struct dp_param_status status;
+        dp_params_get_status(&status);
         switch (address) {
         case 32000: *value = status.flags; break;
         case 32001: *value = (uint16_t)(int16_t)status.error; break;
@@ -20,7 +20,7 @@ static int holding_read(uint16_t address, uint16_t *value)
         }
         return 0;
     }
-    return idu_points_read_register(3, address, value);
+    return tr_read_register(3, address, value);
 }
 
 struct modbus_user_callbacks *idu_parameter_callbacks(void)
@@ -38,19 +38,19 @@ int idu_parameter_write(uint16_t address, const uint16_t *words, size_t count)
             return -EINVAL;
         }
         switch (address) {
-        case 31090: return idu_params_restore(IDU_DEV_LOCAL);
-        case 31091: return idu_params_restore(IDU_DEV_REMOTE_IO);
-        case 31092: return idu_params_flush();
-        case 31093: return idu_params_recover();
+        case 31090: return dp_params_restore(IDU_DEV_LOCAL);
+        case 31091: return dp_params_restore(IDU_DEV_REMOTE_IO);
+        case 31092: return dp_params_flush();
+        case 31093: return dp_params_recover();
         }
     }
-    int iface = idu_modbus_request_iface();
-    return idu_forward_write(iface < 0 ? 0 : iface, address, words, count);
+    int iface = tr_modbus_request_iface();
+    return tr_write(iface < 0 ? 0 : iface, address, words, count);
 }
 
 uint16_t idu_sample_period_ms(void)
 {
-    struct idu_point_state state;
-    int err = idu_params_read((struct idu_key){IDU_DEV_LOCAL, IDU_SIG_SAMPLE_PERIOD}, &state);
+    struct dp_point_state state;
+    int err = dp_params_read((struct dp_key){IDU_DEV_LOCAL, IDU_SIG_SAMPLE_PERIOD}, &state);
     return err ? CONFIG_IDU_SAMPLE_PERIOD_MS : state.value.words[0];
 }

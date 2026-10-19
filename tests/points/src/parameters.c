@@ -1,5 +1,5 @@
 #include "idu_equip.h"
-#include <idu/process.h>
+#include <dataprocess/process.h>
 #include <errno.h>
 #include <string.h>
 #include <stdlib.h>
@@ -32,10 +32,10 @@ static int inject_failure(const struct device *dev, off_t offset, uint8_t data)
 
 static const struct flash_simulator_cb flash_callbacks = {.write_byte = inject_failure};
 
-static struct idu_param_status param_status(void)
+static struct dp_param_status param_status(void)
 {
-    struct idu_param_status s;
-    idu_params_get_status(&s);
+    struct dp_param_status s;
+    dp_params_get_status(&s);
     return s;
 }
 
@@ -57,11 +57,11 @@ void parameter_before(void)
     if (getenv("IDU_REBOOT_PHASE")) {
         return; /* A dedicated process run must inspect the boot-loaded state. */
     }
-    zassert_ok(idu_params_reload());
-    zassert_ok(idu_params_recover());
-    zassert_ok(idu_params_restore(IDU_DEV_LOCAL));
-    zassert_ok(idu_params_restore(IDU_DEV_REMOTE_IO));
-    zassert_ok(idu_params_restore(20));
+    zassert_ok(dp_params_reload());
+    zassert_ok(dp_params_recover());
+    zassert_ok(dp_params_restore(IDU_DEV_LOCAL));
+    zassert_ok(dp_params_restore(IDU_DEV_REMOTE_IO));
+    zassert_ok(dp_params_restore(20));
 }
 
 ZTEST(points, test_parameters_local_write_persists_and_applies)
@@ -70,16 +70,16 @@ ZTEST(points, test_parameters_local_write_persists_and_applies)
     zassert_equal(idu_sample_period_ms(), 750);
     zassert_equal(read_word(31000), 750);
     uint32_t sequence = param_status().sequence;
-    zassert_ok(idu_params_reload());
+    zassert_ok(dp_params_reload());
     zassert_equal(read_word(31000), 750);
     zassert_equal(param_status().sequence, sequence);
     zassert_ok(modbus_write_holding_reg(north_client, 16, 31000, 750));
     zassert_equal(param_status().sequence, sequence); /* No change, no new generation. */
-    struct idu_param_status event;
-    zassert_ok(zbus_chan_read(&idu_param_events, &event, K_NO_WAIT));
+    struct dp_param_status event;
+    zassert_ok(zbus_chan_read(&dp_param_events, &event, K_NO_WAIT));
     zassert_equal(event.sequence, sequence);
     zassert_ok(event.error);
-    zassert_equal(read_word(32000), IDU_PARAM_STORAGE_READY);
+    zassert_equal(read_word(32000), DP_PARAM_STORAGE_READY);
 }
 
 ZTEST(points, test_parameters_full_request_validated_before_write)
@@ -100,7 +100,7 @@ ZTEST(points, test_parameters_full_request_validated_before_write)
     zassert_equal(modbus_write_holding_regs(north_client, 16, 31000, crossing, 10),
                   MODBUS_EXC_ILLEGAL_DATA_ADDR);
     zassert_equal(read_word(31000), 500);
-    zassert_ok(idu_params_reload());
+    zassert_ok(dp_params_reload());
     zassert_equal(read_word(31000), 500);
 }
 
@@ -111,10 +111,10 @@ ZTEST(points, test_parameters_remote_multiword_round_trip)
     uint16_t result[3];
     zassert_ok(modbus_read_holding_regs(north_client, 16, 31500, result, 3));
     zassert_mem_equal(result, request, sizeof(result));
-    zassert_ok(idu_params_reload());
+    zassert_ok(dp_params_reload());
     zassert_ok(modbus_read_holding_regs(north_client, 16, 31500, result, 3));
     zassert_mem_equal(result, request, sizeof(result));
-    zassert_equal(param_status().flags, IDU_PARAM_STORAGE_READY);
+    zassert_equal(param_status().flags, DP_PARAM_STORAGE_READY);
 }
 
 ZTEST(points, test_parameters_downstream_rejection_does_not_change_cache)
@@ -123,8 +123,8 @@ ZTEST(points, test_parameters_downstream_rejection_does_not_change_cache)
     zassert_equal(modbus_write_holding_reg(north_client, 16, 31500, 777),
                   MODBUS_EXC_SERVER_DEVICE_FAILURE);
     zassert_equal(read_word(31500), 100);
-    zassert_false(param_status().flags & IDU_PARAM_PENDING);
-    zassert_ok(idu_params_reload());
+    zassert_false(param_status().flags & DP_PARAM_PENDING);
+    zassert_ok(dp_params_reload());
     zassert_equal(read_word(31500), 100);
     idu_virtual_set_write_fault(IDU_VIRTUAL_WRITE_OK);
 }
@@ -136,7 +136,7 @@ ZTEST(points, test_parameters_lost_ack_resolved_by_readback)
     zassert_ok(modbus_write_holding_reg(north_client, 16, 31500, 456));
     zassert_equal(idu_virtual_write_count(), count + 1); /* No write retry. */
     zassert_equal(read_word(31500), 456);
-    zassert_false(param_status().flags & IDU_PARAM_PENDING);
+    zassert_false(param_status().flags & DP_PARAM_PENDING);
     idu_virtual_set_write_fault(IDU_VIRTUAL_WRITE_OK);
 }
 
@@ -145,21 +145,21 @@ ZTEST(points, test_parameters_pending_survives_remount_and_blocks_writes)
     idu_virtual_set_write_fault(IDU_VIRTUAL_WRITE_DISCONNECT);
     zassert_equal(modbus_write_holding_reg(north_client, 16, 31500, 678),
                   MODBUS_EXC_GW_TARGET_FAILED_TO_RESP);
-    zassert_true(param_status().flags & IDU_PARAM_PENDING);
+    zassert_true(param_status().flags & DP_PARAM_PENDING);
     uint16_t value;
     zassert_equal(modbus_read_holding_regs(north_client, 16, 31500, &value, 1),
                   MODBUS_EXC_ILLEGAL_DATA_ADDR);
     zassert_equal(modbus_write_holding_reg(north_client, 16, 31000, 700),
                   MODBUS_EXC_SERVER_DEVICE_BUSY);
-    zassert_ok(idu_params_reload());
-    zassert_true(param_status().flags & IDU_PARAM_PENDING);
+    zassert_ok(dp_params_reload());
+    zassert_true(param_status().flags & DP_PARAM_PENDING);
     unsigned count = idu_virtual_write_count();
     idu_virtual_set_online(true);
     idu_virtual_set_write_fault(IDU_VIRTUAL_WRITE_OK);
     zassert_ok(modbus_write_holding_reg(north_client, 16, 31093, 1));
     zassert_equal(idu_virtual_write_count(), count); /* Recovery only reads. */
     zassert_equal(read_word(31500), 678);
-    zassert_false(param_status().flags & IDU_PARAM_PENDING);
+    zassert_false(param_status().flags & DP_PARAM_PENDING);
 }
 
 ZTEST(points, test_parameters_ambiguous_readback_never_replays)
@@ -171,14 +171,14 @@ ZTEST(points, test_parameters_ambiguous_readback_never_replays)
     idu_virtual_set_write_fault(IDU_VIRTUAL_WRITE_OK);
     zassert_ok(idu_virtual_set_register(3, 40000, 333));
     unsigned count = idu_virtual_write_count();
-    zassert_equal(idu_params_recover(), -EBADMSG);
-    zassert_true(param_status().flags & IDU_PARAM_PENDING);
+    zassert_equal(dp_params_recover(), -EBADMSG);
+    zassert_true(param_status().flags & DP_PARAM_PENDING);
     zassert_equal(idu_virtual_write_count(), count);
     /* Device inspected/reset by an operator to its captured pre-write value. */
     zassert_ok(idu_virtual_set_register(3, 40000, 100));
-    zassert_ok(idu_params_recover());
+    zassert_ok(dp_params_recover());
     zassert_equal(read_word(31500), 100);
-    zassert_false(param_status().flags & IDU_PARAM_PENDING);
+    zassert_false(param_status().flags & DP_PARAM_PENDING);
 }
 
 ZTEST(points, test_parameters_no_downstream_write_without_durable_intent)
@@ -188,11 +188,11 @@ ZTEST(points, test_parameters_no_downstream_write_without_durable_intent)
     zassert_equal(modbus_write_holding_reg(north_client, 16, 31500, 987),
                   MODBUS_EXC_SERVER_DEVICE_FAILURE);
     zassert_equal(idu_virtual_write_count(), count);
-    zassert_false(param_status().flags & IDU_PARAM_STORAGE_READY);
+    zassert_false(param_status().flags & DP_PARAM_STORAGE_READY);
     zassert_equal(read_word(31500), 100);
     bytes_before_failure = -1;
-    zassert_ok(idu_params_reload());
-    zassert_ok(idu_params_recover());
+    zassert_ok(dp_params_reload());
+    zassert_ok(dp_params_recover());
 }
 
 ZTEST(points, test_parameters_power_loss_after_downstream_before_commit)
@@ -201,11 +201,11 @@ ZTEST(points, test_parameters_power_loss_after_downstream_before_commit)
     fail_after_downstream = true;
     zassert_equal(modbus_write_holding_reg(north_client, 16, 31500, 987),
                   MODBUS_EXC_SERVER_DEVICE_FAILURE);
-    zassert_true(param_status().flags & IDU_PARAM_PENDING);
+    zassert_true(param_status().flags & DP_PARAM_PENDING);
     fail_after_downstream = false;
-    zassert_ok(idu_params_reload());
-    zassert_true(param_status().flags & IDU_PARAM_PENDING);
-    zassert_ok(idu_params_recover());
+    zassert_ok(dp_params_reload());
+    zassert_true(param_status().flags & DP_PARAM_PENDING);
+    zassert_ok(dp_params_recover());
     zassert_equal(read_word(31500), 987);
     zassert_equal(idu_virtual_write_count(), writes_at_start + 1);
 }
@@ -218,12 +218,12 @@ ZTEST(points, test_parameters_torn_flash_write_keeps_whole_snapshot)
     /* Fail each possible byte in this snapshot's data, CRC, and metadata,
      * plus successful writes. Repeated iterations also exercise NVS GC. */
     for (int cut = 0; cut < 160; ++cut) {
-        zassert_ok(idu_params_write_registers(31000, baseline, 9));
+        zassert_ok(dp_params_write_registers(31000, baseline, 9));
         bytes_before_failure = cut;
-        int err = idu_params_write_registers(31000, request, 9);
+        int err = dp_params_write_registers(31000, request, 9);
         bytes_before_failure = -1;
         zassert_true(err == 0 || err == -EIO, "cut=%d error=%d", cut, err);
-        zassert_ok(idu_params_reload(), "cut=%d", cut);
+        zassert_ok(dp_params_reload(), "cut=%d", cut);
         uint16_t result[9];
         zassert_ok(modbus_read_holding_regs(north_client, 16, 31000, result, 9));
         zassert_true(memcmp(result, baseline, sizeof(result)) == 0 ||
@@ -266,40 +266,40 @@ ZTEST(points, test_parameters_unknown_storage_schema_is_read_only)
     zassert_true(len > 16 && len <= sizeof(saved));
     uint8_t unknown[16] = {0};
     zassert_equal(nvs_write(&other, 1, unknown, sizeof(unknown)), sizeof(unknown));
-    zassert_equal(idu_params_reload(), -EPROTO);
-    zassert_equal(idu_params_flush(), -EROFS);
-    zassert_false(param_status().flags & IDU_PARAM_STORAGE_READY);
+    zassert_equal(dp_params_reload(), -EPROTO);
+    zassert_equal(dp_params_flush(), -EROFS);
+    zassert_false(param_status().flags & DP_PARAM_STORAGE_READY);
     /* Restore the exact test fixture without exposing a production erase API. */
     zassert_equal(nvs_write(&other, 1, saved, len), len);
-    zassert_ok(idu_params_reload());
+    zassert_ok(dp_params_reload());
 }
 
 ZTEST(points, test_parameters_business_api_callbacks_and_permissions)
 {
-    struct idu_point_update values[2] = {
+    struct dp_point_update values[2] = {
         {.key = {1, IDU_SIG_SAMPLE_PERIOD}, .width = 1, .value.words = {750}},
         {.key = {1, 31100}, .width = 1, .value.words = {42}},
     };
-    zassert_equal(idu_params_set_values(values, 2), -ERANGE);
+    zassert_equal(dp_params_set_values(values, 2), -ERANGE);
     zassert_equal(read_word(31000), 500);
     values[1].value.words[0] = 43;
-    zassert_ok(idu_params_set_values(values, 2));
-    zassert_ok(idu_params_reload());
-    struct idu_point_state state;
-    zassert_ok(idu_params_read(values[1].key, &state));
+    zassert_ok(dp_params_set_values(values, 2));
+    zassert_ok(dp_params_reload());
+    struct dp_point_state state;
+    zassert_ok(dp_params_read(values[1].key, &state));
     zassert_equal(state.value.words[0], 43);
     values[1].key.sig_id = 31101;
-    zassert_equal(idu_params_set_values(values, 2), -EACCES);
+    zassert_equal(dp_params_set_values(values, 2), -EACCES);
     values[1].key = values[0].key;
-    zassert_equal(idu_params_set_values(values, 2), -EINVAL);
-    values[1].key = (struct idu_key){IDU_DEV_REMOTE_IO, IDU_SIG_REMOTE_SETPOINT};
+    zassert_equal(dp_params_set_values(values, 2), -EINVAL);
+    values[1].key = (struct dp_key){IDU_DEV_REMOTE_IO, IDU_SIG_REMOTE_SETPOINT};
     unsigned count = idu_virtual_write_count();
-    zassert_equal(idu_params_set_values(values, 2), -EXDEV); /* Mixed local/remote. */
+    zassert_equal(dp_params_set_values(values, 2), -EXDEV); /* Mixed local/remote. */
     zassert_equal(idu_virtual_write_count(), count);
-    zassert_ok(idu_params_restore(IDU_DEV_LOCAL));
-    zassert_ok(idu_params_read((struct idu_key){1, 31100}, &state));
+    zassert_ok(dp_params_restore(IDU_DEV_LOCAL));
+    zassert_ok(dp_params_read((struct dp_key){1, 31100}, &state));
     zassert_equal(state.value.words[0], 10);
-    zassert_ok(idu_params_read((struct idu_key){1, 31101}, &state));
+    zassert_ok(dp_params_read((struct dp_key){1, 31101}, &state));
     zassert_equal(state.value.words[0], 7);
 }
 
@@ -320,9 +320,9 @@ ZTEST(points, test_parameters_corrupt_snapshot_recovers_valid_history)
         }
     }
     zassert_true(corruptions > 0);
-    zassert_ok(idu_params_reload());
+    zassert_ok(dp_params_reload());
     zassert_equal(read_word(31000), 601);
-    zassert_true(param_status().flags & IDU_PARAM_HISTORY_RECOVERED);
+    zassert_true(param_status().flags & DP_PARAM_HISTORY_RECOVERED);
 }
 
 ZTEST(points, test_parameters_reboot_probe)
@@ -337,52 +337,52 @@ ZTEST(points, test_parameters_reboot_probe)
         idu_virtual_set_write_fault(IDU_VIRTUAL_WRITE_DISCONNECT);
         zassert_equal(modbus_write_holding_reg(north_client, 16, 31500, 987),
                       MODBUS_EXC_GW_TARGET_FAILED_TO_RESP);
-        zassert_true(param_status().flags & IDU_PARAM_PENDING);
+        zassert_true(param_status().flags & DP_PARAM_PENDING);
     } else if (!strcmp(phase, "recover")) {
         zassert_equal(read_word(31000), 750);
-        zassert_true(param_status().flags & IDU_PARAM_PENDING);
+        zassert_true(param_status().flags & DP_PARAM_PENDING);
         /* The virtual slave RAM restarts with the simulator. Model a real
          * independently powered slave that retained the completed command. */
         zassert_ok(idu_virtual_set_register(3, 40000, 987));
         unsigned count = idu_virtual_write_count();
-        zassert_ok(idu_params_recover());
+        zassert_ok(dp_params_recover());
         zassert_equal(idu_virtual_write_count(), count);
         zassert_equal(read_word(31500), 987);
     } else {
         zassert_equal(strcmp(phase, "verify"), 0);
         zassert_equal(read_word(31000), 750);
         zassert_equal(read_word(31500), 987);
-        zassert_false(param_status().flags & IDU_PARAM_PENDING);
+        zassert_false(param_status().flags & DP_PARAM_PENDING);
     }
 }
 
 extern unsigned module_reboot_count(void);
 ZTEST(points, test_parameters_upgrade_flush_freezes_transactions)
 {
-    struct idu_point_update update = {.key = {1,31100}, .width = 1, .value.words = {77}};
-    zassert_ok(idu_params_apply(&update, 1, IDU_OP_DEFER));
-    zassert_ok(idu_params_prepare_reboot());
+    struct dp_point_update update = {.key = {1,31100}, .width = 1, .value.words = {77}};
+    zassert_ok(dp_params_apply(&update, 1, DP_OP_DEFER));
+    zassert_ok(dp_params_prepare_reboot());
     update.value.words[0] = 88;
-    zassert_equal(idu_params_apply(&update, 1, 0), -EBUSY);
-    zassert_equal(idu_params_restore(IDU_DEV_LOCAL), -EBUSY);
-    zassert_equal(idu_params_reload(), -EBUSY);
-    idu_params_cancel_reboot();
-    zassert_ok(idu_params_reload());
-    struct idu_point_state state;
-    zassert_ok(idu_params_read(update.key, &state));
+    zassert_equal(dp_params_apply(&update, 1, 0), -EBUSY);
+    zassert_equal(dp_params_restore(IDU_DEV_LOCAL), -EBUSY);
+    zassert_equal(dp_params_reload(), -EBUSY);
+    dp_params_cancel_reboot();
+    zassert_ok(dp_params_reload());
+    struct dp_point_state state;
+    zassert_ok(dp_params_read(update.key, &state));
     zassert_equal(state.value.words[0], 77);
-    zassert_ok(idu_params_apply(&update, 1, 0));
+    zassert_ok(dp_params_apply(&update, 1, 0));
 }
 
 ZTEST(points,test_parameters_failed_save_cannot_reboot)
 {
-    struct idu_point_update update={.key={1,31100},.width=1,.value.words={61}};
-    zassert_ok(idu_params_apply(&update,1,IDU_OP_DEFER));
+    struct dp_point_update update={.key={1,31100},.width=1,.value.words={61}};
+    zassert_ok(dp_params_apply(&update,1,DP_OP_DEFER));
     unsigned count=module_reboot_count();
     bytes_before_failure=0;
-    zassert_ok(idu_process_save_reboot(100)); k_sleep(K_MSEC(150));
+    zassert_ok(dp_process_save_reboot(100)); k_sleep(K_MSEC(150));
     zassert_equal(module_reboot_count(),count);
-    zassert_false(param_status().flags & IDU_PARAM_STORAGE_READY);
+    zassert_false(param_status().flags & DP_PARAM_STORAGE_READY);
     bytes_before_failure=-1;
-    zassert_ok(idu_params_reload());
+    zassert_ok(dp_params_reload());
 }

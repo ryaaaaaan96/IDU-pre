@@ -3,8 +3,8 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(iap_receiver_tests)
 get_filename_component(IDU_APP ../.. ABSOLUTE)
 set(CONFIG_MCUBOOT_SIGNATURE_KEY_FILE ${ZEPHYR_MCUBOOT_MODULE_DIR}/root-ec-p256.pem)
-target_include_directories(app PRIVATE ${IDU_APP}/include ${IDU_APP}/modules/idu_points/include
-  ${CMAKE_CURRENT_BINARY_DIR})
+target_include_directories(app PRIVATE ${IDU_APP}/include ${IDU_APP}/modules/dataprocess/include
+  ${IDU_APP}/modules/transmit/include ${CMAKE_CURRENT_BINARY_DIR})
 execute_process(COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_LIST_DIR}/fixtures.py
   ${CMAKE_CURRENT_BINARY_DIR} COMMAND_ERROR_IS_FATAL ANY)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS

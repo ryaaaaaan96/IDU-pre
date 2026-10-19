@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20.0)
 get_filename_component(IDU_APP ${CMAKE_CURRENT_SOURCE_DIR}/../.. ABSOLUTE)
-list(APPEND ZEPHYR_EXTRA_MODULES ${IDU_APP}/modules/idu_points)
+include(${IDU_APP}/modules/modules.cmake)
 set(DTC_OVERLAY_FILE ${CMAKE_CURRENT_SOURCE_DIR}/app.overlay)
 list(APPEND EXTRA_CONF_FILE ${IDU_APP}/conf/aidc-virtual.conf)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})

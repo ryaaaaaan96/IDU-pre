@@ -5,6 +5,13 @@
 当前已实现本地采集、zbus 点表处理、虚拟 Modbus 采集口和现有 RS485
 转发、参数下发和 NVS 持久化。点表配置参考 AIDC 的 equip/process 设计；详见
 [点表设计、库接口分析和换串口步骤](docs/point-tables.md)。
+对照 MCUdemo 的设备实例与三表设计，已将远端 MV-IO 模型集中到
+`cfg/equip/models/`，由 `instances.h` 统一绑定设备、总线和转发窗口。
+Process 支持无 Flash/NVS 的独立运行，采集线程使用事件与截止时间唤醒。
+模块边界、扩展步骤及验证入口见
+[collect / process / transmit 模块设计](docs/collect-process-transmit.md)。
+GD32 官方固件库、Zephyr 上游及厂商分支的支持范围见
+[GD32E505 官方支持索引与适配边界](docs/gd32-support.md)。
 当前没有完成整个旧固件或 RT-Thread 平台库的替换；MV-IO 的单 ARM
 IAPv3/AES/SGZ 接收已接入 MCUboot，见[兼容升级配置](#iapv3)。
 本轮新增事务回调、多输出、独立参数标志、异步/延后保存、多总线采集、
@@ -31,7 +38,10 @@ IDU-pre/
 ├── src/                 # 采集、转发、健康监控、IAPv3/SGZ
 ├── include/             # 本板接口
 ├── cfg/                 # 设备和点表配置，含已生成的 AIDC 表
-├── modules/idu_points/  # 内置 zbus、Modbus、process 和参数持久化模块
+├── modules/
+│   ├── dataprocess/      # dp_* 数据池、业务处理及可选 NVS
+│   ├── collect/          # co_* 采集与总线调度
+│   └── transmit/         # tr_* 地址映射与协议转发
 ├── conf/                # MCUboot、IAPv3、SMP、AIDC 可选配置
 ├── sysbuild/            # MCUboot 与应用联合构建
 ├── tools/               # 镜像检查、签名构建、SGZ 打包和表导入
@@ -115,8 +125,9 @@ IDU-pre/
     └── test_boot_image.py  # BIN/HEX 启动布局检查器的异常输入测试
 ```
 
-点表引擎放在本仓库的 `modules/idu_points/`，作为 Zephyr module
-接入，随本板代码一起版本管理，不修改 west 管理的 Zephyr 源码。
+三个通用模块分别放在 `modules/dataprocess/`、`modules/collect/` 和
+`modules/transmit/`，通过 `modules/modules.cmake` 注册到 Zephyr。产品点表留在
+`cfg/equip/`，模块不依赖本板 BSP；详见 [模块接口](modules/README.md)。
 
 ## 引脚映射
 

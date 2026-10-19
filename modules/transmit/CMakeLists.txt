@@ -1,0 +1,7 @@
+zephyr_library()
+zephyr_include_directories(include)
+zephyr_library_sources_ifdef(CONFIG_TRANSMIT src/transmit.c)
+zephyr_library_sources_ifdef(CONFIG_TR_MODBUS_ADAPTER src/modbus_adapter.c)
+if(CONFIG_TR_MODBUS_ADAPTER)
+  include(compat/modbus.cmake)
+endif()

@@ -11,6 +11,7 @@
 ## 代码与构建
 
 - 产品代码、板级支持和点表模块保存在本应用内；依赖版本由工作区 `manifest/west.yml` 管理。
+- 通用模块使用 `modules/dataprocess`、`modules/collect`、`modules/transmit`，接口分别为 `dp_*`、`co_*`、`tr_*`；产品接口继续使用 `idu_*`。
 - `src/main.c` 负责采样周期和休眠，`src/runtime.c` 编排启动、采集和故障策略；硬件访问归对应板级模块，设备服务归 `src/equip.c`。
 - 在应用目录执行 `./build.sh` 构建默认固件，或 `./build.sh --mcuboot --iapv3` 构建兼容升级配置。
 - 在应用目录执行 `bash tests/run.sh` 运行完整回归；按改动范围选择必要验证。文档修改检查内容、路径和格式即可。

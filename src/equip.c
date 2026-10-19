@@ -1,6 +1,6 @@
 #include "idu_equip.h"
 #include "idu_pre.h"
-#include <idu/process.h>
+#include <dataprocess/process.h>
 #if defined(CONFIG_IDU_AIDC_PROFILE)
 #include "idu_aidc.h"
 #endif
@@ -12,8 +12,8 @@ LOG_MODULE_REGISTER(idu_equip, LOG_LEVEL_INF);
 
 int idu_equipment_init(void)
 {
-    const struct idu_equip_cfg *cfg = idu_equipment_config();
-    int err = idu_points_init(cfg);
+    const struct dp_equip_cfg *cfg = idu_equipment_config();
+    int err = dp_init(cfg);
     if (err) {
         return err;
     }
@@ -21,7 +21,7 @@ int idu_equipment_init(void)
     if (iface < 0) {
         return iface;
     }
-    err = idu_collect_init(cfg, iface, IS_ENABLED(CONFIG_IDU_COLLECT_VIRTUAL));
+    err = co_init(cfg, iface, IS_ENABLED(CONFIG_IDU_COLLECT_VIRTUAL));
     if (err) { return err; }
 #if defined(CONFIG_IDU_AIDC_PROFILE)
     err = idu_aidc_bus_init(cfg);
@@ -33,18 +33,18 @@ int idu_equipment_init(void)
 #else
     const uint8_t storage_id = DT_FIXED_PARTITION_ID(DT_ALIAS(idu_settings));
 #endif
-    err = idu_params_init(cfg, storage_id, iface,
-                          IS_ENABLED(CONFIG_IDU_COLLECT_VIRTUAL));
+    err = dp_params_init(cfg, storage_id);
     if (err) {
         LOG_ERR("Parameter storage unavailable (%d); writes disabled", err);
     } else {
-        err = idu_params_recover();
+        err = dp_params_recover();
         if (err) {
             LOG_WRN("Parameter transaction awaiting readback: %d", err);
         }
     }
-    err = idu_process_init_device(0);
-    return err ? err : idu_collect_start();
+    static const struct dp_process_plan process_plan = {.initialize_all = true};
+    err = dp_process_start(&process_plan);
+    return err ? err : co_start();
 }
 
 int idu_snapshot_publish(const struct idu_snapshot *snapshot)
@@ -52,20 +52,20 @@ int idu_snapshot_publish(const struct idu_snapshot *snapshot)
     if (!snapshot) {
         return -EINVAL;
     }
-    struct idu_point_batch batch = {.source = IDU_SOURCE_LOCAL, .count = 10};
-    batch.points[0] = (struct idu_point_update){
+    struct dp_point_batch batch = {.source = DP_SOURCE_LOCAL, .count = 10};
+    batch.points[0] = (struct dp_point_update){
         .key = {IDU_DEV_LOCAL, IDU_SIG_ADDRESS}, .width = 1,
         .value.words = {snapshot->address}, .error = snapshot->valid ? 0 : -EIO,
     };
-    batch.points[1] = (struct idu_point_update){
+    batch.points[1] = (struct dp_point_update){
         .key = {IDU_DEV_LOCAL, IDU_SIG_DI}, .width = 1,
         .value.words = {snapshot->di}, .error = snapshot->valid ? 0 : -EIO,
     };
     for (unsigned i = 0; i < IDU_ANALOG_COUNT; ++i) {
-        batch.points[i + 2] = (struct idu_point_update){
+        batch.points[i + 2] = (struct dp_point_update){
             .key = {IDU_DEV_LOCAL, IDU_SIG_CURRENT_1 + i}, .width = 1,
             .value.words = {snapshot->raw[i]}, .error = snapshot->valid ? 0 : -EIO,
         };
     }
-    return idu_points_publish(&batch, K_MSEC(20));
+    return dp_publish(&batch, K_MSEC(20));
 }

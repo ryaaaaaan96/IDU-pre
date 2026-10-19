@@ -1,0 +1,98 @@
+menuconfig DATAPROCESS
+    bool "Data management and processing"
+    select ZBUS
+    select ZBUS_MSG_SUBSCRIBER
+    select ZBUS_MSG_SUBSCRIBER_NET_BUF_POOL_ISOLATION
+
+if DATAPROCESS
+
+config DP_PROCESS
+    bool "Business transactions, sample handlers and timers"
+    default y
+    help
+      Run READ, INIT, WRITE, SAMPLE and TIMER handlers with bounded copied
+      requests. Telemetry processing does not require flash or parameter storage.
+
+config DP_POINT_WORDS
+    int "Maximum words in one point"
+    default 16
+    range 2 72
+
+config DP_PROCESS_MAX_OUTPUTS
+    int "Maximum points produced by one process transaction"
+    default 24
+    range 4 64
+
+config DP_PROCESS_QUEUE_DEPTH
+    int "Asynchronous process queue depth"
+    default 4
+    range 1 16
+
+config DP_PROCESS_TIMERS
+    int "Registered business timers"
+    default 8
+    range 1 32
+
+config DP_PROCESS_STACK_SIZE
+    int "Business processor thread stack size"
+    default 6144
+    depends on DP_PROCESS
+
+config DP_MAX_BUSES
+    int "Maximum acquisition buses"
+    default 2
+    range 1 8
+
+config DP_MAX_DEVICES
+    int "Maximum acquisition devices"
+    default 16
+    range 1 64
+
+config DP_PARAMS
+    bool "Transactional parameter writes and durable NVS snapshots"
+    depends on FLASH && FLASH_PAGE_LAYOUT && FLASH_MAP
+    select DP_PROCESS
+    select NVS
+    select NVS_DATA_CRC
+    select REBOOT
+
+config DP_PARAMS_SNAPSHOT_BYTES
+    int "Maximum encoded parameter snapshot bytes"
+    default 2048
+    range 256 8192
+    depends on DP_PARAMS
+
+config DP_PARAMS_MAX_COUNT
+    int "Maximum parameter points"
+    default 16
+    range 1 192
+    depends on DP_PARAMS
+
+config DP_POINTS_QUEUE_DEPTH
+    int "Maximum pending acquisition batches"
+    default 6
+    range 1 16
+
+config DP_POINTS_MAX_POINTS
+    int "Maximum configured signals"
+    default 64
+    range 16 768
+
+config DP_POINTS_VALUE_WORDS
+    int "Total words reserved for configured point values"
+    default 512
+    range 64 16384
+    help
+      Sum of point widths, validated at startup. Each point uses its actual
+      width; a short integer does not reserve a maximum-size string buffer.
+
+config DP_POINTS_MAX_POLLS
+    int "Maximum collection blocks"
+    default 16
+    range 1 512
+
+config DP_POINTS_STACK_SIZE
+    int "Point processor stack size"
+    default 4096
+
+endif

@@ -24,7 +24,7 @@ int idu_acquisition_port_init(void)
     }
     const struct modbus_iface_param param = {
         .mode = MODBUS_MODE_RTU,
-        .rx_timeout = CONFIG_IDU_COLLECT_TIMEOUT_MS * 1000U, /* API uses us. */
+        .rx_timeout = CONFIG_CO_TIMEOUT_MS * 1000U, /* API uses us. */
         .serial = {
             .baud = DT_PROP(DT_PARENT(COLLECT_NODE), current_speed),
             .parity = UART_CFG_PARITY_NONE,

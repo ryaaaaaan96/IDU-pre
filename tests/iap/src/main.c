@@ -1,7 +1,7 @@
 #include "idu_iap.h"
 #include "idu_sgz.h"
 #include "fixture.h"
-#include <idu/modbus_adapter.h>
+#include <transmit/modbus_adapter.h>
 #include <zephyr/dfu/mcuboot.h>
 #include <zephyr/drivers/flash/flash_simulator.h>
 #include <zephyr/storage/flash_map.h>
@@ -29,8 +29,8 @@ FUNC_NORETURN void __wrap_sys_reboot(int type)
     ARG_UNUSED(type); k_sem_give(&rebooted);
     for (;;) { k_sleep(K_FOREVER); }
 }
-int idu_params_prepare_reboot(void) { if (!freeze_error) { frozen = true; } return freeze_error; }
-void idu_params_cancel_reboot(void) { frozen = false; }
+int dp_params_prepare_reboot(void) { if (!freeze_error) { frozen = true; } return freeze_error; }
+void dp_params_cancel_reboot(void) { frozen = false; }
 static int inject_write(const struct device *dev, off_t off, uint8_t byte)
 { ARG_UNUSED(dev); ARG_UNUSED(off); return fail_writes ? -EIO : byte; }
 static const struct flash_simulator_cb flash_cb = {.write_byte = inject_write};
@@ -127,20 +127,20 @@ ZTEST(iap, test_a_metadata_and_validation)
     if (phase) { ztest_test_skip(); }
     zassert_ok(read_regs(20049, 2));
     zassert_equal(sys_get_be16(tx.data + 1), 0); zassert_equal(sys_get_be16(tx.data + 3), 0x0300);
-    confirmed = false; zassert_equal(command(20083, 0xaa), IDU_MODBUS_SILENT); confirmed = true;
+    confirmed = false; zassert_equal(command(20083, 0xaa), TR_MODBUS_SILENT); confirmed = true;
     login(); configure();
     zassert_equal(command(20088, 0), 0); /* incomplete metadata allowed; no packet accepted */
-    zassert_equal(packet_send(1, false, false), IDU_MODBUS_SILENT);
+    zassert_equal(packet_send(1, false, false), TR_MODBUS_SILENT);
     configure();
-    zassert_equal(command(20088, 1025), IDU_MODBUS_SILENT); zassert_equal(word(20088), 1024);
-    zassert_equal(command(20089, 0xffff), IDU_MODBUS_SILENT);
-    zassert_equal(command(20090, 99), IDU_MODBUS_SILENT);
-    zassert_equal(command(20091, 1), IDU_MODBUS_SILENT); /* partial u32 */
-    zassert_equal(command(20083, 0xa1), IDU_MODBUS_SILENT);
+    zassert_equal(command(20088, 1025), TR_MODBUS_SILENT); zassert_equal(word(20088), 1024);
+    zassert_equal(command(20089, 0xffff), TR_MODBUS_SILENT);
+    zassert_equal(command(20090, 99), TR_MODBUS_SILENT);
+    zassert_equal(command(20091, 1), TR_MODBUS_SILENT); /* partial u32 */
+    zassert_equal(command(20083, 0xa1), TR_MODBUS_SILENT);
     zassert_ok(read_regs(20099, 4)); zassert_equal(sys_get_be16(tx.data + 1), 1);
     zassert_equal(sys_get_be16(tx.data + 7), 1024);
-    rx.unit_id = 247; zassert_equal(idu_iap_route(2, &rx, &tx), IDU_MODBUS_SILENT);
-    rx.unit_id = 1; zassert_equal(idu_iap_route(3, &rx, &tx), IDU_MODBUS_SILENT);
+    rx.unit_id = 247; zassert_equal(idu_iap_route(2, &rx, &tx), TR_MODBUS_SILENT);
+    rx.unit_id = 1; zassert_equal(idu_iap_route(3, &rx, &tx), TR_MODBUS_SILENT);
     rx.unit_id = 0; rx.fc = 4; zassert_ok(idu_iap_route(2, &rx, &tx));
     /* Combined login + reserved gap + packet geometry, nonstandard byte count. */
     rx = (struct modbus_adu){.unit_id = 1, .fc = 16, .length = 19};
@@ -157,13 +157,13 @@ ZTEST(iap, test_b_out_of_order_duplicates_and_broadcast)
     if (phase) { ztest_test_skip(); }
     login(); configure();
     unsigned last = DIV_ROUND_UP(sizeof(fixture_sgz), 1024);
-    zassert_equal(packet_send(last, true, false), IDU_MODBUS_SILENT); k_sleep(K_MSEC(10));
+    zassert_equal(packet_send(last, true, false), TR_MODBUS_SILENT); k_sleep(K_MSEC(10));
     zassert_equal(word(20103), last - 1); zassert_equal(word(20099), 1);
     zassert_ok(packet_send(last, false, false)); k_sleep(K_MSEC(10));
     zassert_equal(word(20103), last - 1);
     zassert_ok(packet_send(1, false, false)); k_sleep(K_MSEC(10));
     zassert_equal(word(20099), 2);
-    zassert_equal(command(20088, 512), IDU_MODBUS_SILENT);
+    zassert_equal(command(20088, 512), TR_MODBUS_SILENT);
     zassert_ok(packet_send(1, false, true)); wait_state(6); zassert_equal(cause(), 3);
 }
 
@@ -207,7 +207,7 @@ ZTEST(iap, test_c_sector_crossing_and_atomic_frame_rejection)
     zassert_equal(idu_iap_route(2, &rx, &tx), 0); /* metadata-only is valid */
     rx.length = 15; sys_put_be16(5, rx.data + 2); rx.data[4] = 10;
     sys_put_be16(2, rx.data + 5); /* claims 240 bytes but contains only 2 */
-    zassert_equal(idu_iap_route(2, &rx, &tx), IDU_MODBUS_SILENT);
+    zassert_equal(idu_iap_route(2, &rx, &tx), TR_MODBUS_SILENT);
     zassert_equal(word(20090), 1);
 }
 
@@ -260,6 +260,6 @@ ZTEST(iap, test_z_signed_image_staged_and_test_boot)
     /* The running image and old configuration gap were never written. */
     zassert_ok(flash_area_read(primary, 0, data, sizeof(data)));
     for (size_t i = 0; i < sizeof(data); ++i) { zassert_equal(data[i], 0xff); }
-    zassert_equal(command(20083, 0xaa), IDU_MODBUS_SILENT);
+    zassert_equal(command(20083, 0xaa), TR_MODBUS_SILENT);
 }
 ZTEST_SUITE(iap, NULL, setup, NULL, NULL, NULL);

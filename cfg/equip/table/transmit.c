@@ -1,16 +1,17 @@
 #include "idu_equip.h"
+#include "../models/mvio.h"
+#include "../instances.h"
 
 #define MAP(fc, reg, words, dev, sig) \
     {.function = fc, .address = reg, .count = words, .key = {dev, sig}}
 #define ZERO(reg, words) \
-    {.function = 4, .address = reg, .count = words, .kind = IDU_MAP_ZERO}
+    {.function = 4, .address = reg, .count = words, .kind = DP_MAP_ZERO}
 #define CURRENT(n) MAP(4, 8163 + n, 1, IDU_DEV_LOCAL, IDU_SIG_CURRENT_1 + n)
-#define REMOTE_CURRENT(n) MAP(4, 10001 + n, 1, IDU_DEV_REMOTE_IO, IDU_SIG_CURRENT_1 + n)
-#define QUALITY(reg, sig) \
-    {.function = 4, .address = reg, .count = 1, \
-     .key = {IDU_DEV_REMOTE_IO, sig}, .kind = IDU_MAP_QUALITY}
 
-static const struct idu_transmit_cfg table[] = {
+#define MVIO_TRANSMIT(dev, bus, unit, north, address_reg, period, identity, stale, identity_stale) \
+    IDU_MVIO_TRANSMIT(dev, north, address_reg),
+
+static const struct dp_transmit_cfg table[] = {
 #if defined(CONFIG_IDU_AIDC_PROFILE)
 #include "../aidc/generated/transmit.inc"
     MAP(4, 10012, 1, IDU_DEV_LOCAL, IDU_SIG_VIRTUAL_MODE),
@@ -40,22 +41,12 @@ static const struct idu_transmit_cfg table[] = {
     MAP(3, 30459, 1, IDU_DEV_LOCAL, IDU_SIG_SAVED_ADDRESS),
 
     /* IDU extension: separate remote data from physical local inputs. */
-    MAP(4, 10000, 1, IDU_DEV_REMOTE_IO, IDU_SIG_DI),
-    REMOTE_CURRENT(0), REMOTE_CURRENT(1), REMOTE_CURRENT(2), REMOTE_CURRENT(3),
-    REMOTE_CURRENT(4), REMOTE_CURRENT(5), REMOTE_CURRENT(6), REMOTE_CURRENT(7),
-    QUALITY(10009, IDU_SIG_DI),
-    MAP(4, 10010, 2, IDU_DEV_REMOTE_IO, IDU_SIG_PROTOCOL),
+    IDU_MVIO_INSTANCES(MVIO_TRANSMIT)
     MAP(4, 10012, 1, IDU_DEV_LOCAL, IDU_SIG_VIRTUAL_MODE),
-    QUALITY(10014, IDU_SIG_CURRENT_1 + 0), QUALITY(10015, IDU_SIG_CURRENT_1 + 1),
-    QUALITY(10016, IDU_SIG_CURRENT_1 + 2), QUALITY(10017, IDU_SIG_CURRENT_1 + 3),
-    QUALITY(10018, IDU_SIG_CURRENT_1 + 4), QUALITY(10019, IDU_SIG_CURRENT_1 + 5),
-    QUALITY(10020, IDU_SIG_CURRENT_1 + 6), QUALITY(10021, IDU_SIG_CURRENT_1 + 7),
-    QUALITY(10022, IDU_SIG_PROTOCOL), QUALITY(10023, IDU_SIG_ADDRESS),
-    MAP(3, 30460, 1, IDU_DEV_REMOTE_IO, IDU_SIG_ADDRESS),
 #endif
 };
 
-const struct idu_transmit_cfg *idu_transmit_table(size_t *count)
+const struct dp_transmit_cfg *idu_transmit_table(size_t *count)
 {
     *count = ARRAY_SIZE(table);
     return table;

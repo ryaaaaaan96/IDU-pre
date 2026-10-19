@@ -125,16 +125,16 @@ def generate(root, output):
     range_tables = {name:{val(r['sig_id']):r for r in entries(ranges,name)} for name in ['g_local_range_table','g_dsp_range_table']}
     descriptor=[]; handler_names=set(); cfg=[]; polls=[]; type_mismatches=[]
     writable={m['id'] for m in mapping if m['function']==3}
-    type_map={'DATA_TYPE_U8':('IDU_U8',0,255),'DATA_TYPE_U16':('IDU_U16',0,65535),
-              'DATA_TYPE_S16':('IDU_S16',-32768,32767),'DATA_TYPE_U32':('IDU_U32',0,4294967295),
-              'DATA_TYPE_S32':('IDU_S32',-2147483648,2147483647),'DATA_TYPE_STRING':('IDU_WORDS',0,0)}
+    type_map={'DATA_TYPE_U8':('DP_U8',0,255),'DATA_TYPE_U16':('DP_U16',0,65535),
+              'DATA_TYPE_S16':('DP_S16',-32768,32767),'DATA_TYPE_U32':('DP_U32',0,4294967295),
+              'DATA_TYPE_S32':('DP_S32',-2147483648,2147483647),'DATA_TYPE_STRING':('DP_WORDS',0,0)}
     for table_name, device_ids, range_name in [('g_arm_data_table',[247],'g_local_range_table'),('g_dsp_data_table',list(range(11,19)),'g_dsp_range_table')]:
         for sid,row in tables[table_name].items():
             typ,lo,hi=type_map[row['data_type']]; size=val(row['sig_size']); width=(size+1)//2; flags=val(row['sig_flag'])
             rng=range_tables[range_name].get(sid,{})
-            if typ!='IDU_WORDS' and size!={'IDU_U8':1,'IDU_U16':2,'IDU_S16':2,'IDU_U32':4,'IDU_S32':4}[typ]:
+            if typ!='DP_WORDS' and size!={'DP_U8':1,'DP_U16':2,'DP_S16':2,'DP_U32':4,'DP_S32':4}[typ]:
                 type_mismatches.append({'device':device_ids[0],'id':sid,'declared_type':row['data_type'],'bytes':size,'line':row['line']})
-                typ,lo,hi='IDU_WORDS',0,0
+                typ,lo,hi='DP_WORDS',0,0
             initial=[0]*width
             for k,v in rng.items():
                 if k.startswith('min_value.') and not k.endswith('pst'):lo=val(v)
@@ -152,12 +152,12 @@ def generate(root, output):
             # Local point properties are retained; original table flags do not
             # declare access rights. External writes are limited by FC03 maps.
             parameter=table_name=='g_arm_data_table' and (flags&1 or sid in writable)
-            param_flags=['IDU_PARAM_WRITE'] if parameter else []
-            if flags&1:param_flags+=['IDU_PARAM_PERSIST']
-            if parameter and val(rng.get('is_recover','0'))>1:param_flags+=['IDU_PARAM_RESTORE']
-            if parameter and flags&1 and not flags&(4|16):param_flags+=['IDU_PARAM_DEFER_STORE']
+            param_flags=['DP_PARAM_WRITE'] if parameter else []
+            if flags&1:param_flags+=['DP_PARAM_PERSIST']
+            if parameter and val(rng.get('is_recover','0'))>1:param_flags+=['DP_PARAM_RESTORE']
+            if parameter and flags&1 and not flags&(4|16):param_flags+=['DP_PARAM_DEFER_STORE']
             for dev in device_ids:
-                source='IDU_SOURCE_PARAMETER' if parameter else 'IDU_SOURCE_LOCAL' if dev==247 else 'IDU_SOURCE_MODBUS'
+                source='DP_SOURCE_PARAMETER' if parameter else 'DP_SOURCE_LOCAL' if dev==247 else 'DP_SOURCE_MODBUS'
                 cfg.append(f'    {{.key={{{dev},{sid}}},.source={source},.type={typ},.width={width},.minimum={lo}LL,.maximum={hi}LL,.initial.words={{{",".join(map(str,initial))}}}'+
                            (f',.param_flags={" | ".join(param_flags)}' if parameter else '')+
                            (',.handler=idu_aidc_process' if has_handler else '')+
@@ -174,14 +174,14 @@ def generate(root, output):
     for m in mapping:
         if m['id'] not in tables['g_arm_data_table']:
             unresolved.append(m)
-            cfg.append(f'    {{.key={{247,{m["id"]}}},.source=IDU_SOURCE_LOCAL,.type=IDU_WORDS,.width={m["count"]}}}, /* missing original process definition: unavailable until explicitly supplied */')
+            cfg.append(f'    {{.key={{247,{m["id"]}}},.source=DP_SOURCE_LOCAL,.type=DP_WORDS,.width={m["count"]}}}, /* missing original process definition: unavailable until explicitly supplied */')
     output.mkdir(parents=True,exist_ok=True)
     notice='/* Generated from user-provided AIDC source tables. Original tables: SUNGROW.\n * Regenerate with tools/import_aidc.py; no closed library is linked. */\n'
     (output/'points.inc').write_text(notice+'\n'.join(cfg)+'\n')
-    (output/'transmit.inc').write_text(notice+'\n'.join(f'    {{.function={m["function"]},.address={m["address"]},.count={m["count"]},.key={{{m["device"]},{m["id"]}}},.order=IDU_LOW_WORD_FIRST}},' for m in mapping)+'\n')
+    (output/'transmit.inc').write_text(notice+'\n'.join(f'    {{.function={m["function"]},.address={m["address"]},.count={m["count"]},.key={{{m["device"]},{m["id"]}}},.order=DP_LOW_WORD_FIRST}},' for m in mapping)+'\n')
     (output/'models.inc').write_text(notice+'\n'.join(f'    {{.sig={r["sig"]},.model={r["model"]},.offset={r["offset"]},.width={r["width"]},.legacy_cycle={r["original_cycle"]},.initial.words={{{",".join(map(str,r["initial"]))}}}}},' for r in polls)+'\n')
     (output/'handlers.inc').write_text(notice+'\n'.join(f'    {{.sig={r["id"]},.name="{r["sig_id"]}",.callback="{r["pf_sig_proc"]}"}},' for r in descriptor if r['device']==247)+'\n')
-    (output/'fields.inc').write_text(notice+'\n'.join(f'static const struct idu_collect_field aidc_field_{i}[] = {{{{.sig_id={r["sig"]},.width={r["width"]},.order=IDU_LOW_WORD_FIRST}}}};' for i,r in enumerate(polls))+'\n')
+    (output/'fields.inc').write_text(notice+'\n'.join(f'static const struct co_field aidc_field_{i}[] = {{{{.sig_id={r["sig"]},.width={r["width"]},.order=DP_LOW_WORD_FIRST}}}};' for i,r in enumerate(polls))+'\n')
     (output/'collect.inc').write_text(notice+'\n'.join(f'    {{.dev_id={dev},.model_protocol=true,.model_id={r["model"]},.address={r["offset"]},.count={r["width"]},.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_{i},.field_count=1}},' for dev in range(11,19) for i,r in enumerate(polls))+'\n')
     (output/'devices.inc').write_text(notice+'\n'.join(f'    {{.dev_id={dev},.unit_id={dev-10},.bus_id=1}},' for dev in range(11,19))+'\n')
     required={k:val(k) for k in symbols.expr if k.startswith('LOCAL_SIG_') or k.startswith('E_USART_') or k.startswith('PORT_WORK_MODE_')}

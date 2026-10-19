@@ -64,7 +64,7 @@ int main(void)
         if (!err) {
             err = publish_err;
         }
-        if (!err && !idu_points_healthy(1500)) {
+        if (!err && !dp_healthy(1500)) {
             err = -ETIMEDOUT;
         }
         if (err) {
@@ -85,11 +85,11 @@ int main(void)
         }
         idu_health_kick();
 #ifdef CONFIG_BOOTLOADER_MCUBOOT
-        struct idu_param_status parameter_status;
-        idu_params_get_status(&parameter_status);
+        struct dp_param_status parameter_status;
+        dp_params_get_status(&parameter_status);
         bool ready = device_is_ready(flash) &&
-                     (parameter_status.flags & IDU_PARAM_STORAGE_READY) &&
-                     !(parameter_status.flags & IDU_PARAM_PENDING);
+                     (parameter_status.flags & DP_PARAM_STORAGE_READY) &&
+                     !(parameter_status.flags & DP_PARAM_PENDING);
         err = idu_boot_health_checkpoint(&boot_health, k_uptime_get(), ready);
         if (err) {
             idu_health_stop();

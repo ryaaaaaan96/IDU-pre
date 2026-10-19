@@ -3,7 +3,7 @@
  */
 #include "idu_equip.h"
 #include "idu_pre.h"
-#include <idu/modbus_adapter.h>
+#include <transmit/modbus_adapter.h>
 #include <string.h>
 #include <errno.h>
 #include <zephyr/logging/log.h>
@@ -153,7 +153,7 @@ int idu_virtual_port_init(void)
     if (client_iface < 0 || server_iface < 0) {
         return -ENODEV;
     }
-    const struct idu_equip_cfg *cfg = idu_equipment_config();
+    const struct dp_equip_cfg *cfg = idu_equipment_config();
     size_t bus_devices = 0;
     for (size_t i = 0; i < cfg->device_count; ++i) {
         if (cfg->devices[i].bus_id == 0) { ++bus_devices; }
@@ -167,13 +167,13 @@ int idu_virtual_port_init(void)
         .rawcb = {.raw_tx_cb = server_tx},
     };
     remote_address = cfg->devices[0].unit_id;
-    int err = idu_modbus_init_server(server_iface, server, holding_write, false);
+    int err = tr_modbus_init_server(server_iface, server, holding_write, false);
     if (err) {
         return err;
     }
     struct modbus_iface_param client = {
         .mode = MODBUS_MODE_RAW,
-        .rx_timeout = CONFIG_IDU_COLLECT_TIMEOUT_MS * 1000U,
+        .rx_timeout = CONFIG_CO_TIMEOUT_MS * 1000U,
         .rawcb = {.raw_tx_cb = client_tx},
     };
     err = modbus_init_client(client_iface, client);

@@ -1,8 +1,10 @@
 #ifndef IDU_EQUIP_H
 #define IDU_EQUIP_H
 
-#include <idu/points.h>
-#include <idu/params.h>
+#include <dataprocess/points.h>
+#include <dataprocess/params.h>
+#include <collect/collect.h>
+#include <transmit/transmit.h>
 
 #define IDU_DEV_LOCAL 1
 #define IDU_DEV_REMOTE_IO 10
@@ -21,10 +23,10 @@ struct modbus_user_callbacks *idu_parameter_callbacks(void);
 int idu_parameter_write(uint16_t address, const uint16_t *words, size_t count);
 uint16_t idu_sample_period_ms(void);
 
-const struct idu_equip_cfg *idu_equipment_config(void);
-const struct idu_point_cfg *idu_process_table(size_t *count);
-const struct idu_collect_cfg *idu_collect_table(size_t *count);
-const struct idu_transmit_cfg *idu_transmit_table(size_t *count);
+const struct dp_equip_cfg *idu_equipment_config(void);
+const struct dp_point_cfg *idu_process_table(size_t *count);
+const struct co_cfg *idu_collect_table(size_t *count);
+const struct dp_transmit_cfg *idu_transmit_table(size_t *count);
 int idu_equipment_init(void);
 int idu_acquisition_port_init(void); /* Returns Zephyr Modbus client iface. */
 

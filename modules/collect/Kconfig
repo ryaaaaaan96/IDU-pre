@@ -1,0 +1,22 @@
+menuconfig COLLECT
+    bool "Equipment acquisition and bus scheduling"
+    depends on DATAPROCESS && MODBUS_CLIENT
+    default y
+
+if COLLECT
+
+config CO_QUEUE_DEPTH
+    int "Maximum queued requests per acquisition bus"
+    default 4
+    range 1 16
+
+config CO_STACK_SIZE
+    int "Modbus collector stack size"
+    default 4096
+
+config CO_TIMEOUT_MS
+    int "Modbus acquisition response timeout (ms)"
+    default 100
+    range 10 1000
+
+endif

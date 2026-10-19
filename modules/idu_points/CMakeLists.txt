@@ -1,7 +1,0 @@
-zephyr_library()
-zephyr_include_directories(include)
-zephyr_library_sources_ifdef(CONFIG_IDU_POINTS src/points.c src/collect.c src/forward.c)
-zephyr_library_sources_ifdef(CONFIG_IDU_PARAMS src/params.c src/modbus_adapter.c src/process.c)
-if(CONFIG_IDU_PARAMS)
-  include(compat/modbus.cmake)
-endif()

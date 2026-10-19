@@ -1,0 +1,6 @@
+name: collect
+build:
+  depends:
+    - dataprocess
+  cmake: .
+  kconfig: Kconfig

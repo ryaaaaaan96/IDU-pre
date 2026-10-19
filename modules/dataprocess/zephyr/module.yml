@@ -1,0 +1,4 @@
+name: dataprocess
+build:
+  cmake: .
+  kconfig: Kconfig

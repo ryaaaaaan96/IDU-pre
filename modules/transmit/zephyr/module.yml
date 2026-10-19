@@ -1,0 +1,6 @@
+name: transmit
+build:
+  depends:
+    - dataprocess
+  cmake: .
+  kconfig: Kconfig

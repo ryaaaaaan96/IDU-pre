@@ -11,6 +11,10 @@ config IDU_PRE
     bool
     default y
     select USE_GD32_ADC
+    select COLLECT if DATAPROCESS
+    select TRANSMIT if DATAPROCESS
+    select DP_PROCESS if DATAPROCESS
+    select TR_MODBUS_ADAPTER if DATAPROCESS
 
 config IDU_ADC_AVERAGE_COUNT
     int "Samples averaged per analog input"

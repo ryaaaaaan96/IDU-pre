@@ -7,8 +7,8 @@
 #ifdef CONFIG_IDU_IAPV3
 #include "idu_iap.h"
 #endif
-#include <idu/forward.h>
-#include <idu/modbus_adapter.h>
+#include <transmit/transmit.h>
+#include <transmit/modbus_adapter.h>
 #include <zephyr/storage/flash_map.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/sys/crc.h>
@@ -51,7 +51,7 @@ out:
 }
 #endif
 
-int idu_mvio_seed_address(const struct idu_point_cfg *cfg, struct idu_value *value)
+int idu_mvio_seed_address(const struct dp_point_cfg *cfg, struct dp_value *value)
 {
     ARG_UNUSED(cfg);
 #if DT_NODE_EXISTS(DT_ALIAS(idu_legacy_primary)) && DT_NODE_EXISTS(DT_ALIAS(idu_legacy_backup))
@@ -69,8 +69,8 @@ int idu_mvio_seed_address(const struct idu_point_cfg *cfg, struct idu_value *val
     return 0;
 }
 
-int idu_mvio_prepare_address(const struct idu_point_cfg *cfg, struct idu_value *value,
-                             const struct idu_value *old)
+int idu_mvio_prepare_address(const struct dp_point_cfg *cfg, struct dp_value *value,
+                             const struct dp_value *old)
 {
     ARG_UNUSED(cfg); ARG_UNUSED(old);
     /* Boot import historically permits 0; the 30459 write contract is 1..246. */
@@ -137,13 +137,13 @@ static int legacy_read(int iface, uint8_t fc, uint16_t address, uint16_t count,
         }
     }
     for (size_t offset = 0; offset < count;) {
-        if (span == nspans) { return IDU_MODBUS_SILENT; }
+        if (span == nspans) { return TR_MODBUS_SILENT; }
         uint16_t reg = spans[span].first + entry, words[15] = {0};
         size_t width = spans[span].width;
         /* The legacy version string is an indivisible 15-register request. */
-        if (width == 15 && (offset || count != 15)) { return IDU_MODBUS_SILENT; }
+        if (width == 15 && (offset || count != 15)) { return TR_MODBUS_SILENT; }
         if (fc == 4 || reg == 30459) {
-            if (idu_forward_read(iface, fc, reg, words, width)) { return IDU_MODBUS_SILENT; }
+            if (tr_read(iface, fc, reg, words, width)) { return TR_MODBUS_SILENT; }
         }
         /* Advertise only the initialized, explicitly enabled IAP transport. */
 #ifdef CONFIG_IDU_IAPV3
@@ -165,35 +165,35 @@ static int legacy_read(int iface, uint8_t fc, uint16_t address, uint16_t count,
 static int route(int iface, const struct modbus_adu *rx, struct modbus_adu *tx, void *user)
 {
     ARG_UNUSED(user);
-    if (rx->length < 4 || rx->length > sizeof(rx->data)) { return IDU_MODBUS_SILENT; }
+    if (rx->length < 4 || rx->length > sizeof(rx->data)) { return TR_MODBUS_SILENT; }
     uint16_t address = sys_get_be16(rx->data), count = sys_get_be16(rx->data + 2);
 #ifdef CONFIG_IDU_IAPV3
     int iap = idu_iap_route(iface, rx, tx);
     if (iap != -ENOENT) { return iap; }
 #endif
     if (rx->unit_id != 0 && rx->unit_id != 247 && extension(address)) {
-        return idu_forward_dispatch(iface, rx, tx, NULL);
+        return tr_dispatch(iface, rx, tx, NULL);
     }
-    if (rx->unit_id == 0 && rx->fc != 4 && rx->fc != 16) { return IDU_MODBUS_SILENT; }
+    if (rx->unit_id == 0 && rx->fc != 4 && rx->fc != 16) { return TR_MODBUS_SILENT; }
     if (rx->fc == 3 || rx->fc == 4) {
         if (rx->length != 4 || !count || count > 125 || 1 + count * 2 > sizeof(tx->data) ||
-            !read_start(address)) { return IDU_MODBUS_SILENT; }
+            !read_start(address)) { return TR_MODBUS_SILENT; }
         return legacy_read(iface, rx->fc, address, count, tx);
     }
     if (rx->fc == 6) {
-        if (rx->length != 4) { return IDU_MODBUS_SILENT; }
+        if (rx->length != 4) { return TR_MODBUS_SILENT; }
         count = 1;
     } else if (rx->fc == 16) {
         if (!count || count > 123 || rx->length != 5 + 2 * count ||
-            rx->data[4] != 2 * count) { return IDU_MODBUS_SILENT; }
-    } else { return IDU_MODBUS_SILENT; }
-    if (!write_start(address) || (uint32_t)address + count > 65536) { return IDU_MODBUS_SILENT; }
+            rx->data[4] != 2 * count) { return TR_MODBUS_SILENT; }
+    } else { return TR_MODBUS_SILENT; }
+    if (!write_start(address) || (uint32_t)address + count > 65536) { return TR_MODBUS_SILENT; }
     /* MV-IO has one effective writable legacy point. Unknown entries within
      * these accepted windows are ACK-only, exactly as swSetRegData_4xReg. */
     if (address == 30459) {
         uint16_t value = sys_get_be16(rx->data + (rx->fc == 6 ? 2 : 5));
-        if (value >= 1 && value <= 246 && idu_forward_write(iface, address, &value, 1)) {
-            return IDU_MODBUS_SILENT; /* Never ACK a failed durable write. */
+        if (value >= 1 && value <= 246 && tr_write(iface, address, &value, 1)) {
+            return TR_MODBUS_SILENT; /* Never ACK a failed durable write. */
         }
     }
     tx->length = 4;
@@ -203,7 +203,7 @@ static int route(int iface, const struct modbus_adu *rx, struct modbus_adu *tx, 
 
 int idu_mvio_attach(int iface)
 {
-    const struct idu_modbus_policy policy = {.accept = accept, .legacy_broadcast = true};
-    int err = idu_modbus_set_router(iface, route, NULL);
-    return err ? err : idu_modbus_set_policy(iface, &policy);
+    const struct tr_modbus_policy policy = {.accept = accept, .legacy_broadcast = true};
+    int err = tr_modbus_set_router(iface, route, NULL);
+    return err ? err : tr_modbus_set_policy(iface, &policy);
 }
