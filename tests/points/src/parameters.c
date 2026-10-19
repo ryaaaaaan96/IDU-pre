@@ -241,6 +241,12 @@ ZTEST(points, test_parameters_restore_flush_and_broadcast)
     zassert_equal(modbus_write_holding_reg(north_client, 16, 31090, 0),
                   MODBUS_EXC_ILLEGAL_DATA_VAL);
     zassert_equal(read_word(31000), 750);
+    uint16_t commands[] = {0xa55a, 0xa55a};
+    uint32_t sequence = param_status().sequence;
+    zassert_equal(modbus_write_holding_regs(north_client, 16, 31090, commands, 2),
+                  MODBUS_EXC_ILLEGAL_DATA_VAL);
+    zassert_equal(read_word(31000), 750);
+    zassert_equal(param_status().sequence, sequence);
     zassert_ok(modbus_write_holding_reg(north_client, 16, 31090, 0xa55a));
     zassert_equal(read_word(31000), 500);
     zassert_ok(modbus_write_holding_reg(north_client, 16, 31500, 750));

@@ -5,8 +5,10 @@
 当前已实现本地采集、zbus 点表处理、虚拟 Modbus 采集口和现有 RS485
 转发、参数下发和 NVS 持久化。点表配置参考 AIDC 的 equip/process 设计；详见
 [点表设计、库接口分析和换串口步骤](docs/point-tables.md)。
-对照 MCUdemo 的设备实例与三表设计，已将远端 MV-IO 模型集中到
-`cfg/equip/models/`，由 `instances.h` 统一绑定设备、总线和转发窗口。
+对照 MCUdemo 的设备实例与三表设计，通讯点表按采集、处理、转发拆分在
+`cfg/equip/table/`，由 `instances.h` 统一绑定设备、总线和转发窗口。
+协议地址及回调绑定留在配置层，业务执行放在 `src/process/`；新增点和设备的
+具体入口见 [通讯点表配置指南](cfg/equip/README.md)。
 Process 支持无 Flash/NVS 的独立运行，采集线程使用事件与截止时间唤醒。
 模块边界、扩展步骤及验证入口见
 [collect / process / transmit 模块设计](docs/collect-process-transmit.md)。
@@ -40,6 +42,7 @@ IDU-pre/
 │   ├── app/             # 生命周期与 MCUboot 健康确认
 │   ├── hardware/        # DI、ADC、LED、外部看门狗
 │   ├── equipment/       # 设备服务、点表接入与工程量换算
+│   ├── process/         # 测点处理、参数命令和旧参数导入
 │   ├── communication/   # Modbus 端口、参数协议、MV-IO 兼容及采集后端
 │   └── iap/             # IAPv3 接收、SGZ 与镜像校验
 ├── include/             # 本板接口
@@ -105,9 +108,15 @@ IDU-pre/
 │   └── idu_pre.yaml
 ├── soc/idu/gd32e505/        # E505 SoC 与 20 MHz 有源时钟启动
 ├── dts/bindings/           # 应用硬件描述绑定
-├── cfg/equip/
-│   ├── dev_cfg.c           # 设备与从机地址
-│   └── table/             # collect.c / process.c / transmit.c 三张表
+├── cfg/
+│   ├── inc/               # 信号 ID、设备表和通讯配置契约
+│   └── equip/
+│       ├── dev_cfg.c       # 设备注册与三表装配
+│       ├── instances.h    # 型号实例、总线、从机和转发窗口
+│       ├── callback_function.c # 端口协议回调绑定
+│       ├── models/        # 型号信号定义与三表入口
+│       ├── table/         # 三表、参数命令和 MV-IO 地址段配置
+│       └── aidc/          # 可选 AIDC 生成表与元数据
 ├── conf/collect-rtu.conf   # 补齐硬件后切换真实采集串口
 ├── include/               # idu_pre.h / idu_equip.h
 ├── src/
@@ -121,10 +130,12 @@ IDU-pre/
 │   ├── equipment/
 │   │   ├── equip.c         # 本地样本发布与点表启动
 │   │   └── registers.c     # 电流换算
+│   ├── process/            # 测点回调、参数命令、MV-IO 导入与 AIDC 处理
 │   ├── communication/
 │   │   ├── protocol.c      # RS485 Modbus RTU 端口配置与恢复
-│   │   ├── mvio.c          # MV-IO 旧协议策略、主备参数只读导入
+│   │   ├── mvio.c          # MV-IO 报文路由与旧协议编码
 │   │   ├── parameter_protocol.c # 参数写入、恢复默认、状态诊断
+│   │   ├── aidc_serial.c   # AIDC 参数到 Zephyr 串口配置的适配
 │   │   └── ports/          # 真实 RTU / 虚拟 RAW 采集后端
 │   └── iap/                # IAPv3、SGZ 和镜像校验
 ├── docs/point-tables.md

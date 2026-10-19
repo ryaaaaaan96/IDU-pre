@@ -1,5 +1,5 @@
 #include "idu_equip.h"
-#include "idu_mvio.h"
+#include "comm_cfg.h"
 #include <transmit/modbus_adapter.h>
 #include <transmit/transmit.h>
 #include "modbus_internal.h" /* TX-state injection; no UART electrical simulation. */
@@ -130,6 +130,13 @@ static void write_old_fixture(bool intent)
     }
 }
 
+static int attach_profile(void)
+{
+    const struct idu_protocol_profile *profile = idu_protocol_config();
+
+    return profile->attach ? profile->attach(server) : tr_attach(server, NULL);
+}
+
 static void *setup(void)
 {
     zassert_ok(flash_area_open(DT_FIXED_PARTITION_ID(DT_ALIAS(idu_settings)), &storage));
@@ -150,7 +157,9 @@ static void *setup(void)
         .server = {.unit_id = 16, .user_cb = idu_parameter_callbacks()}, .rawcb = {.raw_tx_cb = response}};
     struct modbus_iface_param client_param = {.mode = MODBUS_MODE_RAW, .rx_timeout = 50000,
                                               .rawcb = {.raw_tx_cb = request}};
-    zassert_ok(idu_mvio_attach(server));
+    zassert_ok(attach_profile());
+    const struct idu_protocol_profile *profile = idu_protocol_config();
+    if (profile->serial) { zassert_ok(profile->serial(&server_param)); }
     zassert_ok(tr_modbus_init_server(server, server_param, idu_parameter_write, true));
     zassert_ok(modbus_init_client(client, client_param));
     return NULL;
@@ -162,7 +171,7 @@ static void before(void *fixture)
     if (getenv("IDU_MVIO_PHASE")) { return; }
     legacy_record(primary, 37, false, 8); legacy_record(backup, 41, false, 8);
     fresh_nvs(); zassert_ok(dp_params_reload());
-    zassert_ok(idu_mvio_attach(server));
+    zassert_ok(attach_profile());
     zassert_ok(idu_virtual_set_register(3, 40000, 100));
     struct dp_point_batch batch = {.source = DP_SOURCE_LOCAL, .count = 2,
         .points = {{.key = {1, IDU_SIG_ADDRESS}, .width = 1, .value.words = {16}},
@@ -419,7 +428,7 @@ ZTEST(mvio, test_stuck_handler_has_bounded_recovery_and_watchdog_error)
     zassert_ok(k_sem_take(&config_done, K_SECONDS(3))); zassert_equal(config_error, -ETIMEDOUT);
     k_sem_give(&handler_release);
     zassert_ok(k_sem_take(&handler_finished, K_SECONDS(1))); k_sleep(K_MSEC(20));
-    zassert_ok(idu_mvio_attach(server));
+    zassert_ok(attach_profile());
     zassert_ok(tr_modbus_recover(server, completed, NULL));
     zassert_ok(k_sem_take(&config_done, K_SECONDS(3))); zassert_ok(config_error);
     uint16_t word; zassert_ok(modbus_read_holding_regs(client, 247, 30459, &word, 1));

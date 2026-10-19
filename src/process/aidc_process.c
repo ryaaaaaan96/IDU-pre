@@ -1,42 +1,7 @@
 #include "idu_aidc.h"
-#include <collect/collect.h>
-#include <dataprocess/params.h>
+#include "aidc_cfg.h"
 #include <errno.h>
 #include <string.h>
-#include "generated/symbols.h"
-
-struct model_point {
-    uint16_t sig, model, offset, legacy_cycle;
-    uint8_t width;
-    struct dp_value initial;
-};
-static const struct model_point models[] = {
-#include "generated/models.inc"
-};
-struct legacy_handler { uint16_t sig; const char *name, *callback; };
-static const struct legacy_handler handlers[] = {
-#include "generated/handlers.inc"
-};
-
-static int model_read(void *user, uint16_t dev, uint16_t model, uint16_t offset,
-                       uint16_t *words, size_t count)
-{
-    ARG_UNUSED(user);
-    if (dev < 11 || dev > 18) { return -ENOENT; }
-    for (size_t i = 0; i < ARRAY_SIZE(models); ++i) {
-        const struct model_point *m = &models[i];
-        if (m->model == model && m->offset == offset && m->width == count) {
-            memcpy(words, m->initial.words, count * sizeof(*words)); return 0;
-        }
-    }
-    return -ENOENT;
-}
-
-int idu_aidc_bus_init(const struct dp_equip_cfg *cfg)
-{
-    struct co_bus_cfg bus = {.id=1,.iface=-1,.simulated=true,.read_model=model_read};
-    return co_init_bus(cfg, &bus);
-}
 
 static void string_value(struct dp_value *v, const char *text, size_t bytes)
 {
@@ -48,8 +13,10 @@ static void string_value(struct dp_value *v, const char *text, size_t bytes)
 
 int idu_aidc_process(struct dp_process_ctx *ctx, struct dp_key key)
 {
-    const struct legacy_handler *h = NULL;
-    for (size_t i=0;i<ARRAY_SIZE(handlers);++i) { if (handlers[i].sig==key.sig_id) { h=&handlers[i]; break; } }
+    size_t count;
+    const struct idu_aidc_handler *handlers = idu_aidc_handlers(&count);
+    const struct idu_aidc_handler *h = NULL;
+    for (size_t i=0;i<count;++i) { if (handlers[i].sig==key.sig_id) { h=&handlers[i]; break; } }
     if (!h) { return -ENOENT; }
     struct dp_value v;
     int err = dp_txn_get(ctx,key,false,&v);
@@ -99,24 +66,4 @@ int idu_aidc_process(struct dp_process_ctx *ctx, struct dp_key key)
         return write ? -ENOTSUP : 0;
     }
     return dp_txn_emit(ctx,key,&v,DP_OP_NO_COLLECT|DP_OP_NO_STORE);
-}
-
-static uint16_t parameter(uint16_t sig, uint16_t fallback)
-{
-    struct dp_point_state state;
-    return dp_params_read((struct dp_key){247,sig},&state) ? fallback : state.value.words[0];
-}
-
-int idu_aidc_serial(struct modbus_iface_param *param)
-{
-    static const uint32_t baud[]={9600,19200,38400,57600,115200,230400,460800};
-    uint16_t b=parameter(AIDC_LOCAL_SIG_UART_PORT1_BAUD,165);
-    uint16_t parity=parameter(AIDC_LOCAL_SIG_UART_PORT1_PARITY,85);
-    uint16_t stop=parameter(AIDC_LOCAL_SIG_UART_PORT1_STOP_BITS,161);
-    if (b<161 || b>167 || (parity!=85 && parity!=161 && parity!=162) || (stop!=161 && stop!=162)) { return -ERANGE; }
-    param->serial.baud=baud[b-161];
-    param->serial.parity=parity==85 ? UART_CFG_PARITY_NONE : parity==161 ? UART_CFG_PARITY_ODD : UART_CFG_PARITY_EVEN;
-    param->serial.stop_bits=stop==161 ? UART_CFG_STOP_BITS_1 : UART_CFG_STOP_BITS_2;
-    param->server.unit_id=parameter(AIDC_LOCAL_SIG_TR_ADDR,1);
-    return 0;
 }

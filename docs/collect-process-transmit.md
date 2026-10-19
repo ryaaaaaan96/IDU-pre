@@ -9,7 +9,10 @@
 
 | 参考工程 | 设计含义 | IDU 实现 |
 | --- | --- | --- |
-| `app/cfg/equip/dev_cfg.c` 的设备列表 | 多个设备实例复用同型号的处理表和采集表 | `cfg/equip/instances.h` 绑定实例；`models/mvio.h` 提供模型 |
+| `app/cfg/inc/` | 信号身份和项目配置契约 | `cfg/inc/app_sig_def.h`、`dev_cfg.h`、`comm_cfg.h`、`aidc_cfg.h` |
+| `app/cfg/equip/dev_cfg.c` 的设备列表 | 多个实例复用同型号的表 | `cfg/equip/dev_cfg.c` 装配，`instances.h` 绑定实例 |
+| `app/cfg/equip/table/*` | 采集、处理、转发分别声明 | `table/*_mvio.h`、`*_local.inc` 与三表装配文件 |
+| `app/process/*` 的业务回调 | 配置绑定行为，执行代码独立维护 | `src/process/` |
 | `platform/inc/collect_lib.h` | 采集地址、周期、优先级和编码独立配置 | `co_cfg`、字段表、每总线采集线程 |
 | `platform/inc/data_process.h` | 共享数据池、类型/范围、旧值、回调及多输出 | `dp_point_cfg`、`dp_process_ctx`、`dp_txn_*` |
 | `platform/inc/transmit_lib.h` | 北向地址映射到设备和测点 | `dp_transmit_cfg`、`tr_*` |
@@ -39,6 +42,39 @@
 UPP、逆变器专用命令及其日志/加密扩展不属于通用三模块接口；不能据这些表的
 组织方式推断相关协议已实现。有界事务或队列满时明确返回错误，不隐式提交
 半批输出。
+
+## 通讯点表的文件职责
+
+本次按参考工程拆分文件内容，三模块内核保持独立。配置层描述“哪个设备、
+哪个信号、哪个协议地址、绑定哪个回调”，执行层处理数据和通信。
+
+| 位置 | 内容 |
+| --- | --- |
+| `cfg/inc/app_sig_def.h` | 应用设备 ID 和信号 ID；内部键不等同于报文地址 |
+| `cfg/inc/dev_cfg.h` | 设备配置及三表获取接口 |
+| `cfg/inc/comm_cfg.h` | 协议选择、命令/状态寄存器、MV-IO 兼容窗口的配置契约 |
+| `cfg/equip/dev_cfg.c`、`instances.h` | 装配三表；绑定型号实例的设备、总线、unit、北向窗口和周期 |
+| `table/process_local.inc`、`process_mvio.h` | 本地信号/演示参数与 MV-IO 型号点定义；绑定处理函数 |
+| `table/collect_mvio.h` | 南向读块、字段偏移、字序与周期参数 |
+| `table/transmit_local.inc`、`transmit_mvio.h` | 本地及型号的北向值、别名与质量映射 |
+| `table/{collect,process,transmit}.c` | 将所属声明与可选 AIDC 生成片段装配为静态数组 |
+| `callback_function.c` | 选择 MV-IO 路由或 AIDC 串口参数回调 |
+| `table/transmit_parameters.c`、`transmit_mvio.c` | 命令/状态地址，以及旧协议入口、扩展窗口和有序回调表 |
+| `src/process/` | 电流换算、参数操作、旧保存地址导入/校验、AIDC 业务回调 |
+| `src/communication/` | Zephyr 端口配置、请求解析/编码和兼容路由；`ports/` 提供采集后端 |
+
+`models/mvio.h` 保留型号信号 ID，聚合三个 `*_mvio.h`，兼容现有模型使用者。
+`include/idu_equip.h` 继续聚合应用接口；新增配置代码使用 `cfg/inc` 的对应契约。
+
+AIDC 的 `aidc/aidc_cfg.c` 只提供 `generated/models.inc` 与 `handlers.inc` 元数据；
+执行分别位于 `src/process/aidc_process.c`、`src/communication/aidc_serial.c` 和
+`src/communication/ports/aidc_virtual.c`。原生成文件、支持范围和未实现动作的
+返回行为不因文件拆分改变。
+
+点序、默认值、flags、字序及 NVS schema 保持原样。MV-IO 的 `input/holding`
+是按旧回调表顺序遍历的条目，允许读取时跳过地址空洞；它们不是连续寄存器段。
+起始地址是否允许进入由独立的 `read_starts/write_starts` 决定，不能通过排序、
+合并区间或改用普通连续映射来“整理”这套兼容行为。
 
 ## 数据流与模块边界
 
@@ -114,10 +150,9 @@ Zephyr Modbus 接收。zbus 消息订阅者保存样本副本，避免仅通知�
 
 ## 增加设备与业务
 
-现有 MV-IO 模型定义在 [`models/mvio.h`](../cfg/equip/models/mvio.h)。
-`IDU_MVIO_POINTS`、`IDU_MVIO_COLLECT`、`IDU_MVIO_TRANSMIT` 分别展开三类表，
-`IDU_MVIO_COLLECT_FIELDS` 只声明一次共享字段。模型不包含演示用的 40000
-写寄存器；这些参数仍由应用的虚拟设备配置负责。
+具体文件和操作步骤见 [`cfg/equip/README.md`](../cfg/equip/README.md)。
+现有 MV-IO 型号由 `table/process_mvio.h`、`collect_mvio.h`、`transmit_mvio.h`
+分别声明；`IDU_MVIO_COLLECT_FIELDS` 只创建一份共享字段数组。
 
 [`instances.h`](../cfg/equip/instances.h) 的每行依次为：
 
@@ -126,19 +161,17 @@ Zephyr Modbus 接收。zbus 消息订阅者保存样本副本，避免仅通知�
 快速采集周期，身份采集周期，快速测点过期时间，身份测点过期时间（时间均为 ms）
 ```
 
-同型号设备增加一行实例声明，就能同步生成设备注册及三张表。为新实例选择
-唯一设备 ID、不冲突的北向窗口，并通过 `co_init_bus()` 注册真实
-后端；不同总线允许相同从机 unit。默认虚拟后端只用于原有演示设备，增加实例
-不会自动创建物理串口或新的虚拟从机。
+增加同型号实例时，同步分配设备 ID、总线和唯一北向窗口，并注册对应的
+`co_init_bus()` 后端。实例行会展开设备注册与三表，不会创建物理串口或虚拟从机。
+默认配置保留远端 10000…10023 与 30460，10012 为虚拟模式标志，10013 未定义。
+**MV-IO 兼容入口的扩展窗口仍显式配置在 `table/transmit_mvio.c` 中；新增实例
+或点的北向地址不在现有窗口内时，还必须调整 `extensions[]` 并验证实际请求路由。**
+仅增加 transmit 映射不能保证该地址可从串口访问。
 
-新型号应建立自己的 `models/<name>.h`，明确其点类型、字段宽度、字序和地址。
-保留显式的连续采集块，避免跨未定义寄存器自动合帧。纯数值换算使用 `process`，
-多输入、多输出或带上下文的业务使用 `handler` 和事务访问器。新映射始终通过
-共享测点键关联采集与转发，不在通用引擎中添加产品地址分支。
-
-本地真实输入保持原有 ID 和协议地址，远端默认映射保持 10000…10023 与
-30460；10012 为应用的虚拟模式标志，10013 仍未定义。启动校验会拒绝重复
-设备、同总线重复 unit、采集所有权冲突、未知测点和冲突映射。
+新型号按三类职责建立自己的声明文件，再接入装配表与实例注册。采集块保持
+显式连续，不跨设备未定义地址合帧；纯换算回调放在 `src/process/`，多输入/
+输出业务使用既有 `handler` 和事务访问器。虚拟演示参数的下游 40000 等地址
+不属于 MV-IO 型号，不应复制成真实设备协议。
 
 ## 验证入口
 
@@ -161,8 +194,14 @@ Zephyr Modbus 接收。zbus 消息订阅者保存样本副本，避免仅通知�
 `./applications/IDU-pre/build.sh` 交叉编译并检查旧 BOOT 镜像布局。
 模拟器验证不代替实际串口时序、调度延迟和设备掉线恢复的上板验证。
 
-2026-10-19 验证记录：完整 `tests/run.sh`、默认固件、MCUboot/IAPv3 构建与
+既有模块拆分验证记录（2026-10-19，非本次文件内容重构的新结果）：完整 `tests/run.sh`、默认固件、MCUboot/IAPv3 构建与
 签名验证通过；另导出暂存区单独交叉编译，确认提交不依赖工作区已有的未提交
 运行层改动。运行环境使用 `CCACHE_DISABLE=1`；主机测试使用
 `ASAN_OPTIONS=detect_leaks=0` 绕过沙箱 ptrace 限制，保留 ASan/UBSan 检查。
-本轮未完成实板验证。
+该记录未包含实板测试。
+
+通讯点表文件重构验证（2026-10-19）：完整 `tests/run.sh`、默认固件及
+MCUboot/IAPv3 构建、签名校验通过。补充 profile 绑定及双字命令拒绝用例后，
+重新运行 points、AIDC、MV-IO 及参数重启恢复测试，全部通过。暂存代码单独
+交叉编译及启动镜像布局检查通过，不依赖未提交的运行层改动。沿用上述沙箱
+环境配置；本次未进行实板测试。

@@ -16,6 +16,26 @@ RT-Thread 平台中的这条数据链，当前没有完成整个 AIDC 固件或�
 设备模型复用和模块依赖见[采集、处理与转发设计](collect-process-transmit.md)。
 下文带日期的测试数量、容量和旧模块审计保留对应时点，不代表本轮验证结果。
 
+## 当前通讯点表文件组织
+
+本次依据 `/home/ryan/Documents/demo/MCUdemo/CODE/app/cfg/equip/` 与
+`app/process/` 的职责划分重构通讯点表。设备、信号和协议配置集中在 `cfg/`，
+业务执行在 `src/process/`，端口及报文处理在 `src/communication/`。
+详细文件对应和扩展步骤见[点表维护入口](../cfg/equip/README.md)。
+
+- `cfg/inc/` 定义应用信号、三表获取接口、通信配置及 AIDC 元数据契约。
+- `cfg/equip/dev_cfg.c` 与 `instances.h` 装配实例；`table/*_mvio.h` 和
+  `*_local.inc` 分开维护型号三表与本地条目。
+- `callback_function.c` 绑定协议回调，`table/transmit_parameters.c` 声明控制/
+  状态寄存器，`table/transmit_mvio.c` 声明兼容入口和旧回调表顺序。
+- AIDC 生成数据保持原样，由 `aidc/aidc_cfg.c` 提供元数据；处理、串口参数和
+  虚拟采集分别由 `aidc_process.c`、`aidc_serial.c`、`ports/aidc_virtual.c` 执行。
+
+此次拆分保持测点顺序、默认值、flags、字序和 NVS schema。旧 MV-IO 读取继续
+按回调表顺序跨地址空洞推进，不能把有序条目改成连续地址段。其 `extensions[]`
+仍是明确的访问入口配置；新增北向窗口需要同时修改映射与入口范围。
+以下带日期的迁移、验证与审计记录保留原时点，不是本次重构的新验收结果。
+
 <a id="mvio-migration"></a>
 
 ## MV-IO 兼容迁移（2026-10-15）
@@ -366,14 +386,14 @@ Zephyr 4.4.2 的标准输入/保持寄存器读回调把应用读错误统一转
 ## IDU-pre 配置和寄存器
 
 本地设备 `dev_id=1`，远程 IO 设备 `dev_id=10`。二者可以有相同
-`sig_id`，不会覆盖；远程从机地址在 `dev_cfg.c` 中配置，当前为 1。
+`sig_id`，不会覆盖；远程从机地址在 `cfg/equip/instances.h` 中配置，当前为 1。
 上位机访问 IDU 的地址仍由板上拨码决定（1–16）。
 
 原有 8149–8199 等本地寄存器和 SN/版本别名保留。电流换算从主循环
 移入处理回调，原始 ADC 值大于 4095 时拒绝，转换后仍按 16 位饱和。
 `tests/legacy_registers.c` 冻结的是本项目早期 Zephyr 映射，仅验证点表
 重构前后的一致性；它没有执行旧 MV-IO 代码，不能证明与旧真机协议
-等价，也不参与固件链接。运行时寄存器配置统一在三张点表中。
+等价，也不参与固件链接。普通映射在三表中，命令/状态及兼容入口另有显式配置。
 
 以下是新增的 **原始报文地址**，不减 1：
 
@@ -405,15 +425,23 @@ Zephyr 4.4.2 的标准输入/保持寄存器读回调把应用读错误统一转
 
 ### 新增一个测点
 
-1. 在 `dev_cfg.c` 中确认设备 ID 和从机地址。
-2. 在 `table/process.c` 中增加 `{dev_id,sig_id}`、类型、字数、
-   范围和过期时间。需要转换时添加 `.process`，回调必须快速且不做 I/O，
-   不得递归调用点表 API；回调成功后才检查工程值范围。
-3. 在 `table/collect.c` 选择合法的连续读块，把该点放入 `fields`。
-   不应为了合包跨越设备没有定义的寄存器空洞。
-4. 在 `table/transmit.c` 配置上位机功能码和地址；可给同一信号多个别名。
-5. 运行测试。启动会拒绝重复信号、重叠转发地址、无设备的采集块、
-   不匹配的宽度、重复采集所有者及越过 65535 的地址范围。
+1. 在 `cfg/inc/app_sig_def.h` 分配应用信号 ID，确认 `instances.h` 的设备归属；
+   型号信号使用 `models/<name>.h` 的定义，内部键与两侧报文地址分别考虑。
+2. 本地点在 `table/process_local.inc` 声明；MV-IO 型号点在
+   `table/process_mvio.h` 声明。配置类型、字数、范围、来源和过期时间；
+   纯换算函数放 `src/process/` 并绑定 `.process`，必须快速、不做 I/O、
+   不递归调用点表 API。回调成功后才检查工程值范围。
+3. 远端采集点在 `table/collect_mvio.h` 或新型号文件中加入字段和合法连续读块；
+   不跨未定义的寄存器空洞合帧。本地采样点更新对应发布方。
+4. 在 `table/transmit_local.inc` 或 `table/transmit_mvio.h` 配置北向映射。
+   使用 MV-IO 兼容 profile 且地址超出现有入口时，同步调整
+   `table/transmit_mvio.c` 的 `extensions[]`。命令/状态寄存器分别配置到
+   `table/transmit_parameters.c`，业务动作放 `src/process/`。
+5. 验证配置冲突、宽度、字序和真实请求路径；有参数改动时补充存储迁移与重启
+   验证。本次文件拆分未重排参数；后续增删持久点不能假定 NVS 格式自动兼容。
+
+同型号新设备的总线、unit、窗口与周期配置，以及建议验证入口见
+[`cfg/equip/README.md`](../cfg/equip/README.md)。
 
 `DP_WORDS` 的数值范围不检查；浮点、变长字符串、动态设备表和在线
 修改点表尚未实现。三张表及设备表必须具有静态生命周期。

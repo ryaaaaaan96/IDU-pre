@@ -9,4 +9,5 @@ target_sources(app PRIVATE src/main.c ${IDU_APP}/src/equipment/registers.c
   ${IDU_APP}/src/communication/ports/acquisition.c ${IDU_APP}/src/communication/ports/virtual.c
   ${IDU_APP}/src/communication/parameter_protocol.c ${IDU_APP}/src/communication/mvio.c)
 add_subdirectory(${IDU_APP}/cfg/equip equip_cfg)
+add_subdirectory(${IDU_APP}/src/process point_process)
 zephyr_ld_options(-Wl,--wrap=modbus_init_server)

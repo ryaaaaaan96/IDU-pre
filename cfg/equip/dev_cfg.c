@@ -1,4 +1,7 @@
-#include "idu_equip.h"
+#include <dataprocess/points.h>
+
+#include "app_sig_def.h"
+#include "dev_cfg.h"
 #include "instances.h"
 
 #define MVIO_DEVICE(dev, bus, unit, north, address_reg, period, identity, stale, identity_stale) \

@@ -1,15 +1,12 @@
 #include "idu_pre.h"
 #include "idu_equip.h"
-#include "idu_mvio.h"
+#include "comm_cfg.h"
 #include <transmit/modbus_adapter.h>
 #include <transmit/transmit.h>
 #include <errno.h>
 #include <zephyr/kernel.h>
 #include <zephyr/modbus/modbus.h>
 #include <zephyr/logging/log.h>
-#if defined(CONFIG_IDU_AIDC_PROFILE)
-#include "idu_aidc.h"
-#endif
 LOG_MODULE_REGISTER(idu_protocol, LOG_LEVEL_INF);
 static int interface = -1;
 static bool configured, changing;
@@ -30,26 +27,19 @@ static void changed(int iface, int error, void *user)
 int idu_protocol_set_address(uint8_t address)
 {
     if (address < 1 || address > 16) { return -EINVAL; }
+    const struct idu_protocol_profile *profile = idu_protocol_config();
     k_mutex_lock(&protocol_lock,K_FOREVER);
     if (interface < 0) {
         interface=modbus_iface_get_by_name(DEVICE_DT_NAME(DT_ALIAS(idu_forward)));
         if (interface < 0) { k_mutex_unlock(&protocol_lock); return interface; }
-#if defined(CONFIG_IDU_AIDC_PROFILE)
-        int attach_err = tr_attach(interface,NULL);
-#else
-        int attach_err = idu_mvio_attach(interface);
-#endif
+        int attach_err = profile->attach ? profile->attach(interface) : tr_attach(interface, NULL);
         if (attach_err) { interface = -1; k_mutex_unlock(&protocol_lock); return attach_err; }
     }
     struct modbus_iface_param param={.mode=MODBUS_MODE_RTU,
         .server={.user_cb=idu_parameter_callbacks(),.unit_id=address},
         .serial={.baud=DT_PROP(DT_PARENT(DT_ALIAS(idu_forward)),current_speed),
                  .parity=UART_CFG_PARITY_NONE,.stop_bits=UART_CFG_STOP_BITS_1}};
-#if defined(CONFIG_IDU_AIDC_PROFILE)
-    int err=idu_aidc_serial(&param);
-#else
-    int err=0;
-#endif
+    int err = profile->serial ? profile->serial(&param) : 0;
     if (!err && !configured) {
         err=tr_modbus_init_server(interface,param,idu_parameter_write,true);
         if (!err) { active=param; configured=true; }

@@ -1,5 +1,7 @@
 target_sources(app PRIVATE protocol.c parameter_protocol.c ports/acquisition.c)
 target_sources_ifdef(CONFIG_IDU_COLLECT_VIRTUAL app PRIVATE ports/virtual.c)
-if(NOT CONFIG_IDU_AIDC_PROFILE)
+if(CONFIG_IDU_AIDC_PROFILE)
+  target_sources(app PRIVATE aidc_serial.c ports/aidc_virtual.c)
+else()
   target_sources(app PRIVATE mvio.c)
 endif()

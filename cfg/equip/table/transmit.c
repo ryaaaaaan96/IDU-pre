@@ -1,4 +1,5 @@
-#include "idu_equip.h"
+#include "app_sig_def.h"
+#include "dev_cfg.h"
 #include "../models/mvio.h"
 #include "../instances.h"
 
@@ -16,29 +17,7 @@ static const struct dp_transmit_cfg table[] = {
 #include "../aidc/generated/transmit.inc"
     MAP(4, 10012, 1, IDU_DEV_LOCAL, IDU_SIG_VIRTUAL_MODE),
 #else
-    MAP(3, 31000, 1, IDU_DEV_LOCAL, IDU_SIG_SAMPLE_PERIOD),
-    MAP(3, 31001, 8, IDU_DEV_LOCAL, IDU_SIG_LABEL),
-#if defined(CONFIG_IDU_COLLECT_VIRTUAL)
-    MAP(3, 31500, 1, IDU_DEV_REMOTE_IO, IDU_SIG_REMOTE_SETPOINT),
-    MAP(3, 31501, 2, IDU_DEV_REMOTE_IO, IDU_SIG_REMOTE_OFFSET),
-#endif
-    MAP(4, 2503, 1, IDU_DEV_LOCAL, 2503),
-    MAP(4, 2504, 10, IDU_DEV_LOCAL, 2504),
-    MAP(4, 4989, 10, IDU_DEV_LOCAL, 2504),
-    MAP(4, 4805, 8, IDU_DEV_LOCAL, 2504),
-    MAP(4, 2581, 15, IDU_DEV_LOCAL, 2581),
-    MAP(4, 2568, 4, IDU_DEV_LOCAL, 2568),
-    MAP(4, 8149, 1, IDU_DEV_LOCAL, 8149),
-    MAP(4, 4813, 1, IDU_DEV_LOCAL, 8149),
-    MAP(4, 4814, 1, IDU_DEV_LOCAL, IDU_SIG_SAVED_ADDRESS),
-    MAP(4, 8150, 2, IDU_DEV_LOCAL, IDU_SIG_PROTOCOL),
-    MAP(4, 8152, 1, IDU_DEV_LOCAL, IDU_SIG_DI),
-    CURRENT(0), CURRENT(1), CURRENT(2), CURRENT(3),
-    CURRENT(4), CURRENT(5), CURRENT(6), CURRENT(7),
-    MAP(4, 5486, 1, IDU_DEV_LOCAL, 5486),
-    ZERO(2514, 19), ZERO(4999, 16), ZERO(5487, 1),
-    ZERO(8153, 10), ZERO(8171, 29),
-    MAP(3, 30459, 1, IDU_DEV_LOCAL, IDU_SIG_SAVED_ADDRESS),
+#include "transmit_local.inc"
 
     /* IDU extension: separate remote data from physical local inputs. */
     IDU_MVIO_INSTANCES(MVIO_TRANSMIT)

@@ -1,32 +1,17 @@
 #ifndef IDU_EQUIP_H
 #define IDU_EQUIP_H
 
+#include "app_sig_def.h"
+#include "dev_cfg.h"
 #include <dataprocess/points.h>
 #include <dataprocess/params.h>
 #include <collect/collect.h>
 #include <transmit/transmit.h>
 
-#define IDU_DEV_LOCAL 1
-#define IDU_DEV_REMOTE_IO 10
-#define IDU_SIG_DI 8152
-#define IDU_SIG_CURRENT_1 8163
-#define IDU_SIG_PROTOCOL 8150
-#define IDU_SIG_ADDRESS 30459
-#define IDU_SIG_SAVED_ADDRESS 30461 /* Internal key; legacy wire address is 30459. */
-#define IDU_SIG_VIRTUAL_MODE 10012
-#define IDU_SIG_SAMPLE_PERIOD 31000
-#define IDU_SIG_LABEL 31001
-#define IDU_SIG_REMOTE_SETPOINT 31500
-#define IDU_SIG_REMOTE_OFFSET 31501
-
 struct modbus_user_callbacks *idu_parameter_callbacks(void);
 int idu_parameter_write(uint16_t address, const uint16_t *words, size_t count);
 uint16_t idu_sample_period_ms(void);
 
-const struct dp_equip_cfg *idu_equipment_config(void);
-const struct dp_point_cfg *idu_process_table(size_t *count);
-const struct co_cfg *idu_collect_table(size_t *count);
-const struct dp_transmit_cfg *idu_transmit_table(size_t *count);
 int idu_equipment_init(void);
 int idu_acquisition_port_init(void); /* Returns Zephyr Modbus client iface. */
 

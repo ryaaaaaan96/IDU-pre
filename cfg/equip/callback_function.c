@@ -1,0 +1,20 @@
+#include "comm_cfg.h"
+#if defined(CONFIG_IDU_AIDC_PROFILE)
+#include "idu_aidc.h"
+#else
+#include "idu_mvio.h"
+#endif
+
+/* Project-specific protocol callbacks are bound here, alongside the device
+ * table. The port implementation only applies these static bindings. */
+const struct idu_protocol_profile *idu_protocol_config(void)
+{
+    static const struct idu_protocol_profile profile = {
+#if defined(CONFIG_IDU_AIDC_PROFILE)
+        .serial = idu_aidc_serial,
+#else
+        .attach = idu_mvio_attach,
+#endif
+    };
+    return &profile;
+}

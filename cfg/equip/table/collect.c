@@ -1,4 +1,5 @@
-#include "idu_equip.h"
+#include "app_sig_def.h"
+#include "dev_cfg.h"
 #include "../models/mvio.h"
 #include "../instances.h"
 

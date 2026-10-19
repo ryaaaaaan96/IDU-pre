@@ -1,10 +1,18 @@
 #include "idu_equip.h"
 #include "idu_aidc.h"
+#include "comm_cfg.h"
 #include <collect/collect.h>
 #include <transmit/transmit.h>
 #include <zephyr/storage/flash_map.h>
 #include <zephyr/ztest.h>
 #include <errno.h>
+
+static int configure_serial(struct modbus_iface_param *cfg)
+{
+    const struct idu_protocol_profile *profile = idu_protocol_config();
+
+    return profile->serial ? profile->serial(cfg) : 0;
+}
 
 static void *setup(void)
 {
@@ -43,12 +51,12 @@ ZTEST(aidc,test_original_write_map_and_serial_enum)
 {
     uint16_t words[]={162,0}; /* legacy enum for 19200 baud */
     zassert_ok(tr_write(7,41655,words,2));
-    struct modbus_iface_param cfg={0}; zassert_ok(idu_aidc_serial(&cfg));
+    struct modbus_iface_param cfg={0}; zassert_ok(configure_serial(&cfg));
     zassert_equal(cfg.serial.baud,19200);
-    zassert_ok(dp_params_reload()); zassert_ok(idu_aidc_serial(&cfg)); zassert_equal(cfg.serial.baud,19200);
+    zassert_ok(dp_params_reload()); zassert_ok(configure_serial(&cfg)); zassert_equal(cfg.serial.baud,19200);
     words[0]=160; zassert_equal(tr_write(7,41655,words,2),-ERANGE);
     words[0]=85; zassert_ok(tr_write(7,41657,words,2));
-    zassert_ok(idu_aidc_serial(&cfg)); zassert_equal(cfg.serial.parity,UART_CFG_PARITY_NONE);
+    zassert_ok(configure_serial(&cfg)); zassert_equal(cfg.serial.parity,UART_CFG_PARITY_NONE);
     words[0]=123; zassert_equal(tr_write(7,41657,words,2),-ERANGE);
 }
 
