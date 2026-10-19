@@ -43,12 +43,12 @@ static void *setup(void)
 
 static void publish(int error)
 {
-    struct dp_point_batch batch = {
-        .source = DP_SOURCE_LOCAL, .count = 1,
-        .points[0] = {.key = {1, 1}, .width = 1, .value.words = {7}, .error = error},
+    const struct dp_point_update value = {
+        .key = {1, 1}, .width = 1, .value.words = {7}, .error = error,
     };
-    zassert_ok(dp_publish(&batch, K_MSEC(20)));
-    zassert_ok(dp_wait_processed(batch.ticket, K_SECONDS(1)));
+    uint32_t ticket;
+    zassert_ok(dp_set_sig_values(&value, 1, K_MSEC(20), &ticket));
+    zassert_ok(dp_wait_processed(ticket, K_SECONDS(1)));
 }
 
 ZTEST(pipeline_basic, test_disabled_business_handlers_rejected)

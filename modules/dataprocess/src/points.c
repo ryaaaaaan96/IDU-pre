@@ -277,6 +277,32 @@ static bool batch_valid(const void *message, size_t size)
            batch->sampled_at >= 0 && batch->sampled_at <= k_uptime_get();
 }
 
+int dp_set_sig_values(const struct dp_point_update *values, size_t count,
+                      k_timeout_t timeout, uint32_t *ticket)
+{
+    if (ticket) { *ticket = 0; }
+    if (k_is_in_isr()) { return -EWOULDBLOCK; }
+    if (!values || !count || count > DP_BATCH_POINTS) { return -EINVAL; }
+
+    struct dp_point_batch batch = {.source = DP_SOURCE_LOCAL, .count = count};
+    memcpy(batch.points, values, count * sizeof(*values));
+    int err = dp_publish(&batch, timeout);
+    if (!err && ticket) { *ticket = batch.ticket; }
+    return err;
+}
+
+int dp_set_sig_value(struct dp_key key, const uint16_t *words, size_t word_count,
+                     k_timeout_t timeout, uint32_t *ticket)
+{
+    if (ticket) { *ticket = 0; }
+    if (k_is_in_isr()) { return -EWOULDBLOCK; }
+    if (!words || !word_count || word_count > DP_POINT_WORDS) { return -EINVAL; }
+
+    struct dp_point_update value = {.key = key, .width = word_count};
+    memcpy(value.value.words, words, word_count * sizeof(*words));
+    return dp_set_sig_values(&value, 1, timeout, ticket);
+}
+
 int dp_publish(struct dp_point_batch *batch, k_timeout_t timeout)
 {
     int err = validate_batch(batch);

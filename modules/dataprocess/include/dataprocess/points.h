@@ -163,6 +163,24 @@ struct dp_point_state {
  */
 int dp_validate(const struct dp_equip_cfg *cfg);
 int dp_init(const struct dp_equip_cfg *cfg);
+/* Local telemetry input, from threads only (-EWOULDBLOCK in an ISR).
+ * Words use the dp_value layout, not the reference platform's byte-buffer ABI.
+ * The single-point form reports no acquisition error; the batch form can report
+ * failed acquisitions. Only DP_SOURCE_LOCAL points are writable through these
+ * APIs; parameter writes and transaction callback outputs use their own APIs.
+ *
+ * count is 1..DP_BATCH_POINTS; each width must match its configured point.
+ * Validate the whole batch before enqueueing one copied message. Return 0 means
+ * accepted, not processed: timeout bounds enqueueing only. Input memory can be
+ * reused after return. If ticket is non-NULL, clear it on entry and fill it only
+ * on success. Wait with dp_wait_processed(), then inspect dp_read() quality/error
+ * for processing results. Pure transforms and SAMPLE handlers run in DP.
+ */
+int dp_set_sig_value(struct dp_key key, const uint16_t *words, size_t word_count,
+                     k_timeout_t timeout, uint32_t *ticket);
+int dp_set_sig_values(const struct dp_point_update *values, size_t count,
+                      k_timeout_t timeout, uint32_t *ticket);
+/* General acquisition ingress, also used by collect for remote samples. */
 int dp_publish(struct dp_point_batch *batch, k_timeout_t timeout);
 int dp_wait_processed(uint32_t ticket, k_timeout_t timeout);
 int dp_read(struct dp_key key, struct dp_point_state *state);

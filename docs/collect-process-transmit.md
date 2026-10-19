@@ -31,6 +31,7 @@
 
 | 参考接口 / 行为 | Zephyr 实现入口 |
 | --- | --- |
+| `dp_set_sig_value` 提交信号值 | `dp_set_sig_value()` / `dp_set_sig_values()` 提交本地遥测样本，复制入队后异步处理 |
 | 数据池、旧值、输入集合、多输出、不递归回调 | `dp_read()`、`dp_process_execute()`、`dp_txn_get()` / `dp_txn_emit()` |
 | `dp_para_reg_set_func` 注入下发方法 | `dp_params_set_transport()` 注入复制的读、写、模拟来源回调 |
 | INIT 列表与 TIMER 注册 | `dp_process_start()`，显式键列表或全部初始化，定时器使用 `k_timeout_t` |
@@ -97,7 +98,9 @@ UPP、逆变器专用命令及其日志/加密扩展不属于通用三模块接�
 
 ```mermaid
 flowchart LR
-    HW[本地 GPIO / ADC] --> PUB[zbus 样本副本]
+    HW[本地 GPIO / ADC] --> MAP[应用信号映射]
+    MAP --> SET[dp_set_sig_values]
+    SET --> PUB[zbus 样本副本]
     BUS[每总线采集线程] --> PUB
     CT[collect 表] --> BUS
     PUB --> P[纯变换 / SAMPLE 事务]
@@ -129,6 +132,30 @@ flowchart LR
 共享数据池并不保证任意多个测点组成的北向读响应来自同一次采样；当前仍是
 逐测点读取。参数跨设备提交也不是分布式原子事务，错误及部分完成结果遵循
 `dp_process_result`。本轮未改变这些既有契约。
+
+## 本地采样入口
+
+`dataprocess/points.h` 提供 `dp_set_sig_value(key, words, word_count, timeout, ticket)`
+和 `dp_set_sig_values(values, count, timeout, ticket)`。它们只接受
+`DP_SOURCE_LOCAL` 遥测点；单点长度为 1…`DP_POINT_WORDS` 个 16 位 word，必须
+匹配点表宽度；批次包含 1…`DP_BATCH_POINTS` 个 `dp_point_update`。数据按主机
+字节序、低字在前传入。未知键、重复键、宽度或来源错误在入队前整批拒绝。
+接口由应用线程调用，ISR 中返回 `-EWOULDBLOCK`。
+
+返回成功表示样本已复制入队，`timeout` 约束提交等待时间。`ticket` 可为 `NULL`；
+非空时调用开始先置零，成功后才赋有效票号。需要等待处理时调用
+`dp_wait_processed(ticket, timeout)`，再用 `dp_read()` 查看质量和错误。
+处理完成不等于数值有效：换算、范围校验及 SAMPLE 回调仍可能失败。批次条目
+也可携带采样 `error`；处理时保留该点旧值并置失效质量。
+
+IDU 的十点快照仍一次提交一批。ADC/GPIO 读取、快照到信号 ID 的映射留在
+应用层；DP 负责类型/范围校验、配置回调、数据池更新和质量管理。底层继续
+使用 `dp_publish()`、zbus 副本队列及 DP 处理线程，collect 的采集入口保持原样。
+参数设置使用 process/params 接口，事务内派生输出使用 `dp_txn_emit()`。
+
+参考平台的旧 `dp_set_sig_value` 长度单位为字节，这里的 `word_count` 为
+16 位 word 数。沿用名称不代表旧 ABI 兼容；旧闭源库的完成时序未经确认，
+本接口明确采用异步处理。
 
 ## Zephyr 配置与调度
 

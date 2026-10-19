@@ -63,11 +63,51 @@ parameter initialization returns `-EBUSY`; identical registrations are idempoten
 knowing a Modbus interface. Local parameters work with no transport; forwarded
 operations without a backend return `-ENODEV` before any intent/cache effects.
 
-Use `dp_publish()` for local/acquired samples. Publication queues a copied
-zbus message; completion is observable through state generations or
-`dp_processed_chan`. Constants start valid, other telemetry starts unavailable.
+Use `dp_set_sig_value()` or `dp_set_sig_values()` for local telemetry. Collection
+continues to use `dp_publish()` with its source and provenance. Both paths queue
+a copied zbus message for the DP processing thread. Constants start valid, other
+telemetry starts unavailable.
 Numeric values use low-word-first host-endian storage. Collection and forwarding
 support both word orders and optional byte swapping within each word.
+
+## Local sample submission
+
+`dataprocess/points.h` provides application-thread entry points:
+
+```c
+int dp_set_sig_value(struct dp_key key, const uint16_t *words,
+                     size_t word_count, k_timeout_t timeout, uint32_t *ticket);
+int dp_set_sig_values(const struct dp_point_update *values, size_t count,
+                      k_timeout_t timeout, uint32_t *ticket);
+```
+
+These APIs accept only points declared with `DP_SOURCE_LOCAL`. The single-point
+length is 1..`DP_POINT_WORDS` 16-bit words and must match the configured width;
+the batch contains 1..`DP_BATCH_POINTS` updates with matching widths. Values use
+host-endian words, low word first. Unknown keys, duplicate keys, wrong widths or
+nonlocal sources reject the whole submission before it enters the queue. Calls
+from an ISR return `-EWOULDBLOCK`.
+
+Success means the inputs were copied into the queue. `timeout` bounds submission,
+not processing. `ticket` may be `NULL`; otherwise it is cleared to zero on entry
+and receives a nonzero ticket only on success. To observe completion, call
+`dp_wait_processed(ticket, timeout)` and then `dp_read()` to inspect the point's
+quality and error. Completion does not imply a valid value: transforms, range
+checks or SAMPLE handlers can fail after enqueueing. A nonzero `error` in a batch
+update reports a failed sample; processing retains that point's previous value
+and marks its quality invalid. `dp_processed_chan` remains a coalescible change
+notification rather than a per-submission result.
+
+IDU submits its ten-point hardware snapshot as one batch. Hardware reads and
+mapping samples to signal keys remain in the application; DP performs configured
+type/range checks, processing callbacks, data-pool and quality updates. Parameter
+writes use the process/parameter APIs; outputs from a transaction use
+`dp_txn_emit()`. The local-sample setters do not replace those entry points.
+
+The name follows the reference platform's `dp_set_sig_value`, whose length was
+in bytes. This API counts 16-bit words and uses Zephyr types, without binary
+compatibility. The closed library's completion timing is unverified; this API
+explicitly processes samples asynchronously.
 
 ## Process and parameter contracts
 
