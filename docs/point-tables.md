@@ -20,19 +20,25 @@ RT-Thread 平台中的这条数据链，当前没有完成整个 AIDC 固件或�
 
 本次依据 `/home/ryan/Documents/demo/MCUdemo/CODE/app/cfg/equip/` 与
 `app/process/` 的职责划分组织通讯点表。`src/cfg/` 只保留信号定义、设备装配、
-采集/处理/转发三表及 AIDC 点表元数据；协议配置归入
+采集/处理/转发三表及生成点表元数据，分为 `include`、`equipment`、`tables`
+三个功能组；协议配置归入
 `src/communication/config/`，应用功能选项归入 `src/Kconfig`。
 配置内容与功能保持不变，业务执行在 `src/process/`，端口及报文处理在
 `src/communication/`。
 详细文件对应和扩展步骤见[点表维护入口](../src/cfg/README.md)。
 
-- `src/cfg/include/` 的 `signal_ids.h`、`device_config.h`、`aidc_config.h`
-  定义应用信号、三表获取接口及 AIDC 点表元数据契约。
+- `src/cfg/include/` 的 `signal_ids.h`、`device_config.h`、`point_metadata.h`
+  定义应用信号、三表获取接口及采集模型、处理绑定元数据契约。
 - `src/cfg/equipment/device_config.c` 与 `src/cfg/equipment/instances.h` 装配实例；`src/cfg/tables/*_mvio.h` 和
   `*_local.inc` 分开维护型号三表与本地条目。
-- AIDC 生成数据保持原样；`models.inc`、`handlers.inc` 描述信号采集模型和
-  处理绑定，继续由 `src/cfg/aidc/aidc_config.c` 提供元数据。实际处理、串口参数
-  和虚拟采集分别由 `aidc_process.c`、`aidc_serial.c`、`ports/aidc_virtual.c` 执行。
+- `src/cfg/tables/generated/` 保留生成的三表片段、采集模型和处理绑定；
+  `src/cfg/tables/point_metadata.c` 通过 `idu_collect_models()` 与
+  `idu_process_bindings()` 提供元数据。处理绑定的 `callback` 是原回调名称
+  字符串，实际业务仍在 `src/process/` 执行。
+
+现有生成数据的 AIDC 来源、版权注释及历史审计保留。
+`CONFIG_IDU_AIDC_PROFILE`、`tools/import_aidc.py`、生成宏和已有业务函数名
+保持兼容；配置目录按实际功能分类，原数据内容和支持范围不变。
 
 点表的转发映射描述寄存器对应哪个信号。通信层的
 `src/communication/config/protocol_config.c` 则绑定协议回调，同目录的
@@ -152,7 +158,7 @@ RAM 115,832 B。HEX、测试摘要和源码/参考文件指纹在 `build/hex/`�
 | 参数操作 | NO_COLLECT、NO_DM、NO_STORE、DEFER 独立组合；异步请求复制与完成回调；1 s 延后保存；成功保存后重启 | `modules/dataprocess/include/dataprocess/params.h`、`process.h` |
 | 采集 | 每总线独立调度；优先级与等待时间；模式选择；初始化读与设定值同步；设备状态/事件；同从机地址跨总线隔离 | `modules/collect/include/collect/collect.h` |
 | 转发 | 通用地址段回调；四种字序；Modbus ADU 透传与地址重映射；串口参数异步生效及失败恢复 | `modules/transmit/include/transmit/transmit.h`、`modbus_adapter.h` |
-| 点表 | 导入原 process/range/transmit 及 UPP 字段元数据；自动展开 8 台 DSP；保留原 ID/地址和问题诊断 | `tools/import_aidc.py`、`src/cfg/aidc/generated/` |
+| 点表 | 导入原 process/range/transmit 及 UPP 字段元数据；自动展开 8 台 DSP；保留原 ID/地址和问题诊断 | `tools/import_aidc.py`、`src/cfg/tables/generated/` |
 
 ### 业务调用与效果边界
 

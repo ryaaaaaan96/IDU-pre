@@ -12,9 +12,12 @@ No legacy platform library is linked.
 
 Product point-table configuration lives in [`src/cfg/`](../src/cfg/README.md),
 outside these modules: `include/` defines point-table contracts, `equipment/`
-binds instances, `tables/` assembles the three tables, and `aidc/` provides
-generated signal acquisition/processing metadata. Register-to-signal mappings
-belong to these tables. Protocol routing, command dispatch and their contracts
+binds instances, and `tables/` assembles the three tables and contains generated
+signal acquisition/processing metadata in `tables/generated/`.
+`point_metadata.h` and `tables/point_metadata.c` expose collection models and
+processing bindings; a binding's `callback` holds the original callback name as
+a string. Execution remains in `src/process/`. Register-to-signal mappings belong
+to the tables. Protocol routing, command dispatch and their contracts
 live in [`src/communication/config/`](../src/communication/config/), while
 application options live in [`src/Kconfig`](../src/Kconfig). Business callbacks
 remain in `src/process/`; hardware and transport code remain in their application

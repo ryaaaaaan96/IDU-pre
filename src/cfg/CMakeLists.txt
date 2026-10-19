@@ -4,5 +4,5 @@ target_sources(app PRIVATE
   tables/collect.c tables/process.c tables/transmit.c)
 
 if(CONFIG_IDU_AIDC_PROFILE)
-  target_sources(app PRIVATE aidc/aidc_config.c)
+  target_sources(app PRIVATE tables/point_metadata.c)
 endif()

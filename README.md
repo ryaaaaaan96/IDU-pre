@@ -39,7 +39,7 @@ IDU-pre/
 ├── dts/                 # 板级设备树 binding
 ├── src/
 │   ├── main.c           # 应用入口、周期与休眠
-│   ├── cfg/             # 点表：信号、设备、三表及 AIDC 元数据
+│   ├── cfg/             # 点表：信号、设备、三表及采集/处理元数据
 │   ├── app/             # 生命周期与 MCUboot 健康确认
 │   ├── hardware/        # DI、ADC、LED、外部看门狗
 │   ├── equipment/       # 设备服务、点表接入与工程量换算
@@ -114,10 +114,11 @@ IDU-pre/
 │   ├── main.c              # 入口与采样周期，周期可通过参数修改
 │   ├── Kconfig             # 产品选项、采集后端及采样周期
 │   ├── cfg/
-│   │   ├── include/       # signal_ids.h、device_config.h、aidc_config.h
+│   │   ├── include/       # signal_ids.h、device_config.h、point_metadata.h
 │   │   ├── equipment/     # device_config.c、instances.h 和 models/
-│   │   ├── tables/        # collect / process / transmit 三表
-│   │   └── aidc/          # AIDC 元数据与 generated/ 原始导入结果
+│   │   └── tables/        # collect / process / transmit 三表
+│   │       ├── point_metadata.c # 采集模型和处理绑定描述
+│   │       └── generated/ # 生成的点表、字段、符号及来源记录
 │   ├── app/
 │   │   └── boot.c          # MCUboot 试运行健康确认
 │   ├── hardware/
@@ -150,6 +151,7 @@ IDU-pre/
 `modules/transmit/`，通过 `modules/modules.cmake` 注册到 Zephyr。产品点表留在
 `src/cfg/`，模块不依赖本板 BSP；详见 [模块接口](modules/README.md)。
 `src/cfg/` 仅保存点表定义及装配所需的设备、信号和生成元数据。
+内部按实际功能命名，导入数据统一在 `tables/generated/`，来源标注保留。
 协议策略在 `src/communication/config/`，产品选项在 `src/Kconfig`，
 `conf/` 保存可选的 Kconfig 配置组合。目录调整保持既有数据、点序和行为。
 

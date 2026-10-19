@@ -1,5 +1,5 @@
 #include "idu_aidc.h"
-#include "aidc_config.h"
+#include "point_metadata.h"
 #include <errno.h>
 #include <string.h>
 
@@ -14,8 +14,8 @@ static void string_value(struct dp_value *v, const char *text, size_t bytes)
 int idu_aidc_process(struct dp_process_ctx *ctx, struct dp_key key)
 {
     size_t count;
-    const struct idu_aidc_handler *handlers = idu_aidc_handlers(&count);
-    const struct idu_aidc_handler *h = NULL;
+    const struct idu_process_binding *handlers = idu_process_bindings(&count);
+    const struct idu_process_binding *h = NULL;
     for (size_t i=0;i<count;++i) { if (handlers[i].sig==key.sig_id) { h=&handlers[i]; break; } }
     if (!h) { return -ENOENT; }
     struct dp_value v;

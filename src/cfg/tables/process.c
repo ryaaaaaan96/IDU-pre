@@ -29,7 +29,7 @@ static const struct dp_point_cfg table[] = {
 
     IDU_MVIO_INSTANCES(MVIO_POINTS)
 #if defined(CONFIG_IDU_AIDC_PROFILE)
-#include "../aidc/generated/points.inc"
+#include "generated/points.inc"
 #endif
 };
 

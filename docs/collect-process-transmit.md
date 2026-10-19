@@ -46,7 +46,7 @@ UPP、逆变器专用命令及其日志/加密扩展不属于通用三模块接�
 ## 通讯点表的文件职责
 
 `src/cfg/` 只保留点表相关配置，分为 `include/` 契约、`equipment/` 实例、
-`tables/` 三表及 `aidc/` 元数据。这里描述设备和信号、采集地址与编码、
+`tables/` 三表与生成元数据。这里描述设备和信号、采集地址与编码、
 处理绑定及寄存器到信号的映射。协议路由、控制命令和应用功能选项分别归属
 通信层与 `src/Kconfig`；配置内容与功能保持不变，三模块内核保持独立。
 
@@ -54,13 +54,14 @@ UPP、逆变器专用命令及其日志/加密扩展不属于通用三模块接�
 | --- | --- |
 | `src/cfg/include/signal_ids.h` | 应用设备 ID 和信号 ID；内部键不等同于报文地址 |
 | `src/cfg/include/device_config.h` | 设备配置及三表获取接口 |
-| `src/cfg/include/aidc_config.h` | AIDC 信号采集模型、处理绑定元数据的获取接口 |
+| `src/cfg/include/point_metadata.h` | 信号采集模型、处理绑定元数据的类型和获取接口 |
 | `src/cfg/equipment/device_config.c`、`src/cfg/equipment/instances.h` | 装配三表；绑定型号实例的设备、总线、unit、北向窗口和周期 |
 | `src/cfg/tables/process_local.inc`、`process_mvio.h` | 本地信号/演示参数与 MV-IO 型号点定义；绑定处理函数 |
 | `src/cfg/tables/collect_mvio.h` | 南向读块、字段偏移、字序与周期参数 |
 | `src/cfg/tables/transmit_local.inc`、`transmit_mvio.h` | 本地及型号的北向值、别名与质量映射 |
-| `src/cfg/tables/{collect,process,transmit}.c` | 将所属声明与可选 AIDC 生成片段装配为静态数组 |
-| `src/cfg/aidc/` | AIDC 三表生成片段，以及采集模型、处理绑定和导入来源元数据 |
+| `src/cfg/tables/{collect,process,transmit}.c` | 将所属声明与可选的生成片段装配为静态数组 |
+| `src/cfg/tables/point_metadata.c` | 提供 `idu_collect_models()` 和 `idu_process_bindings()` 获取接口 |
+| `src/cfg/tables/generated/` | 三表生成片段，以及采集模型、处理绑定和导入来源元数据 |
 
 点表之外，`src/communication/config/protocol_config.h` 声明协议配置契约，
 同目录的 `protocol_config.c` 选择 MV-IO 路由或 AIDC 串口参数回调；
@@ -75,11 +76,12 @@ UPP、逆变器专用命令及其日志/加密扩展不属于通用三模块接�
 `src/cfg/equipment/models/mvio.h` 保留型号信号 ID，聚合三个 `*_mvio.h`，兼容现有模型使用者。
 `include/idu_equip.h` 继续聚合应用接口；新增配置代码使用 `src/cfg/include` 的对应契约。
 
-AIDC 的 `src/cfg/aidc/aidc_config.c` 提供 `generated/models.inc` 的信号采集模型与
-`handlers.inc` 的信号处理绑定。这两份文件属于点表元数据，继续保留在 `src/cfg/`；
-执行分别位于 `src/process/aidc_process.c`、`src/communication/aidc_serial.c` 和
-`src/communication/ports/aidc_virtual.c`。原生成文件、支持范围和未实现动作的
-返回行为不因文件拆分改变。
+`src/cfg/tables/point_metadata.c` 提供 `generated/models.inc` 的信号采集模型与
+`handlers.inc` 的处理绑定，类型分别为 `idu_collect_model`、`idu_process_binding`。
+绑定的 `callback` 是原回调名称字符串，实际处理仍在 `src/process/` 执行。
+现有生成数据来源于 AIDC；外部 `CONFIG_IDU_AIDC_PROFILE`、导入工具
+`tools/import_aidc.py`、生成宏及业务函数名保留兼容，来源与版权记录保留。
+目录按实际职责命名，不改变生成文件内容、支持范围或未实现动作的返回行为。
 
 点序、默认值、flags、字序及 NVS schema 保持原样。MV-IO 的 `input/holding`
 是按旧回调表顺序遍历的条目，允许读取时跳过地址空洞；它们不是连续寄存器段。
@@ -226,3 +228,8 @@ MCUboot/IAPv3 构建、签名校验通过。补充 profile 绑定及双字命令
 文件逐字节一致，迁出的协议配置和 Kconfig 保持原值与行为。完整回归、默认
 固件、MCUboot/IAPv3 构建和签名校验通过，暂存代码独立构建及启动布局检查
 通过。沿用上述沙箱设置，本次未进行实板验证。
+
+点表功能命名调整验证（2026-10-19）：9 份生成数据逐字节不变，导入工具默认
+输出已核对为 `src/cfg/tables/generated/`。完整回归及默认固件构建通过；另将
+暂存内容单独导出，构建并运行导入点表配置的 native_sim 测试，3 项全部通过。
+沿用上述沙箱设置，本次未进行实板验证。

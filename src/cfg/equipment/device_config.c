@@ -12,7 +12,7 @@ const struct dp_equip_cfg *idu_equipment_config(void)
     static const struct dp_device_cfg devices[] = {
         IDU_MVIO_INSTANCES(MVIO_DEVICE)
 #if defined(CONFIG_IDU_AIDC_PROFILE)
-#include "../aidc/generated/devices.inc"
+#include "../tables/generated/devices.inc"
 #endif
     };
     static struct dp_equip_cfg cfg;

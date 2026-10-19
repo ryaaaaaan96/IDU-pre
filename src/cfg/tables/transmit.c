@@ -14,7 +14,7 @@
 
 static const struct dp_transmit_cfg table[] = {
 #if defined(CONFIG_IDU_AIDC_PROFILE)
-#include "../aidc/generated/transmit.inc"
+#include "generated/transmit.inc"
     MAP(4, 10012, 1, IDU_DEV_LOCAL, IDU_SIG_VIRTUAL_MODE),
 #else
 #include "transmit_local.inc"

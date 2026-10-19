@@ -1,5 +1,5 @@
 #include "idu_aidc.h"
-#include "aidc_config.h"
+#include "point_metadata.h"
 #include <collect/collect.h>
 #include <errno.h>
 #include <string.h>
@@ -10,9 +10,9 @@ static int model_read(void *user, uint16_t dev, uint16_t model, uint16_t offset,
     ARG_UNUSED(user);
     if (dev < 11 || dev > 18) { return -ENOENT; }
     size_t model_count;
-    const struct idu_aidc_model *models = idu_aidc_models(&model_count);
+    const struct idu_collect_model *models = idu_collect_models(&model_count);
     for (size_t i = 0; i < model_count; ++i) {
-        const struct idu_aidc_model *m = &models[i];
+        const struct idu_collect_model *m = &models[i];
         if (m->model == model && m->offset == offset && m->width == count) {
             memcpy(words, m->initial.words, count * sizeof(*words)); return 0;
         }

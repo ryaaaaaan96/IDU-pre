@@ -2,8 +2,8 @@
 
 这里按参考工程 `MCUdemo/CODE/app/cfg/equip` 的方式组织设备与三表：
 设备实例关联采集、处理和转发定义，具体业务由应用回调执行。
-`src/cfg/` 只保留点表相关内容，按 `include`、`equipment`、`tables`、`aidc`
-分类：信号定义、设备装配、采集描述、处理绑定、寄存器映射及生成元数据。
+`src/cfg/` 只保留点表相关内容，按 `include`、`equipment`、`tables` 三类职责
+组织：信号定义、设备装配、采集描述、处理绑定、寄存器映射及生成元数据。
 下列相对路径以本目录为准。
 运行时使用本仓库的 Zephyr 模块，不依赖参考工程目录或预编译库。
 
@@ -13,15 +13,16 @@
 | --- | --- |
 | [`include/signal_ids.h`](include/signal_ids.h) | 应用设备 ID、信号 ID；共同组成内部测点键 |
 | [`include/device_config.h`](include/device_config.h) | `idu_equipment_config()` 与三表获取接口 |
-| [`include/aidc_config.h`](include/aidc_config.h) | AIDC 生成元数据的类型和获取接口 |
+| [`include/point_metadata.h`](include/point_metadata.h) | 采集模型、处理绑定元数据的类型和获取接口 |
 | [`equipment/device_config.c`](equipment/device_config.c)、[`equipment/instances.h`](equipment/instances.h) | 装配设备和三表；绑定设备、总线、从机 unit、北向窗口、周期及过期时间 |
-| [`tables/process.c`](tables/process.c) | 装配本地点、型号点和可选 AIDC 处理表 |
+| [`tables/process.c`](tables/process.c) | 装配本地点、型号点和可选的生成处理表 |
 | [`tables/process_local.inc`](tables/process_local.inc) | 本地信号、常量和演示参数，保持现有存储顺序 |
 | [`tables/process_mvio.h`](tables/process_mvio.h) | MV-IO 型号的类型、宽度、范围和质量过期配置 |
 | [`tables/collect.c`](tables/collect.c)、[`tables/collect_mvio.h`](tables/collect_mvio.h) | 采集块装配、南向功能码/地址、字段偏移、字序与周期 |
 | [`tables/transmit.c`](tables/transmit.c) | 装配当前 profile 的北向映射 |
 | [`tables/transmit_local.inc`](tables/transmit_local.inc)、[`tables/transmit_mvio.h`](tables/transmit_mvio.h) | 本地及型号信号的北向地址、别名与质量映射 |
-| [`aidc/aidc_config.c`](aidc/aidc_config.c)、[`aidc/generated/`](aidc/generated/) | AIDC 三表片段、信号采集模型及处理绑定元数据 |
+| [`tables/point_metadata.c`](tables/point_metadata.c) | 通过 `idu_collect_models()`、`idu_process_bindings()` 提供采集模型和处理绑定 |
+| [`tables/generated/`](tables/generated/) | 生成的三表片段、信号采集模型、处理绑定及来源元数据 |
 
 [`equipment/models/mvio.h`](equipment/models/mvio.h) 保留型号信号 ID，并聚合三个 `*_mvio.h`，
 供现有模型使用者继续包含；三类宏分别展开为所属表的静态数据。
@@ -39,12 +40,15 @@
 点表或触发动作，点表的 `transmit` 映射则描述寄存器对应哪个信号。
 应用功能选项统一在 [`src/Kconfig`](../Kconfig)，符号与默认值保持不变。
 
-AIDC 的 `models.inc` 描述信号采集模型，`handlers.inc` 描述信号处理绑定，
-由 `aidc/aidc_config.c` 提供获取接口；它们属于点表元数据，继续保留在此。
-三表装配文件包含 `aidc/generated/` 对应片段，实际业务在 `src/process/` 执行。
-串口参数转换在 `src/communication/aidc_serial.c`，模型模拟采集在
-`src/communication/ports/aidc_virtual.c`。生成元数据不代表相关业务已实现，
-配置迁移和文件重命名保持原有支持范围与错误返回。
+`tables/generated/models.inc` 描述信号采集模型，`handlers.inc` 描述处理绑定，
+对应 `struct idu_collect_model` 和 `struct idu_process_binding`。绑定中的
+`callback` 保存原回调名称字符串；执行函数仍由 `src/process/` 实现和选择。
+三表装配文件包含 `tables/generated/` 中相应片段，生成元数据不代表相关业务
+已实现，目录和接口命名调整保持原有支持范围与错误返回。
+
+这些生成数据来源于已有 AIDC 点表。`CONFIG_IDU_AIDC_PROFILE`、
+`tools/import_aidc.py`、生成内容中的 `AIDC_*` 宏及已有业务函数名保留兼容；
+来源记录和版权注释保留，不作为配置目录的分类依据。
 
 ## 新增设备
 

@@ -12,12 +12,12 @@ IDU_MVIO_COLLECT_FIELDS(mvio);
  * blocks with the actual downstream equipment's register specification.
  */
 #if defined(CONFIG_IDU_AIDC_PROFILE)
-#include "../aidc/generated/fields.inc"
+#include "generated/fields.inc"
 #endif
 static const struct co_cfg table[] = {
     IDU_MVIO_INSTANCES(MVIO_COLLECT)
 #if defined(CONFIG_IDU_AIDC_PROFILE)
-#include "../aidc/generated/collect.inc"
+#include "generated/collect.inc"
 #endif
 };
 
