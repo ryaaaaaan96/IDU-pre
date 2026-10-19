@@ -1,4 +1,4 @@
-#include "comm_cfg.h"
+#include "protocol_config.h"
 #if defined(CONFIG_IDU_AIDC_PROFILE)
 #include "idu_aidc.h"
 #else

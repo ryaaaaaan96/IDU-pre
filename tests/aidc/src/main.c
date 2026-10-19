@@ -1,6 +1,6 @@
 #include "idu_equip.h"
 #include "idu_aidc.h"
-#include "comm_cfg.h"
+#include "protocol_config.h"
 #include <collect/collect.h>
 #include <transmit/transmit.h>
 #include <zephyr/storage/flash_map.h>

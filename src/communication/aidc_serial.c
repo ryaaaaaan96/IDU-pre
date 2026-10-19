@@ -1,5 +1,5 @@
 #include "idu_aidc.h"
-#include "aidc_cfg.h"
+#include "aidc_config.h"
 #include <dataprocess/params.h>
 #include <zephyr/modbus/modbus.h>
 #include <errno.h>

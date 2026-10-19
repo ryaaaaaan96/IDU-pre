@@ -1,5 +1,5 @@
-#ifndef IDU_APP_SIG_DEF_H
-#define IDU_APP_SIG_DEF_H
+#ifndef IDU_SIGNAL_IDS_H
+#define IDU_SIGNAL_IDS_H
 
 /* Logical device and signal IDs, independent of wire register addresses. */
 #define IDU_DEV_LOCAL 1

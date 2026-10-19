@@ -1,7 +1,7 @@
-#include "app_sig_def.h"
-#include "dev_cfg.h"
-#include "../models/mvio.h"
-#include "../instances.h"
+#include "signal_ids.h"
+#include "device_config.h"
+#include "../equipment/models/mvio.h"
+#include "../equipment/instances.h"
 
 #define MAP(fc, reg, words, dev, sig) \
     {.function = fc, .address = reg, .count = words, .key = {dev, sig}}

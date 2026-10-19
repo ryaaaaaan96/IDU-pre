@@ -1,4 +1,4 @@
-#include "aidc_cfg.h"
+#include "aidc_config.h"
 #include <zephyr/sys/util.h>
 
 static const struct idu_aidc_model models[] = {

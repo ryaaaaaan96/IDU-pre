@@ -6,9 +6,9 @@
 转发、参数下发和 NVS 持久化。点表配置参考 AIDC 的 equip/process 设计；详见
 [点表设计、库接口分析和换串口步骤](docs/point-tables.md)。
 对照 MCUdemo 的设备实例与三表设计，通讯点表按采集、处理、转发拆分在
-`cfg/equip/table/`，由 `instances.h` 统一绑定设备、总线和转发窗口。
+`src/cfg/tables/`，由 `equipment/instances.h` 统一绑定设备、总线和转发窗口。
 协议地址及回调绑定留在配置层，业务执行放在 `src/process/`；新增点和设备的
-具体入口见 [通讯点表配置指南](cfg/equip/README.md)。
+具体入口见 [通讯点表配置指南](src/cfg/README.md)。
 Process 支持无 Flash/NVS 的独立运行，采集线程使用事件与截止时间唤醒。
 模块边界、扩展步骤及验证入口见
 [collect / process / transmit 模块设计](docs/collect-process-transmit.md)。
@@ -39,6 +39,7 @@ IDU-pre/
 ├── dts/                 # 板级设备树 binding
 ├── src/
 │   ├── main.c           # 应用入口、周期与休眠
+│   ├── cfg/             # 信号、设备、三表、协议配置及 AIDC 生成数据
 │   ├── app/             # 生命周期与 MCUboot 健康确认
 │   ├── hardware/        # DI、ADC、LED、外部看门狗
 │   ├── equipment/       # 设备服务、点表接入与工程量换算
@@ -46,7 +47,6 @@ IDU-pre/
 │   ├── communication/   # Modbus 端口、参数协议、MV-IO 兼容及采集后端
 │   └── iap/             # IAPv3 接收、SGZ 与镜像校验
 ├── include/             # 本板接口
-├── cfg/                 # 设备和点表配置，含已生成的 AIDC 表
 ├── modules/
 │   ├── dataprocess/      # dp_* 数据池、业务处理及可选 NVS
 │   ├── collect/          # co_* 采集与总线调度
@@ -108,19 +108,16 @@ IDU-pre/
 │   └── idu_pre.yaml
 ├── soc/idu/gd32e505/        # E505 SoC 与 20 MHz 有源时钟启动
 ├── dts/bindings/           # 应用硬件描述绑定
-├── cfg/
-│   ├── inc/               # 信号 ID、设备表和通讯配置契约
-│   └── equip/
-│       ├── dev_cfg.c       # 设备注册与三表装配
-│       ├── instances.h    # 型号实例、总线、从机和转发窗口
-│       ├── callback_function.c # 端口协议回调绑定
-│       ├── models/        # 型号信号定义与三表入口
-│       ├── table/         # 三表、参数命令和 MV-IO 地址段配置
-│       └── aidc/          # 可选 AIDC 生成表与元数据
 ├── conf/collect-rtu.conf   # 补齐硬件后切换真实采集串口
 ├── include/               # idu_pre.h / idu_equip.h
 ├── src/
 │   ├── main.c              # 入口与采样周期，周期可通过参数修改
+│   ├── cfg/
+│   │   ├── include/       # signal_ids.h 与 device/protocol/aidc_config.h
+│   │   ├── equipment/     # device_config.c、instances.h 和 models/
+│   │   ├── tables/        # collect / process / transmit 三表
+│   │   ├── protocol/      # 端口回调、参数命令与 MV-IO 地址段
+│   │   └── aidc/          # AIDC 元数据与 generated/ 原始导入结果
 │   ├── app/
 │   │   └── boot.c          # MCUboot 试运行健康确认
 │   ├── hardware/
@@ -150,7 +147,9 @@ IDU-pre/
 
 三个通用模块分别放在 `modules/dataprocess/`、`modules/collect/` 和
 `modules/transmit/`，通过 `modules/modules.cmake` 注册到 Zephyr。产品点表留在
-`cfg/equip/`，模块不依赖本板 BSP；详见 [模块接口](modules/README.md)。
+`src/cfg/`，模块不依赖本板 BSP；详见 [模块接口](modules/README.md)。
+`src/cfg/` 保存参与编译的应用配置，`conf/` 保存可选的 Kconfig 配置组合。
+目录迁移与内部分类保持既有配置数据、点表顺序和行为。
 
 ## 引脚映射
 

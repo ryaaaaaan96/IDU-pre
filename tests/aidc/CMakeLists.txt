@@ -9,7 +9,7 @@ target_include_directories(app PRIVATE ${IDU_APP}/include)
 target_sources(app PRIVATE src/main.c ${IDU_APP}/src/equipment/registers.c
     ${IDU_APP}/src/equipment/equip.c ${IDU_APP}/src/communication/ports/acquisition.c
     ${IDU_APP}/src/communication/ports/virtual.c ${IDU_APP}/src/communication/parameter_protocol.c)
-add_subdirectory(${IDU_APP}/cfg/equip equip_cfg)
+add_subdirectory(${IDU_APP}/src/cfg app_cfg)
 add_subdirectory(${IDU_APP}/src/process point_process)
 target_sources(app PRIVATE ${IDU_APP}/src/communication/aidc_serial.c
   ${IDU_APP}/src/communication/ports/aidc_virtual.c)

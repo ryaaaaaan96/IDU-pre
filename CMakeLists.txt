@@ -9,4 +9,3 @@ project(idu_pre)
 
 target_include_directories(app PRIVATE include)
 add_subdirectory(src)
-add_subdirectory(cfg/equip)

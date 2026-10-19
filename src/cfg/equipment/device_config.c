@@ -1,7 +1,7 @@
 #include <dataprocess/points.h>
 
-#include "app_sig_def.h"
-#include "dev_cfg.h"
+#include "signal_ids.h"
+#include "device_config.h"
 #include "instances.h"
 
 #define MVIO_DEVICE(dev, bus, unit, north, address_reg, period, identity, stale, identity_stale) \
@@ -12,7 +12,7 @@ const struct dp_equip_cfg *idu_equipment_config(void)
     static const struct dp_device_cfg devices[] = {
         IDU_MVIO_INSTANCES(MVIO_DEVICE)
 #if defined(CONFIG_IDU_AIDC_PROFILE)
-#include "aidc/generated/devices.inc"
+#include "../aidc/generated/devices.inc"
 #endif
     };
     static struct dp_equip_cfg cfg;

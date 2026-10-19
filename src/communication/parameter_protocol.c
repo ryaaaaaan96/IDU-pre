@@ -1,5 +1,5 @@
 #include "idu_equip.h"
-#include "comm_cfg.h"
+#include "protocol_config.h"
 #include <transmit/transmit.h>
 #include <errno.h>
 

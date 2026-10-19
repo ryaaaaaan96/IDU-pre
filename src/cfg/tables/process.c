@@ -1,12 +1,12 @@
 #include <dataprocess/params.h>
 
-#include "app_sig_def.h"
-#include "dev_cfg.h"
+#include "signal_ids.h"
+#include "device_config.h"
 #include "idu_process.h"
 #include "idu_pre.h"
 #include "idu_mvio.h"
-#include "../models/mvio.h"
-#include "../instances.h"
+#include "../equipment/models/mvio.h"
+#include "../equipment/instances.h"
 #if defined(CONFIG_IDU_AIDC_PROFILE)
 #include "idu_aidc.h"
 #endif

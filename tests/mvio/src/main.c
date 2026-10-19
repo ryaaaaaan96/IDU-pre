@@ -1,5 +1,5 @@
 #include "idu_equip.h"
-#include "comm_cfg.h"
+#include "protocol_config.h"
 #include <transmit/modbus_adapter.h>
 #include <transmit/transmit.h>
 #include "modbus_internal.h" /* TX-state injection; no UART electrical simulation. */

@@ -1,8 +1,8 @@
-#ifndef IDU_AIDC_CFG_H
-#define IDU_AIDC_CFG_H
+#ifndef IDU_AIDC_CONFIG_H
+#define IDU_AIDC_CONFIG_H
 
 #include <dataprocess/points.h>
-#include "../equip/aidc/generated/symbols.h"
+#include "../aidc/generated/symbols.h"
 
 struct idu_aidc_model {
     uint16_t sig, model, offset, legacy_cycle;

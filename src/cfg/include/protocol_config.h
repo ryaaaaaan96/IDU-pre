@@ -1,5 +1,5 @@
-#ifndef IDU_COMM_CFG_H
-#define IDU_COMM_CFG_H
+#ifndef IDU_PROTOCOL_CONFIG_H
+#define IDU_PROTOCOL_CONFIG_H
 
 #include <stddef.h>
 #include <stdint.h>

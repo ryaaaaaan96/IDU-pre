@@ -18,8 +18,8 @@ enum idu_mvio_signal {
 /* Compatibility entry point for the reusable model and existing consumers.
  * Table declarations are maintained separately by their communication role.
  */
-#include "../table/process_mvio.h"
-#include "../table/collect_mvio.h"
-#include "../table/transmit_mvio.h"
+#include "../../tables/process_mvio.h"
+#include "../../tables/collect_mvio.h"
+#include "../../tables/transmit_mvio.h"
 
 #endif

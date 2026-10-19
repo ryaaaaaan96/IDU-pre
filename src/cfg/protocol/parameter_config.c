@@ -1,5 +1,5 @@
-#include "app_sig_def.h"
-#include "comm_cfg.h"
+#include "signal_ids.h"
+#include "protocol_config.h"
 #include "idu_process.h"
 #include <zephyr/sys/util.h>
 

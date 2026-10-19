@@ -1,5 +1,5 @@
-#ifndef IDU_DEV_CFG_H
-#define IDU_DEV_CFG_H
+#ifndef IDU_DEVICE_CONFIG_H
+#define IDU_DEVICE_CONFIG_H
 
 #include <stddef.h>
 

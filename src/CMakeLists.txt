@@ -1,4 +1,5 @@
 target_sources(app PRIVATE main.c)
+add_subdirectory(cfg)
 add_subdirectory(app)
 add_subdirectory(hardware)
 add_subdirectory(equipment)

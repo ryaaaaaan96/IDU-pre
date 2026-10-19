@@ -10,7 +10,12 @@ No legacy platform library is linked.
 | `collect` | `collect/collect.h` | `co_*` acquisition, bus scheduling and parameter transport backend |
 | `transmit` | `transmit/transmit.h`, `transmit/modbus_adapter.h` | `tr_*` register mappings, port modes and Modbus workqueues |
 
-Product tables and hardware remain outside these modules. `dataprocess` has no
+Product configuration lives in [`src/cfg/`](../src/cfg/README.md), outside these
+modules: `include/` defines configuration contracts, `equipment/` binds instances,
+`tables/` assembles the three tables, `protocol/` declares protocol policy and
+commands, and `aidc/` provides generated metadata. Business callbacks remain in
+`src/process/`; hardware and transport code remain in their application layers.
+Moving the configuration preserves its data and behavior. `dataprocess` has no
 Modbus or collector dependency. The other two depend on its data contracts;
 downstream forwarding is optional when `collect` is absent.
 
@@ -216,7 +221,7 @@ its 552-point profile. `ZBUS_MSG_SUBSCRIBER_NET_BUF_STATIC_DATA_SIZE` must cover
 lookup is linear. Measure timing and stack margins on the target before release.
 
 The application's reusable MV-IO model binds device instances at compile time
-through `cfg/equip/instances.h`. The three tables stay const and collection field
+through `src/cfg/equipment/instances.h`. The three tables stay const and collection field
 arrays are shared; no runtime copy of model definitions or heap allocation is
 needed. See [the model and pipeline design](../docs/collect-process-transmit.md).
 

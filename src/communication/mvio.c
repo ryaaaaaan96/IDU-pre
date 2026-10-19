@@ -2,7 +2,7 @@
  * Wire addresses are literal (no 40001 adjustment). Normal IDU extensions keep
  * the standard Zephyr behavior; legacy broadcasts/247 never reach extensions.
  */
-#include "comm_cfg.h"
+#include "protocol_config.h"
 #include "idu_mvio.h"
 #ifdef CONFIG_IDU_IAPV3
 #include "idu_iap.h"

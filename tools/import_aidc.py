@@ -198,5 +198,5 @@ def generate(root, output):
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source',type=Path,required=True,help='Path to the reference AIDC CODE checkout; only needed to regenerate tables')
-    parser.add_argument('--output',type=Path,default=Path(__file__).resolve().parents[1]/'cfg/equip/aidc/generated')
+    parser.add_argument('--output',type=Path,default=Path(__file__).resolve().parents[1]/'src/cfg/aidc/generated')
     args=parser.parse_args();generate(args.source,args.output)

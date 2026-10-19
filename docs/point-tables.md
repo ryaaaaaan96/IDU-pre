@@ -19,16 +19,18 @@ RT-Thread 平台中的这条数据链，当前没有完成整个 AIDC 固件或�
 ## 当前通讯点表文件组织
 
 本次依据 `/home/ryan/Documents/demo/MCUdemo/CODE/app/cfg/equip/` 与
-`app/process/` 的职责划分重构通讯点表。设备、信号和协议配置集中在 `cfg/`，
+`app/process/` 的职责划分组织通讯点表。原 `cfg` 的全部配置内容和功能已迁入
+`src/cfg/`，本次仅调整分类、文件名及引用。设备、信号和协议配置集中在此，
 业务执行在 `src/process/`，端口及报文处理在 `src/communication/`。
-详细文件对应和扩展步骤见[点表维护入口](../cfg/equip/README.md)。
+详细文件对应和扩展步骤见[点表维护入口](../src/cfg/README.md)。
 
-- `cfg/inc/` 定义应用信号、三表获取接口、通信配置及 AIDC 元数据契约。
-- `cfg/equip/dev_cfg.c` 与 `instances.h` 装配实例；`table/*_mvio.h` 和
+- `src/cfg/include/` 的 `signal_ids.h`、`device_config.h`、`protocol_config.h`、
+  `aidc_config.h` 定义应用信号、三表获取接口、通信配置及 AIDC 元数据契约。
+- `src/cfg/equipment/device_config.c` 与 `src/cfg/equipment/instances.h` 装配实例；`src/cfg/tables/*_mvio.h` 和
   `*_local.inc` 分开维护型号三表与本地条目。
-- `callback_function.c` 绑定协议回调，`table/transmit_parameters.c` 声明控制/
-  状态寄存器，`table/transmit_mvio.c` 声明兼容入口和旧回调表顺序。
-- AIDC 生成数据保持原样，由 `aidc/aidc_cfg.c` 提供元数据；处理、串口参数和
+- `src/cfg/protocol/protocol_config.c` 绑定协议回调，`src/cfg/protocol/parameter_config.c` 声明控制/
+  状态寄存器，`src/cfg/protocol/mvio_config.c` 声明兼容入口和旧回调表顺序。
+- AIDC 生成数据保持原样，由 `src/cfg/aidc/aidc_config.c` 提供元数据；处理、串口参数和
   虚拟采集分别由 `aidc_process.c`、`aidc_serial.c`、`ports/aidc_virtual.c` 执行。
 
 此次拆分保持测点顺序、默认值、flags、字序和 NVS schema。旧 MV-IO 读取继续
@@ -143,7 +145,7 @@ RAM 115,832 B。HEX、测试摘要和源码/参考文件指纹在 `build/hex/`�
 | 参数操作 | NO_COLLECT、NO_DM、NO_STORE、DEFER 独立组合；异步请求复制与完成回调；1 s 延后保存；成功保存后重启 | `modules/dataprocess/include/dataprocess/params.h`、`process.h` |
 | 采集 | 每总线独立调度；优先级与等待时间；模式选择；初始化读与设定值同步；设备状态/事件；同从机地址跨总线隔离 | `modules/collect/include/collect/collect.h` |
 | 转发 | 通用地址段回调；四种字序；Modbus ADU 透传与地址重映射；串口参数异步生效及失败恢复 | `modules/transmit/include/transmit/transmit.h`、`modbus_adapter.h` |
-| 点表 | 导入原 process/range/transmit 及 UPP 字段元数据；自动展开 8 台 DSP；保留原 ID/地址和问题诊断 | `tools/import_aidc.py`、`cfg/equip/aidc/generated/` |
+| 点表 | 导入原 process/range/transmit 及 UPP 字段元数据；自动展开 8 台 DSP；保留原 ID/地址和问题诊断 | `tools/import_aidc.py`、`src/cfg/aidc/generated/` |
 
 ### 业务调用与效果边界
 
@@ -282,11 +284,11 @@ Flash 故障注入。原 `legacy_registers.c` 是早期 Zephyr 重构对照，�
 
 | 参考文件 | 可确认的接口行为 | 本项目对应位置 |
 | --- | --- | --- |
-| `app/cfg/equip/dev_cfg.c` | 用设备 ID、端口、从机地址关联处理、采集、转发表 | `cfg/equip/dev_cfg.c` |
-| `app/cfg/equip/table/collect.c`、`platform/inc/collect_lib.h` | 信号 ID、寄存器/模型偏移、数量、类型、周期、字序描述采集 | `cfg/equip/table/collect.c` |
-| `app/cfg/equip/table/process.c`、`platform/inc/data_process.h` | `dev_id/sig_id` 区分信号，配置长度、类型、处理回调 | `cfg/equip/table/process.c` |
+| `app/cfg/equip/dev_cfg.c` | 用设备 ID、端口、从机地址关联处理、采集、转发表 | `src/cfg/equipment/device_config.c` |
+| `app/cfg/equip/table/collect.c`、`platform/inc/collect_lib.h` | 信号 ID、寄存器/模型偏移、数量、类型、周期、字序描述采集 | `src/cfg/tables/collect.c` |
+| `app/cfg/equip/table/process.c`、`platform/inc/data_process.h` | `dev_id/sig_id` 区分信号，配置长度、类型、处理回调 | `src/cfg/tables/process.c` |
 | `app/cfg/equip/range/signal_range.c` | 默认值和范围由配置管理 | 处理表中的 `initial/minimum/maximum` |
-| `app/cfg/equip/table/transmit.c`、`platform/inc/transmit_lib.h` | 协议地址和内部信号分离；同一信号可以有多个转发地址 | `cfg/equip/table/transmit.c` |
+| `app/cfg/equip/table/transmit.c`、`platform/inc/transmit_lib.h` | 协议地址和内部信号分离；同一信号可以有多个转发地址 | `src/cfg/tables/transmit.c` |
 | `app/process/app/APP_FUNC.C` 等 | 业务回调转换采集/协议值 | 处理表中的 `process` 回调；本地 ADC 电流转换已接入 |
 
 当前参考项目的主采集表实际是 **DSP UPP**，不能把 UPP 的模型偏移当成
@@ -386,7 +388,7 @@ Zephyr 4.4.2 的标准输入/保持寄存器读回调把应用读错误统一转
 ## IDU-pre 配置和寄存器
 
 本地设备 `dev_id=1`，远程 IO 设备 `dev_id=10`。二者可以有相同
-`sig_id`，不会覆盖；远程从机地址在 `cfg/equip/instances.h` 中配置，当前为 1。
+`sig_id`，不会覆盖；远程从机地址在 `src/cfg/equipment/instances.h` 中配置，当前为 1。
 上位机访问 IDU 的地址仍由板上拨码决定（1–16）。
 
 原有 8149–8199 等本地寄存器和 SN/版本别名保留。电流换算从主循环
@@ -425,23 +427,23 @@ Zephyr 4.4.2 的标准输入/保持寄存器读回调把应用读错误统一转
 
 ### 新增一个测点
 
-1. 在 `cfg/inc/app_sig_def.h` 分配应用信号 ID，确认 `instances.h` 的设备归属；
-   型号信号使用 `models/<name>.h` 的定义，内部键与两侧报文地址分别考虑。
-2. 本地点在 `table/process_local.inc` 声明；MV-IO 型号点在
-   `table/process_mvio.h` 声明。配置类型、字数、范围、来源和过期时间；
+1. 在 `src/cfg/include/signal_ids.h` 分配应用信号 ID，确认 `src/cfg/equipment/instances.h` 的设备归属；
+   型号信号使用 `src/cfg/equipment/models/<name>.h` 的定义，内部键与两侧报文地址分别考虑。
+2. 本地点在 `src/cfg/tables/process_local.inc` 声明；MV-IO 型号点在
+   `src/cfg/tables/process_mvio.h` 声明。配置类型、字数、范围、来源和过期时间；
    纯换算函数放 `src/process/` 并绑定 `.process`，必须快速、不做 I/O、
    不递归调用点表 API。回调成功后才检查工程值范围。
-3. 远端采集点在 `table/collect_mvio.h` 或新型号文件中加入字段和合法连续读块；
+3. 远端采集点在 `src/cfg/tables/collect_mvio.h` 或新型号文件中加入字段和合法连续读块；
    不跨未定义的寄存器空洞合帧。本地采样点更新对应发布方。
-4. 在 `table/transmit_local.inc` 或 `table/transmit_mvio.h` 配置北向映射。
+4. 在 `src/cfg/tables/transmit_local.inc` 或 `src/cfg/tables/transmit_mvio.h` 配置北向映射。
    使用 MV-IO 兼容 profile 且地址超出现有入口时，同步调整
-   `table/transmit_mvio.c` 的 `extensions[]`。命令/状态寄存器分别配置到
-   `table/transmit_parameters.c`，业务动作放 `src/process/`。
+   `src/cfg/protocol/mvio_config.c` 的 `extensions[]`。命令/状态寄存器分别配置到
+   `src/cfg/protocol/parameter_config.c`，业务动作放 `src/process/`。
 5. 验证配置冲突、宽度、字序和真实请求路径；有参数改动时补充存储迁移与重启
    验证。本次文件拆分未重排参数；后续增删持久点不能假定 NVS 格式自动兼容。
 
 同型号新设备的总线、unit、窗口与周期配置，以及建议验证入口见
-[`cfg/equip/README.md`](../cfg/equip/README.md)。
+[`src/cfg/README.md`](../src/cfg/README.md)。
 
 `DP_WORDS` 的数值范围不检查；浮点、变长字符串、动态设备表和在线
 修改点表尚未实现。三张表及设备表必须具有静态生命周期。

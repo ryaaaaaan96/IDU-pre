@@ -1,8 +1,8 @@
 #ifndef IDU_EQUIP_H
 #define IDU_EQUIP_H
 
-#include "app_sig_def.h"
-#include "dev_cfg.h"
+#include "signal_ids.h"
+#include "device_config.h"
 #include <dataprocess/points.h>
 #include <dataprocess/params.h>
 #include <collect/collect.h>

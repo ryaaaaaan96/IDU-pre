@@ -1,4 +1,4 @@
-#include "comm_cfg.h"
+#include "protocol_config.h"
 #include <zephyr/sys/util.h>
 
 /* Legacy acceptance uses the first address, independently of callback-table

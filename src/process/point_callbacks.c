@@ -1,6 +1,6 @@
 #include "idu_process.h"
 #include "idu_pre.h"
-#include "app_sig_def.h"
+#include "signal_ids.h"
 #include <dataprocess/params.h>
 #include <errno.h>
 

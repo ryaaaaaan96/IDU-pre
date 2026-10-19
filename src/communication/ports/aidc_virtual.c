@@ -1,5 +1,5 @@
 #include "idu_aidc.h"
-#include "aidc_cfg.h"
+#include "aidc_config.h"
 #include <collect/collect.h>
 #include <errno.h>
 #include <string.h>
