@@ -19,19 +19,26 @@ RT-Thread 平台中的这条数据链，当前没有完成整个 AIDC 固件或�
 ## 当前通讯点表文件组织
 
 本次依据 `/home/ryan/Documents/demo/MCUdemo/CODE/app/cfg/equip/` 与
-`app/process/` 的职责划分组织通讯点表。原 `cfg` 的全部配置内容和功能已迁入
-`src/cfg/`，本次仅调整分类、文件名及引用。设备、信号和协议配置集中在此，
-业务执行在 `src/process/`，端口及报文处理在 `src/communication/`。
+`app/process/` 的职责划分组织通讯点表。`src/cfg/` 只保留信号定义、设备装配、
+采集/处理/转发三表及 AIDC 点表元数据；协议配置归入
+`src/communication/config/`，应用功能选项归入 `src/Kconfig`。
+配置内容与功能保持不变，业务执行在 `src/process/`，端口及报文处理在
+`src/communication/`。
 详细文件对应和扩展步骤见[点表维护入口](../src/cfg/README.md)。
 
-- `src/cfg/include/` 的 `signal_ids.h`、`device_config.h`、`protocol_config.h`、
-  `aidc_config.h` 定义应用信号、三表获取接口、通信配置及 AIDC 元数据契约。
+- `src/cfg/include/` 的 `signal_ids.h`、`device_config.h`、`aidc_config.h`
+  定义应用信号、三表获取接口及 AIDC 点表元数据契约。
 - `src/cfg/equipment/device_config.c` 与 `src/cfg/equipment/instances.h` 装配实例；`src/cfg/tables/*_mvio.h` 和
   `*_local.inc` 分开维护型号三表与本地条目。
-- `src/cfg/protocol/protocol_config.c` 绑定协议回调，`src/cfg/protocol/parameter_config.c` 声明控制/
-  状态寄存器，`src/cfg/protocol/mvio_config.c` 声明兼容入口和旧回调表顺序。
-- AIDC 生成数据保持原样，由 `src/cfg/aidc/aidc_config.c` 提供元数据；处理、串口参数和
-  虚拟采集分别由 `aidc_process.c`、`aidc_serial.c`、`ports/aidc_virtual.c` 执行。
+- AIDC 生成数据保持原样；`models.inc`、`handlers.inc` 描述信号采集模型和
+  处理绑定，继续由 `src/cfg/aidc/aidc_config.c` 提供元数据。实际处理、串口参数
+  和虚拟采集分别由 `aidc_process.c`、`aidc_serial.c`、`ports/aidc_virtual.c` 执行。
+
+点表的转发映射描述寄存器对应哪个信号。通信层的
+`src/communication/config/protocol_config.c` 则绑定协议回调，同目录的
+`parameter_config.c` 声明控制/状态寄存器，`mvio_config.c` 声明兼容入口和
+旧回调表顺序，配置契约由 `protocol_config.h` 提供。这些内容控制请求路由
+和动作分派，独立于点表维护。`src/Kconfig` 保留原应用配置符号和默认值。
 
 此次拆分保持测点顺序、默认值、flags、字序和 NVS schema。旧 MV-IO 读取继续
 按回调表顺序跨地址空洞推进，不能把有序条目改成连续地址段。其 `extensions[]`
@@ -437,8 +444,8 @@ Zephyr 4.4.2 的标准输入/保持寄存器读回调把应用读错误统一转
    不跨未定义的寄存器空洞合帧。本地采样点更新对应发布方。
 4. 在 `src/cfg/tables/transmit_local.inc` 或 `src/cfg/tables/transmit_mvio.h` 配置北向映射。
    使用 MV-IO 兼容 profile 且地址超出现有入口时，同步调整
-   `src/cfg/protocol/mvio_config.c` 的 `extensions[]`。命令/状态寄存器分别配置到
-   `src/cfg/protocol/parameter_config.c`，业务动作放 `src/process/`。
+   `src/communication/config/mvio_config.c` 的 `extensions[]`。命令/状态寄存器配置到
+   `src/communication/config/parameter_config.c`，业务动作放 `src/process/`。
 5. 验证配置冲突、宽度、字序和真实请求路径；有参数改动时补充存储迁移与重启
    验证。本次文件拆分未重排参数；后续增删持久点不能假定 NVS 格式自动兼容。
 

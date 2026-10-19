@@ -5,7 +5,7 @@ config MODBUS_BUFFER_SIZE
     range 64 1100 if IDU_IAPV3
 
 source "Kconfig.zephyr"
-rsource "src/cfg/Kconfig"
+rsource "src/Kconfig"
 
 config IDU_PRE
     bool

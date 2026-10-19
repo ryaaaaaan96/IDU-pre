@@ -7,8 +7,8 @@
 [点表设计、库接口分析和换串口步骤](docs/point-tables.md)。
 对照 MCUdemo 的设备实例与三表设计，通讯点表按采集、处理、转发拆分在
 `src/cfg/tables/`，由 `equipment/instances.h` 统一绑定设备、总线和转发窗口。
-协议地址及回调绑定留在配置层，业务执行放在 `src/process/`；新增点和设备的
-具体入口见 [通讯点表配置指南](src/cfg/README.md)。
+信号、采集和转发映射由点表维护，协议策略归 `src/communication/config/`，
+业务执行放在 `src/process/`；新增点和设备见 [通讯点表配置指南](src/cfg/README.md)。
 Process 支持无 Flash/NVS 的独立运行，采集线程使用事件与截止时间唤醒。
 模块边界、扩展步骤及验证入口见
 [collect / process / transmit 模块设计](docs/collect-process-transmit.md)。
@@ -39,7 +39,7 @@ IDU-pre/
 ├── dts/                 # 板级设备树 binding
 ├── src/
 │   ├── main.c           # 应用入口、周期与休眠
-│   ├── cfg/             # 信号、设备、三表、协议配置及 AIDC 生成数据
+│   ├── cfg/             # 点表：信号、设备、三表及 AIDC 元数据
 │   ├── app/             # 生命周期与 MCUboot 健康确认
 │   ├── hardware/        # DI、ADC、LED、外部看门狗
 │   ├── equipment/       # 设备服务、点表接入与工程量换算
@@ -112,11 +112,11 @@ IDU-pre/
 ├── include/               # idu_pre.h / idu_equip.h
 ├── src/
 │   ├── main.c              # 入口与采样周期，周期可通过参数修改
+│   ├── Kconfig             # 产品选项、采集后端及采样周期
 │   ├── cfg/
-│   │   ├── include/       # signal_ids.h 与 device/protocol/aidc_config.h
+│   │   ├── include/       # signal_ids.h、device_config.h、aidc_config.h
 │   │   ├── equipment/     # device_config.c、instances.h 和 models/
 │   │   ├── tables/        # collect / process / transmit 三表
-│   │   ├── protocol/      # 端口回调、参数命令与 MV-IO 地址段
 │   │   └── aidc/          # AIDC 元数据与 generated/ 原始导入结果
 │   ├── app/
 │   │   └── boot.c          # MCUboot 试运行健康确认
@@ -129,6 +129,7 @@ IDU-pre/
 │   │   └── registers.c     # 电流换算
 │   ├── process/            # 测点回调、参数命令、MV-IO 导入与 AIDC 处理
 │   ├── communication/
+│   │   ├── config/        # 协议选择、控制命令与 MV-IO 路由配置
 │   │   ├── protocol.c      # RS485 Modbus RTU 端口配置与恢复
 │   │   ├── mvio.c          # MV-IO 报文路由与旧协议编码
 │   │   ├── parameter_protocol.c # 参数写入、恢复默认、状态诊断
@@ -148,8 +149,9 @@ IDU-pre/
 三个通用模块分别放在 `modules/dataprocess/`、`modules/collect/` 和
 `modules/transmit/`，通过 `modules/modules.cmake` 注册到 Zephyr。产品点表留在
 `src/cfg/`，模块不依赖本板 BSP；详见 [模块接口](modules/README.md)。
-`src/cfg/` 保存参与编译的应用配置，`conf/` 保存可选的 Kconfig 配置组合。
-目录迁移与内部分类保持既有配置数据、点表顺序和行为。
+`src/cfg/` 仅保存点表定义及装配所需的设备、信号和生成元数据。
+协议策略在 `src/communication/config/`，产品选项在 `src/Kconfig`，
+`conf/` 保存可选的 Kconfig 配置组合。目录调整保持既有数据、点序和行为。
 
 ## 引脚映射
 

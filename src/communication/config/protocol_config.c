@@ -5,8 +5,8 @@
 #include "idu_mvio.h"
 #endif
 
-/* Project-specific protocol callbacks are bound here, alongside the device
- * table. The port implementation only applies these static bindings. */
+/* Project-specific protocol callbacks belong to the communication layer.
+ * The port implementation applies these static bindings. */
 const struct idu_protocol_profile *idu_protocol_config(void)
 {
     static const struct idu_protocol_profile profile = {

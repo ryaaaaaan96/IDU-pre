@@ -10,12 +10,15 @@ No legacy platform library is linked.
 | `collect` | `collect/collect.h` | `co_*` acquisition, bus scheduling and parameter transport backend |
 | `transmit` | `transmit/transmit.h`, `transmit/modbus_adapter.h` | `tr_*` register mappings, port modes and Modbus workqueues |
 
-Product configuration lives in [`src/cfg/`](../src/cfg/README.md), outside these
-modules: `include/` defines configuration contracts, `equipment/` binds instances,
-`tables/` assembles the three tables, `protocol/` declares protocol policy and
-commands, and `aidc/` provides generated metadata. Business callbacks remain in
-`src/process/`; hardware and transport code remain in their application layers.
-Moving the configuration preserves its data and behavior. `dataprocess` has no
+Product point-table configuration lives in [`src/cfg/`](../src/cfg/README.md),
+outside these modules: `include/` defines point-table contracts, `equipment/`
+binds instances, `tables/` assembles the three tables, and `aidc/` provides
+generated signal acquisition/processing metadata. Register-to-signal mappings
+belong to these tables. Protocol routing, command dispatch and their contracts
+live in [`src/communication/config/`](../src/communication/config/), while
+application options live in [`src/Kconfig`](../src/Kconfig). Business callbacks
+remain in `src/process/`; hardware and transport code remain in their application
+layers. Moving the configuration preserves its data and behavior. `dataprocess` has no
 Modbus or collector dependency. The other two depend on its data contracts;
 downstream forwarding is optional when `collect` is absent.
 

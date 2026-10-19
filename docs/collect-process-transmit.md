@@ -9,7 +9,7 @@
 
 | 参考工程 | 设计含义 | IDU 实现 |
 | --- | --- | --- |
-| `app/cfg/inc/` | 信号身份和项目配置契约 | `src/cfg/include/signal_ids.h`、`device_config.h`、`protocol_config.h`、`aidc_config.h` |
+| `app/cfg/inc/` | 信号身份和项目配置契约 | 点表契约在 `src/cfg/include/`；协议契约在 `src/communication/config/protocol_config.h` |
 | `app/cfg/equip/dev_cfg.c` 的设备列表 | 多个实例复用同型号的表 | `src/cfg/equipment/device_config.c` 装配，`src/cfg/equipment/instances.h` 绑定实例 |
 | `app/cfg/equip/table/*` | 采集、处理、转发分别声明 | `src/cfg/tables/*_mvio.h`、`*_local.inc` 与三表装配文件 |
 | `app/process/*` 的业务回调 | 配置绑定行为，执行代码独立维护 | `src/process/` |
@@ -45,30 +45,38 @@ UPP、逆变器专用命令及其日志/加密扩展不属于通用三模块接�
 
 ## 通讯点表的文件职责
 
-配置数据与功能完整保留在 `src/cfg/`，分为 `include/` 契约、`equipment/` 实例、
-`tables/` 三表、`protocol/` 协议配置及 `aidc/` 元数据。本次只迁移配置目录并
-整理文件命名，三模块内核保持独立。配置层描述“哪个设备、
-哪个信号、哪个协议地址、绑定哪个回调”，执行层处理数据和通信。
+`src/cfg/` 只保留点表相关配置，分为 `include/` 契约、`equipment/` 实例、
+`tables/` 三表及 `aidc/` 元数据。这里描述设备和信号、采集地址与编码、
+处理绑定及寄存器到信号的映射。协议路由、控制命令和应用功能选项分别归属
+通信层与 `src/Kconfig`；配置内容与功能保持不变，三模块内核保持独立。
 
 | 位置 | 内容 |
 | --- | --- |
 | `src/cfg/include/signal_ids.h` | 应用设备 ID 和信号 ID；内部键不等同于报文地址 |
 | `src/cfg/include/device_config.h` | 设备配置及三表获取接口 |
-| `src/cfg/include/protocol_config.h` | 协议选择、命令/状态寄存器、MV-IO 兼容窗口的配置契约 |
+| `src/cfg/include/aidc_config.h` | AIDC 信号采集模型、处理绑定元数据的获取接口 |
 | `src/cfg/equipment/device_config.c`、`src/cfg/equipment/instances.h` | 装配三表；绑定型号实例的设备、总线、unit、北向窗口和周期 |
 | `src/cfg/tables/process_local.inc`、`process_mvio.h` | 本地信号/演示参数与 MV-IO 型号点定义；绑定处理函数 |
 | `src/cfg/tables/collect_mvio.h` | 南向读块、字段偏移、字序与周期参数 |
 | `src/cfg/tables/transmit_local.inc`、`transmit_mvio.h` | 本地及型号的北向值、别名与质量映射 |
 | `src/cfg/tables/{collect,process,transmit}.c` | 将所属声明与可选 AIDC 生成片段装配为静态数组 |
-| `src/cfg/protocol/protocol_config.c` | 选择 MV-IO 路由或 AIDC 串口参数回调 |
-| `src/cfg/protocol/parameter_config.c`、`src/cfg/protocol/mvio_config.c` | 命令/状态地址，以及旧协议入口、扩展窗口和有序回调表 |
-| `src/process/` | 电流换算、参数操作、旧保存地址导入/校验、AIDC 业务回调 |
-| `src/communication/` | Zephyr 端口配置、请求解析/编码和兼容路由；`ports/` 提供采集后端 |
+| `src/cfg/aidc/` | AIDC 三表生成片段，以及采集模型、处理绑定和导入来源元数据 |
+
+点表之外，`src/communication/config/protocol_config.h` 声明协议配置契约，
+同目录的 `protocol_config.c` 选择 MV-IO 路由或 AIDC 串口参数回调；
+`parameter_config.c` 声明控制命令/诊断状态，`mvio_config.c` 声明兼容入口、
+扩展窗口和旧回调表顺序。这些配置决定请求路由和动作分派；`transmit` 点表
+描述寄存器与数据池信号的对应关系，二者需要配合维护。
+
+`src/process/` 执行电流换算、参数操作、旧保存地址导入/校验和 AIDC 业务回调。
+`src/communication/` 执行端口配置、解析/编码及路由，`ports/` 提供采集后端。
+应用功能选项统一在 `src/Kconfig`，原符号和默认值保持不变。
 
 `src/cfg/equipment/models/mvio.h` 保留型号信号 ID，聚合三个 `*_mvio.h`，兼容现有模型使用者。
 `include/idu_equip.h` 继续聚合应用接口；新增配置代码使用 `src/cfg/include` 的对应契约。
 
-AIDC 的 `src/cfg/aidc/aidc_config.c` 只提供 `generated/models.inc` 与 `handlers.inc` 元数据；
+AIDC 的 `src/cfg/aidc/aidc_config.c` 提供 `generated/models.inc` 的信号采集模型与
+`handlers.inc` 的信号处理绑定。这两份文件属于点表元数据，继续保留在 `src/cfg/`；
 执行分别位于 `src/process/aidc_process.c`、`src/communication/aidc_serial.c` 和
 `src/communication/ports/aidc_virtual.c`。原生成文件、支持范围和未实现动作的
 返回行为不因文件拆分改变。
@@ -166,7 +174,7 @@ Zephyr Modbus 接收。zbus 消息订阅者保存样本副本，避免仅通知�
 增加同型号实例时，同步分配设备 ID、总线和唯一北向窗口，并注册对应的
 `co_init_bus()` 后端。实例行会展开设备注册与三表，不会创建物理串口或虚拟从机。
 默认配置保留远端 10000…10023 与 30460，10012 为虚拟模式标志，10013 未定义。
-**MV-IO 兼容入口的扩展窗口仍显式配置在 `src/cfg/protocol/mvio_config.c` 中；新增实例
+**MV-IO 兼容入口的扩展窗口仍显式配置在 `src/communication/config/mvio_config.c` 中；新增实例
 或点的北向地址不在现有窗口内时，还必须调整 `extensions[]` 并验证实际请求路由。**
 仅增加 transmit 映射不能保证该地址可从串口访问。
 
@@ -208,8 +216,13 @@ MCUboot/IAPv3 构建、签名校验通过。补充 profile 绑定及双字命令
 交叉编译及启动镜像布局检查通过，不依赖未提交的运行层改动。沿用上述沙箱
 环境配置；本次未进行实板测试。
 
-配置目录迁移验证（2026-10-19）：原 `cfg/` 的 31 个文件全部迁入 `src/cfg/`，
+前次配置目录迁移验证（2026-10-19）：原 `cfg/` 的 31 个文件全部迁入 `src/cfg/`，
 9 个 AIDC 生成文件逐字节一致，配置数据与执行逻辑保持不变。完整回归、默认
 固件、MCUboot/IAPv3 构建及签名校验通过；暂存代码独立构建与启动布局检查
 通过。导入工具的默认输出已核对为新目录，参考来源路径保持原样。沿用上述
 沙箱测试设置，本次未进行实板验证。
+
+点表目录职责调整验证（2026-10-19）：`src/cfg/` 保留的 24 个点表源码及数据
+文件逐字节一致，迁出的协议配置和 Kconfig 保持原值与行为。完整回归、默认
+固件、MCUboot/IAPv3 构建和签名校验通过，暂存代码独立构建及启动布局检查
+通过。沿用上述沙箱设置，本次未进行实板验证。
