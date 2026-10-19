@@ -9,7 +9,6 @@
 typedef int (*idu_image_read_fn)(void *ctx, uint32_t off, void *buf, size_t len);
 typedef int (*idu_image_write_fn)(void *ctx, const void *buf, size_t len);
 struct idu_sgz_workspace { uint8_t compressed[2304], plain[2048]; };
-int idu_qlz_decode(const uint8_t *src, size_t len, uint8_t *dst, size_t cap);
 uint32_t idu_sgz_crc32(uint32_t crc, const void *buf, size_t len);
 int idu_sgz_decrypt(uint8_t *data, size_t len, uint32_t file_offset);
 int idu_sgz_unpack(idu_image_read_fn read, void *in, uint32_t received,

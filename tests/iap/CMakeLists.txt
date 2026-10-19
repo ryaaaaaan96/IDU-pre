@@ -1,7 +1,8 @@
 cmake_minimum_required(VERSION 3.20.0)
+get_filename_component(IDU_APP ../.. ABSOLUTE)
+list(APPEND ZEPHYR_EXTRA_MODULES ${IDU_APP}/modules/quicklz)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(iap_receiver_tests)
-get_filename_component(IDU_APP ../.. ABSOLUTE)
 set(CONFIG_MCUBOOT_SIGNATURE_KEY_FILE ${ZEPHYR_MCUBOOT_MODULE_DIR}/root-ec-p256.pem)
 target_include_directories(app PRIVATE ${IDU_APP}/include ${IDU_APP}/modules/dataprocess/include
   ${IDU_APP}/modules/transmit/include ${CMAKE_CURRENT_BINARY_DIR})

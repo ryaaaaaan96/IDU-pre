@@ -10,8 +10,11 @@ RT-Thread 平台中的这条数据链，当前没有完成整个 AIDC 固件或�
 [旧模块逐项对照](#legacy-audit)保留为改动前的审计记录，不代表扩展后的状态。
 2026-10-15 的旧硬件协议迁移状态见[MV-IO 兼容迁移](#mvio-migration)。
 
-当前代码已拆分为 `modules/dataprocess`、`modules/collect` 和
+当前点表引擎已拆分为 `modules/dataprocess`、`modules/collect` 和
 `modules/transmit`，公共 API 分别使用 `dp_*`、`co_*`、`tr_*` 前缀。
+另有 `modules/quicklz` 提供 `quicklz/quicklz.h` 中的 `qlz_decode_level3()`，
+由 `CONFIG_QUICKLZ` 启用。纯解码器不依赖硬件、加密或 Zephyr 运行时；
+SGZ 容器、密钥及板级镜像/向量检查仍在 `src/iap/`。
 独立配置、启动计划和端口控制契约见[公共模块说明](../modules/README.md)，
 设备模型复用和模块依赖见[采集、处理与转发设计](collect-process-transmit.md)。
 下文带日期的测试数量、容量和旧模块审计保留对应时点，不代表本轮验证结果。
@@ -26,6 +29,16 @@ RT-Thread 平台中的这条数据链，当前没有完成整个 AIDC 固件或�
 配置内容与功能保持不变，业务执行在 `src/process/`，端口及报文处理在
 `src/communication/`。
 详细文件对应和扩展步骤见[点表维护入口](../src/cfg/README.md)。
+
+应用装配在 `src/app/startup.c`，采样映射在
+`src/app/point_service.c`，工程值换算在 `src/process/engineering.c`。
+`include/idu_point_service.h` 提供初始化、快照发布和采样周期接口，保留
+`idu_equipment_init()` 名称。这些产品职责不另包装为通用 equipment 模块。
+
+启动显式执行 `dp_init()` → 创建应用采集接口 → `co_init()` / `co_init_bus()`
+注册全部总线 → `dp_params_init()` / 恢复参数 → `dp_process_start()` →
+`co_start()`。存储故障是否允许降级由应用决定，转发在首轮地址就绪后绑定；
+这组依赖不通过 `SYS_INIT` 排序。
 
 - `src/cfg/tables/` 的 `signal_ids.h`、`point_metadata.h` 定义信号和元数据契约；
   `src/cfg/devices/device_config.h` 提供设备配置与三表获取接口。

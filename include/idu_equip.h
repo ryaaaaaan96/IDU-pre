@@ -1,6 +1,7 @@
 #ifndef IDU_EQUIP_H
 #define IDU_EQUIP_H
 
+#include "idu_point_service.h"
 #include "signal_ids.h"
 #include "device_config.h"
 #include <dataprocess/points.h>
@@ -10,9 +11,7 @@
 
 struct modbus_user_callbacks *idu_parameter_callbacks(void);
 int idu_parameter_write(uint16_t address, const uint16_t *words, size_t count);
-uint16_t idu_sample_period_ms(void);
 
-int idu_equipment_init(void);
 int idu_acquisition_port_init(void); /* Returns Zephyr Modbus client iface. */
 
 #if defined(CONFIG_IDU_COLLECT_VIRTUAL)

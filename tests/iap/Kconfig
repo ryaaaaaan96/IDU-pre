@@ -6,6 +6,7 @@ source "Kconfig.zephyr"
 config IDU_IAPV3
     bool
     default y
+    select QUICKLZ
 config DP_POINT_WORDS
     int
     default 16

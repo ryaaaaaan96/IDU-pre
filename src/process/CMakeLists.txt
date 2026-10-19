@@ -1,4 +1,4 @@
-target_sources(app PRIVATE point_callbacks.c)
+target_sources(app PRIVATE point_callbacks.c engineering.c)
 if(CONFIG_IDU_AIDC_PROFILE)
   target_sources(app PRIVATE aidc_process.c)
 else()

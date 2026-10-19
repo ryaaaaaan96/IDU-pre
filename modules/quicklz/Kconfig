@@ -1,0 +1,6 @@
+config QUICKLZ
+    bool "QuickLZ 1.5 level-3 decoder"
+    help
+      Decode bounded QuickLZ 1.5 level-3 blocks without streaming history.
+      Supports compressed and stored blocks using caller-provided buffers.
+      The decoder has no allocation, kernel, storage or crypto dependencies.

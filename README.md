@@ -40,17 +40,17 @@ IDU-pre/
 ├── src/
 │   ├── main.c           # 应用入口、周期与休眠
 │   ├── cfg/             # 点表：信号、设备、三表及采集/处理元数据
-│   ├── app/             # 生命周期与 MCUboot 健康确认
+│   ├── app/             # 初始化装配、本地样本映射与 MCUboot 健康确认
 │   ├── hardware/        # DI、ADC、LED、外部看门狗
-│   ├── equipment/       # 设备服务、点表接入与工程量换算
-│   ├── process/         # 测点处理、参数命令和旧参数导入
+│   ├── process/         # 工程量换算、测点处理、参数命令和旧参数导入
 │   ├── communication/   # Modbus 端口、参数协议、MV-IO 兼容及采集后端
 │   └── iap/             # IAPv3 接收、SGZ 与镜像校验
 ├── include/             # 本板接口
 ├── modules/
 │   ├── dataprocess/      # dp_* 数据池、业务处理及可选 NVS
 │   ├── collect/          # co_* 采集与总线调度
-│   └── transmit/         # tr_* 地址映射与协议转发
+│   ├── transmit/         # tr_* 地址映射与协议转发
+│   └── quicklz/          # QuickLZ level-3 块解码
 ├── conf/                # MCUboot、IAPv3、SMP、AIDC 可选配置
 ├── sysbuild/            # MCUboot 与应用联合构建
 ├── tools/               # 镜像检查、签名构建、SGZ 打包和表导入
@@ -123,15 +123,18 @@ IDU-pre/
 │   │       ├── signal_ids.h / imported_signals.h
 │   │       └── point_metadata.c/.h
 │   ├── app/
+│   │   ├── startup.c       # DP、采集总线、参数恢复与处理启动
+│   │   ├── point_service.c # 本地样本到信号的映射
 │   │   └── boot.c          # MCUboot 试运行健康确认
 │   ├── hardware/
 │   │   ├── io.c            # DI、拨码地址、运行灯
 │   │   ├── analog.c        # 有超时的 ADC 采集与十次平均
 │   │   └── health.c        # PC13 外部看门狗
-│   ├── equipment/
-│   │   ├── equip.c         # 本地样本发布与点表启动
-│   │   └── registers.c     # 电流换算
-│   ├── process/            # 测点回调、参数命令、MV-IO 导入与 AIDC 处理
+│   ├── process/            # 工程量换算、测点回调、参数命令与旧参数导入
+│   │   ├── engineering.c   # IDU 电流标定换算
+│   │   ├── point_callbacks.c
+│   │   ├── mvio_process.c
+│   │   └── aidc_process.c
 │   ├── communication/
 │   │   ├── config/        # 协议选择、控制命令与 MV-IO 路由配置
 │   │   ├── protocol.c      # RS485 Modbus RTU 端口配置与恢复
@@ -150,15 +153,22 @@ IDU-pre/
     └── test_boot_image.py  # BIN/HEX 启动布局检查器的异常输入测试
 ```
 
-三个通用模块分别放在 `modules/dataprocess/`、`modules/collect/` 和
-`modules/transmit/`，通过 `modules/modules.cmake` 注册到 Zephyr。产品点表留在
+点表通用模块分别放在 `modules/dataprocess/`、`modules/collect/` 和
+`modules/transmit/`，独立块解码算法放在 `modules/quicklz/`；统一通过
+`modules/modules.cmake` 注册到 Zephyr，由 Kconfig 按需启用。产品点表留在
 `src/cfg/`，模块不依赖本板 BSP；详见 [模块接口](modules/README.md)。
 `src/cfg/devices/` 维护设备实例、型号和三表装配，`src/cfg/tables/` 维护
 信号与三表内容。三表直接在各自 `.c` 中维护，不使用 `.inc` 片段。
 导入符号在 `tables/imported_signals.h`，来源记录在
 [点表导入记录](docs/point-table-import.json)。导入工具只更新标记区和对应导入文件。
-`src/equipment/` 保留 IDU 的启动、采样映射和换算服务；它依赖产品配置，
-通用的数据处理、采集调度及转发仍由三个独立模块提供。
+初始化装配放在 `src/app/startup.c`，由应用线程显式调用：初始化 DP → 准备采集
+端口及总线 → 初始化参数存储并恢复事务 → 启动处理 → 启动采集。
+参数恢复需要已注册的总线，处理初始化须早于周期采集；此过程不放入 `SYS_INIT`。
+转发端口仍在首次取得有效地址后由通信层绑定。`src/app/point_service.c` 只负责
+将本地样本映射到信号并调用 `dp_set_sig_values()`，队列、数据池与处理调度归 DP。
+IDU 电流标定换算放在 `src/process/engineering.c`，不再保留 `src/equipment/`。
+应用服务接口见 `include/idu_point_service.h`；已有 `idu_equipment_init()` 名称保持兼容。
+SGZ 容器、升级密钥、镜像限制和板级校验仍在 `src/iap/`，只调用通用 QuickLZ 解码模块。
 协议策略在 `src/communication/config/`，产品选项在 `src/Kconfig`，
 `conf/` 保存可选的 Kconfig 配置组合。目录调整保持既有数据、点序和行为。
 

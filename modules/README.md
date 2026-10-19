@@ -1,7 +1,9 @@
-# dataprocess / collect / transmit
+# Application-owned modules
 
-Three reusable Zephyr 4.4.2 modules for data processing, equipment acquisition
-and protocol forwarding. See [IDU-pre integration and migration status](../docs/point-tables.md#module-extension).
+Three reusable modules provide data processing, equipment acquisition and
+protocol forwarding; a fourth provides standalone QuickLZ decoding. All have
+Zephyr module metadata for integration with Zephyr 4.4.2. See
+[IDU-pre integration and migration status](../docs/point-tables.md#module-extension).
 No legacy platform library is linked.
 
 | Module | Public headers | Responsibility |
@@ -9,6 +11,7 @@ No legacy platform library is linked.
 | `dataprocess` | `dataprocess/points.h`, `dataprocess/process.h`, `dataprocess/params.h` | Shared data contracts/store, `dp_*` processing, optional NVS |
 | `collect` | `collect/collect.h` | `co_*` acquisition, bus scheduling and parameter transport backend |
 | `transmit` | `transmit/transmit.h`, `transmit/modbus_adapter.h` | `tr_*` register mappings, port modes and Modbus workqueues |
+| `quicklz` | `quicklz/quicklz.h` | `qlz_decode_level3()` bounded QuickLZ level 3 decoding in plain C |
 
 Product point-table configuration lives in [`src/cfg/`](../src/cfg/README.md),
 outside these modules. `devices/` binds device instances and reusable models;
@@ -24,16 +27,19 @@ live in [`src/communication/config/`](../src/communication/config/), while
 application options live in [`src/Kconfig`](../src/Kconfig). Business callbacks
 remain in `src/process/`; hardware and transport code remain in their application
 layers. Moving the configuration preserves its data and behavior. `dataprocess` has no
-Modbus or collector dependency. The other two depend on its data contracts;
+Modbus or collector dependency. `collect` and `transmit` depend on its data contracts;
 downstream forwarding is optional when `collect` is absent.
 
-`src/equipment/` remains an application service: its startup, sample mappings and
-conversion dependencies are specific to IDU. There is no separate generic
-equipment module; the three modules above provide the reusable engines.
+Application composition lives in `src/app/startup.c`, sample mapping in
+`src/app/point_service.c`, and engineering conversion in
+`src/process/engineering.c`. `include/idu_point_service.h` exposes initialization,
+snapshot publication and sample-period access. The existing
+`idu_equipment_init()` name remains available. These product responsibilities
+stay in the application; there is no separate generic equipment module.
 
 ## Integration
 
-Include `modules.cmake` before `find_package(Zephyr ...)` to register all three,
+Include `modules.cmake` before `find_package(Zephyr ...)` to register these modules,
 or append individual module directories to `ZEPHYR_EXTRA_MODULES`.
 Enable `DATAPROCESS`; enable `COLLECT` with the Modbus client role and `TRANSMIT`
 with the server role as needed. `DP_PROCESS` enables business
@@ -44,11 +50,15 @@ transforms and basic forwarding remain available; tables declaring business
 handlers or read callbacks are rejected instead of silently ignoring them.
 `TR_MODBUS_ADAPTER` enables whole-PDU routing and isolated forwarding workers,
 and can be selected without `DP_PARAMS`. The full IDU-pre application selects it.
-Supply static `dp_equip_cfg` tables. Call `dp_init()`, register every acquisition
-bus with `co_init_bus()`, and initialize/recover parameter storage when enabled.
-With `DP_PROCESS`, call `dp_process_start()` to run the declared INIT/TIMER plan
-before `co_start()` starts collection. Configure northbound interfaces with `tr_attach()`
-and `tr_modbus_init_server(..., true)` for independent forwarding workqueues.
+Supply static `dp_equip_cfg` tables. IDU's `src/app/startup.c` explicitly calls
+`dp_init()`, creates the application acquisition interface, registers all buses
+through `co_init()` / `co_init_bus()`, then initializes and recovers parameters.
+The application decides whether a storage failure permits degraded operation.
+It calls `dp_process_start()` for the INIT/TIMER plan before `co_start()` starts
+collection. This order is application orchestration, not `SYS_INIT` registration.
+Once the first sampled address is available, the communication layer binds the
+northbound interface with `tr_attach()` and
+`tr_modbus_init_server(..., true)` for independent forwarding workqueues.
 The system workqueue remains available for southbound Modbus receive work.
 
 `dp_params_set_transport()` registers copied read/write/provenance callbacks,
@@ -108,6 +118,16 @@ The name follows the reference platform's `dp_set_sig_value`, whose length was
 in bytes. This API counts 16-bit words and uses Zephyr types, without binary
 compatibility. The closed library's completion timing is unverified; this API
 explicitly processes samples asynchronously.
+
+## QuickLZ decoding
+
+Enable `CONFIG_QUICKLZ` for the `quicklz/quicklz.h` API
+`qlz_decode_level3()`. The decoder has no hardware, cryptography or Zephyr runtime
+dependency and can also be compiled as plain C. It only decodes QuickLZ blocks;
+version 1.5 level 3 compressed and stored blocks use caller-provided buffers,
+without streaming history or allocation. Success returns the decoded byte count.
+SGZ container parsing, keys, image checks and board-specific vector validation
+remain in `src/iap/`. It is independent of the three point-processing modules.
 
 ## Process and parameter contracts
 

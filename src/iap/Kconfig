@@ -3,6 +3,7 @@ config IDU_IAPV3
     depends on BOOTLOADER_MCUBOOT && !IDU_AIDC_PROFILE && !MCUMGR_GRP_IMG
     depends on IMG_MANAGER && MCUBOOT_IMG_MANAGER && IMG_ERASE_PROGRESSIVELY
     depends on STREAM_FLASH && FLASH_MAP && FLASH_PAGE_LAYOUT && NVS && REBOOT
+    select QUICKLZ
     help
       Alternative to SMP image upload on the fitted MV-IO RS485 port.
       Accepts a single ARM QuickLZ level-3 SGZ containing a signed MCUboot

@@ -11,10 +11,10 @@
 ## 代码与构建
 
 - 产品代码、板级支持和点表模块保存在本应用内；依赖版本由工作区 `manifest/west.yml` 管理。
-- 通用模块使用 `modules/dataprocess`、`modules/collect`、`modules/transmit`，接口分别为 `dp_*`、`co_*`、`tr_*`；产品接口继续使用 `idu_*`。
-- `src/main.c` 负责采样周期和休眠，`src/app/runtime.c` 编排启动、采集和故障策略；硬件访问归 `src/hardware/`，设备服务与工程量换算归 `src/equipment/`，端口和协议适配归 `src/communication/`，升级实现归 `src/iap/`。
+- 通用点表模块使用 `modules/dataprocess`、`modules/collect`、`modules/transmit`，接口分别为 `dp_*`、`co_*`、`tr_*`；独立块解码算法归 `modules/quicklz`，接口为 `qlz_decode_level3()`；产品接口继续使用 `idu_*`。
+- `src/main.c` 负责采样周期和休眠，`src/app/runtime.c` 编排启动、采集和故障策略；`src/app/startup.c` 显式装配 DP、采集总线、参数恢复与处理启动，`src/app/point_service.c` 将本地样本映射到 DP 信号；硬件访问归 `src/hardware/`，工程量换算归 `src/process/engineering.c`，端口和协议适配归 `src/communication/`，产品升级流程与校验规则归 `src/iap/`。
 - 源码由 `src/CMakeLists.txt` 及各功能目录的 CMakeLists 集中管理；公开头文件继续放在 `include/`，通用 `dp_*`、`co_*`、`tr_*` 实现留在 `modules/`。
-- `src/cfg/` 仅保存点表相关内容，分为两组：`devices/` 管设备实例、型号及三表装配，`tables/` 管信号、采集/处理/转发三表及点表元数据。三表直接在 `.c` 中维护，不使用 `.inc` 片段；导入工具只更新标记区，符号写入 `tables/imported_signals.h`，来源记录保存在 `docs/point-table-import.json`。`src/equipment/` 是依赖 IDU 配置的应用设备服务，通用能力继续归 `dataprocess`、`collect`、`transmit`。协议选择、控制命令和旧协议路由配置归 `src/communication/config/`，产品选项归 `src/Kconfig`。`src/process/` 执行测点处理和参数命令，协议编码及 Zephyr 端口适配归 `src/communication/`；扩展步骤见 `src/cfg/README.md`。`conf/` 保存可选 Kconfig 配置组合。目录整理保持既有配置内容；重排持久化点或旧协议回调顺序前，必须核对 NVS 和线协议兼容性。
+- `src/cfg/` 仅保存点表相关内容，分为两组：`devices/` 管设备实例、型号及三表装配，`tables/` 管信号、采集/处理/转发三表及点表元数据。三表直接在 `.c` 中维护，不使用 `.inc` 片段；导入工具只更新标记区，符号写入 `tables/imported_signals.h`，来源记录保存在 `docs/point-table-import.json`。不再设置 `src/equipment/` 或通用 equipment 模块；产品装配归 `src/app/`，队列、数据池、处理调度、采集和转发机制归各通用模块。协议选择、控制命令和旧协议路由配置归 `src/communication/config/`，产品选项归 `src/Kconfig`。`src/process/` 执行测点处理和参数命令，协议编码及 Zephyr 端口适配归 `src/communication/`；扩展步骤见 `src/cfg/README.md`。`conf/` 保存可选 Kconfig 配置组合。目录整理保持既有配置内容；重排持久化点或旧协议回调顺序前，必须核对 NVS 和线协议兼容性。
 - 在应用目录执行 `./build.sh` 构建默认固件，或 `./build.sh --mcuboot --iapv3` 构建兼容升级配置。
 - 在应用目录执行 `bash tests/run.sh` 运行完整回归；按改动范围选择必要验证。文档修改检查内容、路径和格式即可。
 - 构建与测试产物放在工作区 `build/`，签名私钥放在 `build/keys/`，均不提交。

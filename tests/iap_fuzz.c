@@ -1,4 +1,5 @@
 #include "idu_sgz.h"
+#include <quicklz/quicklz.h>
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -26,7 +27,7 @@ int main(void)
             input[1] = input_len; input[2] = input_len >> 8; input[3] = input[4] = 0;
             input[5] = random_byte(); input[6] = random_byte() % 8; input[7] = input[8] = 0;
         }
-        int n = idu_qlz_decode(input, input_len, output, sizeof(output));
+        int n = qlz_decode_level3(input, input_len, output, sizeof(output));
         assert(n < 0 || (size_t)n <= sizeof(output));
         uint32_t size;
         (void)idu_sgz_unpack(read_buf, NULL, input_len, write_buf, NULL, &ws, &size);

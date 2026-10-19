@@ -1,0 +1,4 @@
+name: quicklz
+build:
+  cmake: .
+  kconfig: Kconfig

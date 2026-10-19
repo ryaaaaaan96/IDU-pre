@@ -10,9 +10,29 @@ transmit 提供。数据池数值采用主机字节序、低字在前。
 
 ## 采样与事务
 
-`dp_init()` 接收静态设备配置。`dp_publish()` 通过有界 zbus 消息订阅队列
-复制一批采样，`dp_wait_processed()` 等待处理 ticket，`dp_read()` 查询当前
-值、时间和质量。过期或传输失败保留旧数值并更新质量，不能只凭数值判断有效性。
+`dp_init()` 接收静态设备配置。应用线程通过 `dataprocess/points.h` 提交本地遥测：
+
+```c
+int dp_set_sig_value(struct dp_key key, const uint16_t *words, size_t word_count,
+                     k_timeout_t timeout, uint32_t *ticket);
+int dp_set_sig_values(const struct dp_point_update *values, size_t count,
+                      k_timeout_t timeout, uint32_t *ticket);
+```
+
+目标必须是 `DP_SOURCE_LOCAL`。单点长度为 1…`DP_POINT_WORDS` 个 16 位 word，
+匹配点表宽度；批次为 1…`DP_BATCH_POINTS` 项。未知或重复键、宽度及来源错误
+在入队前整批拒绝；ISR 调用返回 `-EWOULDBLOCK`。数值按主机字节序、低字在前
+传入，长度单位不同于参考平台旧接口的字节数，不承诺旧 ABI 或完成时序兼容。
+
+成功表示输入已复制到有界 zbus 队列，`timeout` 只约束提交等待。
+`ticket` 可为 `NULL`；非空时调用开始清零，成功后赋有效票号。
+`dp_wait_processed()` 等待处理完成，随后用 `dp_read()` 检查当前值、质量及
+错误；完成不等于数值有效。批次可携带采样 `error`，处理时保留旧数值并置
+失效质量。换算、范围校验和 SAMPLE 回调由 DP 线程执行。
+
+底层仍使用 `dp_publish()`；collect 通过此入口提交远端样本。硬件读取、
+样本到信号键的映射和 IDU 十点快照组批留在应用层。参数写入使用 process/params
+接口，事务内输出使用 `dp_txn_emit()`，不通过本地采样接口提交。
 
 `CONFIG_DP_PROCESS` 默认开启，增加 WRITE/READ/INIT/SAMPLE/TIMER 事务、
 异步消息队列和专用业务线程。handler 使用 `dp_txn_get()`、`dp_txn_emit()`
@@ -21,6 +41,12 @@ transmit 提供。数据池数值采用主机字节序、低字在前。
 配置会被拒绝，纯值转换和基础数据池仍可工作。
 
 ## 声明式初始化和定时器
+
+模块提供初始化机制，由应用明确决定装配顺序。IDU 在 `src/app/startup.c`
+保留 `idu_equipment_init()`：先 `dp_init()`，建立采集接口并注册全部总线，
+再初始化/恢复参数，由应用判断存储故障是否允许降级，最后调用
+`dp_process_start()` 和 `co_start()`。北向转发在首次地址就绪后绑定，
+不使用 `SYS_INIT` 隐式决定这组依赖顺序。
 
 `dp_process_plan` 对应参考工程的 INIT/TIMER 注册表思路。回调绑定到测点
 handler，使用同一个事务上下文，时间采用 Zephyr `k_timeout_t`：
@@ -34,7 +60,7 @@ static const struct dp_process_plan plan = {
     .init_keys = startup, .init_count = ARRAY_SIZE(startup),
     .timers = timers, .timer_count = ARRAY_SIZE(timers),
 };
-/* 在 dp_init() 和可选参数恢复成功后，由启动线程调用。 */
+/* 在 dp_init() 和应用完成可选参数恢复策略后，由启动线程调用。 */
 int err = dp_process_start(&plan);
 ```
 

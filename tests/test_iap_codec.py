@@ -38,10 +38,11 @@ WRITE = C.CFUNCTYPE(C.c_int, C.c_void_p, C.c_void_p, C.c_size_t)
 def build():
     BUILD.mkdir(parents=True, exist_ok=True)
     subprocess.run([sys.executable, str(APP / "tests/iap/fixtures.py"), str(BUILD)], check=True)
-    sources = [APP / "src/iap/sgz.c", APP / "src/iap/verify_rng.c"] + [TINY / f"source/{x}.c" for x in
+    sources = [APP / "src/iap/sgz.c", APP / "src/iap/verify_rng.c",
+               APP / "modules/quicklz/src/quicklz.c"] + [TINY / f"source/{x}.c" for x in
         ("aes_encrypt", "aes_decrypt", "sha256", "utils", "ecc", "ecc_dsa")]
     flags = ["-std=c11", "-Wall", "-Wextra", "-Werror", "-I", str(APP / "include"),
-             "-I", str(TINY / "include")]
+             "-I", str(APP / "modules/quicklz/include"), "-I", str(TINY / "include")]
     subprocess.run(["gcc", "-shared", "-fPIC", *flags, *map(str, sources),
                     "-o", str(BUILD / "codec.so")], check=True)
     subprocess.run(["gcc", "-O1", "-g", "-fno-omit-frame-pointer", "-fsanitize=address,undefined",
@@ -59,7 +60,7 @@ class Codec(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.lib = C.CDLL(str(BUILD / "codec.so"))
-        cls.lib.idu_qlz_decode.argtypes = [C.c_void_p, C.c_size_t, C.c_void_p, C.c_size_t]
+        cls.lib.qlz_decode_level3.argtypes = [C.c_void_p, C.c_size_t, C.c_void_p, C.c_size_t]
         cls.lib.idu_sgz_decrypt.argtypes = [C.c_void_p, C.c_size_t, C.c_uint32]
         cls.lib.idu_sgz_unpack.argtypes = [READ, C.c_void_p, C.c_uint32, WRITE,
                                           C.c_void_p, C.c_void_p, C.POINTER(C.c_uint32)]
@@ -117,11 +118,11 @@ class Codec(unittest.TestCase):
                 frame = self.compress(data)
                 compressed += frame[0] & 1
                 out = C.create_string_buffer(2048)
-                self.assertEqual(self.lib.idu_qlz_decode(frame, len(frame), out, 2048), len(data),
+                self.assertEqual(self.lib.qlz_decode_level3(frame, len(frame), out, 2048), len(data),
                                  (size, frame.hex()))
                 self.assertEqual(out.raw[:size], data)
                 for cut in (0, 1, 2, len(frame) - 1):
-                    self.assertLess(self.lib.idu_qlz_decode(frame, cut, out, 2048), 0)
+                    self.assertLess(self.lib.qlz_decode_level3(frame, cut, out, 2048), 0)
         self.assertGreater(compressed, 300)
 
     def test_aes_transport_packets(self):

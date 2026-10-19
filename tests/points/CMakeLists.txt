@@ -5,9 +5,10 @@ set(DTC_OVERLAY_FILE ${CMAKE_CURRENT_SOURCE_DIR}/app.overlay)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(idu_points_tests)
 target_include_directories(app PRIVATE ${IDU_APP}/include ${IDU_APP}/tests)
-target_sources(app PRIVATE src/main.c ${IDU_APP}/src/equipment/registers.c
+target_sources(app PRIVATE src/main.c
     ${IDU_APP}/tests/legacy_registers.c
-    ${IDU_APP}/src/equipment/equip.c ${IDU_APP}/src/communication/ports/acquisition.c
+    ${IDU_APP}/src/app/startup.c ${IDU_APP}/src/app/point_service.c
+    ${IDU_APP}/src/communication/ports/acquisition.c
     ${IDU_APP}/src/communication/ports/virtual.c)
 add_subdirectory(${IDU_APP}/src/cfg app_cfg)
 add_subdirectory(${IDU_APP}/src/communication/config communication_config)
