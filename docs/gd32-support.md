@@ -12,7 +12,7 @@
 | Zephyr 上游 HAL 模块 | `zephyrproject-rtos/hal_gigadevice`，含 `gd32e50x` | 本工作区已经通过 West 导入；无需再复制一份固件库 |
 | 兆易创新 Zephyr 下游 | `GD32-MCU-IOT/gd32_zephyr` 和 `hal_gigadevice_zephyr` | 是完整 Zephyr 分支和配套 HAL，不能视为可直接叠加到任意 Zephyr 版本的小模块 |
 
-[官方 SDK 总索引](https://github.com/GigaDevice-GD32-MCU/GD32-MCU-SDK) 中，E50x 的 AddOn、Demo Suites 有独立仓库链接，但 Firmware Library 栏当前为 `—`。因此固件库以官网发布目录为入口，不臆造 `GD32E50x_Firmware_Library` GitHub 仓库。
+[官方 SDK 总索引](https://github.com/GigaDevice-GD32-MCU/GD32-MCU-SDK) 中，E50x 的 Firmware Library 栏当前仍为 `—`，但独立的 [官方固件库仓库](https://github.com/GigaDevice-GD32-MCU/GD32E50x_Firmware_Library) 实际存在。直接核查仓库 API 确认其于 2026-08-26 创建；[CMSIS 头文件](https://github.com/GigaDevice-GD32-MCU/GD32E50x_Firmware_Library/blob/main/Firmware/CMSIS/GD/GD32E50x/Include/gd32e50x.h) 标注 V1.7.0 / 2026-02-09。索引尚未列出链接不能用来推断仓库不存在；该仓库提供标准固件库，并不补齐 Zephyr 的 E505 集成。
 
 **版本和覆盖范围。** 本地 `manifest/west.yml` 固定 `v4.4.2`，Zephyr 的导入清单固定 HAL 提交。网络 `main` 会变化，以下记录便于后续复核。
 
@@ -62,7 +62,7 @@ Flash 还有一处具体兼容原因：当前 [上游 `flash_gd32_v1.c`](https:/
 
 证据：[上游 ADC 驱动](https://github.com/zephyrproject-rtos/zephyr/blob/a915b2f12675b48b16d56653ea145dcd8f20cbbf/drivers/adc/adc_gd32.c)、[厂商 ADC 驱动](https://github.com/GD32-MCU-IOT/gd32_zephyr/blob/9a6008dfafc339fedd3a47611adc2fbc58c19027/drivers/adc/adc_gd32.c)、[上游 E50x DTS](https://github.com/zephyrproject-rtos/zephyr/blob/a915b2f12675b48b16d56653ea145dcd8f20cbbf/dts/arm/gd/gd32e50x/gd32e50x.dtsi)、[厂商 E50x DTS](https://github.com/GD32-MCU-IOT/gd32_zephyr/blob/9a6008dfafc339fedd3a47611adc2fbc58c19027/dts/arm/gd/gd32e50x/gd32e50x.dtsi)。
 
-本地 [analog.c](../src/analog.c) 已调用 `gd32_adc.h` 的官方函数配置 APB2/6、12 位、单通道软件触发，按板级通道顺序采样并平均，校准和转换分别设置等待期限。这是对现有 HAL 的适配。后续若要求业务统一调用 `adc_channel_setup()` / `adc_read()`，可以在应用自有驱动目录封装 E505 HAL，或补齐并向上游提交通用驱动支持；均需验证分频、触发、校准、通道顺序、错误恢复及实际电流换算。
+本地 [analog.c](../src/hardware/analog.c) 已调用 `gd32_adc.h` 的官方函数配置 APB2/6、12 位、单通道软件触发，按板级通道顺序采样并平均，校准和转换分别设置等待期限。这是对现有 HAL 的适配。后续若要求业务统一调用 `adc_channel_setup()` / `adc_read()`，可以在应用自有驱动目录封装 E505 HAL，或补齐并向上游提交通用驱动支持；均需验证分频、触发、校准、通道顺序、错误恢复及实际电流换算。
 
 **本次依赖选择建议。** 保持 `v4.4.2` 及现有固定 HAL 提交。本次所需的 GPIO/UART/SPI/Flash 接口已经存在；厂商下游尚不能消除 E505 时钟和 ADC 缺口，切换整个 Zephyr 分支没有与之对应的直接收益。后续需要某项厂商修复时，先比较具体提交、锁定依赖、单独构建验证；不直接复制整个固件库，也不让生产清单追踪浮动 `main`。本研究没有修改 West 清单或任何上游文件。
 
@@ -70,7 +70,7 @@ Flash 还有一处具体兼容原因：当前 [上游 `flash_gd32_v1.c`](https:/
 
 | 资源 | 本次检索结果与用途 | 官方入口 |
 | --- | --- | --- |
-| GD32E50x Firmware Library | 1.7.0，2026-02-11；E50x CMSIS、外设驱动和示例，覆盖 E505 | [固件库目录](https://www.gd32mcu.com/cn/download/7?kw=GD32E5) |
+| GD32E50x Firmware Library | 1.7.0，2026-02-11；E50x CMSIS、外设驱动和示例，覆盖 E505 | [固件库目录](https://www.gd32mcu.com/cn/download/7?kw=GD32E5)、[官方源码](https://github.com/GigaDevice-GD32-MCU/GD32E50x_Firmware_Library) |
 | GD32E50x AddOn | 1.9.0，2026-04-15；Keil/IAR 器件开发包，非 Zephyr SoC 移植 | [官网目录](https://www.gd32mcu.com/cn/download/7?kw=GD32E5)、[官方仓库](https://github.com/GigaDevice-GD32-MCU/GD32E50x_AddOn) |
 | GD32E50x Demo Suites | 1.8.0；参考 E503/E507 等官方评估板例程，不能直接替代 IDU 板级配置 | [官方仓库](https://github.com/GigaDevice-GD32-MCU/GD32E50x_Demo_Suites) |
 | GD32E505 数据手册 | 2.3，2026-04-15；器件、电气参数、引脚和存储规格 | [目录](https://www.gd32mcu.com/cn/download/5?kw=GD32E5)、[下载入口](https://www.gd32mcu.com/download/down/document_id/251/path_type/1) |

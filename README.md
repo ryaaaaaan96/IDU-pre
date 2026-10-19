@@ -35,7 +35,13 @@ IDU-pre/
 ├── boards/              # idu_pre 板定义、引脚和启动分区 overlay
 ├── soc/                 # GD32E505 SoC 接入
 ├── dts/                 # 板级设备树 binding
-├── src/                 # 采集、转发、健康监控、IAPv3/SGZ
+├── src/
+│   ├── main.c           # 应用入口、周期与休眠
+│   ├── app/             # 生命周期与 MCUboot 健康确认
+│   ├── hardware/        # DI、ADC、LED、外部看门狗
+│   ├── equipment/       # 设备服务、点表接入与工程量换算
+│   ├── communication/   # Modbus 端口、参数协议、MV-IO 兼容及采集后端
+│   └── iap/             # IAPv3 接收、SGZ 与镜像校验
 ├── include/             # 本板接口
 ├── cfg/                 # 设备和点表配置，含已生成的 AIDC 表
 ├── modules/
@@ -105,16 +111,22 @@ IDU-pre/
 ├── conf/collect-rtu.conf   # 补齐硬件后切换真实采集串口
 ├── include/               # idu_pre.h / idu_equip.h
 ├── src/
-│   ├── main.c              # 采集与状态发布，周期可通过参数修改
-│   ├── io.c                # DI、拨码地址、运行灯
-│   ├── analog.c            # 有超时的 ADC 采集与十次平均
-│   ├── health.c            # PC13 外部看门狗
-│   ├── protocol.c          # 现有 RS485 的 Modbus RTU 转发服务
-│   ├── mvio.c              # MV-IO 旧协议策略、主备参数只读导入
-│   ├── parameter_protocol.c # 参数写入、恢复默认、状态诊断
-│   ├── equip.c             # 本地样本发布与点表启动
-│   ├── ports/              # 采集口：真实 RTU / 虚拟 RAW 回环
-│   └── registers.c         # 电流换算
+│   ├── main.c              # 入口与采样周期，周期可通过参数修改
+│   ├── app/
+│   │   └── boot.c          # MCUboot 试运行健康确认
+│   ├── hardware/
+│   │   ├── io.c            # DI、拨码地址、运行灯
+│   │   ├── analog.c        # 有超时的 ADC 采集与十次平均
+│   │   └── health.c        # PC13 外部看门狗
+│   ├── equipment/
+│   │   ├── equip.c         # 本地样本发布与点表启动
+│   │   └── registers.c     # 电流换算
+│   ├── communication/
+│   │   ├── protocol.c      # RS485 Modbus RTU 端口配置与恢复
+│   │   ├── mvio.c          # MV-IO 旧协议策略、主备参数只读导入
+│   │   ├── parameter_protocol.c # 参数写入、恢复默认、状态诊断
+│   │   └── ports/          # 真实 RTU / 虚拟 RAW 采集后端
+│   └── iap/                # IAPv3、SGZ 和镜像校验
 ├── docs/point-tables.md
 └── tests/
     ├── run.sh              # 主机回归 + Zephyr 模拟器测试

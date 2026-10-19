@@ -1,0 +1,8 @@
+target_sources(app PRIVATE main.c)
+add_subdirectory(app)
+add_subdirectory(hardware)
+add_subdirectory(equipment)
+add_subdirectory(communication)
+if(CONFIG_IDU_IAPV3)
+  add_subdirectory(iap)
+endif()

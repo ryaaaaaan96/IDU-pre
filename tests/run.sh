@@ -13,7 +13,7 @@ gcc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined \
     -I applications/IDU-pre/include \
     applications/IDU-pre/tests/test_registers.c \
     applications/IDU-pre/tests/legacy_registers.c \
-    applications/IDU-pre/src/registers.c \
+    applications/IDU-pre/src/equipment/registers.c \
     -o "$test_dir/test_registers"
 "$test_dir/test_registers"
 

@@ -6,7 +6,7 @@ list(APPEND EXTRA_CONF_FILE ${IDU_APP}/conf/aidc-virtual.conf)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(idu_aidc_tests)
 target_include_directories(app PRIVATE ${IDU_APP}/include)
-target_sources(app PRIVATE src/main.c ${IDU_APP}/src/registers.c
-    ${IDU_APP}/src/equip.c ${IDU_APP}/src/ports/acquisition.c
-    ${IDU_APP}/src/ports/virtual.c ${IDU_APP}/src/parameter_protocol.c)
+target_sources(app PRIVATE src/main.c ${IDU_APP}/src/equipment/registers.c
+    ${IDU_APP}/src/equipment/equip.c ${IDU_APP}/src/communication/ports/acquisition.c
+    ${IDU_APP}/src/communication/ports/virtual.c ${IDU_APP}/src/communication/parameter_protocol.c)
 add_subdirectory(${IDU_APP}/cfg/equip equip_cfg)
