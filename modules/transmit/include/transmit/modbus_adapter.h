@@ -9,6 +9,10 @@
  * A non-isolated fixture callback must not block on protocol transactions.
  */
 typedef int (*tr_modbus_write_fn)(uint16_t address, const uint16_t *words, size_t count);
+/* Startup calls are serialized. An occupied client/server returns -EALREADY
+ * without changing its writer or queue. Failed startup releases a newly
+ * reserved worker slot. Do not race startup with direct modbus_init_* calls.
+ */
 int tr_modbus_init_server(int iface, struct modbus_iface_param param,
                            tr_modbus_write_fn write_fn, bool isolated);
 /* Return -ENOENT to continue, TR_MODBUS_SILENT to consume without replying.

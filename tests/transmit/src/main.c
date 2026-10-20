@@ -16,6 +16,24 @@ K_THREAD_STACK_DEFINE(transaction_stack, 2048);
 static struct k_thread transaction_thread;
 static int transaction_result;
 static uint16_t transaction_value;
+static bool inject_startup_frame;
+static bool capture_startup_response;
+K_SEM_DEFINE(startup_response_done, 0, 1);
+
+int __real_modbus_init_server(int iface, struct modbus_iface_param param);
+int __wrap_modbus_init_server(int iface, struct modbus_iface_param param)
+{
+    int err = __real_modbus_init_server(iface, param);
+    if (!err && inject_startup_frame) {
+        inject_startup_frame = false;
+        struct modbus_adu rx = {.unit_id = param.server.unit_id, .fc = 6, .length = 4};
+        sys_put_be16(100, rx.data);
+        sys_put_be16(5, rx.data + 2);
+        zassert_ok(modbus_raw_submit_rx(iface, &rx));
+        zassert_equal(atomic_get(&writes), 0, "Startup RX must wait for initialization");
+    }
+    return err;
+}
 
 static const struct dp_point_cfg points[] = {
     {.key = {1, 1}, .source = DP_SOURCE_CONSTANT, .type = DP_U16,
@@ -39,6 +57,11 @@ static int response_tx(int iface, const struct modbus_adu *adu, void *user)
 {
     ARG_UNUSED(iface); ARG_UNUSED(user);
     atomic_inc(&replies);
+    if (capture_startup_response) {
+        zassert_equal(adu->fc, 6);
+        k_sem_give(&startup_response_done);
+        return 0;
+    }
     return modbus_raw_submit_rx(client, adu);
 }
 
@@ -109,8 +132,26 @@ static void *setup(void)
     zassert_true(client >= 0 && servers[0] >= 0 && servers[1] >= 0);
     server_callbacks = *tr_callbacks();
     server_callbacks.coil_wr = write_coil;
+    /* More failed interfaces than worker slots must not exhaust the pool. */
+    struct modbus_iface_param invalid = {
+        .mode = (enum modbus_mode)99,
+        .server = {.unit_id = 7, .user_cb = &server_callbacks},
+    };
+    const int failed_ifaces[] = {client, servers[0], servers[1]};
+    for (size_t i = 0; i < ARRAY_SIZE(failed_ifaces); ++i) {
+        zassert_equal(tr_modbus_init_server(failed_ifaces[i], invalid,
+                                           write_register, true), -ENOTSUP);
+    }
     for (size_t i = 0; i < ARRAY_SIZE(servers); ++i) {
+        inject_startup_frame = i == 0;
+        capture_startup_response = i == 0;
         zassert_ok(tr_server_service(&managed[i], 7 + i));
+        if (i == 0) {
+            zassert_ok(k_sem_take(&startup_response_done, K_SECONDS(1)),
+                       "RX received during initialization must be processed");
+            capture_startup_response = false;
+            zassert_equal(atomic_get(&writes), 1);
+        }
     }
     struct modbus_iface_param config = {
         .mode = MODBUS_MODE_RAW, .rx_timeout = 20000,
@@ -321,6 +362,24 @@ ZTEST(transmit, test_managed_servers_reconfigure_independently)
     zassert_equal(value, 2222);
     zassert_ok(tr_server_service(&managed[0], 7));
     wait_config(servers[0]);
+}
+
+ZTEST(transmit, test_duplicate_initialization_preserves_active_writer)
+{
+    zassert_ok(modbus_write_holding_reg(client, 7, 100, 5));
+    struct modbus_iface_param config = managed[0].param;
+    config.server.unit_id = 7;
+
+    zassert_equal(tr_modbus_init_server(servers[0], config, NULL, true), -EALREADY);
+    zassert_ok(modbus_write_holding_reg(client, 7, 100, 6));
+    zassert_equal(atomic_get(&writes), 2);
+
+    /* A client interface also retains its existing role and callback. */
+    zassert_equal(tr_modbus_init_server(client, config, NULL, true), -EALREADY);
+    zassert_ok(modbus_write_holding_reg(client, 7, 100, 7));
+    zassert_equal(atomic_get(&writes), 3);
+    target = 1;
+    zassert_ok(modbus_write_holding_reg(client, 8, 100, 8));
 }
 
 ZTEST_SUITE(transmit, NULL, setup, before, NULL, NULL);

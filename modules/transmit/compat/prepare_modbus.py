@@ -45,6 +45,15 @@ for name in EXPECTED_SHA256:
 \tif (err < 0) { tr_modbus_transport_rx_end(ctx); return err; }
 \treturn 0;""")
     if name == "modbus_core.c":
+        source += """
+/* Adapter startup must reject occupied interfaces before changing callbacks. */
+int tr_modbus_check_available(int iface)
+{
+\tif (iface < 0 || iface >= ARRAY_SIZE(mb_ctx_tbl)) { return -EINVAL; }
+\treturn atomic_test_bit(&mb_ctx_tbl[iface].state, MODBUS_STATE_CONFIGURED) ?
+\t\t-EALREADY : 0;
+}
+"""
         source = replace_once(source, "\tif (ctx->client == true) {",
                               """\tif (!ctx->rx_adu_err) {
 \t\tctx->rx_adu_err = tr_modbus_transport_rx_route(ctx);

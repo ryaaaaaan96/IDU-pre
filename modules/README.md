@@ -300,6 +300,17 @@ than physical TX completions, `filtered` counts requests consumed by the filter,
 counts callback error/exception results. These counters do not establish that a
 peer received a response; use the adapter health API for recovery state.
 
+`tr_modbus_init_server()` checks interface ownership before changing the writer.
+An existing client or server returns `-EALREADY` and keeps its callback and queue;
+failed startup releases a newly reserved forwarding slot. On isolated ports,
+RX notifications received during startup are held until the worker is ready.
+Use this serialized startup API consistently; do not race it with direct Zephyr
+`modbus_init_*()` calls. Use `tr_modbus_reconfigure()` for an active port.
+
+The register service takes one parameter-status snapshot per FC03 response,
+so flags, error and both sequence words describe the same transaction.
+This does not promise a simultaneous snapshot of unrelated point values.
+
 `tr_modbus_reconfigure()` copies settings and applies them on a control workqueue.
 It drains/plugs forwarding work, waits for old TX completion, then disables and
 reinitializes the interface. New requests during this transition may need retry.
@@ -323,11 +334,17 @@ Each bus queues at most 4 requests plus one in flight by default. The business
 thread stack is controlled by `DP_PROCESS_STACK_SIZE` (default 6144 bytes).
 The value pool allocates each point's actual width and is validated at startup.
 Transaction entries include captured dependencies as well as emitted outputs.
+The IDU product overrides the defaults to one bus and one isolated forwarding
+port; AIDC retains two buses. Thread stack sizes are unchanged. Full-application
+CMake checks reject missing required services; standalone module users keep
+their independent feature selection.
 
 The AIDC example increases point width to 32 words and changes these bounds for
 its 553 configured points (560 runtime slots). `ZBUS_MSG_SUBSCRIBER_NET_BUF_STATIC_DATA_SIZE` must cover
 `sizeof(dp_point_batch)` despite isolated pools in Zephyr 4.4.2. Tables are static;
-lookup is linear. Measure timing and stack margins on the target before release.
+reference key lookup searches the device list and then only that device's rows,
+without reordering rows or allocating a RAM index. Native tables use a linear
+scan. Measure timing and stack margins on the target before release.
 
 The application's reusable MV-IO model binds device instances and table pointers
 directly in the const device table in `app/cfg/device.c`. Process and acquisition rows are shared
@@ -340,7 +357,8 @@ Parameter and device events are notifications; state/result APIs are authoritati
 
 `transmit/compat/prepare_modbus.py` generates build-local copies of four reviewed Zephyr
 4.4.2 sources for whole-PDU routing, isolated RX scheduling and one-byte RAW
-exceptions, plus optional vport handoff and TX-completion hooks. The west checkout is unchanged. Strict source hashes intentionally
+exceptions, a quiet interface-availability check, plus optional vport handoff
+and TX-completion hooks. The west checkout is unchanged. Strict source hashes intentionally
 stop builds after a Zephyr upgrade until this adapter has been reviewed and tested.
 
 The Zephyr 4.4.2 `modbus_register_user_fc()` API is dispatched only for function

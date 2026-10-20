@@ -1,4 +1,4 @@
-"""Exercise product Sysbuild defaults without configuring Zephyr images."""
+"""Exercise product Sysbuild defaults and application feature requirements."""
 from pathlib import Path
 import subprocess
 import tempfile
@@ -67,6 +67,58 @@ endif()
     def test_user_modules_are_preserved_without_duplicate_hardware_module(self):
         modules = f'/custom/module;{APP / "modules/gd32e505"}'
         self.configure({'ZEPHYR_EXTRA_MODULES': modules}, {'ZEPHYR_EXTRA_MODULES': modules})
+
+
+class ApplicationRequirements(unittest.TestCase):
+    required = (
+        'DATAPROCESS', 'DP_PROCESS', 'DP_REFERENCE_TABLES', 'DP_PARAMS', 'COLLECT',
+        'TRANSMIT', 'TR_MODBUS_ADAPTER', 'TR_MODBUS_TRANSPORT', 'TR_SERVER_SERVICE',
+        'TR_REGISTER_SERVICE', 'GPIO', 'ADC', 'ANALOG_INPUT', 'DIGITAL_IO',
+        'IDU_INPUTS', 'LED', 'WATCHDOG_MONITOR',
+    )
+
+    def configure(self, **overrides):
+        values = {name: 'y' for name in self.required}
+        values.update(IDU_COLLECT_VIRTUAL='y', CO_SIMULATOR='y', TR_MVIO='y',
+                      IDU_AIDC_PROFILE='n', CO_MODEL_SIMULATOR='n', DP_MAX_BUSES='1')
+        values.update(overrides)
+        script = 'cmake_minimum_required(VERSION 3.20.0)\n'
+        # Execute the actual configure checks without compiling a firmware image.
+        for command in ('target_include_directories', 'target_sources', 'add_subdirectory'):
+            script += f'function({command})\nendfunction()\n'
+        for name, value in values.items():
+            # CMake uses ON/OFF, while generated Zephyr y/n become defined/undefined.
+            value = {'y': 'ON', 'n': 'OFF'}.get(value, value)
+            script += f'set(CONFIG_{name} {value})\n'
+        script += f'include([=[{APP / "app/CMakeLists.txt"}]=])\n'
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / 'check.cmake'
+            source.write_text(script)
+            return subprocess.run(['cmake', '-P', str(source)], text=True, capture_output=True)
+
+    def test_required_services_fail_during_configuration(self):
+        for name in self.required:
+            with self.subTest(feature=name):
+                result = self.configure(**{name: 'n'})
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(f'requires CONFIG_{name}=y', result.stderr)
+
+    def test_default_and_rtu_profiles(self):
+        for overrides in ({}, {'IDU_COLLECT_VIRTUAL': 'n', 'CO_SIMULATOR': 'n'}):
+            result = self.configure(**overrides)
+            self.assertEqual(result.returncode, 0, result.stderr)
+        for feature in ('CO_SIMULATOR', 'TR_MVIO'):
+            result = self.configure(**{feature: 'n'})
+            self.assertIn(f'requires CONFIG_{feature}=y', result.stderr)
+
+    def test_aidc_requires_model_backend_and_second_bus(self):
+        result = self.configure(IDU_AIDC_PROFILE='y', CO_MODEL_SIMULATOR='y',
+                                TR_MVIO='n', DP_MAX_BUSES='2')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        result = self.configure(IDU_AIDC_PROFILE='y', DP_MAX_BUSES='2')
+        self.assertIn('requires CONFIG_CO_MODEL_SIMULATOR=y', result.stderr)
+        result = self.configure(IDU_AIDC_PROFILE='y', CO_MODEL_SIMULATOR='y')
+        self.assertIn('requires CONFIG_DP_MAX_BUSES >= 2', result.stderr)
 
 
 if __name__ == '__main__':

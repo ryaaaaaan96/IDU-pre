@@ -30,9 +30,46 @@ static DEV_TABLE_S table[] = {
 };
 static const uint8_t identifier[] = {0x01, 0x23, 0x45, 0x67, 0x89};
 static unsigned range_calls;
+static unsigned view_calls;
 static unsigned init_calls;
 static bool reject_init = true;
 K_SEM_DEFINE(timer_fired, 0, 1);
+
+static int indexed_view(const struct dp_equip_cfg *cfg, size_t index,
+                         struct dp_point_cfg *point)
+{
+    ++view_calls;
+    point->key = dp_config_key(cfg, index);
+    point->initial.words[0] = index;
+    return 0;
+}
+
+ZTEST(reference_configuration, test_device_scoped_lookup_preserves_table_order)
+{
+    const DM_SIG_CFG_S signals[] = {
+        {.sig_id = 31}, {.sig_id = 2}, {.sig_id = 17},
+    };
+    const DEV_TABLE_S devices[] = {
+        {.dev_id = 40, .ptl_tbl_cfg = {{PRO_DATA_PROCESS, ARRAY_SIZE(signals), signals}}},
+        {.dev_id = 7, .ptl_tbl_cfg = {{PRO_DATA_PROCESS, ARRAY_SIZE(signals), signals}}},
+    };
+    const struct dp_equip_cfg config = {
+        .reference_devices = devices, .reference_device_count = ARRAY_SIZE(devices),
+        .point_count = 6, .point_get = indexed_view,
+    };
+    struct dp_point_cfg scratch;
+    view_calls = 0;
+    zassert_equal(dp_config_index(&config, (struct dp_key){7, 2}), 4);
+    const struct dp_point_cfg *point = dp_config_find(&config, (struct dp_key){7, 2}, &scratch);
+    zassert_not_null(point);
+    zassert_equal(point->key.dev_id, 7);
+    zassert_equal(point->initial.words[0], 4);
+    zassert_equal(view_calls, 1); /* Other devices' defaults are never evaluated. */
+    zassert_equal(dp_config_index(&config, (struct dp_key){40, 2}), 1);
+    zassert_equal(dp_config_index(&config, (struct dp_key){40, 99}), -ENOENT);
+    zassert_is_null(dp_config_find(&config, (struct dp_key){99, 2}, &scratch));
+    zassert_equal(view_calls, 1);
+}
 
 static int32_t initialize(FUNC_PARA_ALL *in, FUNC_PARA_ALL *out, void *new, void *old)
 {

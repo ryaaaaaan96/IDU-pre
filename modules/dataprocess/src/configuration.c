@@ -1,4 +1,5 @@
 #include <dataprocess/points.h>
+#include <errno.h>
 #include <string.h>
 
 struct dp_key dp_config_key(const struct dp_equip_cfg *cfg, size_t index)
@@ -54,10 +55,9 @@ const struct dp_transmit_cfg *dp_config_transmit(const struct dp_equip_cfg *cfg,
     return cfg->transmit_get(cfg, index, scratch) ? NULL : scratch;
 }
 
-const struct dp_point_cfg *dp_config_find(const struct dp_equip_cfg *cfg,
-                                         struct dp_key key, struct dp_point_cfg *scratch)
+int dp_config_index(const struct dp_equip_cfg *cfg, struct dp_key key)
 {
-    if (!cfg) { return NULL; }
+    if (!cfg) { return -EINVAL; }
     /* Reference catalogs allow key lookup without evaluating every default. */
     if (cfg->point_get && cfg->reference_devices) {
         size_t offset = 0;
@@ -65,23 +65,33 @@ const struct dp_point_cfg *dp_config_find(const struct dp_equip_cfg *cfg,
             const DEV_TABLE_S *dev = &cfg->reference_devices[d];
             const DEV_TBL_CFG_S *group = &dev->ptl_tbl_cfg[0];
             const DM_SIG_CFG_S *rows = group->pst_table;
+            if (group->sig_num > cfg->point_count - offset ||
+                (group->sig_num && !rows)) { return -EINVAL; }
             if (dev->dev_id == key.dev_id) {
                 for (size_t s = 0; s < group->sig_num; ++s) {
                     if (rows[s].sig_id == key.sig_id) {
-                        return dp_config_point(cfg, offset + s, scratch);
+                        return offset + s;
                     }
                 }
-                return NULL;
+                return -ENOENT;
             }
             offset += group->sig_num;
         }
-        return NULL;
+        return -ENOENT;
     }
     for (size_t i = 0; i < cfg->point_count; ++i) {
-        const struct dp_point_cfg *p = dp_config_point(cfg, i, scratch);
+        struct dp_point_cfg scratch;
+        const struct dp_point_cfg *p = dp_config_point(cfg, i, &scratch);
         if (p && p->key.dev_id == key.dev_id && p->key.sig_id == key.sig_id) {
-            return p;
+            return i;
         }
     }
-    return NULL;
+    return -ENOENT;
+}
+
+const struct dp_point_cfg *dp_config_find(const struct dp_equip_cfg *cfg,
+                                         struct dp_key key, struct dp_point_cfg *scratch)
+{
+    int index = dp_config_index(cfg, key);
+    return index < 0 ? NULL : dp_config_point(cfg, index, scratch);
 }

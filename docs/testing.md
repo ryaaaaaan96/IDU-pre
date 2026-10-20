@@ -476,3 +476,37 @@ UART/GPIO emulator 验证不代表实际 RS485 电气时序、栈余量或 CAN �
 | MCUboot + AIDC 应用 | 112,740 B | 121,240 B |
 
 日志在工作区 `build/IDU-pre/code-cleanup/`。本轮未烧录或进行实板验证。
+
+## 初始化保护、状态快照与资源裁剪（2026-10-20）
+
+转发适配器在改写回调前检查接口是否已占用；初始化失败归还新增工作队列槽，
+初始化期间收到的 RX 通知在队列就绪后处理。参数状态寄存器在同一 FC03 响应中
+共享一次快照。DP 按设备查找处理表，等待采样完成改为条件变量广播，
+保留点表顺序及持久化布局。
+
+- `CCACHE_DISABLE=1 ASAN_OPTIONS=detect_leaks=0 bash tests/run.sh` 通过：
+  40 次模拟器执行、275 项 Ztest PASS（含恢复阶段重复执行）；
+  Python 33 项中 30 项通过、3 项因缺少外部 QuickLZ/SGZ 样本跳过。
+  主机 C 保留 ASan/UBSan，仅关闭 LeakSanitizer。
+- 新增回归覆盖重复初始化后原写回调及其他接口仍有效、失败初始化不耗尽槽位、
+  启动期 RX 通知延后处理、参数序号跨 16 位进位时快照一致，以及相同/不同票号
+  多等待者、超时后继续处理和无序设备/信号表查找。
+- 完整应用所需服务由实际 CMake 检查，Python 覆盖默认、RTU 和 AIDC 条件。
+  独立运行 `west build --cmake-only ... -- -DCONFIG_TR_SERVER_SERVICE=n`
+  验证配置阶段按预期拒绝，报告 `IDU-pre requires CONFIG_TR_SERVER_SERVICE=y`。
+- 默认、MCUboot + IAPv3、MCUboot + AIDC 构建及导出检查通过，
+  两种 MCUboot 应用镜像验签通过。全量回归及三种构建无编译警告或错误。
+  本地 Markdown 链接和 `git diff --check` 通过。
+
+| 配置 | Flash | 静态 RAM | 相比上一轮 RAM |
+| --- | ---: | ---: | ---: |
+| 默认 | 100,008 B | 76,032 B | −9,896 B |
+| MCUboot + IAPv3 应用 | 123,012 B | 108,744 B | −13,280 B |
+| MCUboot + AIDC 应用 | 113,384 B | 121,272 B | +32 B |
+| MCUboot | 36,632 B | 18,096 B | 不变 |
+
+默认及 IAPv3 裁剪一个未使用采集总线槽和一个独立转发槽；AIDC 本就只有一个
+转发槽，并保留两个采集总线槽。每个线程的栈大小不变；新增等待和启动状态有少量
+静态开销，因此 AIDC 增加 32 B。以上是链接期数据，不代表运行时栈余量。
+
+日志在工作区 `build/IDU-pre/reliability-fixes/`。本轮未烧录或进行实板验证。

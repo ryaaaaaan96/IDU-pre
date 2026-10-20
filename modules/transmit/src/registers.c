@@ -4,17 +4,16 @@
 #include <string.h>
 
 static int read_status(const struct tr_register_service *service,
+                        const struct dp_param_status *status,
                         uint16_t address, uint16_t *value)
 {
     for (size_t i = 0; service && i < service->status_count; ++i) {
         if (service->status[i].address != address) { continue; }
-        struct dp_param_status status;
-        dp_params_get_status(&status);
         switch (service->status[i].field) {
-        case TR_PARAMETER_FLAGS: *value = status.flags; break;
-        case TR_PARAMETER_ERROR: *value = (uint16_t)(int16_t)status.error; break;
-        case TR_PARAMETER_SEQUENCE_LOW: *value = status.sequence & 0xffff; break;
-        case TR_PARAMETER_SEQUENCE_HIGH: *value = status.sequence >> 16; break;
+        case TR_PARAMETER_FLAGS: *value = status->flags; break;
+        case TR_PARAMETER_ERROR: *value = (uint16_t)(int16_t)status->error; break;
+        case TR_PARAMETER_SEQUENCE_LOW: *value = status->sequence & 0xffff; break;
+        case TR_PARAMETER_SEQUENCE_HIGH: *value = status->sequence >> 16; break;
         default: return -EINVAL;
         }
         return 0;
@@ -34,9 +33,14 @@ int tr_register_route(int iface, const struct modbus_adu *rx,
     uint16_t address = sys_get_be16(rx->data);
     uint16_t count = rx->fc == 6 ? 1 : sys_get_be16(rx->data + 2);
     if (rx->fc == 3 || rx->fc == 4) {
+        struct dp_param_status status = {0};
+        if (rx->fc == 3 && service && service->status_count) {
+            /* 同一响应中的标志、错误和序号来自同一次参数状态快照。 */
+            dp_params_get_status(&status);
+        }
         for (size_t i = 0; i < count; ++i) {
             uint16_t value;
-            err = rx->fc == 3 ? read_status(service, address + i, &value) : -ENOENT;
+            err = rx->fc == 3 ? read_status(service, &status, address + i, &value) : -ENOENT;
             if (err == -ENOENT) { err = tr_read_register(rx->fc, address + i, &value); }
             if (err) { return err; }
             sys_put_be16(value, tx->data + 1 + 2 * i);

@@ -165,6 +165,8 @@ const struct dp_transmit_cfg *dp_config_transmit(const struct dp_equip_cfg *cfg,
 const struct dp_point_cfg *dp_config_find(const struct dp_equip_cfg *cfg,
                                          struct dp_key key, struct dp_point_cfg *scratch);
 struct dp_key dp_config_key(const struct dp_equip_cfg *cfg, size_t index);
+/* Reference tables search only the matching device's rows; no RAM table copy. */
+int dp_config_index(const struct dp_equip_cfg *cfg, struct dp_key key);
 
 struct dp_point_update {
     struct dp_key key;
@@ -214,6 +216,10 @@ int dp_submit_sig_values(const struct dp_point_update *values, size_t count,
                       k_timeout_t timeout, uint32_t *ticket);
 /* General acquisition ingress, also used by collect for remote samples. */
 int dp_publish(struct dp_point_batch *batch, k_timeout_t timeout);
+/* Notification-driven wait; supports multiple threads waiting for the same or
+ * different tickets. Completed tickets succeed with K_NO_WAIT. A timeout does
+ * not cancel processing. Inspect point quality/error after completion.
+ */
 int dp_wait_processed(uint32_t ticket, k_timeout_t timeout);
 int dp_read(struct dp_key key, struct dp_point_state *state);
 bool dp_healthy(uint32_t max_idle_ms);

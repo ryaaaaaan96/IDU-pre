@@ -17,12 +17,20 @@ static unsigned timer_count;
 static struct dp_process_result completion;
 static K_SEM_DEFINE(done, 0, 1);
 static K_SEM_DEFINE(timer_done, 0, 1);
+/* Fault injection: hold the DP consumer to exercise completion waiters. */
+static atomic_t hold_sample;
+static K_SEM_DEFINE(sample_entered, 0, 1);
+static K_SEM_DEFINE(sample_release, 0, 1);
 
 static int scale(const struct dp_point_cfg *cfg, struct dp_value *value,
                  const struct dp_value *old)
 {
     ARG_UNUSED(cfg);
     ARG_UNUSED(old);
+    if (atomic_get(&hold_sample)) {
+        k_sem_give(&sample_entered);
+        k_sem_take(&sample_release, K_FOREVER);
+    }
     value->words[0] *= 2;
     return 0;
 }
@@ -160,6 +168,73 @@ static struct dp_point_state read_point(struct dp_key key)
     struct dp_point_state state;
     zassert_ok(dp_read(key, &state));
     return state;
+}
+
+struct sample_waiter {
+    uint32_t ticket;
+    int result;
+    atomic_t finished;
+};
+static struct sample_waiter waiters[3];
+static struct k_thread waiter_threads[3];
+K_THREAD_STACK_ARRAY_DEFINE(waiter_stacks, 3, 2048);
+static K_SEM_DEFINE(waiters_started, 0, 3);
+static K_SEM_DEFINE(waiters_done, 0, 3);
+
+static void wait_for_sample(void *arg, void *unused1, void *unused2)
+{
+    ARG_UNUSED(unused1);
+    ARG_UNUSED(unused2);
+    struct sample_waiter *waiter = arg;
+    k_sem_give(&waiters_started);
+    waiter->result = dp_wait_processed(waiter->ticket, K_SECONDS(1));
+    atomic_set(&waiter->finished, 1);
+    k_sem_give(&waiters_done);
+}
+
+ZTEST(pipeline, test_sample_completion_broadcast_and_timeout)
+{
+    struct dp_point_batch batch = {
+        .source = DP_SOURCE_MODBUS, .count = 1,
+        .points = {{.key = {10, 1}, .width = 1, .value.words = {17}}},
+    };
+    atomic_set(&hold_sample, 1);
+    zassert_ok(dp_publish(&batch, K_MSEC(20)));
+    uint32_t first = batch.ticket;
+    zassert_ok(k_sem_take(&sample_entered, K_SECONDS(1)));
+    zassert_ok(dp_publish(&batch, K_MSEC(20)));
+    uint32_t second = batch.ticket;
+
+    for (size_t i = 0; i < ARRAY_SIZE(waiters); ++i) {
+        waiters[i].ticket = i < 2 ? first : second;
+        waiters[i].result = -EINPROGRESS;
+        atomic_clear(&waiters[i].finished);
+        k_thread_create(&waiter_threads[i], waiter_stacks[i],
+                        K_THREAD_STACK_SIZEOF(waiter_stacks[i]), wait_for_sample,
+                        &waiters[i], NULL, NULL, 4, 0, K_NO_WAIT);
+        zassert_ok(k_sem_take(&waiters_started, K_SECONDS(1)));
+    }
+    zassert_equal(dp_wait_processed(0, K_NO_WAIT), -EINVAL);
+    zassert_equal(dp_wait_processed(first, K_NO_WAIT), -ETIMEDOUT);
+    zassert_equal(dp_wait_processed(first, K_MSEC(5)), -ETIMEDOUT);
+
+    k_sem_give(&sample_release);
+    zassert_ok(k_sem_take(&sample_entered, K_SECONDS(1)));
+    zassert_ok(k_sem_take(&waiters_done, K_SECONDS(1)));
+    zassert_ok(k_sem_take(&waiters_done, K_SECONDS(1)));
+    zassert_true(atomic_get(&waiters[0].finished));
+    zassert_true(atomic_get(&waiters[1].finished));
+    zassert_false(atomic_get(&waiters[2].finished));
+
+    atomic_clear(&hold_sample);
+    k_sem_give(&sample_release);
+    zassert_ok(k_sem_take(&waiters_done, K_SECONDS(1)));
+    for (size_t i = 0; i < ARRAY_SIZE(waiters); ++i) {
+        zassert_ok(k_thread_join(&waiter_threads[i], K_SECONDS(1)));
+        zassert_ok(waiters[i].result);
+    }
+    zassert_ok(dp_wait_processed(second, K_NO_WAIT));
+    zassert_equal(read_point(input).value.words[0], 34);
 }
 
 ZTEST(pipeline, test_collect_initialization_without_storage)

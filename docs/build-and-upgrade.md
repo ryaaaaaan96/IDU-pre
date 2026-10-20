@@ -19,6 +19,14 @@
 IAPv3 与 SMP、AIDC 互斥。真实南向串口配置见
 [替换虚拟采集口](point-tables.md#第二路串口补上后)。
 
+产品在 `prj.conf` 设置 `CONFIG_DP_MAX_BUSES=1`、`CONFIG_TR_PORTS=1`，
+只为当前使用的采集总线和 RS485 独立转发队列分配静态内存。
+`conf/aidc-virtual.conf` 将采集总线容量改为 2，保留额外的模型采集后端。
+这些选项控制实例数量，不缩小每个线程的栈；扩展总线或转发口时应同步调整。
+
+`app/CMakeLists.txt` 在配置阶段检查完整应用所需的模块，以及 AIDC 的第二总线和
+模型后端；缺少时给出对应配置错误。模块自身仍可由其他应用或独立测试按需启用。
+
 ## Flash 与启动布局
 
 内部 Flash：

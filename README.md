@@ -72,6 +72,9 @@ app/main.c                         启动顺序、采样周期与休眠
 `app/CMakeLists.txt` 汇总功能目录，各目录管理本组源码；公共头文件与实现同目录。
 `dataprocess`、`collect`、`transmit` 未启用时不创建空库，
 公开头文件仍可供独立测试和调用方使用。
+完整 IDU 应用会在 CMake 配置阶段检查所需模块；关闭必要服务时直接报告缺失选项，
+不用等到链接失败。默认及 IAPv3 使用一个采集总线槽和一个独立转发口，
+AIDC 使用两个采集总线槽；容量配置见[构建与升级](docs/build-and-upgrade.md#配置选择)。
 
 `tests/acquisition/` 使用真实的 `main.c` 启动流程和状态机，替换模块实现以验证
 初始化顺序、失败短路、存储降级、采样和通信故障；`tests/adc/`、`tests/io/`

@@ -35,6 +35,23 @@ static K_SEM_DEFINE(config_done, 0, 1);
 static int config_error;
 static bool capture_only;
 static K_SEM_DEFINE(captured, 0, 1);
+static atomic_t inject_status, status_reads;
+
+void __real_dp_params_get_status(struct dp_param_status *status);
+void __wrap_dp_params_get_status(struct dp_param_status *status)
+{
+    if (!atomic_get(&inject_status)) {
+        __real_dp_params_get_status(status);
+        return;
+    }
+    /* Every call observes a new transaction, including a 16-bit carry. */
+    uint32_t read = atomic_inc(&status_reads);
+    *status = (struct dp_param_status){
+        .flags = read ? DP_PARAM_PENDING : DP_PARAM_STORAGE_READY,
+        .error = read ? -EIO : 0,
+        .sequence = 0x1234ffff + read,
+    };
+}
 
 int __real_modbus_init_server(int iface, struct modbus_iface_param param);
 int __wrap_modbus_init_server(int iface, struct modbus_iface_param param)
@@ -467,6 +484,21 @@ ZTEST(mvio, test_invalid_protocol_spans_preserve_registered_router)
     zassert_equal(tr_mvio_attach(server, &config), -EINVAL);
     uint16_t value;
     zassert_ok(modbus_read_holding_regs(client, 247, 30459, &value, 1));
+}
+
+ZTEST(mvio, test_status_response_uses_one_transaction_snapshot)
+{
+    uint16_t words[4];
+    atomic_clear(&status_reads);
+    atomic_set(&inject_status, 1);
+    int err = modbus_read_holding_regs(client, 16, 32000, words, ARRAY_SIZE(words));
+    atomic_clear(&inject_status);
+    zassert_ok(err);
+    zassert_equal(words[0], DP_PARAM_STORAGE_READY);
+    zassert_equal(words[1], 0);
+    zassert_equal(words[2], 0xffff);
+    zassert_equal(words[3], 0x1234);
+    zassert_equal(atomic_get(&status_reads), 1);
 }
 
 ZTEST_SUITE(mvio, NULL, setup, before, NULL, NULL);

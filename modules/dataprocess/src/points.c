@@ -30,6 +30,8 @@ static atomic_t ready;
 static atomic_t last_progress;
 static uint32_t published_ticket;
 static atomic_t consumed_ticket;
+K_MUTEX_DEFINE(completion_lock);
+K_CONDVAR_DEFINE(completion_changed);
 K_MUTEX_DEFINE(store_lock);
 K_MUTEX_DEFINE(publish_lock);
 K_SEM_DEFINE(sample_slots, CONFIG_DP_POINTS_QUEUE_DEPTH, CONFIG_DP_POINTS_QUEUE_DEPTH);
@@ -58,16 +60,6 @@ BUILD_ASSERT(sizeof(struct dp_point_batch) <=
 static bool same_key(struct dp_key a, struct dp_key b)
 {
     return a.dev_id == b.dev_id && a.sig_id == b.sig_id;
-}
-
-static int point_index(const struct dp_equip_cfg *cfg, struct dp_key key)
-{
-    for (size_t i = 0; i < cfg->point_count; ++i) {
-        if (same_key(dp_config_key(cfg, i), key)) {
-            return (int)i;
-        }
-    }
-    return -ENOENT;
 }
 
 /* Caller holds store_lock, including the final commit check after callbacks. */
@@ -134,7 +126,7 @@ int dp_validate(const struct dp_equip_cfg *cfg)
         }
         words_needed += p->width;
         if (words_needed > ARRAY_SIZE(point_words)) { return -ENOSPC; }
-        if (point_index(cfg, p->key) != (int)i) {
+        if (dp_config_index(cfg, p->key) != (int)i) {
             return -EEXIST;
         }
     }
@@ -167,7 +159,7 @@ int dp_validate(const struct dp_equip_cfg *cfg)
         }
         for (size_t f = 0; f < c->field_count; ++f) {
             const struct co_field *field = &c->fields[f];
-            int index = point_index(cfg, (struct dp_key){c->dev_id, field->sig_id});
+            int index = dp_config_index(cfg, (struct dp_key){c->dev_id, field->sig_id});
             struct dp_point_cfg point_scratch;
             const struct dp_point_cfg *point = index < 0 ? NULL :
                 dp_config_point(cfg, index, &point_scratch);
@@ -204,7 +196,7 @@ int dp_validate(const struct dp_equip_cfg *cfg)
             return -EINVAL;
         }
         if (t->kind != DP_MAP_ZERO) {
-            int index = point_index(cfg, t->key);
+            int index = dp_config_index(cfg, t->key);
             struct dp_point_cfg point_scratch;
             const struct dp_point_cfg *point = index < 0 ? NULL :
                 dp_config_point(cfg, index, &point_scratch);
@@ -283,7 +275,7 @@ static int validate_batch(const struct dp_point_batch *batch)
     /* Validate the complete batch before publishing any changes. */
     for (size_t i = 0; i < batch->count; ++i) {
         const struct dp_point_update *update = &batch->points[i];
-        int index = point_index(equipment, update->key);
+        int index = dp_config_index(equipment, update->key);
         if (index < 0) {
             return index;
         }
@@ -365,12 +357,32 @@ int dp_publish(struct dp_point_batch *batch, k_timeout_t timeout)
 int dp_wait_processed(uint32_t ticket, k_timeout_t timeout)
 {
     if (!ticket || k_is_in_isr()) { return -EINVAL; }
+    if ((int32_t)((uint32_t)atomic_get(&consumed_ticket) - ticket) >= 0) { return 0; }
     k_timepoint_t deadline = sys_timepoint_calc(timeout);
+    int err = k_mutex_lock(&completion_lock, sys_timepoint_timeout(deadline));
+    if (err) { return -ETIMEDOUT; }
     while ((int32_t)((uint32_t)atomic_get(&consumed_ticket) - ticket) < 0) {
-        if (sys_timepoint_expired(deadline)) { return -ETIMEDOUT; }
-        k_sleep(K_MSEC(1));
+        if (sys_timepoint_expired(deadline)) {
+            k_mutex_unlock(&completion_lock);
+            return -ETIMEDOUT;
+        }
+        err = k_condvar_wait(&completion_changed, &completion_lock,
+                             sys_timepoint_timeout(deadline));
+        /* Zephyr 4.4.2 reacquires the mutex only on a successful wake.
+         * Timeout leaves it unlocked; never unlock another thread's mutex.
+         */
+        if (err) { return -ETIMEDOUT; }
     }
+    k_mutex_unlock(&completion_lock);
     return 0;
+}
+
+static void complete_ticket(uint32_t ticket)
+{
+    k_mutex_lock(&completion_lock, K_FOREVER);
+    atomic_set(&consumed_ticket, ticket);
+    k_condvar_broadcast(&completion_changed);
+    k_mutex_unlock(&completion_lock);
 }
 
 static uint16_t effective_quality(size_t index)
@@ -390,7 +402,7 @@ int dp_read(struct dp_key key, struct dp_point_state *state)
     if (!atomic_get(&ready) || !state) {
         return -EINVAL;
     }
-    int index = point_index(equipment, key);
+    int index = dp_config_index(equipment, key);
     if (index < 0) {
         return index;
     }
@@ -436,13 +448,13 @@ static void process_thread(void *a, void *b, void *c)
         k_mutex_lock(&store_lock, K_FOREVER);
         bool obsolete = obsolete_samples(batch.points, batch.count, batch.sampled_at);
         k_mutex_unlock(&store_lock);
-        if (obsolete) { atomic_set(&consumed_ticket, batch.ticket); continue; }
+        if (obsolete) { complete_ticket(batch.ticket); continue; }
         uint16_t quality[DP_BATCH_POINTS];
         bool callbacks = false, all_valid = true;
         k_mutex_lock(&store_lock, K_FOREVER);
         for (size_t i = 0; i < batch.count; ++i) {
             struct dp_point_update *u = &batch.points[i];
-            int n = point_index(equipment, u->key);
+            int n = dp_config_index(equipment, u->key);
             struct dp_point_cfg p_scratch;
             const struct dp_point_cfg *p = dp_config_point(equipment, n, &p_scratch);
             quality[i] = u->error ? DP_QUALITY_COMM_ERROR : DP_QUALITY_GOOD;
@@ -462,7 +474,7 @@ static void process_thread(void *a, void *b, void *c)
             err = dp_process_sample(&batch);
             if (!err) {
                 atomic_set(&last_progress, k_uptime_get_32());
-                atomic_set(&consumed_ticket, batch.ticket);
+                complete_ticket(batch.ticket);
                 continue;
             }
             /* Callback validation rejects this transaction before the usual
@@ -477,13 +489,13 @@ static void process_thread(void *a, void *b, void *c)
         k_mutex_lock(&store_lock, K_FOREVER);
         if (obsolete_samples(batch.points, batch.count, batch.sampled_at)) {
             k_mutex_unlock(&store_lock);
-            atomic_set(&consumed_ticket, batch.ticket);
+            complete_ticket(batch.ticket);
             continue;
         }
         ++generation;
         for (size_t i = 0; i < batch.count; ++i) {
             const struct dp_point_update *u = &batch.points[i];
-            struct stored_point *state = &states[point_index(equipment, u->key)];
+            struct stored_point *state = &states[dp_config_index(equipment, u->key)];
             if (!u->error) {
                 struct dp_value old = {0};
                 memcpy(old.words, state->words, u->width * 2);
@@ -504,7 +516,7 @@ static void process_thread(void *a, void *b, void *c)
         if (err) {
             LOG_WRN("Processed notification lost: %d", err);
         }
-        atomic_set(&consumed_ticket, batch.ticket);
+        complete_ticket(batch.ticket);
     }
 }
 
@@ -544,7 +556,7 @@ int dp_commit_sample(const struct dp_point_update *values, size_t count,
     }
     ++generation;
     for (size_t i = 0; i < count; ++i) {
-        int n = point_index(equipment, values[i].key);
+        int n = dp_config_index(equipment, values[i].key);
         struct dp_value old = {0};
         memcpy(old.words, states[n].words, values[i].width * 2);
         dp_reference_notify(dp_find(values[i].key, &(struct dp_point_cfg){0}), &old, &values[i].value);

@@ -3,7 +3,7 @@
 #include <transmit_lib.h>
 #include <errno.h>
 #include <zephyr/sys/byteorder.h>
-#include "modbus_internal.h"
+#include "modbus_hooks.h"
 
 /* Zephyr exposes at most four RAW interfaces. Leave room for serial ports. */
 #define IFACE_LIMIT 16
@@ -28,6 +28,8 @@ static struct k_spinlock control_lock;
 struct forwarding_port {
     int iface;
     bool allocated;
+    bool starting;
+    struct k_work *startup_work;
     struct k_work_q queue;
     struct k_work_delayable reconfigure;
     struct modbus_iface_param current, pending;
@@ -245,25 +247,63 @@ int tr_modbus_init_server(int iface, struct modbus_iface_param param,
     if (iface < 0 || iface >= IFACE_LIMIT) { return -EINVAL; }
     k_mutex_lock(&config_lock, K_FOREVER);
     struct forwarding_port *port = port_for(iface);
+    if (port && port->changing) { k_mutex_unlock(&config_lock); return -EBUSY; }
+    int err = tr_modbus_check_available(iface);
+    if (err) { k_mutex_unlock(&config_lock); return err; }
+
+    bool reserved = false;
     if (isolated && !port) {
         for (size_t i = 0; i < ARRAY_SIZE(ports); ++i) {
             if (ports[i].allocated) { continue; }
-            port = &ports[i]; port->iface = iface; port->allocated = true;
-            k_work_queue_start(&port->queue, forward_stacks[i],
-                               K_THREAD_STACK_SIZEOF(forward_stacks[i]), 6, NULL);
-            k_work_init_delayable(&port->reconfigure, reconfigure_work);
+            port = &ports[i];
+            k_spinlock_key_t key = k_spin_lock(&submission_lock);
+            port->iface = iface;
+            port->starting = true;
+            atomic_set(&port->paused, 1);
+            port->allocated = true;
+            k_spin_unlock(&submission_lock, key);
+            reserved = true;
             break;
         }
         if (!port) { k_mutex_unlock(&config_lock); return -ENOSPC; }
     }
-    if (port && port->changing) { k_mutex_unlock(&config_lock); return -EBUSY; }
+    if (port) {
+        k_spinlock_key_t key = k_spin_lock(&submission_lock);
+        port->starting = true;
+        port->startup_work = NULL;
+        atomic_set(&port->paused, 1);
+        k_spin_unlock(&submission_lock, key);
+    }
+    tr_modbus_write_fn previous_writer = writers[iface];
     writers[iface] = write_fn;
-    int err = modbus_init_server(iface, param);
+    err = modbus_init_server(iface, param);
     if (!err && port) {
+        /* RX stays paused until the worker exists. Failed startup consumes no slot. */
+        if (reserved) {
+            size_t index = port - ports;
+            k_work_queue_start(&port->queue, forward_stacks[index],
+                               K_THREAD_STACK_SIZEOF(forward_stacks[index]), 6, NULL);
+            k_work_init_delayable(&port->reconfigure, reconfigure_work);
+        }
         port->current = param; port->last_error = 0;
+        port->busy_since = 0;
         atomic_set(&port->last_activity, k_uptime_get_32());
     }
-    if (err) { writers[iface] = NULL; }
+    if (err) { writers[iface] = previous_writer; }
+    if (port) {
+        k_spinlock_key_t key = k_spin_lock(&submission_lock);
+        if (err && reserved) { port->allocated = false; }
+        port->starting = false;
+        atomic_clear(&port->paused);
+        /* UART RX may complete before init returns. Preserve that notification
+         * so a full RX buffer can be consumed and reception enabled again.
+         */
+        if (!err && port->startup_work) {
+            k_work_submit_to_queue(&port->queue, port->startup_work);
+        }
+        port->startup_work = NULL;
+        k_spin_unlock(&submission_lock, key);
+    }
     k_mutex_unlock(&config_lock);
     return err;
 }
@@ -401,10 +441,16 @@ int tr_modbus_service(int iface, uint32_t timeout_ms)
 int tr_modbus_submit_work(struct k_work *work)
 {
     struct modbus_context *ctx = CONTAINER_OF(work, struct modbus_context, server_work);
-    struct forwarding_port *port = port_for(modbus_iface_get_by_ctx(ctx));
     k_spinlock_key_t key = k_spin_lock(&submission_lock);
-    int err = port && atomic_get(&port->paused) ? -EBUSY :
+    struct forwarding_port *port = port_for(modbus_iface_get_by_ctx(ctx));
+    int err;
+    if (port && port->starting) {
+        port->startup_work = work;
+        err = 0;
+    } else {
+        err = port && atomic_get(&port->paused) ? -EBUSY :
               port ? k_work_submit_to_queue(&port->queue, work) : k_work_submit(work);
+    }
     k_spin_unlock(&submission_lock, key);
     return err;
 }
