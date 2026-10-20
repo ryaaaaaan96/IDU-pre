@@ -53,12 +53,12 @@ and protocol adaptation in `transmit`. `dataprocess` has no
 Modbus or collector dependency. `collect` and `transmit` depend on its data contracts;
 downstream forwarding is optional when `collect` is absent.
 
-Application composition, sample mapping and common callbacks live in
-`app/process/points.c`; engineering conversion lives in
-`app/process/engineering.c`. `app/process/idu_process.h` exposes initialization,
-snapshot publication, sample-period access and application health. The existing
-`idu_equipment_init()` name remains available. These product responsibilities
-stay in the application; there is no separate generic equipment module.
+Application startup lives in `app/main.c`; sample mapping and common callbacks
+live in `app/process/points.c`, with engineering conversion in
+`app/process/engineering.c`. `app/process/idu_process.h` exposes snapshot
+publication, sample-period access and business callbacks. Status and trial-image
+readiness belong to `app/status/`. There is no separate generic equipment module
+or legacy `idu_equipment_*` application API.
 
 ## Communication ownership
 
@@ -175,7 +175,7 @@ transforms and basic forwarding remain available; tables declaring business
 handlers or read callbacks are rejected instead of silently ignoring them.
 `TR_MODBUS_ADAPTER` enables whole-PDU routing and isolated forwarding workers,
 and can be selected without `DP_PARAMS`. The full IDU-pre application selects it.
-Supply static `dp_equip_cfg` tables. IDU's `app/process/points.c` explicitly calls
+Supply static `dp_equip_cfg` tables. IDU's `app/main.c` explicitly calls
 `idu_register_point_tables()` then `dp_init()`, creates
 the application acquisition interface, registers all buses
 through `co_init()` / `co_init_bus()`, then initializes and recovers parameters.
@@ -183,9 +183,9 @@ The application decides whether a storage failure permits degraded operation.
 It calls `dp_process_start()` for the per-point plan and `dp_reference_start()`
 for registered global INIT/TIMER tables before `co_start()` starts collection.
 This order is application orchestration, not `SYS_INIT` registration.
-Once the first sampled address is available, the communication layer binds the
-northbound interface with `tr_attach()` and
-`tr_modbus_init_server(..., true)` for independent forwarding workqueues.
+Once the first sampled address is available, `tr_server_service()` attaches and
+starts the northbound interface with an independent forwarding workqueue, then
+maintains its settings and recovery on subsequent application cycles.
 The system workqueue remains available for southbound Modbus receive work.
 
 `dp_params_set_transport()` registers copied read/write/provenance callbacks for

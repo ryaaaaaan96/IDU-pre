@@ -98,10 +98,10 @@ flowchart LR
 - **params** 单独负责参数权限、持久化、下游设定值事务及恢复。现有参数源
   仍要求启用该后端，不会因关闭存储而悄悄退化为易失参数。
 - **应用层** 保留本地 ADC 换算、MV-IO 兼容策略和设备配置；通用模块不引用
-  板级 GPIO、设备专用寄存器或 BSP。生命周期继续由设备服务与运行层组织。
+  板级 GPIO、设备专用寄存器或 BSP。启动顺序归 `main.c`，周期执行归 `acquisition`。
 
-`app/process/points.c` 集中点表初始化、采样映射及公共回调，保留
-`idu_equipment_init()` 函数名；`app/process/engineering.c`
+`app/main.c` 集中产品初始化；`app/process/points.c` 只负责采样映射及公共回调，
+`app/process/engineering.c`
 负责工程值换算。这些职责直接依赖 IDU 配置及硬件语义，属于应用层。
 点表机制由 `dataprocess`、`collect`、`transmit` 提供，不另设 equipment 模块。
 
@@ -131,10 +131,11 @@ flowchart LR
 可以按需选择。关闭 Process 后仍可执行纯变换，声明业务回调的配置会在启动
 校验时被拒绝。无参数后端时 `dp_process_save_reboot()` 返回 `-ENOTSUP`。
 
-应用在 `app/process/points.c` 显式组织启动：`dp_init()` → 创建应用采集接口 →
+应用在 `app/main.c` 显式组织启动：注册点表 → `dp_init()` →
+`tr_modbus_network_start()` → `co_port_open()` →
 `co_init()` / `co_init_bus()` 注册全部总线 → `dp_params_init()` / 恢复参数 →
 `dp_process_start()` → `dp_reference_start()` → `co_start()`。参数存储失败后的降级策略由应用决定。
-首轮采样地址就绪后，再由通信层绑定转发接口；不使用 `SYS_INIT` 安排这些步骤。
+首轮采样地址就绪后，调用 `tr_server_service()` 启动并维护转发接口；不使用 `SYS_INIT` 安排这些步骤。
 初始化计划先完整校验并预留定时器槽，全部 INIT 成功后再启用定时器；
 失败释放预留槽，已成功的 INIT 事务不会回滚。成功后的重复启动返回
 `-EALREADY`。IDU 默认初始化全部测点，业务按需增加定时器。

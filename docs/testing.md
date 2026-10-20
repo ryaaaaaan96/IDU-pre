@@ -2,6 +2,9 @@
 
 [文档导航](README.md) · [构建与升级](build-and-upgrade.md)
 
+各日期章节记录当时的实现与验证结果，旧模块名称不代表当前目录。当前职责以
+[根 README](../README.md) 和[模块接口](../modules/README.md)为准。
+
 ## 运行测试
 
 从 West 工作区根目录执行：
@@ -44,7 +47,7 @@ build/IDU-pre/tests/reference_services/zephyr/zephyr.exe -flash_in_ram
 | `vport` | 后端注册、路由、CAN ID 分流、来源隔离、有界 RX、发送互斥 |
 | `communication` | UART/GPIO emulator 上的 RTU/RAW 往返、完整 ADU（含 IAPv3 大报文配置）、背压、交接超时、TX 错误及恢复 |
 | `simulator` | 独立于产品配置的双设备模拟、值/故障隔离、完整多字写入及丢失应答 |
-| `acquisition` | 采集与 status 集成、无效样本发布、故障保留、状态灯亮灭/翻转、LED/看门狗错误阻止试运行确认 |
+| `acquisition` | main 启动顺序与失败短路、存储降级、采样发布、故障锁定及试运行确认条件 |
 
 `tests/run.sh` 同时验证 Process 关闭、参数/后端可选配置，并用独立 Flash 临时文件
 在新进程中执行参数、MV-IO 和 IAP 恢复阶段。普通运行跳过的 reboot probe 会在
@@ -447,3 +450,29 @@ UART/GPIO emulator 验证不代表实际 RS485 电气时序、栈余量或 CAN �
 
 日志在工作区 `build/IDU-pre/communication-ownership/`。本轮未烧录验证，
 未验证真实双 UART 采集、CAN 收发或实板栈余量。
+
+## 启动与应用职责整理（2026-10-20）
+
+整机启动顺序集中在 `app/main.c`，不设置独立的 startup 文件；
+`acquisition` 只执行采样周期，`process` 只保留测点业务，Flash/参数就绪条件
+归 `status`。移除旧设备服务包装接口，三类点表模块按启用条件创建库。
+
+- `CCACHE_DISABLE=1 ASAN_OPTIONS=detect_leaks=0 bash tests/run.sh` 通过：
+  40 次模拟器执行、270 项 Ztest PASS（含恢复阶段重复执行）；
+  Python 30 项中 27 项通过、3 项因缺少外部 QuickLZ/SGZ 输入跳过。
+  主机 C 保留 ASan/UBSan，仅禁用 LeakSanitizer。
+- 启动/采集套件 13 项通过，直接编译应用 `main.c` 并替换模块服务：
+  检查注册、总线建立、参数恢复和轮询的顺序，以及每个必要步骤失败后
+  停止后续启动；存储失败保留采样但不确认镜像，待恢复事务清除后才允许确认。
+- 默认、MCUboot + IAPv3、MCUboot + AIDC 构建及导出检查通过，
+  升级镜像验签通过。三种应用静态 RAM 均与整理前一致。
+- 构建/完整回归日志没有编译警告、错误或空模块库警告；
+  225 个本地 Markdown 链接及 `git diff --check` 通过。
+
+| 配置 | Flash | 静态 RAM |
+| --- | ---: | ---: |
+| 默认 | 99,540 B | 85,928 B |
+| MCUboot + IAPv3 应用 | 122,552 B | 122,024 B |
+| MCUboot + AIDC 应用 | 112,740 B | 121,240 B |
+
+日志在工作区 `build/IDU-pre/code-cleanup/`。本轮未烧录或进行实板验证。

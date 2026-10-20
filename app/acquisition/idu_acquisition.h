@@ -3,11 +3,9 @@
 
 #include "status/idu_status.h"
 
-/* Zero-initialize once. Only the application thread drives this state machine.
- * A fault records its original phase/error and remains locked until reset.
+/* idu_startup() 成功后，由应用线程执行一个采样/发布/转发周期。
+ * main 负责周期和休眠；故障保留最初阶段与错误，直到复位。
  */
-int idu_acquisition_start(struct idu_status *status);
-/* Complete one sampling/publication/communication cycle; main owns scheduling. */
 int idu_acquisition_cycle(struct idu_status *status);
 
 #endif

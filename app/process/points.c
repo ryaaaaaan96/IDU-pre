@@ -1,83 +1,10 @@
-/* Product point initialization, sample mapping and common point callbacks. */
+/* 本地样本到测点的映射，以及公共测点和参数命令回调。 */
 #include "process/idu_process.h"
 #include "process/engineering.h"
-#include "cfg/inc/device.h"
 #include "cfg/inc/signal_ids.h"
 #include <gpio/idu_inputs.h>
-#include "cfg/inc/ports.h"
-#include <collect/port.h>
-#include <transmit/modbus_transport.h>
-#include <data_process.h>
-#include <platform_callback.h>
-#include <collect/collect.h>
 #include <dataprocess/params.h>
-#include <dataprocess/process.h>
 #include <errno.h>
-#include <zephyr/device.h>
-#include <zephyr/storage/flash_map.h>
-#include <zephyr/logging/log.h>
-
-LOG_MODULE_REGISTER(idu_points, LOG_LEVEL_INF);
-
-/* Buses must exist before parameter recovery; INIT precedes polling. */
-int idu_equipment_init(void)
-{
-    int err = idu_register_point_tables();
-    if (!err) { err = dp_init(); }
-    if (err) {
-        return err;
-    }
-    const struct dp_equip_cfg *cfg = dp_config();
-    err = tr_modbus_network_start(&idu_port_network);
-    if (err) { return err; }
-    int iface = co_port_open(&idu_collect_port);
-    if (iface < 0) {
-        return iface;
-    }
-    err = co_init(cfg, iface, IS_ENABLED(CONFIG_IDU_COLLECT_VIRTUAL));
-    if (err) { return err; }
-#if defined(CONFIG_IDU_AIDC_PROFILE)
-    err = co_init_bus(cfg, &idu_model_bus);
-    if (err) { return err; }
-    LOG_WRN("AIDC profile: DSP1..8 use a VIRTUAL UPP model backend");
-#endif
-#if defined(CONFIG_IDU_AIDC_PROFILE)
-    const uint8_t storage_id = DT_FIXED_PARTITION_ID(DT_ALIAS(idu_aidc_settings));
-#else
-    const uint8_t storage_id = DT_FIXED_PARTITION_ID(DT_ALIAS(idu_settings));
-#endif
-    err = dp_params_init(cfg, storage_id);
-    if (err) {
-        LOG_ERR("Parameter storage unavailable (%d); writes disabled", err);
-    } else {
-        err = dp_params_recover();
-        if (err) {
-            LOG_WRN("Parameter transaction awaiting readback: %d", err);
-        }
-    }
-    static const struct dp_process_plan process_plan = {.initialize_all = true};
-    err = dp_process_start(&process_plan);
-    if (!err) {
-        err = dp_reference_start();
-    }
-    return err ? err : co_start();
-}
-
-bool idu_equipment_healthy(uint32_t max_idle_ms)
-{
-    return dp_healthy(max_idle_ms);
-}
-
-#ifdef CONFIG_BOOTLOADER_MCUBOOT
-bool idu_equipment_confirm_ready(void)
-{
-    const struct device *flash = DEVICE_DT_GET(DT_NODELABEL(external_flash));
-    struct dp_param_status status;
-    dp_params_get_status(&status);
-    return device_is_ready(flash) && (status.flags & DP_PARAM_STORAGE_READY) &&
-           !(status.flags & DP_PARAM_PENDING);
-}
-#endif
 
 int idu_snapshot_publish(const struct idu_snapshot *snapshot)
 {
@@ -110,7 +37,9 @@ int32_t idu_default_point(FUNC_PARA_ALL *in, FUNC_PARA_ALL *out,
     ARG_UNUSED(out);
     ARG_UNUSED(new_value);
     ARG_UNUSED(old_value);
-    if (!in || in->para_num != 1 || !in->para_all) { return -EINVAL; }
+    if (!in || in->para_num != 1 || !in->para_all) {
+        return -EINVAL;
+    }
     /* DP already loaded the registered default. INIT marks identities ready. */
     return in->type == DP_PARA_INIT ? dp_set_para_value(in->para_all) :
            in->type == DP_PARA_SET ? -EACCES : 0;
@@ -119,8 +48,12 @@ int32_t idu_default_point(FUNC_PARA_ALL *in, FUNC_PARA_ALL *out,
 int32_t idu_initialize_point(FUNC_PARA_ALL *in, FUNC_PARA_ALL *out,
                              void *new_value, void *old_value)
 {
-    ARG_UNUSED(out); ARG_UNUSED(new_value); ARG_UNUSED(old_value);
-    if (!in || in->para_num != 1 || !in->para_all) { return -EINVAL; }
+    ARG_UNUSED(out);
+    ARG_UNUSED(new_value);
+    ARG_UNUSED(old_value);
+    if (!in || in->para_num != 1 || !in->para_all) {
+        return -EINVAL;
+    }
     return in->type == DP_PARA_INIT ? dp_set_para_value(in->para_all) : 0;
 }
 

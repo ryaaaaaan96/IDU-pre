@@ -2,7 +2,9 @@
 / {
     aliases {
         led0 = &status_led;
+        idu-settings = &storage_partition;
     };
+    external_flash: test-flash {};
     status_leds: status-leds {
         status_led: run {};
     };

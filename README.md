@@ -48,32 +48,34 @@ bash applications/IDU-pre/tests/run.sh
 
 ## 应用架构与模块边界
 
-应用入口按三层组织，硬件访问和业务配置通过服务接口连接：
+应用按启动、周期执行、测点业务和状态管理组织：
 
 ```text
-app/main.c                            启动入口、采样周期与休眠调度
-  └─ acquisition/acquisition.c        采集、发布及通信的执行流程
-       ├─ modules/gpio                GPIO 输入及 IDU 原始采样
-       ├─ status/status.c             业务阶段、故障记录、LED 策略和健康进度
-       ├─ status/image_confirm.c      MCUboot 试运行健康确认
-       ├─ process/points.c            点表初始化、采样映射及公共回调
-       └─ modules/transmit/src/server.c   转发端口启动、重配置与恢复
+app/main.c                         启动顺序、采样周期与休眠
+  ├─ cfg/                          产品设备、点表及模块配置
+  ├─ modules/                      点表、采集、转发、输入和升级服务
+  └─ acquisition/acquisition.c     每周期采样、发布、转发和健康检查
+       ├─ process/points.c         原始样本映射和公共业务回调
+       └─ status/status.c          业务阶段、故障、LED 和试运行确认条件
 ```
 
-`app/status/idu_status.h` 定义业务状态：未配置、启动、等待采样、
-读取输入、发布点值、维护通信、健康检查及故障锁定。`main.c` 调用
-`idu_acquisition_start()` 和 `idu_acquisition_cycle()`；故障时记录阶段和错误码，
-停止喂狗并拒绝继续采集。`app/process/idu_process.h` 提供应用级设备服务。
-芯片专用的 JTAG/SWD 配置归属 `boards/idu/idu_pre/board.c`。点表配置、处理、参数事务和协议兼容
-继续分别位于 `app/cfg/`、`modules/` 下的三类通用模块和 `modules/transmit/src/mvio.c`。
+`main.c` 中的 `idu_startup()` 显式组织状态与输入初始化、点表注册、端口和总线
+建立、参数恢复、INIT 和采集启动。启动成功后按周期调用 `idu_acquisition_cycle()`；
+不再设置独立的 startup 文件或设备服务兼容入口。
+`app/status/idu_status.h` 定义业务阶段，启动或采集失败时保留最初故障、停止喂狗，
+并拒绝继续执行。MCUboot 确认条件由 `status` 检查 Flash 和参数事务状态，
+持续健康窗口由 `status/image_confirm.c` 判断。
 
-新增功能时，硬件操作放入对应板级模块，设备数据与存储策略放入设备服务，
-运行顺序由 `acquisition` 编排，状态、故障锁定和 LED 指示策略归 `status`；
-周期和休眠仍由 `main.c` 管理。
-`app/CMakeLists.txt` 汇总功能目录，各目录的 CMakeLists 负责本组源码及可选配置；
-应用头文件与所属功能源码同目录，通用模块继续独立放在 `modules/`。
-`tests/acquisition/` 覆盖业务阶段、启动失败、无效采样发布、处理超时、通信及升级确认故障；
-`tests/adc/`、`tests/io/` 覆盖统一采样、通用输入和看门狗，均已接入 `tests/run.sh`。
+新增功能时，通用机制放进对应模块，产品数据放进 `cfg/`，测点业务放进 `process/`。
+启动依赖顺序由 `main.c` 管理，每周期工作由 `acquisition` 编排；不在这些文件中
+重新实现协议、存储或驱动。芯片专用 JTAG/SWD 配置仍归板级早期初始化。
+`app/CMakeLists.txt` 汇总功能目录，各目录管理本组源码；公共头文件与实现同目录。
+`dataprocess`、`collect`、`transmit` 未启用时不创建空库，
+公开头文件仍可供独立测试和调用方使用。
+
+`tests/acquisition/` 使用真实的 `main.c` 启动流程和状态机，替换模块实现以验证
+初始化顺序、失败短路、存储降级、采样和通信故障；`tests/adc/`、`tests/io/`
+分别验证统一采样、GPIO 和看门狗。均已接入 `tests/run.sh`。
 
 引脚、极性、ADC 通道顺序、DI/拨码位序、地址偏移和喂狗时序由板级 DTS 配置，
 平均次数由 `CONFIG_IDU_ADC_AVERAGE_COUNT` 配置。业务层统一通过
@@ -90,11 +92,11 @@ LED 操作直接放在 `app/status/status.c`，通过 Zephyr LED API 控制：
 IDU-pre/
 ├── boards/、dts/        # IDU 板定义、早期板级初始化及设备树
 ├── app/
-│   ├── main.c          # 应用入口、采样周期与休眠
+│   ├── main.c           # 模块初始化顺序、采样周期与休眠
 │   ├── acquisition/     # 采集、发布及通信执行流程
 │   ├── status/          # 业务状态、LED 策略、健康进度及镜像确认
 │   ├── cfg/             # 点表及端口/协议配置；inc/ 配置契约；tables/ 三表
-│   └── process/         # 点表初始化、采样映射、工程换算及业务参数回调
+│   └── process/         # 采样映射、工程换算及业务参数回调
 ├── modules/             # analog_input、gpio、watchdog 及点表/升级/SoC 模块
 ├── bootloader/          # MCUboot 配置、分区和联合构建
 ├── sysbuild/            # Zephyr 约定的薄入口
@@ -121,12 +123,12 @@ IDU-pre/
 
 | 接口 | 职责 |
 | --- | --- |
-| `acquisition/idu_acquisition.h` | 启动和周期执行 |
+| `acquisition/idu_acquisition.h` | 每周期采样、发布、转发及健康检查 |
 | `status/idu_status.h` | 业务阶段、故障状态、LED 策略及健康进度 |
 | `<gpio/idu_inputs.h>` | 模块提供的 IDU 统一原始采样接口及快照 |
 | `status/idu_image_confirm.h` | MCUboot 试运行健康确认 |
 | `process/engineering.h` | 仅依赖标准 C 的工程量换算，可用于主机测试 |
-| `process/idu_process.h` | 点表初始化、采样发布、健康检查及测点业务回调 |
+| `process/idu_process.h` | 采样发布、周期参数及测点业务回调 |
 | `cfg/inc/ports.h` | 产品常驻端口、协议和仿真配置声明 |
 | `<transmit/server.h>` | 每端口启动、配置更新及健康维护 |
 | `<transmit/registers.h>`、`<transmit/mvio.h>` | 参数寄存器服务及 MV-IO 协议 |

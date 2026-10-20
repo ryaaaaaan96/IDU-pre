@@ -1,6 +1,6 @@
 #include "status/idu_status.h"
 #ifdef CONFIG_BOOTLOADER_MCUBOOT
-#include "process/idu_process.h"
+#include <dataprocess/params.h>
 #endif
 #include <watchdog/watchdog.h>
 #include <zephyr/drivers/led.h>
@@ -14,22 +14,49 @@ static const struct watchdog_config watchdog = {
 };
 static struct watchdog monitor;
 
+#ifdef CONFIG_BOOTLOADER_MCUBOOT
+/* 镜像确认由产品健康策略决定，不属于测点回调或采集驱动。 */
+static bool parameters_ready(void)
+{
+    const struct device *flash = DEVICE_DT_GET(DT_NODELABEL(external_flash));
+    struct dp_param_status status;
+
+    dp_params_get_status(&status);
+    return device_is_ready(flash) && (status.flags & DP_PARAM_STORAGE_READY) &&
+           !(status.flags & DP_PARAM_PENDING);
+}
+#endif
+
 static int set_run_led(struct idu_status *status, bool on)
 {
     int err = on ? led_on_dt(&run_led) : led_off_dt(&run_led);
-    if (!err) { status->led_on = on; }
+
+    if (!err) {
+        status->led_on = on;
+    }
     return err;
 }
 
 int idu_status_start(struct idu_status *status)
 {
-    if (!status) { return -EINVAL; }
-    if (status->phase != IDU_STATUS_UNCONFIGURED) { return -EALREADY; }
+    if (!status) {
+        return -EINVAL;
+    }
+    if (status->phase != IDU_STATUS_UNCONFIGURED) {
+        return -EALREADY;
+    }
     status->phase = IDU_STATUS_STARTING;
     int err = watchdog_start(&monitor, &watchdog);
-    if (!err && !led_is_ready_dt(&run_led)) { err = -ENODEV; }
-    if (!err) { err = set_run_led(status, true); }
-    if (err) { idu_status_fail(status, IDU_STATUS_STARTING, err); }
+
+    if (!err && !led_is_ready_dt(&run_led)) {
+        err = -ENODEV;
+    }
+    if (!err) {
+        err = set_run_led(status, true);
+    }
+    if (err) {
+        idu_status_fail(status, IDU_STATUS_STARTING, err);
+    }
     return err;
 }
 
@@ -44,15 +71,21 @@ void idu_status_set_phase(struct idu_status *status, enum idu_status_phase phase
 
 int idu_status_progress(struct idu_status *status)
 {
-    if (!status) { return -EINVAL; }
-    if (status->phase != IDU_STATUS_CHECKING_HEALTH) { return -EACCES; }
+    if (!status) {
+        return -EINVAL;
+    }
+    if (status->phase != IDU_STATUS_CHECKING_HEALTH) {
+        return -EACCES;
+    }
     /* 当前每次健康采样翻转一次；后续状态闪烁策略在此实现。 */
     int err = set_run_led(status, !status->led_on);
-    if (!err) { err = watchdog_progress(&monitor); }
+    if (!err) {
+        err = watchdog_progress(&monitor);
+    }
 #ifdef CONFIG_BOOTLOADER_MCUBOOT
     if (!err) {
         err = idu_image_confirm_checkpoint(&status->image_confirm, k_uptime_get(),
-                                           idu_equipment_confirm_ready());
+                                           parameters_ready());
     }
 #endif
     return err;
@@ -60,13 +93,17 @@ int idu_status_progress(struct idu_status *status)
 
 void idu_status_fail(struct idu_status *status, enum idu_status_phase phase, int error)
 {
-    if (!status || status->phase == IDU_STATUS_FAULT_LOCKED) { return; }
+    if (!status || status->phase == IDU_STATUS_FAULT_LOCKED) {
+        return;
+    }
     status->fault_phase = phase;
     status->last_error = error;
     status->phase = IDU_STATUS_FAULT_LOCKED;
     watchdog_stop(&monitor);
     /* Best effort fault indication must not replace the original failure. */
-    if (led_is_ready_dt(&run_led)) { (void)set_run_led(status, true); }
+    if (led_is_ready_dt(&run_led)) {
+        (void)set_run_led(status, true);
+    }
 }
 
 uint32_t idu_status_timeout_ms(void)

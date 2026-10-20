@@ -55,7 +55,7 @@ cfg/
 声明和定义都不指定数组长度，避免缺少初始化项时被自动补零。
 手写点表增删条目需同步调整枚举，导入点表的数量由导入工具同步生成。
 
-初始化由 `app/process/points.c` 调用 `idu_register_point_tables()`、`dp_init()`、总线初始化、参数恢复和
+初始化由 `app/main.c` 调用 `idu_register_point_tables()`、`dp_init()`、总线初始化、参数恢复和
 处理/采集启动。原始采样到信号的映射及工程量换算留在业务层，硬件模块只返回样本。
 参考结构与接口边界见[参考平台对照](../../docs/reference-platform.md)。
 
