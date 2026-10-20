@@ -1,5 +1,7 @@
 # dataprocess
 
+[文档导航](../../docs/README.md) · [模块总览](../README.md) · [参考接口](../../docs/reference-platform.md)
+
 独立 Zephyr 模块，公开接口使用 `dp_*`，负责点值、质量、事务处理和可选的
 NVS 参数持久化。把本目录加入 `ZEPHYR_EXTRA_MODULES`，启用
 `CONFIG_DATAPROCESS` 即可；不需要注册 collect/transmit，也不需要 Modbus。
@@ -45,6 +47,29 @@ int dp_submit_sig_values(const struct dp_point_update *values, size_t count,
 等事务访问器，不重入引擎。所有原始输入先准备完成，再执行 handler；
 派生输出不递归调用 handler。关闭该配置时，带 handler/read_callback 的
 配置会被拒绝，纯值转换和基础数据池仍可工作。
+
+## 事务标志与提交
+
+`process` 是持数据池锁执行的快速纯变换；事务 `handler` 使用 `dp_txn_*`
+访问候选值、旧值和依赖状态，在数据池锁外执行。所有原始输入先准备完成，
+派生输出不递归执行 handler。`dp_process_execute()` 同步返回结果，
+`dp_process_submit()` 复制请求后在业务线程执行，完成结果指针只在回调期间有效。
+
+| 标志 | 行为 |
+| --- | --- |
+| `DP_OP_NO_COLLECT` | 不下发，仍可更新缓存/持久值 |
+| `DP_OP_NO_DM` | 仅下发，缓存和持久值保持原状 |
+| `DP_OP_NO_STORE` | 更新缓存/下游，不更新持久目标值 |
+| `DP_OP_DEFER` | 延后保存，1 s 防抖或显式 flush 时落盘 |
+
+仅改缓存使用 `NO_COLLECT | NO_STORE`。NO_STORE 暂态值不会混入后续其他参数
+快照。事务容量包含捕获的依赖及输出；所有输出先校验类型、范围和权限，
+提交按设备/标志分组，后组失败不回滚先组，未执行项报告 `-ECANCELED`。
+远端 NO_DM/NO_STORE 仍需意图日志对账，不将一次性命令当成可回读绝对设定值。
+
+`dp_process_save_reboot(delay_ms)` 在保存成功后延时重启；保存失败不重启。
+参考回调内的 `dp_flush_para_store()` / `dp_set_reboot()` 先设置标记，
+仅在事务成功后执行。多设备默认恢复和外设直接写入同样不提供整体回滚。
 
 ## 声明式初始化和定时器
 
@@ -104,3 +129,21 @@ int err = dp_process_start(&plan);
 
 `tests/dataprocess` 仅注册此模块，覆盖无 Flash、仅本地 NVS、注入假传输
 三种配置，以及 INIT 失败释放槽、初始化顺序和单次启动约束。
+
+## 参考服务与 const 配置
+
+设备及三表具有静态生命周期，可以放在 Flash。查询返回 `const` 指针；
+没有原协议表的 native 配置不会被强转成参考结构。运行值、质量、时间戳、
+事务和存储缓冲保存在 RAM。
+
+`dp_set_para_def_range()` 复制默认值/范围到有界覆盖槽，保留原 const 表；
+大于 4 字节的默认值 getter 需要调用方提供缓冲区。覆盖不持久化，
+不立即修改当前值。`dp_dm_reset_dev_data()` 仅重置远端遥测，旧排队样本不能覆盖重置结果。
+
+`dp_para_reg_set_func()` 与 `dp_set_para_not_dm()` 是直接采集下发路径，和前述
+NVS transport 分开；超时后保留已接受请求的副本直到完成，防止迟到回调引用失效内存。
+策略、迁移、变化/日志通知、默认恢复和重启的准确上下文及容量限制见
+[参考平台对照](../../docs/reference-platform.md#回调存储与直接下发的约定)。
+
+`tests/reference_services` 分别验证有/无参数存储的服务配置；
+测试方法与历史 RAM 数值统一见[验证说明](../../docs/testing.md)。

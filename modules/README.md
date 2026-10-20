@@ -1,9 +1,11 @@
 # Application-owned modules
 
+[Documentation index](../docs/README.md) · [Architecture](../docs/collect-process-transmit.md)
+
 Three reusable modules provide data processing, equipment acquisition and
 protocol forwarding; a fourth provides standalone QuickLZ decoding. All have
 Zephyr module metadata for integration with Zephyr 4.4.2. See
-[IDU-pre integration and migration status](../docs/point-tables.md#module-extension).
+[architecture and application integration](../docs/collect-process-transmit.md).
 No legacy platform library is linked.
 
 Business-facing headers keep the reference names `data_process.h`,
@@ -71,9 +73,10 @@ northbound interface with `tr_attach()` and
 `tr_modbus_init_server(..., true)` for independent forwarding workqueues.
 The system workqueue remains available for southbound Modbus receive work.
 
-`dp_params_set_transport()` registers copied read/write/provenance callbacks,
-matching the platform's `dp_para_reg_set_func` dependency direction. `collect`
-registers its backend on bus initialization. When combining collection with a
+`dp_params_set_transport()` registers copied read/write/provenance callbacks for
+durable native parameter transactions. `dp_para_reg_set_func()` separately
+registers the reference direct-write path used by `dp_set_para_not_dm()`.
+`collect` registers both backends on bus initialization. When combining collection with a
 different parameter transport, finish all `co_init_bus()` calls first, then
 register the custom operations before `dp_params_init()`; later collector
 initialization would register its own backend again. The callback registration
@@ -92,42 +95,11 @@ support both word orders and optional byte swapping within each word.
 
 ## Local sample submission
 
-`dataprocess/points.h` provides application-thread entry points:
-
-```c
-int dp_submit_sig_value(struct dp_key key, const uint16_t *words,
-                     size_t word_count, k_timeout_t timeout, uint32_t *ticket);
-int dp_submit_sig_values(const struct dp_point_update *values, size_t count,
-                      k_timeout_t timeout, uint32_t *ticket);
-```
-
-These APIs accept only points declared with `DP_SOURCE_LOCAL`. The single-point
-length is 1..`DP_POINT_WORDS` 16-bit words and must match the configured width;
-the batch contains 1..`DP_BATCH_POINTS` updates with matching widths. Values use
-host-endian words, low word first. Unknown keys, duplicate keys, wrong widths or
-nonlocal sources reject the whole submission before it enters the queue. Calls
-from an ISR return `-EWOULDBLOCK`.
-
-Success means the inputs were copied into the queue. `timeout` bounds submission,
-not processing. `ticket` may be `NULL`; otherwise it is cleared to zero on entry
-and receives a nonzero ticket only on success. To observe completion, call
-`dp_wait_processed(ticket, timeout)` and then `dp_read()` to inspect the point's
-quality and error. Completion does not imply a valid value: transforms, range
-checks or SAMPLE handlers can fail after enqueueing. A nonzero `error` in a batch
-update reports a failed sample; processing retains that point's previous value
-and marks its quality invalid. `dp_processed_chan` remains a coalescible change
-notification rather than a per-submission result.
-
-IDU submits its ten-point hardware snapshot as one batch. Hardware reads and
-mapping samples to signal keys remain in the application; DP performs configured
-type/range checks, processing callbacks, data-pool and quality updates. Parameter
-writes use the process/parameter APIs; outputs from a transaction use
-`dp_txn_emit()`. The local-sample setters do not replace those entry points.
-
-The asynchronous sampling extension uses a distinct name and counts 16-bit
-words. The reference-shaped `data_process.h` API keeps `dp_set_sig_value()`
-synchronous and byte-oriented; the library disassembly confirms that distinction.
-See [reference evidence and interface coverage](../docs/reference-platform.md).
+The asynchronous `dp_submit_sig_value(s)` APIs accept local telemetry in host-endian
+16-bit words; success means the sample was copied into the bounded queue. Wait for
+its ticket and inspect point quality to determine the result. Synchronous
+`dp_set_sig_value()` uses bytes and runs the transaction before returning.
+Detailed sample contracts are in [the DP guide](dataprocess/README.md#采样与事务).
 
 ## QuickLZ decoding
 
@@ -141,73 +113,11 @@ remain in `src/iap/`. It is independent of the three point-processing modules.
 
 ## Process and parameter contracts
 
-`process` is the original pure, nonblocking value transform under the store lock.
-`handler` is the transaction callback in `dataprocess/process.h`: WRITE, READ (when
-`read_callback` is enabled), INIT, TIMER and successful SAMPLE operations. It runs
-outside the store lock and must use `dp_txn_get`, `dp_txn_get_state`,
-`dp_txn_contains` and `dp_txn_emit`. All original inputs are visible before any
-handler runs. Outputs do not recursively invoke handlers. Reentry is rejected.
-An invalid sample batch does not invoke transaction callbacks. Sample provenance
-is retained in derived telemetry; a read of a dependency does not by itself prove
-that its value is valid, so check its state when availability matters.
-
-`dp_process_execute()` returns a result; `dp_process_submit()` copies its request
-and invokes the supplied completion exactly once after acceptance, including on
-failure/busy. The completion pointer is valid only during the callback. Jobs run
-on a dedicated thread. Read context contains the source interface, function,
-register address and count. Per-device INIT, one-shot and periodic timers are
-available. Busy timers retry; timers are scheduling callbacks, not hard realtime.
-
-`dp_process_start(const struct dp_process_plan *plan)` is a thread startup API
-called after `dp_init()` and optional parameter recovery. Choose either
-`initialize_all` or ordered `init_keys`, and optionally supply `dp_timer_spec`
-entries. The whole plan is validated and timer slots are reserved before INIT
-callbacks run. Plan timers start only after all INIT calls succeed; failure
-releases reservations for retry, but does not roll back earlier successful INIT
-transactions. A successful start is one-time; another call returns `-EALREADY`.
-The plan is consumed during the call. Timer delays and periods are finite,
-relative Zephyr timeouts; a `K_NO_WAIT` period means one-shot. Individual timers
-can also use `dp_process_timer_start()` / `dp_process_timer_cancel()`; a completed
-one-shot releases its slot.
-
-Independent per-output flags:
-
-| Flag | Effect |
-| --- | --- |
-| `DP_OP_NO_COLLECT` | Update the data pool/storage without downstream writes |
-| `DP_OP_NO_DM` | Downstream write only; leave the cached and durable value unchanged |
-| `DP_OP_NO_STORE` | Update the cache/downstream, but not its durable value |
-| `DP_OP_DEFER` | Defer the durable value until the 1 s debounce or explicit flush |
-
-For a cache-only update combine NO_COLLECT and NO_STORE. Point attributes declare
-WRITE/PERSIST/FORWARD/RESTORE/DEFER_STORE independently. NO_STORE changes cannot
-leak into a later unrelated snapshot. A deferred durable value is kept separately
-from transient cache updates. `dp_process_save_reboot(delay_ms)` requests a flush
-then reboot; a failed flush prevents reboot and is visible in parameter status.
-Call it after a successful transaction/completion when a command requires reboot.
-
-All emitted outputs receive type/range/permission validation before commit.
-Commit groups are per device and flags. They are **not** a distributed atomic
-transaction: a later group can fail after an earlier one succeeded. The result
-lists successful, failed and unattempted (`-ECANCELED`) outputs. Pure parameter
-`prepare_write` callbacks and downstream checks run within their commit group.
-The lower-level `dp_params_*` setters intentionally bypass business handlers;
-use the process API or `tr_write` for normal application writes.
-
-A forwarded parameter group must be a contiguous set of readable, idempotent
-absolute settings on one device. A durable intent pins device/unit/bus, precedes
-I/O, and stores old/new wire images. Readback resolves lost acknowledgements;
-recovery never replays a write. Even NO_STORE downstream operations use this
-journal, while the final durable parameter values remain unchanged. Flash access
-failure or unresolved intent blocks further parameter writes until reconciled.
-Unknown storage schemas are rejected without erasing data. Explicit `param_added`
-entries allow exactly one additive schema transition: the previous signature must
-match all other parameter definitions unchanged. `seed_missing` runs only for
-missing values during mount; it may read a legacy store, but cannot reenter the
-parameter API. Its result is validated and committed as a complete NVS snapshot.
-An existing pending intent is validated first and reconciled by readback before
-the upgraded snapshot is committed. A new empty partition also saves one initial
-snapshot, preventing repeated legacy import on subsequent boots.
+See [the DP guide](dataprocess/README.md#事务标志与提交) for callback scope,
+flags and commit boundaries. Native parameter storage/recovery and product
+register semantics are described in [point tables](../docs/point-tables.md#参数下发与持久化).
+Reference services, callback policies and known differences are documented in
+[the compatibility guide](../docs/reference-platform.md#覆盖清单).
 
 ## Collection and forwarding
 
@@ -298,7 +208,7 @@ The value pool allocates each point's actual width and is validated at startup.
 Transaction entries include captured dependencies as well as emitted outputs.
 
 The AIDC example increases point width to 32 words and changes these bounds for
-its 552-point profile. `ZBUS_MSG_SUBSCRIBER_NET_BUF_STATIC_DATA_SIZE` must cover
+its 552 configured points (560 runtime slots). `ZBUS_MSG_SUBSCRIBER_NET_BUF_STATIC_DATA_SIZE` must cover
 `sizeof(dp_point_batch)` despite isolated pools in Zephyr 4.4.2. Tables are static;
 lookup is linear. Measure timing and stack margins on the target before release.
 
@@ -321,3 +231,17 @@ CRC/RAW validation and permits legacy broadcast routing/replies. A route returns
 `TR_MODBUS_SILENT` to consume a frame without replying. With no policy, standard
 unit filtering and broadcast behavior remain unchanged. Only the MV-IO app
 installs its 247/broadcast rules; they are not enabled by the AIDC profile.
+
+## Reference service adapters
+
+The public reference headers currently expose 79 of the 89 audited names.
+Device/protocol table queries return const views; runtime default/range changes
+use bounded sparse overrides. Signal/log notifications run on the DP jobs thread
+through a bounded queue. Direct CO writes validate the whole request before I/O;
+RTU response injection checks CRC, unit and mapped fields. TR activity monitoring
+uses accepted ADUs and an inactivity timeout.
+
+These services have explicit limits and differ from some original behaviors.
+Use [reference-platform.md](../docs/reference-platform.md) for the exact contracts,
+remaining ten names and configuration requirements. Use
+[testing.md](../docs/testing.md) for dated validation and RAM measurements.

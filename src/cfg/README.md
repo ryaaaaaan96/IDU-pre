@@ -1,5 +1,7 @@
 # 通讯点表配置
 
+[文档导航](../../docs/README.md) · [点表与寄存器](../../docs/point-tables.md)
+
 参考工程 `MCUdemo/CODE/app/cfg/equip` 用设备实例关联采集、处理和转发表。
 这里保留这一关系，`src/cfg/devices/` 管设备与型号，`src/cfg/tables/` 管三表
 及信号元数据。本地条目和导入数据直接写在对应 `.c` 中。
@@ -47,7 +49,7 @@
    不保证请求能进入点表。控制命令放通信层的 `parameter_config.c`。
 5. 检查设备、总线、测点和采集块容量，验证宽度、字序、质量、路由和设备隔离。
    新增持久点还需考虑 NVS schema、旧快照及重启恢复；测试入口见
-   [模块设计](../../docs/collect-process-transmit.md#验证入口)。
+   [验证说明](../../docs/testing.md#覆盖入口)。
 
 其他型号可先直接在对应 `.c` 中声明三表；需要多个实例共享定义时，再参考
 `devices/mvio_model.h`。型号地址、演示参数和旧广播规则应按实际设备协议配置。
@@ -73,6 +75,6 @@ python applications/IDU-pre/tools/import_aidc.py --source /path/to/AIDC_CODE/COD
 现有 AIDC 来源、版权注释、`CONFIG_IDU_AIDC_PROFILE`、生成宏和业务函数名
 保持兼容，生成元数据本身不代表相关业务已实现。
 
-此次整理保持点序、默认值、flags、字序和 NVS schema。MV-IO 旧回调按条目
+调整目录时应保持点序、默认值、flags、字序和 NVS schema。MV-IO 旧回调按条目
 顺序跨地址空洞读取的规则仍在通信层维护，不能将其排序为普通连续地址段。
 协议细节与历史证据见[点表说明](../../docs/point-tables.md)。

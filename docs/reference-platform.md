@@ -1,5 +1,7 @@
 # 参考平台接口与静态逆向记录
 
+[文档导航](README.md) · [模块接口](../modules/README.md) · [验证与 RAM 记录](testing.md)
+
 本次范围是参考工程 `/home/ryan/Documents/demo/MCUdemo/CODE` 的 DP、CO、TR 及其配置注册契约。公开类型和业务接口尽量沿用参考设计，线程、互斥、消息、定时和 Modbus 直接使用 Zephyr。没有引入 ARC 包装层，也不链接 `plateform.lib`。
 
 以下结论来自公开头文件、应用调用和静态库的选定反汇编，不能据此声称还原了完整平台源码或实现了全部非 ARC 子系统。原库为 ARM 二进制，指针、位域和 `DATA_U` 的布局不构成新版的二进制兼容承诺。
@@ -131,6 +133,8 @@ GD32E505 上每个 `stored_point` 从 32 字节缩至 24 字节；64 点容量�
 [collect.c](../modules/collect/src/collect.c) 和
 [modbus_adapter.c](../modules/transmit/src/modbus_adapter.c)。
 
+<a id="回调存储与直接下发的约定"></a>
+
 ### 回调、存储与直接下发的约定
 
 - 变化通知和参数日志复制提交值后进入有界队列，由现有 DP 业务线程调用，避免持有数据池
@@ -186,37 +190,8 @@ IEC104/61850、MQTT/FTP/WEB、EGD、CAN/PLC 产品业务、旧日志/文件/升�
 回归位于 [reference_services](../tests/reference_services)、[reference_config](../tests/reference_config)、
 [reference_dp](../tests/reference_dp) 和 [reference_ports](../tests/reference_ports)。
 
-## 验证记录（2026-10-20）
+<a id="验证记录2026-10-20"></a>
 
-本轮验证命令：
+## 验证记录
 
-```bash
-CCACHE_DISABLE=1 ASAN_OPTIONS=detect_leaks=0 bash applications/IDU-pre/tests/run.sh
-CCACHE_DISABLE=1 ./applications/IDU-pre/build.sh
-CCACHE_DISABLE=1 ./applications/IDU-pre/build.sh --mcuboot --iapv3
-CCACHE_DISABLE=1 ./applications/IDU-pre/build.sh --mcuboot --aidc
-```
-
-完整测试入口通过：33 次 native simulator 执行，Ztest 汇总 189 项通过（含重启阶段等
-重复执行）；Python 共 21 项，其中依赖外部旧 QuickLZ/SGZ 样本的 3 项跳过。
-ASan/UBSan 保留，当前执行环境禁用 LeakSanitizer。新增服务的 11 项测试分别在
-启用/关闭参数存储时通过，CO/TR 用例由 8 项增至 11 项。最后补充的迁移类型元数据修改
-再次运行参数服务回归并通过。
-
-默认、MCUboot + IAPv3、MCUboot + 大点表固件均构建通过，镜像检查与签名验证通过；
-最终修改后通过 `cmake --build` 增量重建三种配置。另导出仅含本次暂存内容的源码并构建
-默认固件，确认提交不依赖工作区既有的应用 runtime 重构。
-
-| 固件配置 | 修改前静态 RAM | 修改后静态 RAM | 净变化 | 当前占 128 KiB |
-| --- | ---: | ---: | ---: | ---: |
-| 默认 | 80,536 B | 81,728 B | +1,192 B | 62.35% |
-| MCUboot + IAPv3 | 113,328 B | 114,512 B | +1,184 B | 87.37% |
-| MCUboot + 大点表 | 119,680 B | 117,088 B | −2,592 B | 89.33% |
-
-这里包含新增服务缓冲与状态数组压缩的共同影响，不表示所有配置均净省 RAM。
-`nm -S` 确认三个产品三表的 `table` 符号位于 `0x080…` 只读区；状态数组在 RAM，
-默认/IAPv3 从 `0x800` 缩至 `0x600` 字节，大点表从 `0x4600` 缩至 `0x3480`。
-构建前后 ELF section/symbol 清单保存在工作区
-`build/IDU-pre/tests/interfaces-memory-{before,after}.json`，日志位于
-`build/IDU-pre/tests/extensions-*.log`，均不提交。本轮没有实板验证；运行时栈余量和
-实际通信时序仍需实板确认。
+2026-10-20 的回归、构建与 RAM 对比统一保存在[验证说明](testing.md#已记录验证2026-10-20)。
