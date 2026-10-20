@@ -18,15 +18,33 @@ config TR_MODBUS_ADAPTER
       routing and isolated workers. This is also available without NVS storage.
 
 config TR_STACK_SIZE
-    int "Isolated Modbus forwarding workqueue stack"
+    int "Stack size per isolated forwarding port (bytes)"
     default 4096
+    range 1024 65536
     depends on TR_MODBUS_ADAPTER
+    help
+      Stack size for each isolated forwarding worker, including protocol and
+      write callbacks. Total reserved stack space is TR_PORTS times this size,
+      plus any architecture alignment or guard requirements.
 
 config TR_PORTS
     int "Independent forwarding workqueues"
-    default 2
+    default 1
     range 1 4
     depends on TR_MODBUS_ADAPTER
+    help
+      Number of statically reserved isolated forwarding workers and stacks.
+      Unused slots still reserve RAM. This is separate from the number of
+      interfaces bound to the Modbus virtual-port transport.
+
+config TR_CONFIG_STACK_SIZE
+    int "Shared forwarding reconfiguration stack size (bytes)"
+    default 2048
+    range 1024 65536
+    depends on TR_MODBUS_ADAPTER
+    help
+      One shared control worker handles port reconfiguration and recovery.
+      Its stack is reserved once, independently of TR_PORTS.
 
 endif
 

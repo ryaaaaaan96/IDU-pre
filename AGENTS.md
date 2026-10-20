@@ -21,6 +21,7 @@
 - 源码由 `app/CMakeLists.txt` 及各功能目录的 CMakeLists 集中管理；头文件与所属功能源码同目录，跨功能引用以 `app/` 为搜索根目录，通用 `dp_*`、`co_*`、`tr_*` 实现留在 `modules/`。
 - `app/cfg/` 保存点表及各模块的产品配置；不实现端口状态机、协议解析或收发，`device.c` 用 const `DEV_TABLE_S` 直接声明设备与点表关联并注册回调，getter 只返回配置，`inc/` 集中所有配置头文件，`tables/` 保存采集/处理/转发三表及默认值。三表使用参考结构，默认/范围及恢复策略集中在 `process.c` 的 const `parameters[]`，预留按国家查询接口，当前 DP 固定使用通用参数；信号用枚举或宏，直接绑定回调，不再设置 `point_metadata`。质量寄存器映射、采样过期及 NVS 迁移暂缓，见根 README。三表直接在 `.c` 中维护，不使用 `.inc` 片段；三表由 CMake 独立编译，`inc/tables.h` 通过不带长度的 `extern const` 数组声明及数量枚举提供静态设备绑定，定义处用 `ARRAY_SIZE` / `BUILD_ASSERT` 校验实际行数；手写点表增删行同步修改枚举，导入数量由工具更新 `counts` 标记区；导入工具只更新标记区，符号写入 `inc/imported_signals.h`，来源记录保存在 `docs/point-table-import.json`。不再设置 `app/equipment/` 或通用 equipment 模块；产品装配归 `app/`，队列、数据池、处理调度、采集和转发机制归各通用模块。协议选择、控制命令和旧协议路由配置归 `app/cfg/`，产品选项归 `app/Kconfig`。`app/process/` 执行测点处理和参数命令，协议编码及 Zephyr 端口适配归 `modules/transmit`，采集和可选模拟设备归 `modules/collect`；扩展步骤见 `app/cfg/README.md`。`conf/` 保存应用可选配置，MCUboot 配置、分区和联合构建设置归 `bootloader/`，`sysbuild/` 只保留 Zephyr 薄入口。目录整理保持既有配置内容；重排持久化点或旧协议回调顺序前，必须核对 NVS 和线协议兼容性。
 - 在应用目录执行 `./build.sh` 构建默认固件，或 `./build.sh --mcuboot --iapv3` 构建兼容升级配置。
+- 当前工作固件启用 MCUboot + IAPv3。采集总线数量及栈大小由 `modules/collect/Kconfig` 定义，隔离转发口数量、转发栈及共享重配置栈由 `modules/transmit/Kconfig` 定义；数值保留在 `prj.conf` 手动维护，不按固件类型自动覆盖，也不预留未来端口。扩展时手动修改 `.conf`，多端口测试在自己的配置中显式声明容量。
 - 在应用目录执行 `bash tests/run.sh` 运行完整回归；按改动范围选择必要验证。文档修改检查内容、路径和格式即可。
 - 构建与测试产物放在工作区 `build/`，签名私钥放在 `build/keys/`，均不提交。
 - 分开记录主机测试、模拟器验证与实物验证，不能以编译通过代替实物验证。

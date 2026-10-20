@@ -47,7 +47,7 @@ K_THREAD_STACK_ARRAY_DEFINE(forward_stacks, CONFIG_TR_PORTS, CONFIG_TR_STACK_SIZ
 static struct { tr_modbus_route_fn fn; void *user; k_tid_t caller; } routes[IFACE_LIMIT];
 K_MUTEX_DEFINE(config_lock);
 static struct k_work_q config_queue;
-K_THREAD_STACK_DEFINE(config_stack, 2048);
+K_THREAD_STACK_DEFINE(config_stack, CONFIG_TR_CONFIG_STACK_SIZE);
 static bool config_started;
 static struct k_spinlock submission_lock;
 

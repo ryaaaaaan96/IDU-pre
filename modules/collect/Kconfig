@@ -5,14 +5,28 @@ menuconfig COLLECT
 
 if COLLECT
 
+config CO_MAX_BUSES
+    int "Maximum acquisition buses"
+    default 1
+    range 1 8
+    help
+      Number of statically reserved bus workers, stacks and request queues.
+      Bus IDs must be in the range 0 to CO_MAX_BUSES - 1. Only registered buses
+      start workers, but all configured slots reserve RAM.
+
 config CO_QUEUE_DEPTH
     int "Maximum queued requests per acquisition bus"
     default 4
     range 1 16
 
 config CO_STACK_SIZE
-    int "Modbus collector stack size"
+    int "Stack size per acquisition bus (bytes)"
     default 4096
+    range 1024 65536
+    help
+      Stack size for each bus worker, including acquisition backend callbacks.
+      Total reserved stack space is CO_MAX_BUSES times this size, plus any
+      architecture alignment or guard requirements.
 
 config CO_TIMEOUT_MS
     int "Modbus acquisition response timeout (ms)"

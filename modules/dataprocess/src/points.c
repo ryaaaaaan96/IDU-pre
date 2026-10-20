@@ -132,7 +132,7 @@ int dp_validate(const struct dp_equip_cfg *cfg)
     }
     for (size_t i = 0; i < cfg->device_count; ++i) {
         const struct dp_device_cfg *d = &cfg->devices[i];
-        if (!d->dev_id || d->bus_id >= CONFIG_DP_MAX_BUSES || d->unit_id < 1 || d->unit_id > 247) {
+        if (!d->dev_id || d->unit_id < 1 || d->unit_id > 247) {
             return -EINVAL;
         }
         for (size_t j = 0; j < i; ++j) {

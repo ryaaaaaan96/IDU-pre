@@ -19,13 +19,34 @@
 IAPv3 与 SMP、AIDC 互斥。真实南向串口配置见
 [替换虚拟采集口](point-tables.md#第二路串口补上后)。
 
-产品在 `prj.conf` 设置 `CONFIG_DP_MAX_BUSES=1`、`CONFIG_TR_PORTS=1`，
-只为当前使用的采集总线和 RS485 独立转发队列分配静态内存。
-`conf/aidc-virtual.conf` 将采集总线容量改为 2，保留额外的模型采集后端。
-这些选项控制实例数量，不缩小每个线程的栈；扩展总线或转发口时应同步调整。
+采集和转发的实例数量、栈大小由各模块的 Kconfig 定义，在 `prj.conf`
+手动填写，不随固件类型自动覆盖。当前工作配置为 MCUboot + IAPv3：
+
+| 所属配置 | 选项 | 当前手动值 |
+| --- | --- | ---: |
+| `modules/collect/Kconfig` | `CONFIG_CO_MAX_BUSES` | 1 |
+| `modules/collect/Kconfig` | `CONFIG_CO_STACK_SIZE` | 4096 B / 总线 |
+| `modules/transmit/Kconfig` | `CONFIG_TR_PORTS` | 1 |
+| `modules/transmit/Kconfig` | `CONFIG_TR_STACK_SIZE` | 4096 B / 转发口 |
+| `modules/transmit/Kconfig` | `CONFIG_TR_CONFIG_STACK_SIZE` | 2048 B，共享 |
+
+这些工作线程共预留 `CO_MAX_BUSES × CO_STACK_SIZE + TR_PORTS × TR_STACK_SIZE +
+TR_CONFIG_STACK_SIZE` 字节栈，另计架构对齐/保护开销；DP、vport、系统工作队列等
+其他线程不在这个公式中。槽位数量决定预留几份栈，栈大小决定每份的容量。
+即使某个槽位没有启动线程，静态栈仍占用 RAM。后续增加设备总线或转发口时，
+由维护者手动修改 `.conf`；调整栈大小后检查目标板最深调用路径的栈余量。
+IAPv3 通过 `./applications/IDU-pre/build.sh --mcuboot --iapv3` 构建，
+`conf/iapv3.conf` 启用升级功能，不覆盖上述线程配置。
+
+总线容量原名 `CONFIG_DP_MAX_BUSES` 已迁移为 `CONFIG_CO_MAX_BUSES`；
+自定义 `.conf` 请同步改名，已有构建缓存使用 `west build -p always` 重新生成。
+`co_init_bus()` 会在注册前检查全部设备的总线 ID 均小于配置容量，
+数据处理模块不再依赖采集线程数量。
 
 `app/CMakeLists.txt` 在配置阶段检查完整应用所需的模块，以及 AIDC 的第二总线和
-模型后端；缺少时给出对应配置错误。模块自身仍可由其他应用或独立测试按需启用。
+模型后端；缺少时给出对应配置错误。历史 AIDC 配置已不再自动增加总线槽，
+若以后使用其双总线点表，需要先手动把 `CONFIG_CO_MAX_BUSES` 改为 2。
+模块自身仍可由其他应用或独立测试按需启用。
 
 ## Flash 与启动布局
 

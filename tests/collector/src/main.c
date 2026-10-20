@@ -129,6 +129,19 @@ static void *setup(void)
         .id = 0, .iface = -1, .transfer = transfer, .initialize = initialize,
     };
     zassert_ok(dp_init_config(&equipment));
+    /* Reject a table that references a later bus outside the configured pool,
+     * even when the bus currently being registered has a valid ID.
+     */
+    struct dp_device_cfg invalid_device = devices[0];
+    invalid_device.bus_id = CONFIG_CO_MAX_BUSES;
+    struct dp_equip_cfg invalid = equipment;
+    invalid.devices = &invalid_device;
+    zassert_ok(dp_validate(&invalid)); /* DP does not own collector capacity. */
+    zassert_equal(co_init_bus(&invalid, &bus), -EINVAL);
+    struct co_bus_cfg invalid_bus = bus;
+    invalid_bus.id = CONFIG_CO_MAX_BUSES;
+    zassert_equal(co_init_bus(&equipment, &invalid_bus), -EINVAL);
+    /* Neither rejection reserves a worker or installs the invalid equipment. */
     zassert_ok(co_init_bus(&equipment, &bus));
     zassert_ok(co_enable_poll(0, false));
     set_mode(CO_PORT_SLEEP);

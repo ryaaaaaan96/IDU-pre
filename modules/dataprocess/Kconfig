@@ -65,11 +65,6 @@ config DP_PROCESS_STACK_SIZE
     default 6144
     depends on DP_PROCESS
 
-config DP_MAX_BUSES
-    int "Maximum acquisition buses"
-    default 2
-    range 1 8
-
 config DP_MAX_DEVICES
     int "Maximum acquisition devices"
     default 16

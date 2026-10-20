@@ -510,3 +510,28 @@ UART/GPIO emulator 验证不代表实际 RS485 电气时序、栈余量或 CAN �
 静态开销，因此 AIDC 增加 32 B。以上是链接期数据，不代表运行时栈余量。
 
 日志在工作区 `build/IDU-pre/reliability-fixes/`。本轮未烧录或进行实板验证。
+
+## 采集与转发线程配置归属（2026-10-20）
+
+`CO_MAX_BUSES` 替代 `DP_MAX_BUSES`，容量检查移入 `co_init_bus()`；
+采集数量/栈大小归 collect Kconfig，隔离转发数量/栈大小及新增的
+`TR_CONFIG_STACK_SIZE` 归 transmit Kconfig。当前 IAPv3 的数值在 `prj.conf`
+手动维护，固件类型配置不再自动覆盖；多端口测试显式声明自己的容量。
+
+- 最终 `CCACHE_DISABLE=1 ASAN_OPTIONS=detect_leaks=0 bash tests/run.sh` 通过：
+  40 次模拟器执行、275 项 Ztest PASS；Python 33 项中 30 项通过，
+  3 项因缺少外部 QuickLZ/SGZ 样本跳过。主机 C 保留 ASan/UBSan。
+- 单总线采集测试增加容量边界检查：配置表引用超容量总线、注册超容量 ID
+  均拒绝；随后有效注册成功，失败路径不安装错误设备配置。
+- 独立变体把采集栈改为 5120 B，5 项采集测试通过；双转发口栈改为每份
+  5120 B、共享重配置栈改为 3072 B，8 项转发测试通过。
+  ELF 符号分别为 5120 B、10240 B、3072 B，证明 Kconfig 值实际控制分配。
+- 最终 `./build.sh --mcuboot --iapv3` 构建、镜像验签和 SGZ 导出通过；
+  生成配置确认 MCUboot 和 IAPv3 均启用。应用 Flash 为 123,036 B，
+  静态 RAM 为 108,744 B，与本轮前 RAM 一致。
+  ELF 中采集栈 4096 B、转发栈 4096 B、共享重配置栈 2048 B。
+- 最终回归及 IAPv3 构建无编译警告或错误。本地文档链接及
+  `git diff --check` 通过。
+
+日志及 ELF 栈尺寸记录位于工作区 `build/IDU-pre/stack-config/`，
+最终 IAPv3 配置记录为 `iap-final-resources.json`。本轮未进行实板栈余量测量。

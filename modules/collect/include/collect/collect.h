@@ -39,6 +39,9 @@ typedef void (*co_done_fn)(const struct co_request *reply,
 int co_init(const struct dp_equip_cfg *cfg, int iface, bool simulated);
 int co_poll(size_t block);
 int co_start(void);
+/* All device bus IDs must fit CONFIG_CO_MAX_BUSES, including buses registered
+ * later. Invalid configurations are rejected before installing callbacks.
+ */
 int co_init_bus(const struct dp_equip_cfg *cfg, const struct co_bus_cfg *bus);
 int co_set_mode(uint8_t bus, enum co_port_mode mode);
 int co_get_mode(uint8_t bus, enum co_port_mode *mode);

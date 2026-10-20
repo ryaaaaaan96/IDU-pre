@@ -80,7 +80,7 @@ class ApplicationRequirements(unittest.TestCase):
     def configure(self, **overrides):
         values = {name: 'y' for name in self.required}
         values.update(IDU_COLLECT_VIRTUAL='y', CO_SIMULATOR='y', TR_MVIO='y',
-                      IDU_AIDC_PROFILE='n', CO_MODEL_SIMULATOR='n', DP_MAX_BUSES='1')
+                      IDU_AIDC_PROFILE='n', CO_MODEL_SIMULATOR='n', CO_MAX_BUSES='1')
         values.update(overrides)
         script = 'cmake_minimum_required(VERSION 3.20.0)\n'
         # Execute the actual configure checks without compiling a firmware image.
@@ -113,12 +113,12 @@ class ApplicationRequirements(unittest.TestCase):
 
     def test_aidc_requires_model_backend_and_second_bus(self):
         result = self.configure(IDU_AIDC_PROFILE='y', CO_MODEL_SIMULATOR='y',
-                                TR_MVIO='n', DP_MAX_BUSES='2')
+                                TR_MVIO='n', CO_MAX_BUSES='2')
         self.assertEqual(result.returncode, 0, result.stderr)
-        result = self.configure(IDU_AIDC_PROFILE='y', DP_MAX_BUSES='2')
+        result = self.configure(IDU_AIDC_PROFILE='y', CO_MAX_BUSES='2')
         self.assertIn('requires CONFIG_CO_MODEL_SIMULATOR=y', result.stderr)
         result = self.configure(IDU_AIDC_PROFILE='y', CO_MODEL_SIMULATOR='y')
-        self.assertIn('requires CONFIG_DP_MAX_BUSES >= 2', result.stderr)
+        self.assertIn('requires CONFIG_CO_MAX_BUSES >= 2', result.stderr)
 
 
 if __name__ == '__main__':

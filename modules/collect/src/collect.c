@@ -27,14 +27,14 @@ struct bus_state {
     struct k_thread thread;
     struct queued_request queue[CONFIG_CO_QUEUE_DEPTH];
 };
-static struct bus_state buses[CONFIG_DP_MAX_BUSES];
-K_THREAD_STACK_ARRAY_DEFINE(bus_stacks, CONFIG_DP_MAX_BUSES, CONFIG_CO_STACK_SIZE);
+static struct bus_state buses[CONFIG_CO_MAX_BUSES];
+K_THREAD_STACK_ARRAY_DEFINE(bus_stacks, CONFIG_CO_MAX_BUSES, CONFIG_CO_STACK_SIZE);
 static const struct dp_equip_cfg *equipment;
 static struct co_device_status statuses[CONFIG_DP_MAX_DEVICES];
 static int64_t next_poll[CONFIG_DP_POINTS_MAX_POLLS];
 static bool disabled[CONFIG_DP_POINTS_MAX_POLLS];
 static bool started;
-static CO_PORT_PF_PROC init_callbacks[CONFIG_DP_MAX_BUSES];
+static CO_PORT_PF_PROC init_callbacks[CONFIG_CO_MAX_BUSES];
 static CO_SET_VALUE_TRANS_CB value_transform;
 static struct k_spinlock reference_callbacks_lock;
 K_MUTEX_DEFINE(schedule_lock);
@@ -202,6 +202,10 @@ int co_init_bus(const struct dp_equip_cfg *cfg, const struct co_bus_cfg *config)
         !cfg || cfg->device_count > CONFIG_DP_MAX_DEVICES) { return -EINVAL; }
     int err = dp_validate(cfg);
     if (err) { return err; }
+    /* Worker capacity belongs to collect; DP only validates point-table data. */
+    for (size_t i = 0; i < cfg->device_count; ++i) {
+        if (cfg->devices[i].bus_id >= ARRAY_SIZE(buses)) { return -EINVAL; }
+    }
     for (size_t i = 0; i < cfg->collect_count; ++i) {
         struct co_cfg scratch;
         const struct co_cfg *poll = dp_config_collect(cfg, i, &scratch);

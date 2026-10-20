@@ -327,17 +327,38 @@ on failure; the caller must reconfigure successfully before resuming it.
 
 ## Bounds and compatibility
 
-Defaults: 64 points, 512 total value words, 16 polling blocks, 2 buses, 16 devices,
+Defaults: 64 points, 512 total value words, 16 polling blocks, 1 bus, 16 devices,
 12 points per sample, 16 words per point, 24 transaction entries, 32 registers per
-collection/write and 2 isolated forwarding ports. Kconfig bounds all storage.
+collection/write and 1 isolated forwarding port. Kconfig bounds all storage.
 Each bus queues at most 4 requests plus one in flight by default. The business
 thread stack is controlled by `DP_PROCESS_STACK_SIZE` (default 6144 bytes).
 The value pool allocates each point's actual width and is validated at startup.
 Transaction entries include captured dependencies as well as emitted outputs.
-The IDU product overrides the defaults to one bus and one isolated forwarding
-port; AIDC retains two buses. Thread stack sizes are unchanged. Full-application
-CMake checks reject missing required services; standalone module users keep
-their independent feature selection.
+The current IAPv3 product explicitly configures one bus and one isolated forwarding
+port in `prj.conf`. Firmware profiles do not override these capacities; changes
+are made manually in `.conf`. Full-application CMake checks reject missing
+required services; standalone module users keep their independent feature selection.
+
+Worker resources are configured in the module that owns them:
+
+| Module | Kconfig option | Module default | Meaning |
+| --- | --- | ---: | --- |
+| collect | `CO_MAX_BUSES` | 1 | Reserved bus workers, stacks and queues |
+| collect | `CO_STACK_SIZE` | 4096 | Bytes per bus worker stack |
+| transmit | `TR_PORTS` | 1 | Reserved isolated forwarding workers |
+| transmit | `TR_STACK_SIZE` | 4096 | Bytes per forwarding worker stack |
+| transmit | `TR_CONFIG_STACK_SIZE` | 2048 | One shared reconfiguration/recovery stack |
+
+These stacks are reserved statically even when a worker has not started.
+Architecture alignment/guard space can increase their allocated size.
+The Modbus transport binding count is independent of `TR_PORTS`.
+`CO_MAX_BUSES` replaces `DP_MAX_BUSES`; update custom configuration fragments
+and regenerate old build directories with `west build -p always`.
+`co_init_bus()` validates all device bus IDs against its capacity before
+installing any callbacks. DP validates the point-table structure without
+depending on the collector's worker pool.
+Tests with multiple buses or forwarding workers explicitly declare their fixture
+capacity in their own `.conf`; they do not supply product defaults.
 
 The AIDC example increases point width to 32 words and changes these bounds for
 its 553 configured points (560 runtime slots). `ZBUS_MSG_SUBSCRIBER_NET_BUF_STATIC_DATA_SIZE` must cover

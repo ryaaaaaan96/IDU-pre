@@ -15,10 +15,7 @@ Modbus 采集与转发、NVS 参数持久化及可选 MCUboot 升级。
 从工作区根目录执行：
 
 ```bash
-# 默认固件：旧 BOOT 布局
-./applications/IDU-pre/build.sh
-
-# MCUboot + 旧 IAPv3 / AES / SGZ 升级
+# 当前工作固件：MCUboot + IAPv3 / AES / SGZ 升级
 ./applications/IDU-pre/build.sh --mcuboot --iapv3
 
 # 主机回归与 Zephyr native_sim 测试
@@ -26,8 +23,9 @@ bash applications/IDU-pre/tests/run.sh
 ```
 
 首次恢复工作区或有意同步依赖时运行 `west update`。构建/测试脚本在未激活
-虚拟环境时自动使用工作区 `.venv`。也可在本仓库中执行 `./build.sh`。
-默认 HEX 导出为工作区 `build/hex/IDU-pre.hex`；MCUboot 产物使用独立目录。
+虚拟环境时自动使用工作区 `.venv`。也可在本仓库中执行
+`./build.sh --mcuboot --iapv3`，产物位于 `build/hex/IDU-pre-mcuboot-iapv3/`。
+不带升级选项的 `./build.sh` 仍构建旧 BOOT 布局，导出 `build/hex/IDU-pre.hex`。
 配置选项、签名密钥、分区和首次安装步骤见[构建与升级](docs/build-and-upgrade.md)。
 
 ## 阅读文档
@@ -73,8 +71,9 @@ app/main.c                         启动顺序、采样周期与休眠
 `dataprocess`、`collect`、`transmit` 未启用时不创建空库，
 公开头文件仍可供独立测试和调用方使用。
 完整 IDU 应用会在 CMake 配置阶段检查所需模块；关闭必要服务时直接报告缺失选项，
-不用等到链接失败。默认及 IAPv3 使用一个采集总线槽和一个独立转发口，
-AIDC 使用两个采集总线槽；容量配置见[构建与升级](docs/build-and-upgrade.md#配置选择)。
+不用等到链接失败。当前工作配置启用 IAPv3，在 `prj.conf` 手动设置一个采集总线槽、
+一个独立转发口及各自栈大小；固件类型不自动覆盖容量，
+后续扩展时手动修改，见[构建与升级](docs/build-and-upgrade.md#配置选择)。
 
 `tests/acquisition/` 使用真实的 `main.c` 启动流程和状态机，替换模块实现以验证
 初始化顺序、失败短路、存储降级、采样和通信故障；`tests/adc/`、`tests/io/`
