@@ -1,5 +1,6 @@
-#include "idu_aidc.h"
-#include "point_metadata.h"
+#include "process/idu_process.h"
+#include "cfg/tables/point_metadata.h"
+#include <dataprocess/process.h>
 #include <errno.h>
 #include <string.h>
 

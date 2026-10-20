@@ -104,6 +104,25 @@ IDU-pre/
 跨功能引用使用 `"hardware/idu_pre.h"` 等路径；通用 IAP 使用 `<iap/iap.h>`、`<iap/sgz.h>`。
 通用模块继续保留各自的公开 `include/`，由 Zephyr 模块机制导出。
 
+`app/` 根目录只保留运行管理、应用服务和启动健康三个接口头：
+`idu_runtime.h`、`idu_equipment.h`、`idu_boot.h`。各功能接口按下表引用，
+调用通用模块时直接包含对应模块头，不通过应用汇总头间接引入。
+
+| 接口 | 职责 |
+| --- | --- |
+| `hardware/idu_pre.h` | 板级采样快照、IO、ADC、LED 和看门狗 |
+| `process/engineering.h` | 仅依赖标准 C 的工程量换算，可用于主机测试 |
+| `process/idu_process.h` | 测点处理、参数命令及 MV-IO/AIDC 业务回调 |
+| `communication/idu_protocol.h` | 上位机端口配置、参数协议回调及 AIDC 串口参数转换 |
+| `communication/idu_mvio.h` | MV-IO 旧协议路由注册 |
+| `communication/ports/idu_acquisition.h` | 采集端口初始化，选择实际 RTU 或虚拟后端 |
+| `communication/ports/idu_virtual.h` | 虚拟 MV-IO 设备、故障注入及 AIDC 虚拟模型总线 |
+| `communication/config/protocol_config.h` | 产品协议选择、命令和状态映射、旧协议访问范围 |
+
+`communication/` 负责产品通信适配；通用采集调度、点表处理、转发和升级机制
+分别由 `collect`、`dataprocess`、`transmit`、`iap` 提供。虚拟模型总线不实现真实
+UPP 链路，点表及参数处理声明不放入硬件或协议路由头文件。
+
 [`bootloader/`](bootloader/README.md) 保存本板 MCUboot 配置、分区和联合构建设置。
 MCUboot 源码仍使用 West 工作区中的独立仓库；`app/boot.c` 负责应用健康确认。
 [`modules/iap/`](modules/iap/README.md) 负责升级接收、解包和验签，分区／内存取自

@@ -25,7 +25,5 @@ int idu_analog_read(uint16_t raw[IDU_ANALOG_COUNT]);
 int idu_health_init(void);
 void idu_health_kick(void);
 void idu_health_stop(void);
-int idu_protocol_set_address(uint8_t address);
-uint16_t idu_current_from_raw(uint16_t raw);
 
 #endif

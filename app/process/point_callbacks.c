@@ -1,6 +1,7 @@
 #include "process/idu_process.h"
-#include "hardware/idu_pre.h"
-#include "signal_ids.h"
+#include "process/engineering.h"
+#include "idu_equipment.h"
+#include "cfg/tables/signal_ids.h"
 #include <dataprocess/params.h>
 #include <errno.h>
 

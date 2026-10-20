@@ -1,6 +1,15 @@
-#include "idu_equip.h"
+#include "idu_equipment.h"
+#include "cfg/devices/device_config.h"
+#include "cfg/tables/signal_ids.h"
+#include "communication/idu_protocol.h"
+#include "communication/ports/idu_acquisition.h"
+#include "communication/ports/idu_virtual.h"
 #include "hardware/idu_pre.h"
+#include "process/engineering.h"
 #include "legacy_registers.h"
+#include <collect/collect.h>
+#include <dataprocess/params.h>
+#include <dataprocess/points.h>
 #include <transmit/modbus_adapter.h>
 #include <transmit/transmit.h>
 #include <zephyr/sys/byteorder.h>

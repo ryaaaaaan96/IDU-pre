@@ -1,4 +1,7 @@
-#include "idu_equip.h"
+#include "cfg/tables/signal_ids.h"
+#include "communication/ports/idu_virtual.h"
+#include <dataprocess/params.h>
+#include <dataprocess/points.h>
 #include <dataprocess/process.h>
 #include <collect/collect.h>
 #include <transmit/transmit.h>

@@ -1,8 +1,10 @@
 /* Virtual second serial link at the Zephyr Modbus ADU boundary. This exercises
  * the actual client/server stacks without claiming to emulate UART/RTU timing.
  */
-#include "idu_equip.h"
+#include "communication/ports/idu_virtual.h"
+#include "cfg/devices/device_config.h"
 #include "hardware/idu_pre.h"
+#include <dataprocess/points.h>
 #include <transmit/modbus_adapter.h>
 #include <string.h>
 #include <errno.h>

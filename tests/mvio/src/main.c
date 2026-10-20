@@ -1,5 +1,13 @@
-#include "idu_equip.h"
-#include "protocol_config.h"
+#include "idu_equipment.h"
+#include "cfg/devices/device_config.h"
+#include "cfg/tables/signal_ids.h"
+#include "communication/idu_protocol.h"
+#include "communication/config/protocol_config.h"
+#include "communication/ports/idu_acquisition.h"
+#include "communication/ports/idu_virtual.h"
+#include <collect/collect.h>
+#include <dataprocess/params.h>
+#include <dataprocess/points.h>
 #include <transmit/modbus_adapter.h>
 #include <transmit/transmit.h>
 #include "modbus_internal.h" /* TX-state injection; no UART electrical simulation. */

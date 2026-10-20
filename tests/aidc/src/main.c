@@ -1,7 +1,11 @@
-#include "idu_equip.h"
-#include "idu_aidc.h"
-#include "protocol_config.h"
+#include "cfg/devices/device_config.h"
+#include "communication/config/protocol_config.h"
+#include "communication/ports/idu_acquisition.h"
+#include "communication/ports/idu_virtual.h"
 #include <collect/collect.h>
+#include <dataprocess/params.h>
+#include <dataprocess/points.h>
+#include <dataprocess/process.h>
 #include <transmit/transmit.h>
 #include <zephyr/storage/flash_map.h>
 #include <zephyr/ztest.h>

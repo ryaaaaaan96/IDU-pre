@@ -25,7 +25,7 @@
 [`app/startup.c`](../startup.c) 装配初始化，
 [`app/point_service.c`](../point_service.c) 负责采样映射，
 [`app/process/engineering.c`](../process/engineering.c) 负责工程值换算。
-应用接口在 [`idu_point_service.h`](../idu_point_service.h)，保留
+应用接口统一在 [`idu_equipment.h`](../idu_equipment.h)，保留
 `idu_equipment_init()` 名称。点表机制由 `dataprocess`、`collect`、`transmit`
 提供；独立的 `quicklz` 只负责解码，与点表配置无关。
 

@@ -1,5 +1,5 @@
 /* Legacy engineering conversion, shared by process callbacks and tests. */
-#include "hardware/idu_pre.h"
+#include "process/engineering.h"
 
 uint16_t idu_current_from_raw(uint16_t raw)
 {

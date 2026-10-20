@@ -1,6 +1,6 @@
 #include "protocol_config.h"
 #if defined(CONFIG_IDU_AIDC_PROFILE)
-#include "idu_aidc.h"
+#include "communication/idu_protocol.h"
 #else
 #include "communication/idu_mvio.h"
 #endif

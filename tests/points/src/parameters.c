@@ -1,4 +1,8 @@
-#include "idu_equip.h"
+#include "idu_equipment.h"
+#include "cfg/tables/signal_ids.h"
+#include "communication/ports/idu_virtual.h"
+#include <dataprocess/params.h>
+#include <dataprocess/points.h>
 #include <dataprocess/process.h>
 #include <errno.h>
 #include <string.h>
@@ -6,6 +10,7 @@
 #include <zephyr/drivers/flash.h>
 #include <zephyr/drivers/flash/flash_simulator.h>
 #include <zephyr/kvss/nvs.h>
+#include <zephyr/modbus/modbus.h>
 #include <zephyr/storage/flash_map.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/ztest.h>

@@ -1,6 +1,5 @@
-#include "hardware/idu_pre.h"
-#include "idu_equip.h"
-#include "protocol_config.h"
+#include "communication/idu_protocol.h"
+#include "communication/config/protocol_config.h"
 #include <transmit/modbus_adapter.h>
 #include <transmit/transmit.h>
 #include <errno.h>

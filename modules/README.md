@@ -46,8 +46,8 @@ downstream forwarding is optional when `collect` is absent.
 
 Application composition lives in `app/startup.c`, sample mapping in
 `app/point_service.c`, and engineering conversion in
-`app/process/engineering.c`. `app/idu_point_service.h` exposes initialization,
-snapshot publication and sample-period access. The existing
+`app/process/engineering.c`. `app/idu_equipment.h` exposes initialization,
+snapshot publication, sample-period access and application health. The existing
 `idu_equipment_init()` name remains available. These product responsibilities
 stay in the application; there is no separate generic equipment module.
 

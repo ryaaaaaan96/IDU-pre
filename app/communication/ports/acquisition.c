@@ -1,5 +1,9 @@
-#include "idu_equip.h"
+#include "communication/ports/idu_acquisition.h"
+#if defined(CONFIG_IDU_COLLECT_VIRTUAL)
+#include "communication/ports/idu_virtual.h"
+#endif
 #include <zephyr/device.h>
+#include <zephyr/modbus/modbus.h>
 
 #if defined(CONFIG_IDU_COLLECT_RTU)
 #define COLLECT_NODE DT_ALIAS(idu_collect)

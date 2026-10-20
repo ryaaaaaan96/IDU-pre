@@ -1,6 +1,9 @@
 /* Map board samples to the product point table. */
-#include "idu_equip.h"
+#include "idu_equipment.h"
+#include "cfg/tables/signal_ids.h"
 #include "hardware/idu_pre.h"
+#include <dataprocess/params.h>
+#include <dataprocess/points.h>
 #include <errno.h>
 #include <zephyr/device.h>
 

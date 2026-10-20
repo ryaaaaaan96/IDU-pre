@@ -4,12 +4,8 @@
 #include "device_config.h"
 #include "process/idu_process.h"
 #include "hardware/idu_pre.h"
-#include "communication/idu_mvio.h"
 #include "mvio_model.h"
 #include "instances.h"
-#if defined(CONFIG_IDU_AIDC_PROFILE)
-#include "idu_aidc.h"
-#endif
 
 #define CONST_U16(sig, val) \
     {.key = {IDU_DEV_LOCAL, sig}, .source = DP_SOURCE_CONSTANT, \

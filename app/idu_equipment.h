@@ -6,7 +6,7 @@
 
 struct idu_snapshot;
 
-/* Application services; callers do not need point-table or NVS internals. */
+/* Application-thread services; callers do not need point-table or NVS internals. */
 int idu_equipment_init(void);
 int idu_snapshot_publish(const struct idu_snapshot *snapshot);
 uint16_t idu_sample_period_ms(void);

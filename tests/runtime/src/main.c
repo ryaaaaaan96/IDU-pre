@@ -1,5 +1,6 @@
 #include "idu_runtime.h"
 #include "idu_equipment.h"
+#include "communication/idu_protocol.h"
 #include "hardware/idu_pre.h"
 #include <iap/iap.h>
 #include <zephyr/ztest.h>

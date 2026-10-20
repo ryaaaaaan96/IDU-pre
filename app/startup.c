@@ -1,10 +1,14 @@
 /* Assemble the IDU point pipeline in application-thread context. */
-#include "idu_equip.h"
+#include "idu_equipment.h"
+#include "cfg/devices/device_config.h"
+#include "communication/ports/idu_acquisition.h"
 #include <data_process.h>
 #include <platform_callback.h>
+#include <collect/collect.h>
+#include <dataprocess/params.h>
 #include <dataprocess/process.h>
 #if defined(CONFIG_IDU_AIDC_PROFILE)
-#include "idu_aidc.h"
+#include "communication/ports/idu_virtual.h"
 #endif
 #include <zephyr/storage/flash_map.h>
 #include <zephyr/logging/log.h>

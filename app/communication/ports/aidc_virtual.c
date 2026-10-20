@@ -1,5 +1,5 @@
-#include "idu_aidc.h"
-#include "point_metadata.h"
+#include "communication/ports/idu_virtual.h"
+#include "cfg/tables/point_metadata.h"
 #include <collect/collect.h>
 #include <errno.h>
 #include <string.h>
