@@ -1,22 +1,22 @@
-#include "acquisition/idu_boot.h"
+#include "status/idu_image_confirm.h"
 #include <zephyr/ztest.h>
 
 static unsigned writes;
 static int write_error;
 static bool already_confirmed;
-static struct idu_boot_health state;
+static struct idu_image_confirm state;
 bool boot_is_img_confirmed(void) { return already_confirmed; }
 int boot_write_img_confirmed(void) { ++writes; return write_error; }
-#define checkpoint(now, healthy) idu_boot_health_checkpoint(&state, now, healthy)
+#define checkpoint(now, healthy) idu_image_confirm_checkpoint(&state, now, healthy)
 
 static void before(void *fixture)
 {
     ARG_UNUSED(fixture);
-    state = (struct idu_boot_health){0};
+    state = (struct idu_image_confirm){0};
     writes = 0; write_error = 0; already_confirmed = false;
 }
 
-ZTEST(boot_policy, test_trial_only_confirmed_after_continuous_health)
+ZTEST(image_confirm, test_trial_only_confirmed_after_continuous_health)
 {
     /* Simply waiting at boot cannot confirm an image. */
     zassert_ok(checkpoint(30000, true));
@@ -44,7 +44,7 @@ ZTEST(boot_policy, test_trial_only_confirmed_after_continuous_health)
     zassert_equal(writes, 2);
 }
 
-ZTEST(boot_policy, test_unhealthy_trial_times_out)
+ZTEST(image_confirm, test_unhealthy_trial_times_out)
 {
     zassert_ok(checkpoint(1000, false));
     zassert_ok(checkpoint(60999, false));
@@ -52,7 +52,7 @@ ZTEST(boot_policy, test_unhealthy_trial_times_out)
     zassert_equal(writes, 0);
 }
 
-ZTEST(boot_policy, test_confirmed_image_needs_no_trial_deadline)
+ZTEST(image_confirm, test_confirmed_image_needs_no_trial_deadline)
 {
     already_confirmed = true;
     zassert_ok(checkpoint(1000, true));
@@ -60,4 +60,4 @@ ZTEST(boot_policy, test_confirmed_image_needs_no_trial_deadline)
     zassert_equal(writes, 0);
 }
 
-ZTEST_SUITE(boot_policy, NULL, NULL, before, NULL, NULL);
+ZTEST_SUITE(image_confirm, NULL, NULL, before, NULL, NULL);

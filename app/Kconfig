@@ -20,11 +20,6 @@ config IDU_SAMPLE_PERIOD_MS
     default 500
     range 100 1000
 
-config IDU_ADC_AVERAGE_COUNT
-    int "Samples averaged per analog input"
-    default 10
-    range 1 64
-
 config IDU_AIDC_PROFILE
     bool "Imported AIDC business tables with virtual UPP acquisition"
     depends on IDU_COLLECT_VIRTUAL

@@ -38,10 +38,10 @@ build/IDU-pre/tests/reference_services/zephyr/zephyr.exe -flash_in_ram
 | `pipeline`、`models` | 无存储数据流、模型复用、多设备及多总线隔离 |
 | `dataprocess`、`collector`、`transmit` | 核心模块独立配置、采集调度、转发模式和恢复 |
 | `reference_config`、`reference_dp`、`reference_ports`、`reference_services` | 原表注册、同步字节接口、CO/TR 适配、策略回调和迁移 |
-| `boot`、`iap`、`test_iap_codec.py` | 健康确认、独立 IAP 模块、配置驱动升级、收包/签名拒绝、SGZ/QuickLZ 边界 |
+| `image_confirm`、`iap`、`test_iap_codec.py` | 健康确认、独立 IAP 模块、配置驱动升级、收包/签名拒绝、SGZ/QuickLZ 边界 |
 | `adc`、`test_build_configuration.py` | 标准 ADC API、采样平均、硬件超时恢复、并发隔离与 Sysbuild 配置覆盖 |
-| `io` | 通用数字量组的极性/位序/32 位边界、独立看门狗实例、超时锁定和 GPIO 故障 |
-| `acquisition` | 业务状态顺序、采样故障发布无效质量、通信故障、看门狗过期和试运行确认 |
+| `io` | GPIO 极性/位序/32 位边界、看门狗超时锁定、LED 极性/闪烁切换及异步故障 |
+| `acquisition` | 采集与 status 集成、无效样本发布、故障保留、LED/看门狗错误阻止试运行确认 |
 
 `tests/run.sh` 同时验证 Process 关闭、参数/后端可选配置，并用独立 Flash 临时文件
 在新进程中执行参数、MV-IO 和 IAP 恢复阶段。普通运行跳过的 reboot probe 会在
@@ -243,3 +243,31 @@ Kconfig 配置。保留原线协议、结果日志内容、试运行请求及应
 日志位于 `build/IDU-pre/hardware-modules/`。JTAG 释放提前到板级早期初始化，
 保留 SWD；应用故障停止喂狗时保持引脚输出，看门狗超时后不允许迟到进度恢复喂狗。
 本轮没有烧录，需实板确认 PA15/RS485 初始化、DI/ADC 采样和 PC13 看门狗交接。
+
+## LED、状态与统一输入模块验证（2026-10-20）
+
+GPIO 输入与 IDU 采样实现合并到 `modules/io_input`，通用 GPIO 和 IDU 采样配置
+分别通过 `DIGITAL_IO`、`IDU_INPUTS` 启用。LED 使用标准 Zephyr LED 驱动及
+`modules/led_indicator`；业务阶段、故障锁定、LED 策略和健康进度归 `app/status/`。
+当前为启动/故障常亮、每个正常采集周期翻转一次，尚未配置故障闪烁编码。
+
+- 完整 `tests/run.sh` 通过：36 次模拟器执行、228 项 Ztest 通过；Python 28 项中
+  3 项因缺少外部 QuickLZ/SGZ 输入跳过。主机 C 回归保留 ASan/UBSan，
+  当前环境禁用 LeakSanitizer。
+- 新增 LED 6 项：真实 `gpio-leds` 极性、亮灭/翻转、独立闪烁实例、取消与切换，
+  包括旧回调等待互斥锁时不截断新闪烁周期，以及异步错误可观测且停止闪烁。
+- 采集/status 集成共 11 项通过，覆盖 LED 初始化/输出/异步错误阻止喂狗与确认，
+  指示灯错误不覆盖最初故障，以及故障后拒绝恢复正常状态。
+- 输入模块的 ADC 13 项通过；移除测试工程的看门狗模块依赖后单独重跑通过，
+  确认 IDU 采样可以独立于 LED、status 和看门狗使用。
+- 默认、MCUboot＋IAPv3 构建、镜像导出及验签通过；最后清理头文件引用后
+  再次构建通过。静态 RAM 分别为 81,880 B、114,712 B，比上轮增加 112 B、104 B。
+- 文档本地链接及差异格式检查通过。
+
+日志位于 `build/IDU-pre/status-modules/`。本轮未烧录；软件闪烁由系统工作队列
+调度，需实板验证 LED 极性、工作队列负载下的闪烁和故障/看门狗复位交接。
+
+随后将试运行健康确认改名并移至 `app/status/image_confirm.c`，状态统一由
+`idu_status` 持有。确认规则不变；移动后单独重跑 11 项采集/status 集成测试与
+3 项镜像确认测试通过，默认及 MCUboot＋IAPv3 再次构建、导出与验签通过。
+原 `tests/boot` 改为 `tests/image_confirm`，完整回归入口已同步更新。

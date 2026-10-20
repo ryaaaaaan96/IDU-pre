@@ -1,7 +1,7 @@
 #include <zephyr/ztest.h>
 #include <zephyr/drivers/adc/adc_emul.h>
 #include <zephyr/drivers/gpio/gpio_emul.h>
-#include "acquisition/inputs.h"
+#include <io_input/idu_inputs.h>
 #include <analog_input/analog_input.h>
 
 #define TEST_ADC_SPEC(node, prop, idx) ADC_DT_SPEC_GET_BY_IDX(node, idx),

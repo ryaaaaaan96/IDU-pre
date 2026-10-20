@@ -1,6 +1,9 @@
 #ifndef IDU_SIGNAL_IDS_H
 #define IDU_SIGNAL_IDS_H
 
+#define IDU_DEVICE_TYPE 0x2221
+#define IDU_PROTOCOL_VERSION 0x01000101U
+
 /* Logical device and signal IDs, independent of wire register addresses. */
 #define IDU_DEV_LOCAL 1
 #define IDU_DEV_REMOTE_IO 10

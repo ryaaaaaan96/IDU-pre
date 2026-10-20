@@ -3,7 +3,7 @@
 #include "process/engineering.h"
 #include "cfg/devices/device_config.h"
 #include "cfg/tables/signal_ids.h"
-#include "acquisition/inputs.h"
+#include <io_input/idu_inputs.h>
 #include "communication/ports/idu_acquisition.h"
 #include <data_process.h>
 #include <platform_callback.h>
@@ -74,7 +74,7 @@ bool idu_equipment_healthy(uint32_t max_idle_ms)
 }
 
 #ifdef CONFIG_BOOTLOADER_MCUBOOT
-bool idu_equipment_boot_ready(void)
+bool idu_equipment_confirm_ready(void)
 {
     const struct device *flash = DEVICE_DT_GET(DT_NODELABEL(external_flash));
     struct dp_param_status status;

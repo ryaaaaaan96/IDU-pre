@@ -3,7 +3,6 @@
 #include "signal_ids.h"
 #include "device_config.h"
 #include "process/idu_process.h"
-#include "acquisition/inputs.h"
 #include "mvio_model.h"
 #include "instances.h"
 

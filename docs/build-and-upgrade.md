@@ -113,8 +113,8 @@ ECDSA P-256 签名、`swap-scratch` 交换、试运行后确认；未确认的�
 内部擦除页依据 GD32E50x 用户手册
 为 8 KiB，写粒度设置为 4 字节；外部驱动使用 4 KiB 页布局。导出工具保守预留
 完整 8 KiB 尾部，不接受超过 440 KiB 的签名升级文件。
-MCUboot 在 SoC 早期初始化中沿用旧 `wdog_close()`，将 PC13 设为浮空输入；
-应用 `idu_watchdog_start()` 恢复 GPIO 输出和喂狗。实物上仍需验证这一交接及擦写时序。
+MCUboot 在板级早期初始化中沿用旧 `wdog_close()`，将 PC13 设为浮空输入；
+应用 `idu_status_start()` 恢复 GPIO 输出和喂狗。实物上仍需验证这一交接及擦写时序。
 
 保留当前工具链设置，在工作区根目录执行：
 

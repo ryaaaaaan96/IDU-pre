@@ -1,0 +1,3 @@
+config LED_INDICATOR
+    bool "LED indication with software blink timing"
+    depends on LED

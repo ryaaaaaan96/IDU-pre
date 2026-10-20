@@ -2,8 +2,9 @@
  * the actual client/server stacks without claiming to emulate UART/RTU timing.
  */
 #include "communication/ports/idu_virtual.h"
+#include "cfg/tables/signal_ids.h"
 #include "cfg/devices/device_config.h"
-#include "acquisition/inputs.h"
+#include <io_input/idu_inputs.h>
 #include <dataprocess/points.h>
 #include <transmit/modbus_adapter.h>
 #include <string.h>

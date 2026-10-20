@@ -1,11 +1,11 @@
-#include "acquisition/idu_boot.h"
+#include "status/idu_image_confirm.h"
 #include <errno.h>
 #include <zephyr/dfu/mcuboot.h>
 #include <zephyr/logging/log.h>
 
-LOG_MODULE_REGISTER(idu_boot, LOG_LEVEL_INF);
+LOG_MODULE_REGISTER(idu_image_confirm, LOG_LEVEL_INF);
 
-int idu_boot_health_checkpoint(struct idu_boot_health *state, int64_t now, bool healthy)
+int idu_image_confirm_checkpoint(struct idu_image_confirm *state, int64_t now, bool healthy)
 {
     if (!state || now < 0) { return -EINVAL; }
     if (!state->initialized) {

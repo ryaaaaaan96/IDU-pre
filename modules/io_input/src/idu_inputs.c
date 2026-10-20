@@ -1,10 +1,9 @@
-#include "acquisition/inputs.h"
+#include <io_input/idu_inputs.h>
 #include <analog_input/analog_input.h>
 #include <digital_io/digital_io.h>
-#include <health_monitor/health_monitor.h>
 #include <errno.h>
 
-/* Product bindings are private; pins and timing come from devicetree. */
+/* Optional IDU sampling profile; pins and order come from devicetree. */
 #define IO_NODE DT_NODELABEL(idu_io)
 #define ADC_SPEC(node, prop, idx) ADC_DT_SPEC_GET_BY_IDX(node, idx),
 #define GPIO_SPEC(node, prop, idx) GPIO_DT_SPEC_GET_BY_IDX(node, prop, idx),
@@ -37,14 +36,6 @@ static const struct digital_io_config idu_address_inputs = {
     .order = DT_ENUM_IDX(IO_NODE, address_bit_order),
 };
 static const uint8_t idu_address_offset = DT_PROP(IO_NODE, address_offset);
-static const struct gpio_dt_spec idu_run_led = GPIO_DT_SPEC_GET(DT_ALIAS(led0), gpios);
-static const struct health_monitor_config idu_watchdog_config = {
-    .feed = GPIO_DT_SPEC_GET(IO_NODE, watchdog_gpios),
-    .feed_interval_ms = DT_PROP(IO_NODE, watchdog_feed_ms),
-    .progress_timeout_ms = DT_PROP(IO_NODE, watchdog_health_ms),
-};
-
-static struct health_monitor acquisition_monitor;
 
 int idu_inputs_init(void)
 {
@@ -60,8 +51,6 @@ int idu_inputs_init(void)
     }
     int err = digital_io_init(&idu_digital_inputs);
     if (!err) { err = digital_io_init(&idu_address_inputs); }
-    if (!err && !gpio_is_ready_dt(&idu_run_led)) { err = -ENODEV; }
-    if (!err) { err = gpio_pin_configure_dt(&idu_run_led, GPIO_OUTPUT_ACTIVE); }
     return err ? err : analog_input_init(&idu_analog_inputs);
 }
 
@@ -79,29 +68,4 @@ int idu_inputs_sample(struct idu_snapshot *snapshot)
     }
     snapshot->valid = !err;
     return err;
-}
-
-int idu_indicator_toggle(void)
-{
-    return gpio_pin_toggle_dt(&idu_run_led);
-}
-
-int idu_watchdog_start(void)
-{
-    return health_monitor_start(&acquisition_monitor, &idu_watchdog_config);
-}
-
-int idu_watchdog_progress(void)
-{
-    return health_monitor_progress(&acquisition_monitor);
-}
-
-void idu_watchdog_stop(void)
-{
-    health_monitor_stop(&acquisition_monitor);
-}
-
-uint32_t idu_watchdog_timeout_ms(void)
-{
-    return idu_watchdog_config.progress_timeout_ms;
 }

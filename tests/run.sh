@@ -10,7 +10,7 @@ fi
 test_dir="build/IDU-pre/tests"
 mkdir -p "$test_dir"
 gcc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined \
-    -I applications/IDU-pre/app \
+    -I applications/IDU-pre/app -I applications/IDU-pre/modules/io_input/include \
     applications/IDU-pre/tests/test_registers.c \
     applications/IDU-pre/tests/legacy_registers.c \
     applications/IDU-pre/app/process/engineering.c \
@@ -49,8 +49,8 @@ python3 applications/IDU-pre/tests/test_import_aidc.py
 python3 applications/IDU-pre/tests/test_build_configuration.py
 
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
-    applications/IDU-pre/tests/boot -d "$test_dir/boot"
-timeout 30s "$test_dir/boot/zephyr/zephyr.exe"
+    applications/IDU-pre/tests/image_confirm -d "$test_dir/image_confirm"
+timeout 30s "$test_dir/image_confirm/zephyr/zephyr.exe"
 
 bash applications/IDU-pre/tests/iap/run.sh
 

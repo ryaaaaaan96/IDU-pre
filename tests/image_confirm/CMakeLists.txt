@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20.0)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
-project(idu_boot_tests)
+project(idu_image_confirm_tests)
 target_include_directories(app PRIVATE ../../app)
-target_sources(app PRIVATE src/main.c ../../app/acquisition/boot.c)
+target_sources(app PRIVATE src/main.c ../../app/status/image_confirm.c)

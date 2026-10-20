@@ -1,5 +1,0 @@
-if(CONFIG_DIGITAL_IO)
-  zephyr_library()
-  zephyr_include_directories(include)
-  zephyr_library_sources(src/digital_io.c)
-endif()

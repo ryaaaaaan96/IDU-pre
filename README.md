@@ -49,14 +49,15 @@ bash applications/IDU-pre/tests/run.sh
 
 ```text
 app/main.c                            启动入口、采样周期与休眠调度
-  └─ acquisition/acquisition.c        采集业务状态、故障锁定与升级确认
-       ├─ acquisition/inputs.c        统一采样入口及只读硬件配置
-       ├─ acquisition/boot.c          MCUboot 试运行健康确认
+  └─ acquisition/acquisition.c        采集、发布及通信的执行流程
+       ├─ modules/io_input            GPIO 输入及 IDU 原始采样
+       ├─ status/status.c             业务阶段、故障记录、LED 策略和健康进度
+       ├─ status/image_confirm.c      MCUboot 试运行健康确认
        ├─ process/points.c            点表初始化、采样映射及公共回调
        └─ communication/protocol.c    Modbus 端口配置与恢复
 ```
 
-`app/acquisition/idu_acquisition.h` 定义采集业务状态：未配置、启动、等待采样、
+`app/status/idu_status.h` 定义业务状态：未配置、启动、等待采样、
 读取输入、发布点值、维护通信、健康检查及故障锁定。`main.c` 调用
 `idu_acquisition_start()` 和 `idu_acquisition_cycle()`；故障时记录阶段和错误码，
 停止喂狗并拒绝继续采集。`app/process/idu_process.h` 提供应用级设备服务。
@@ -64,7 +65,8 @@ app/main.c                            启动入口、采样周期与休眠调度
 继续分别位于 `app/cfg/`、`modules/` 下的三类通用模块和 `app/communication/mvio.c`。
 
 新增功能时，硬件操作放入对应板级模块，设备数据与存储策略放入设备服务，
-运行顺序和故障策略由采集状态机编排；周期和休眠仍由 `main.c` 管理。
+运行顺序由 `acquisition` 编排，状态、故障锁定和 LED 指示策略归 `status`；
+周期和休眠仍由 `main.c` 管理。
 `app/CMakeLists.txt` 汇总功能目录，各目录的 CMakeLists 负责本组源码及可选配置；
 应用头文件与所属功能源码同目录，通用模块继续独立放在 `modules/`。
 `tests/acquisition/` 覆盖业务阶段、启动失败、无效采样发布、处理超时、通信及升级确认故障；
@@ -72,8 +74,13 @@ app/main.c                            启动入口、采样周期与休眠调度
 
 引脚、极性、ADC 通道顺序、DI/拨码位序、地址偏移和喂狗时序由板级 DTS 配置，
 平均次数由 `CONFIG_IDU_ADC_AVERAGE_COUNT` 配置。业务层统一通过
-`idu_inputs_sample()` 获取快照；三个硬件服务模块不认识点号，也不自动写 DP。
+`idu_inputs_sample()` 获取快照；输入及指示模块不认识点号，也不自动写 DP。
 采样字段到测点的映射由 `process/points.c` 完成，点表定义仍在 `app/cfg/`。
+
+LED 操作归 `modules/led_indicator`，直接使用 Zephyr LED 驱动，支持亮、灭、翻转和
+独立于采样周期的定时闪烁。`app/status/status.c` 决定状态对应的显示方式：当前启动和
+故障时常亮，每完成一次正常采样翻转一次；尚未分配各故障的闪烁编码。后续在这里
+调用 `led_indicator_blink()` 设置亮/灭时间，采样等瞬时阶段不重启闪烁周期。
 
 ## 仓库布局
 
@@ -82,11 +89,12 @@ IDU-pre/
 ├── boards/、dts/        # IDU 板定义、早期板级初始化及设备树
 ├── app/
 │   ├── main.c          # 应用入口、采样周期与休眠
-│   ├── acquisition/     # 采集状态、统一采样及试运行确认
+│   ├── acquisition/     # 采集、发布及通信执行流程
+│   ├── status/          # 业务状态、LED 策略、健康进度及镜像确认
 │   ├── cfg/             # devices/ 设备与型号；tables/ 三表及元数据
 │   ├── process/         # 点表初始化、采样映射、工程换算及业务回调
 │   └── communication/   # 端口、协议、路由与采集后端
-├── modules/             # analog_input、digital_io、health_monitor 及点表/升级/SoC 模块
+├── modules/             # analog_input、io_input、led_indicator、health_monitor 及点表/升级/SoC 模块
 ├── bootloader/          # MCUboot 配置、分区和联合构建
 ├── sysbuild/            # Zephyr 约定的薄入口
 ├── conf/                # 应用可选配置
@@ -101,9 +109,9 @@ IDU-pre/
 
 ## 头文件与启动程序边界
 
-应用以 `app/` 为头文件搜索根。采集、处理和通信头
-分别与实现放在 `app/acquisition/`、`app/process/`、`app/communication/`；
-跨功能引用使用 `"acquisition/inputs.h"` 等路径；通用 IAP 使用 `<iap/iap.h>`、`<iap/sgz.h>`。
+应用以 `app/` 为头文件搜索根。采集、状态、处理和通信头
+分别与实现放在 `app/acquisition/`、`app/status/`、`app/process/`、`app/communication/`；
+跨功能引用使用 `"status/idu_status.h"` 等路径；采样使用 `<io_input/idu_inputs.h>`；IAP 使用 `<iap/iap.h>`、`<iap/sgz.h>`。
 通用模块继续保留各自的公开 `include/`，由 Zephyr 模块机制导出。
 
 `app/` 根目录只保留 `main.c`、`CMakeLists.txt` 和 `Kconfig`。
@@ -112,9 +120,10 @@ IDU-pre/
 
 | 接口 | 职责 |
 | --- | --- |
-| `acquisition/idu_acquisition.h` | 采集业务状态、启动和周期执行 |
-| `acquisition/inputs.h` | 统一原始采样接口、产品快照及健康/指示接口 |
-| `acquisition/idu_boot.h` | MCUboot 试运行健康确认 |
+| `acquisition/idu_acquisition.h` | 启动和周期执行 |
+| `status/idu_status.h` | 业务阶段、故障状态、LED 策略及健康进度 |
+| `<io_input/idu_inputs.h>` | 模块提供的 IDU 统一原始采样接口及快照 |
+| `status/idu_image_confirm.h` | MCUboot 试运行健康确认 |
 | `process/engineering.h` | 仅依赖标准 C 的工程量换算，可用于主机测试 |
 | `process/idu_process.h` | 点表初始化、采样发布、健康检查及测点业务回调 |
 | `communication/idu_protocol.h` | 上位机端口配置、参数协议回调及 AIDC 串口参数转换 |
@@ -128,7 +137,7 @@ IDU-pre/
 UPP 链路，点表及参数处理声明不放入硬件或协议路由头文件。
 
 [`bootloader/`](bootloader/README.md) 保存本板 MCUboot 配置、分区和联合构建设置。
-MCUboot 源码仍使用 West 工作区中的独立仓库；`app/acquisition/boot.c` 负责应用健康确认。
+MCUboot 源码仍使用 West 工作区中的独立仓库；`app/status/image_confirm.c` 负责应用健康确认。
 [`modules/iap/`](modules/iap/README.md) 负责升级接收、解包和验签，分区／内存取自
 设备树，密钥来源、镜像上限和保存策略由 `conf/iapv3.conf` 等 Kconfig 配置提供，
 产品升级开关归 `app/Kconfig`，运行层和通信层直接调用 `iap_*`，不再保留
