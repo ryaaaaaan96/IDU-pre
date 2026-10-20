@@ -131,7 +131,7 @@ static const struct dp_params_transport transport = {
 
 static void *setup(void)
 {
-    zassert_ok(dp_init(&equipment));
+    zassert_ok(dp_init_config(&equipment));
 #if defined(CONFIG_DP_PARAMS)
     const struct dp_params_transport invalid = {.read = read_words};
     zassert_equal(dp_params_set_transport(&invalid), -EINVAL);
@@ -163,7 +163,7 @@ static void setter_barrier(void)
 {
     const uint16_t words[] = {0, 0};
     uint32_t ticket;
-    zassert_ok(dp_set_sig_value(setter_output, words, ARRAY_SIZE(words), K_MSEC(20), &ticket));
+    zassert_ok(dp_submit_sig_value(setter_output, words, ARRAY_SIZE(words), K_MSEC(20), &ticket));
     zassert_not_equal(ticket, 0);
     zassert_ok(dp_wait_processed(ticket, K_SECONDS(1)));
 }
@@ -174,7 +174,7 @@ ZTEST(dataprocess, test_setter_copies_u32_words_and_runs_handler)
     uint32_t ticket = 0;
     /* Keep the consumer from reading until the caller has reused its buffer. */
     k_sched_lock();
-    int err = dp_set_sig_value(setter_input, words, ARRAY_SIZE(words), K_NO_WAIT, &ticket);
+    int err = dp_submit_sig_value(setter_input, words, ARRAY_SIZE(words), K_NO_WAIT, &ticket);
     words[0] = words[1] = 0;
     k_sched_unlock();
     zassert_ok(err);
@@ -200,7 +200,7 @@ ZTEST(dataprocess, test_setter_batch_generation_and_error_preserves_value)
         {.key = {3, 3}, .width = 1, .value.words = {11}},
         {.key = {3, 4}, .width = 1, .value.words = {22}},
     };
-    zassert_ok(dp_set_sig_values(values, ARRAY_SIZE(values), K_MSEC(20), NULL));
+    zassert_ok(dp_submit_sig_values(values, ARRAY_SIZE(values), K_MSEC(20), NULL));
     setter_barrier();
     struct dp_point_state before, first, second;
     zassert_ok(dp_read(values[1].key, &before));
@@ -210,7 +210,7 @@ ZTEST(dataprocess, test_setter_batch_generation_and_error_preserves_value)
     values[1].error = -ETIMEDOUT;
     uint32_t ticket = 0;
     k_sched_lock();
-    int err = dp_set_sig_values(values, ARRAY_SIZE(values), K_NO_WAIT, &ticket);
+    int err = dp_submit_sig_values(values, ARRAY_SIZE(values), K_NO_WAIT, &ticket);
     values[0].value.words[0] = 0;
     values[1].error = 0;
     k_sched_unlock();
@@ -237,7 +237,7 @@ ZTEST(dataprocess, test_setter_rejects_invalid_batch_before_any_update)
         {.key = {3, 4}, .width = 1, .value.words = {22}},
     };
     uint32_t ticket;
-    zassert_ok(dp_set_sig_values(baseline, ARRAY_SIZE(baseline), K_MSEC(20), &ticket));
+    zassert_ok(dp_submit_sig_values(baseline, ARRAY_SIZE(baseline), K_MSEC(20), &ticket));
     zassert_ok(dp_wait_processed(ticket, K_SECONDS(1)));
     struct dp_point_state before;
     zassert_ok(dp_read(baseline[0].key, &before));
@@ -261,7 +261,7 @@ ZTEST(dataprocess, test_setter_rejects_invalid_batch_before_any_update)
             {.key = invalid[i].key, .width = invalid[i].width, .value.words = {88}},
         };
         ticket = UINT32_MAX;
-        zassert_equal(dp_set_sig_values(values, ARRAY_SIZE(values), K_MSEC(20), &ticket),
+        zassert_equal(dp_submit_sig_values(values, ARRAY_SIZE(values), K_MSEC(20), &ticket),
                       invalid[i].error, "case %u", (unsigned)i);
         zassert_equal(ticket, 0);
         setter_barrier();
@@ -283,26 +283,26 @@ ZTEST(dataprocess, test_setter_checks_input_sizes_before_copying)
     const size_t word_counts[] = {0, DP_POINT_WORDS + 1, SIZE_MAX};
     const size_t counts[] = {0, DP_BATCH_POINTS + 1, SIZE_MAX};
     uint32_t ticket = UINT32_MAX;
-    zassert_equal(dp_set_sig_value(value.key, NULL, 1, K_NO_WAIT, &ticket), -EINVAL);
+    zassert_equal(dp_submit_sig_value(value.key, NULL, 1, K_NO_WAIT, &ticket), -EINVAL);
     zassert_equal(ticket, 0);
     ticket = UINT32_MAX;
-    zassert_equal(dp_set_sig_values(NULL, 1, K_NO_WAIT, &ticket), -EINVAL);
+    zassert_equal(dp_submit_sig_values(NULL, 1, K_NO_WAIT, &ticket), -EINVAL);
     zassert_equal(ticket, 0);
     for (size_t i = 0; i < ARRAY_SIZE(word_counts); ++i) {
         ticket = UINT32_MAX;
-        zassert_equal(dp_set_sig_value(value.key, &word, word_counts[i], K_NO_WAIT, &ticket), -EINVAL);
+        zassert_equal(dp_submit_sig_value(value.key, &word, word_counts[i], K_NO_WAIT, &ticket), -EINVAL);
         zassert_equal(ticket, 0);
     }
     for (size_t i = 0; i < ARRAY_SIZE(counts); ++i) {
         ticket = UINT32_MAX;
-        zassert_equal(dp_set_sig_values(&value, counts[i], K_NO_WAIT, &ticket), -EINVAL);
+        zassert_equal(dp_submit_sig_values(&value, counts[i], K_NO_WAIT, &ticket), -EINVAL);
         zassert_equal(ticket, 0);
     }
     ticket = UINT32_MAX;
-    zassert_equal(dp_set_sig_value(setter_input, &word, 1, K_NO_WAIT, &ticket), -EINVAL);
+    zassert_equal(dp_submit_sig_value(setter_input, &word, 1, K_NO_WAIT, &ticket), -EINVAL);
     zassert_equal(ticket, 0);
     ticket = UINT32_MAX;
-    zassert_equal(dp_set_sig_value((struct dp_key){3, 99}, &word, 1, K_NO_WAIT, &ticket), -ENOENT);
+    zassert_equal(dp_submit_sig_value((struct dp_key){3, 99}, &word, 1, K_NO_WAIT, &ticket), -ENOENT);
     zassert_equal(ticket, 0);
 }
 
@@ -310,11 +310,11 @@ ZTEST(dataprocess, test_setter_acceptance_does_not_hide_processing_error)
 {
     const struct dp_key key = {3, 3};
     uint16_t word = 23;
-    zassert_ok(dp_set_sig_value(key, &word, 1, K_MSEC(20), NULL));
+    zassert_ok(dp_submit_sig_value(key, &word, 1, K_MSEC(20), NULL));
     setter_barrier();
     word = 101;
     uint32_t ticket = 0;
-    zassert_ok(dp_set_sig_value(key, &word, 1, K_MSEC(20), &ticket));
+    zassert_ok(dp_submit_sig_value(key, &word, 1, K_MSEC(20), &ticket));
     zassert_not_equal(ticket, 0);
     zassert_ok(dp_wait_processed(ticket, K_SECONDS(1)));
     struct dp_point_state state;
@@ -332,9 +332,9 @@ static void setter_from_isr(struct k_timer *timer)
 {
     ARG_UNUSED(timer);
     const struct dp_point_update value = {.key = {3, 3}, .width = 1, .value.words = {42}};
-    setter_isr_results[0] = dp_set_sig_value(value.key, value.value.words, 1,
+    setter_isr_results[0] = dp_submit_sig_value(value.key, value.value.words, 1,
                                            K_NO_WAIT, &setter_isr_tickets[0]);
-    setter_isr_results[1] = dp_set_sig_values(&value, 1, K_NO_WAIT, &setter_isr_tickets[1]);
+    setter_isr_results[1] = dp_submit_sig_values(&value, 1, K_NO_WAIT, &setter_isr_tickets[1]);
     k_sem_give(&setter_isr_done);
 }
 static K_TIMER_DEFINE(setter_isr_timer, setter_from_isr, NULL);

@@ -21,7 +21,7 @@ static void *setup(void)
     zassert_equal(cfg->collect_count,332);
     zassert_equal(cfg->transmit_count,108);
     zassert_ok(dp_validate(cfg));
-    zassert_ok(dp_init(cfg));
+    zassert_ok(dp_init_config(cfg));
     int iface=idu_acquisition_port_init(); zassert_true(iface>=0);
     zassert_ok(co_init(cfg,iface,true));
     zassert_ok(idu_aidc_bus_init(cfg));

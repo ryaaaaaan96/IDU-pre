@@ -1,5 +1,7 @@
 /* Assemble the IDU point pipeline in application-thread context. */
 #include "idu_equip.h"
+#include <data_process.h>
+#include <platform_callback.h>
 #include <dataprocess/process.h>
 #if defined(CONFIG_IDU_AIDC_PROFILE)
 #include "idu_aidc.h"
@@ -13,7 +15,14 @@ LOG_MODULE_REGISTER(idu_startup, LOG_LEVEL_INF);
 int idu_equipment_init(void)
 {
     const struct dp_equip_cfg *cfg = idu_equipment_config();
-    int err = dp_init(cfg);
+    /* Project configuration is registered before the platform starts. Native
+     * IDU tables retain NVS migration hooks and explicit acquisition metadata.
+     */
+    int err = dp_register_config_provider(idu_equipment_config);
+    if (err) {
+        return err;
+    }
+    err = dp_init();
     if (err) {
         return err;
     }
@@ -44,5 +53,8 @@ int idu_equipment_init(void)
     }
     static const struct dp_process_plan process_plan = {.initialize_all = true};
     err = dp_process_start(&process_plan);
+    if (!err) {
+        err = dp_reference_start();
+    }
     return err ? err : co_start();
 }

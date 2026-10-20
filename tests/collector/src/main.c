@@ -128,7 +128,7 @@ static void *setup(void)
     const struct co_bus_cfg bus = {
         .id = 0, .iface = -1, .transfer = transfer, .initialize = initialize,
     };
-    zassert_ok(dp_init(&equipment));
+    zassert_ok(dp_init_config(&equipment));
     zassert_ok(co_init_bus(&equipment, &bus));
     zassert_ok(co_enable_poll(0, false));
     set_mode(CO_PORT_SLEEP);

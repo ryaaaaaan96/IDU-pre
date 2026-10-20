@@ -6,11 +6,19 @@ Zephyr module metadata for integration with Zephyr 4.4.2. See
 [IDU-pre integration and migration status](../docs/point-tables.md#module-extension).
 No legacy platform library is linked.
 
+Business-facing headers keep the reference names `data_process.h`,
+`collect_lib.h`, `transmit_lib.h` and `platform_callback.h`. They use standard C
+and Zephyr types directly; no ARC layer is implemented. Original and native
+extension APIs have distinct names where their contracts differ. Read the
+[reverse-engineering evidence and coverage](../docs/reference-platform.md)
+before migrating callers; these headers do not promise full library or ABI
+compatibility.
+
 | Module | Public headers | Responsibility |
 | --- | --- | --- |
-| `dataprocess` | `dataprocess/points.h`, `dataprocess/process.h`, `dataprocess/params.h` | Shared data contracts/store, `dp_*` processing, optional NVS |
-| `collect` | `collect/collect.h` | `co_*` acquisition, bus scheduling and parameter transport backend |
-| `transmit` | `transmit/transmit.h`, `transmit/modbus_adapter.h` | `tr_*` register mappings, port modes and Modbus workqueues |
+| `dataprocess` | `data_process.h`, `platform_callback.h`, `dataprocess/{points,process,params}.h` | Shared data contracts/store, `dp_*` processing, optional NVS |
+| `collect` | `collect_lib.h`, `collect/collect.h` | `co_*` acquisition, bus scheduling and parameter transport backend |
+| `transmit` | `transmit_lib.h`, `transmit/{transmit,modbus_adapter}.h` | `tr_*` register mappings, port modes and Modbus workqueues |
 | `quicklz` | `quicklz/quicklz.h` | `qlz_decode_level3()` bounded QuickLZ level 3 decoding in plain C |
 
 Product point-table configuration lives in [`src/cfg/`](../src/cfg/README.md),
@@ -51,11 +59,13 @@ handlers or read callbacks are rejected instead of silently ignoring them.
 `TR_MODBUS_ADAPTER` enables whole-PDU routing and isolated forwarding workers,
 and can be selected without `DP_PARAMS`. The full IDU-pre application selects it.
 Supply static `dp_equip_cfg` tables. IDU's `src/app/startup.c` explicitly calls
-`dp_init()`, creates the application acquisition interface, registers all buses
+`dp_register_config_provider(idu_equipment_config)` then `dp_init()`, creates
+the application acquisition interface, registers all buses
 through `co_init()` / `co_init_bus()`, then initializes and recovers parameters.
 The application decides whether a storage failure permits degraded operation.
-It calls `dp_process_start()` for the INIT/TIMER plan before `co_start()` starts
-collection. This order is application orchestration, not `SYS_INIT` registration.
+It calls `dp_process_start()` for the per-point plan and `dp_reference_start()`
+for registered global INIT/TIMER tables before `co_start()` starts collection.
+This order is application orchestration, not `SYS_INIT` registration.
 Once the first sampled address is available, the communication layer binds the
 northbound interface with `tr_attach()` and
 `tr_modbus_init_server(..., true)` for independent forwarding workqueues.
@@ -73,7 +83,7 @@ parameter initialization returns `-EBUSY`; identical registrations are idempoten
 knowing a Modbus interface. Local parameters work with no transport; forwarded
 operations without a backend return `-ENODEV` before any intent/cache effects.
 
-Use `dp_set_sig_value()` or `dp_set_sig_values()` for local telemetry. Collection
+Use `dp_submit_sig_value()` or `dp_submit_sig_values()` for local telemetry. Collection
 continues to use `dp_publish()` with its source and provenance. Both paths queue
 a copied zbus message for the DP processing thread. Constants start valid, other
 telemetry starts unavailable.
@@ -85,9 +95,9 @@ support both word orders and optional byte swapping within each word.
 `dataprocess/points.h` provides application-thread entry points:
 
 ```c
-int dp_set_sig_value(struct dp_key key, const uint16_t *words,
+int dp_submit_sig_value(struct dp_key key, const uint16_t *words,
                      size_t word_count, k_timeout_t timeout, uint32_t *ticket);
-int dp_set_sig_values(const struct dp_point_update *values, size_t count,
+int dp_submit_sig_values(const struct dp_point_update *values, size_t count,
                       k_timeout_t timeout, uint32_t *ticket);
 ```
 
@@ -114,10 +124,10 @@ type/range checks, processing callbacks, data-pool and quality updates. Paramete
 writes use the process/parameter APIs; outputs from a transaction use
 `dp_txn_emit()`. The local-sample setters do not replace those entry points.
 
-The name follows the reference platform's `dp_set_sig_value`, whose length was
-in bytes. This API counts 16-bit words and uses Zephyr types, without binary
-compatibility. The closed library's completion timing is unverified; this API
-explicitly processes samples asynchronously.
+The asynchronous sampling extension uses a distinct name and counts 16-bit
+words. The reference-shaped `data_process.h` API keeps `dp_set_sig_value()`
+synchronous and byte-oriented; the library disassembly confirms that distinction.
+See [reference evidence and interface coverage](../docs/reference-platform.md).
 
 ## QuickLZ decoding
 
@@ -240,13 +250,13 @@ Northbound port controls require `TR_MODBUS_ADAPTER` and operate per interface:
 
 | Mode | Behavior |
 | --- | --- |
-| `TR_MODE_SLAVE` | Normal routing/register handling; an optional handler registered with `tr_reg_table_func()` can handle the request first |
+| `TR_MODE_SLAVE` | Normal routing/register handling; an optional handler registered with `tr_port_set_handler()` can handle the request first |
 | `TR_MODE_SLEEP` | Suppress new callbacks and replies; a handler or serial TX already in progress may finish |
 | `TR_MODE_CALLBACK` | Dispatch through the registered callback; never fall through to the normal register writer |
 
-Use `tr_set_port_mode()` / `tr_get_port_mode()` to control the mode. Register a
-CALLBACK handler before selecting that mode. `tr_reg_pkt_filter_func()` installs
-a filter, and `tr_pkt_filter_config()` enables or disables it. Enabled filters
+Use `tr_port_set_mode()` / `tr_port_get_mode()` to control the mode. Register a
+CALLBACK handler before selecting that mode. `tr_port_set_filter()` installs
+a filter, and `tr_port_enable_filter()` enables or disables it. Enabled filters
 run before mode handlers on accepted complete ADUs. Standard broadcasts do not
 reach these callbacks unless a per-interface legacy broadcast policy permits it.
 Mode and filter handlers return `-ENOENT` to continue, `0` for a reply,
@@ -255,7 +265,7 @@ exception. In CALLBACK mode, `-ENOENT` produces an unsupported-operation respons
 instead of falling through. Registrations are copied; referenced user data must
 remain valid while in use.
 
-`tr_mb_port_work_control(iface, TR_PORT_GET_STATS, &stats)` reads
+`tr_port_control(iface, TR_PORT_GET_STATS, &stats)` reads
 `struct tr_port_stats`; `TR_PORT_CLEAR_STATS` takes `NULL`. `requests` counts
 accepted requests reaching dispatch, `responses` counts prepared replies rather
 than physical TX completions, `filtered` counts requests consumed by the filter,

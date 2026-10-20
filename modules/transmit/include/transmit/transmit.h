@@ -9,15 +9,15 @@ enum tr_port_mode { TR_MODE_SLAVE, TR_MODE_SLEEP, TR_MODE_CALLBACK };
  * or -errno/a positive Modbus exception. CALLBACK never falls through to a
  * normal register writer. Registrations are copied; user data must outlive use.
  */
-int tr_reg_table_func(int iface, enum tr_port_mode mode,
+int tr_port_set_handler(int iface, enum tr_port_mode mode,
                        tr_modbus_route_fn handler, void *user);
-int tr_get_port_mode(int iface, enum tr_port_mode *mode);
+int tr_port_get_mode(int iface, enum tr_port_mode *mode);
 /* Applies to following requests; a handler/TX already in progress may finish.
  * SLEEP suppresses new callbacks/replies without interrupting serial TX.
  */
-int tr_set_port_mode(int iface, enum tr_port_mode mode);
-int tr_reg_pkt_filter_func(int iface, tr_modbus_route_fn handler, void *user);
-int tr_pkt_filter_config(int iface, bool enabled);
+int tr_port_set_mode(int iface, enum tr_port_mode mode);
+int tr_port_set_filter(int iface, tr_modbus_route_fn handler, void *user);
+int tr_port_enable_filter(int iface, bool enabled);
 struct tr_port_stats {
     uint32_t requests;       /* Accepted requests reaching dispatch. */
     uint32_t responses;      /* Responses prepared, not physical TX completions. */
@@ -27,7 +27,7 @@ struct tr_port_stats {
 };
 enum tr_port_control { TR_PORT_GET_STATS, TR_PORT_CLEAR_STATS };
 /* GET takes struct tr_port_stats *, CLEAR takes NULL. Requires the adapter. */
-int tr_mb_port_work_control(int iface, enum tr_port_control command, void *arg);
+int tr_port_control(int iface, enum tr_port_control command, void *arg);
 struct tr_segment {
     uint16_t begin, end;
     uint8_t function; /* zero: any function with a register-address PDU */

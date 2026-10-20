@@ -19,6 +19,12 @@ SGZ 容器、密钥及板级镜像/向量检查仍在 `src/iap/`。
 设备模型复用和模块依赖见[采集、处理与转发设计](collect-process-transmit.md)。
 下文带日期的测试数量、容量和旧模块审计保留对应时点，不代表本轮验证结果。
 
+当前已进一步按 `MCUdemo/CODE/platform/libs/plateform.lib` 的符号、重定位
+反汇编和公开头文件对齐点表业务入口。同步字节 API 与异步采样入口分开，
+配置注册及支持的旧表结构直接接入 Zephyr；实现范围和未支持项见
+[参考平台对照](reference-platform.md)。下文历史审计中的“未适配/未核实”
+保留当时含义，以该对照文档作为当前入口。
+
 ## 当前通讯点表文件组织
 
 本次依据 `/home/ryan/Documents/demo/MCUdemo/CODE/app/cfg/equip/` 与

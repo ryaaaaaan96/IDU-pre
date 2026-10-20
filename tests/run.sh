@@ -54,11 +54,17 @@ timeout 30s "$test_dir/boot/zephyr/zephyr.exe"
 bash applications/IDU-pre/tests/iap/run.sh
 
 # Modular telemetry pipeline, reusable device models and event-driven polling.
-for suite in pipeline models collector transmit dataprocess; do
+for suite in pipeline models collector transmit dataprocess reference_dp reference_ports reference_config; do
     env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
         "applications/IDU-pre/tests/$suite" -d "$test_dir/$suite"
     timeout 30s "$test_dir/$suite/zephyr/zephyr.exe"
 done
+
+# Byte getters remain available when the processing worker is disabled.
+env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
+    applications/IDU-pre/tests/reference_dp -d "$test_dir/reference_dp_off" \
+    -- -DEXTRA_CONF_FILE=process_off.conf
+timeout 30s "$test_dir/reference_dp_off/zephyr/zephyr.exe"
 
 # Storage and transport are independently optional in the processing module.
 for variant in params transport; do

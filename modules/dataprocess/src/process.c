@@ -23,6 +23,8 @@ struct async_job {
     void *user;
 };
 K_MSGQ_DEFINE(process_jobs, sizeof(struct async_job), CONFIG_DP_PROCESS_QUEUE_DEPTH, 4);
+K_MUTEX_DEFINE(submission_lock);
+static struct async_job submission;
 struct business_timer {
     struct dp_key key;
     int64_t due;
@@ -83,6 +85,24 @@ int dp_txn_get(struct dp_process_ctx *ctx, struct dp_key key,
     return 0;
 }
 
+int dp_txn_get_flags(struct dp_process_ctx *ctx, struct dp_key key, uint8_t *flags)
+{
+    if (!context_valid(ctx) || !flags) { return -EINVAL; }
+    int i = find(key);
+    if (i < 0) { return i; }
+    *flags = entries[i].item.flags;
+    return 0;
+}
+
+int dp_txn_set_flags(struct dp_process_ctx *ctx, struct dp_key key, uint8_t flags)
+{
+    if (!context_valid(ctx) || flags & ~DP_OP_MASK) { return -EINVAL; }
+    int i = find(key);
+    if (i < 0 || !entries[i].dirty) { return -ENOENT; }
+    entries[i].item.flags = flags;
+    return 0;
+}
+
 int dp_txn_get_state(struct dp_process_ctx *ctx, struct dp_key key,
                        struct dp_point_state *state)
 {
@@ -124,7 +144,9 @@ int dp_process_execute(const struct dp_process_request *request,
                         struct dp_process_result *result)
 {
     if (result) { *result = (struct dp_process_result){.id = request ? request->id : 0, .error = -EINVAL}; }
-    if (!request || !result || !request->count ||
+    if (!request || !result || (!request->count && !request->callback) ||
+        (request->callback && (request->count ||
+            (request->operation != DP_OP_INIT && request->operation != DP_OP_TIMER))) ||
         request->count > CONFIG_DP_PROCESS_MAX_OUTPUTS || (unsigned)request->operation > DP_OP_SAMPLE ||
         (request->quality_flags & ~DP_QUALITY_SIMULATED) ||
         k_is_in_isr()) { return -EINVAL; }
@@ -151,6 +173,10 @@ int dp_process_execute(const struct dp_process_request *request,
             entries[i].item = *item;
             entries[i].dirty = true;
         }
+    }
+    if (request->callback) {
+        err = request->callback(&ctx, request->user);
+        if (err) { goto out; }
     }
     /* All inputs are visible before any callback. Derived outputs never recurse. */
     for (size_t n = 0; n < request->count; ++n) {
@@ -223,10 +249,18 @@ out:
 int dp_process_submit(const struct dp_process_request *request,
                        dp_process_done_fn done, void *user)
 {
-    if (!request || !done || !request->count || request->count > CONFIG_DP_PROCESS_MAX_OUTPUTS ||
+    if (!request || !done || (!request->count && !request->callback) ||
+        (request->callback && (request->count ||
+            (request->operation != DP_OP_INIT && request->operation != DP_OP_TIMER))) ||
+        request->count > CONFIG_DP_PROCESS_MAX_OUTPUTS ||
         (unsigned)request->operation > DP_OP_TIMER || k_is_in_isr()) { return -EINVAL; }
-    struct async_job job = {.request = *request, .done = done, .user = user};
-    return k_msgq_put(&process_jobs, &job, K_NO_WAIT);
+    if (k_mutex_lock(&submission_lock, K_NO_WAIT)) { return -EBUSY; }
+    memcpy(&submission.request, request, sizeof(*request));
+    submission.done = done;
+    submission.user = user;
+    int err = k_msgq_put(&process_jobs, &submission, K_NO_WAIT);
+    k_mutex_unlock(&submission_lock);
+    return err;
 }
 
 int dp_process_sample(const struct dp_point_batch *batch)
@@ -249,6 +283,9 @@ int dp_process_read_at(struct dp_key key, uint16_t port_id, uint8_t function,
 {
     const struct dp_point_cfg *p = dp_find(key);
     if (!p || !state) { return -EINVAL; }
+    if (p->reference_handler && p->read_callback) {
+        return dp_reference_read_at(key, port_id, function, address, count, state);
+    }
     if (p->handler && p->read_callback) {
         struct dp_process_request request = {.operation = DP_OP_READ, .port_id = port_id,
                                                .function = function, .address = address, .register_count = count,

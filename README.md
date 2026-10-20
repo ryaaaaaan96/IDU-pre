@@ -157,15 +157,21 @@ IDU-pre/
 `modules/transmit/`，独立块解码算法放在 `modules/quicklz/`；统一通过
 `modules/modules.cmake` 注册到 Zephyr，由 Kconfig 按需启用。产品点表留在
 `src/cfg/`，模块不依赖本板 BSP；详见 [模块接口](modules/README.md)。
+业务入口沿用 `data_process.h`、`collect_lib.h`、`transmit_lib.h` 和
+`platform_callback.h`，直接采用标准 C/Zephyr 类型，不引入 ARC 封装。
+`dp_set_sig_value()` 保留四参数、字节长度及同步处理；本地异步采样使用
+`dp_submit_sig_value()` / `dp_submit_sig_values()`。原格式设备/三表可选择
+`CONFIG_DP_REFERENCE_TABLES` 编译接入；IDU 现有表通过配置提供者注册，保留
+持久化迁移和协议元数据。证据、入口及差异见 [参考平台对照](docs/reference-platform.md)。
 `src/cfg/devices/` 维护设备实例、型号和三表装配，`src/cfg/tables/` 维护
 信号与三表内容。三表直接在各自 `.c` 中维护，不使用 `.inc` 片段。
 导入符号在 `tables/imported_signals.h`，来源记录在
 [点表导入记录](docs/point-table-import.json)。导入工具只更新标记区和对应导入文件。
-初始化装配放在 `src/app/startup.c`，由应用线程显式调用：初始化 DP → 准备采集
-端口及总线 → 初始化参数存储并恢复事务 → 启动处理 → 启动采集。
+初始化装配放在 `src/app/startup.c`，由应用线程显式调用：注册产品配置 → 初始化 DP → 准备采集
+端口及总线 → 初始化参数存储并恢复事务 → 启动处理及注册的 INIT/TIMER → 启动采集。
 参数恢复需要已注册的总线，处理初始化须早于周期采集；此过程不放入 `SYS_INIT`。
 转发端口仍在首次取得有效地址后由通信层绑定。`src/app/point_service.c` 只负责
-将本地样本映射到信号并调用 `dp_set_sig_values()`，队列、数据池与处理调度归 DP。
+将本地样本映射到信号并调用 `dp_submit_sig_values()`，队列、数据池与处理调度归 DP。
 IDU 电流标定换算放在 `src/process/engineering.c`，不再保留 `src/equipment/`。
 应用服务接口见 `include/idu_point_service.h`；已有 `idu_equipment_init()` 名称保持兼容。
 SGZ 容器、升级密钥、镜像限制和板级校验仍在 `src/iap/`，只调用通用 QuickLZ 解码模块。
@@ -224,7 +230,7 @@ PD8 为最高位。寄存器 DI bit0 对应 DI1，bit15 对应 DI16。
   启用非标准串行配置选项以保留旧固件的 8N1；Zephyr 默认无校验时
   使用两个停止位。拨码地址改变后异步重配，等待原响应发送结束后切换。
   切换期间新请求可能需要重试；AIDC 配置也支持原点表中的串口参数。
-- 本地采样通过 DP 模块的 `dp_set_sig_value()` / `dp_set_sig_values()` 设置，
+- 本地采样通过 DP 模块的 `dp_submit_sig_value()` / `dp_submit_sig_values()` 设置，
   IDU 只负责采样字段到信号的映射，整份快照一次批量提交。成功表示已入队；
   需要等待时使用返回的 ticket 调用 `dp_wait_processed()`，再读取质量与错误。
 - DP 内部通过 zbus 消息副本发布采集批次，处理线程执行点表转换与范围检查，

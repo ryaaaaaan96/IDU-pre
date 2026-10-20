@@ -57,7 +57,7 @@ static int transfer(void *user, struct modbus_adu *adu)
 
 static void *setup(void)
 {
-    zassert_ok(dp_init(&cfg));
+    zassert_ok(dp_init_config(&cfg));
     for (size_t i = 0; i < ARRAY_SIZE(peers); ++i) {
         struct co_bus_cfg bus = {
             .id = i, .iface = -1, .simulated = i == 0,

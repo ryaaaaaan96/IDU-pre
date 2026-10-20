@@ -24,5 +24,5 @@ int idu_snapshot_publish(const struct idu_snapshot *snapshot)
             .value.words = {snapshot->raw[i]}, .error = snapshot->valid ? 0 : -EIO,
         };
     }
-    return dp_set_sig_values(values, ARRAY_SIZE(values), K_MSEC(20), NULL);
+    return dp_submit_sig_values(values, ARRAY_SIZE(values), K_MSEC(20), NULL);
 }

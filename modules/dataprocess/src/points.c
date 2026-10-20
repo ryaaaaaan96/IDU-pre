@@ -106,7 +106,7 @@ int dp_validate(const struct dp_equip_cfg *cfg)
     size_t words_needed = 0;
     for (size_t i = 0; i < cfg->point_count; ++i) {
         const struct dp_point_cfg *p = &cfg->points[i];
-        if (!IS_ENABLED(CONFIG_DP_PROCESS) && (p->handler || p->read_callback)) {
+        if (!IS_ENABLED(CONFIG_DP_PROCESS) && (p->handler || p->read_callback || p->reference_handler)) {
             return -ENOTSUP;
         }
         if (!p->key.dev_id || !p->key.sig_id || !p->width ||
@@ -117,6 +117,15 @@ int dp_validate(const struct dp_equip_cfg *cfg)
             (p->source == DP_SOURCE_CONSTANT &&
              (p->process || !value_in_range(p, &p->initial)))) {
             LOG_ERR("Invalid point %u:%u type=%u width=%u",p->key.dev_id,p->key.sig_id,p->type,p->width);
+            return -EINVAL;
+        }
+        size_t bytes = p->type == DP_U8 ? 1 : p->width * 2;
+        if (p->size_bytes &&
+            (p->size_bytes > bytes || (p->type != DP_WORDS && p->size_bytes != bytes) ||
+             (p->type == DP_WORDS && p->size_bytes <= (p->width - 1) * 2))) {
+            return -EINVAL;
+        }
+        if (p->reference_handler && p->handler != dp_reference_process) {
             return -EINVAL;
         }
         words_needed += p->width;
@@ -213,7 +222,7 @@ int dp_validate(const struct dp_equip_cfg *cfg)
 #endif
 }
 
-int dp_init(const struct dp_equip_cfg *cfg)
+int dp_init_config(const struct dp_equip_cfg *cfg)
 {
     if (atomic_get(&ready)) {
         return -EALREADY;
@@ -277,7 +286,7 @@ static bool batch_valid(const void *message, size_t size)
            batch->sampled_at >= 0 && batch->sampled_at <= k_uptime_get();
 }
 
-int dp_set_sig_values(const struct dp_point_update *values, size_t count,
+int dp_submit_sig_values(const struct dp_point_update *values, size_t count,
                       k_timeout_t timeout, uint32_t *ticket)
 {
     if (ticket) { *ticket = 0; }
@@ -291,7 +300,7 @@ int dp_set_sig_values(const struct dp_point_update *values, size_t count,
     return err;
 }
 
-int dp_set_sig_value(struct dp_key key, const uint16_t *words, size_t word_count,
+int dp_submit_sig_value(struct dp_key key, const uint16_t *words, size_t word_count,
                      k_timeout_t timeout, uint32_t *ticket)
 {
     if (ticket) { *ticket = 0; }
@@ -300,7 +309,7 @@ int dp_set_sig_value(struct dp_key key, const uint16_t *words, size_t word_count
 
     struct dp_point_update value = {.key = key, .width = word_count};
     memcpy(value.value.words, words, word_count * sizeof(*words));
-    return dp_set_sig_values(&value, 1, timeout, ticket);
+    return dp_submit_sig_values(&value, 1, timeout, ticket);
 }
 
 int dp_publish(struct dp_point_batch *batch, k_timeout_t timeout)

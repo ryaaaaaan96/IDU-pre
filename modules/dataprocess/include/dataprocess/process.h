@@ -13,6 +13,9 @@ enum dp_operation { DP_OP_WRITE, DP_OP_READ, DP_OP_INIT, DP_OP_TIMER, DP_OP_SAMP
 struct dp_process_item {
     struct dp_point_update point;
     uint8_t flags;
+    /* Original fast-set entries can carry different register addresses. */
+    bool reference_address_valid;
+    uint16_t reference_address;
 };
 struct dp_process_request {
     uint32_t id;
@@ -24,6 +27,10 @@ struct dp_process_request {
     uint16_t register_count;
     uint8_t function;
     uint8_t count;
+    /* Global INIT/TIMER callback; valid only with an empty input list. */
+    int (*callback)(struct dp_process_ctx *ctx, void *user);
+    void *user;
+    DM_PF_SIG_PROC reference_callback;
     struct dp_process_item items[CONFIG_DP_PROCESS_MAX_OUTPUTS];
 };
 struct dp_process_result {
@@ -45,6 +52,9 @@ typedef void (*dp_process_done_fn)(const struct dp_process_result *result, void 
  */
 int dp_process_execute(const struct dp_process_request *request,
                         struct dp_process_result *result);
+/* Nonblocking copy into the bounded queue; simultaneous publishers may receive
+ * -EBUSY. Generic callback user data must outlive queued execution.
+ */
 int dp_process_submit(const struct dp_process_request *request,
                        dp_process_done_fn done, void *user);
 int dp_txn_get(struct dp_process_ctx *ctx, struct dp_key key,
@@ -52,6 +62,11 @@ int dp_txn_get(struct dp_process_ctx *ctx, struct dp_key key,
 bool dp_txn_contains(struct dp_process_ctx *ctx, struct dp_key key);
 int dp_txn_emit(struct dp_process_ctx *ctx, struct dp_key key,
                  const struct dp_value *value, uint8_t flags);
+/* Flags address already captured outputs; they do not create a write. */
+int dp_txn_get_flags(struct dp_process_ctx *ctx, struct dp_key key, uint8_t *flags);
+int dp_txn_set_flags(struct dp_process_ctx *ctx, struct dp_key key, uint8_t flags);
+int dp_reference_read_at(struct dp_key key, uint16_t port_id, uint8_t function,
+                         uint16_t address, uint16_t count, struct dp_point_state *state);
 int dp_txn_get_state(struct dp_process_ctx *ctx, struct dp_key key,
                        struct dp_point_state *state);
 /* Called by the single zbus sample consumer after pure transforms. */
@@ -76,7 +91,7 @@ struct dp_process_plan {
     const struct dp_timer_spec *timers;
     size_t timer_count;
 };
-/* Thread startup API, after dp_init and optional parameter recovery. Validates
+/* Thread startup API, after dp_init_config and optional parameter recovery. Validates
  * the whole plan and reserves timer slots before ordered INIT calls. Plan timers
  * start only if every INIT succeeds; failure releases reservations for retry.
  * Earlier successful INIT transactions are not rolled back. initialize_all and

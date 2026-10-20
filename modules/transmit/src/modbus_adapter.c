@@ -1,5 +1,6 @@
 #include <transmit/modbus_adapter.h>
 #include <transmit/transmit.h>
+#include <transmit_lib.h>
 #include <errno.h>
 #include <zephyr/sys/byteorder.h>
 #include "modbus_internal.h"
@@ -8,7 +9,11 @@
 #define IFACE_LIMIT 16
 static tr_modbus_write_fn writers[IFACE_LIMIT];
 static struct tr_modbus_policy policies[IFACE_LIMIT];
-struct port_callback { tr_modbus_route_fn handler; void *user; };
+struct port_callback {
+    tr_modbus_route_fn handler;
+    void *user;
+    TR_FUNC_CB reference;
+};
 struct port_control {
     enum tr_port_mode mode;
     struct port_callback slave, callback, filter;
@@ -16,6 +21,7 @@ struct port_control {
     struct tr_port_stats stats;
 };
 static struct port_control controls[IFACE_LIMIT];
+static TR_FUNC_CB reference_handlers[MB_MODE_MAX];
 static struct k_spinlock control_lock;
 struct forwarding_port {
     int iface;
@@ -41,7 +47,7 @@ K_THREAD_STACK_DEFINE(config_stack, 2048);
 static bool config_started;
 static struct k_spinlock submission_lock;
 
-int tr_get_port_mode(int iface, enum tr_port_mode *mode)
+int tr_port_get_mode(int iface, enum tr_port_mode *mode)
 {
     if (iface < 0 || iface >= IFACE_LIMIT || !mode) { return -EINVAL; }
     k_spinlock_key_t key = k_spin_lock(&control_lock);
@@ -50,53 +56,56 @@ int tr_get_port_mode(int iface, enum tr_port_mode *mode)
     return 0;
 }
 
-int tr_set_port_mode(int iface, enum tr_port_mode mode)
+int tr_port_set_mode(int iface, enum tr_port_mode mode)
 {
     if (iface < 0 || iface >= IFACE_LIMIT || (unsigned)mode > TR_MODE_CALLBACK) { return -EINVAL; }
     k_spinlock_key_t key = k_spin_lock(&control_lock);
-    int err = mode == TR_MODE_CALLBACK && !controls[iface].callback.handler ? -ENOENT : 0;
+    int err = mode == TR_MODE_CALLBACK && !controls[iface].callback.handler &&
+              !reference_handlers[MB_MODE_CALLBACK] ? -ENOENT : 0;
     if (!err) { controls[iface].mode = mode; }
     k_spin_unlock(&control_lock, key);
     return err;
 }
 
-int tr_reg_table_func(int iface, enum tr_port_mode mode,
+int tr_port_set_handler(int iface, enum tr_port_mode mode,
                        tr_modbus_route_fn handler, void *user)
 {
     if (iface < 0 || iface >= IFACE_LIMIT ||
         (mode != TR_MODE_SLAVE && mode != TR_MODE_CALLBACK)) { return -EINVAL; }
     k_spinlock_key_t key = k_spin_lock(&control_lock);
     struct port_control *port = &controls[iface];
-    int err = mode == TR_MODE_CALLBACK && port->mode == mode && !handler ? -EBUSY : 0;
+    int err = mode == TR_MODE_CALLBACK && port->mode == mode && !handler &&
+              !reference_handlers[MB_MODE_CALLBACK] ? -EBUSY : 0;
     if (!err) {
         struct port_callback *target = mode == TR_MODE_SLAVE ? &port->slave : &port->callback;
-        *target = (struct port_callback){handler, user};
+        *target = (struct port_callback){.handler = handler, .user = user};
     }
     k_spin_unlock(&control_lock, key);
     return err;
 }
 
-int tr_reg_pkt_filter_func(int iface, tr_modbus_route_fn handler, void *user)
+int tr_port_set_filter(int iface, tr_modbus_route_fn handler, void *user)
 {
     if (iface < 0 || iface >= IFACE_LIMIT) { return -EINVAL; }
     k_spinlock_key_t key = k_spin_lock(&control_lock);
-    controls[iface].filter = (struct port_callback){handler, user};
+    controls[iface].filter = (struct port_callback){.handler = handler, .user = user};
     if (!handler) { controls[iface].filter_enabled = false; }
     k_spin_unlock(&control_lock, key);
     return 0;
 }
 
-int tr_pkt_filter_config(int iface, bool enabled)
+int tr_port_enable_filter(int iface, bool enabled)
 {
     if (iface < 0 || iface >= IFACE_LIMIT) { return -EINVAL; }
     k_spinlock_key_t key = k_spin_lock(&control_lock);
-    int err = enabled && !controls[iface].filter.handler ? -ENOENT : 0;
+    int err = enabled && !controls[iface].filter.handler &&
+              !controls[iface].filter.reference ? -ENOENT : 0;
     if (!err) { controls[iface].filter_enabled = enabled; }
     k_spin_unlock(&control_lock, key);
     return err;
 }
 
-int tr_mb_port_work_control(int iface, enum tr_port_control command, void *arg)
+int tr_port_control(int iface, enum tr_port_control command, void *arg)
 {
     if (iface < 0 || iface >= IFACE_LIMIT ||
         (command != TR_PORT_GET_STATS && command != TR_PORT_CLEAR_STATS) ||
@@ -105,6 +114,66 @@ int tr_mb_port_work_control(int iface, enum tr_port_control command, void *arg)
     k_spinlock_key_t key = k_spin_lock(&control_lock);
     if (command == TR_PORT_GET_STATS) { *(struct tr_port_stats *)arg = controls[iface].stats; }
     else { controls[iface].stats = (struct tr_port_stats){0}; }
+    k_spin_unlock(&control_lock, key);
+    return 0;
+}
+
+int tr_reg_table_func(MB_MODE_E mode, TR_FUNC_CB handler)
+{
+    if (mode != MB_MODE_SLAVE && mode != MB_MODE_CALLBACK) { return -EINVAL; }
+    k_spinlock_key_t key = k_spin_lock(&control_lock);
+    if (mode == MB_MODE_CALLBACK && !handler) {
+        for (size_t i = 0; i < ARRAY_SIZE(controls); ++i) {
+            if (controls[i].mode == TR_MODE_CALLBACK && !controls[i].callback.handler) {
+                k_spin_unlock(&control_lock, key); return -EBUSY;
+            }
+        }
+    }
+    reference_handlers[mode] = handler;
+    k_spin_unlock(&control_lock, key);
+    return 0;
+}
+
+int tr_reg_pkt_filter_func(uint16_t iface, TR_FUNC_CB filter)
+{
+    if (iface >= IFACE_LIMIT) { return -EINVAL; }
+    k_spinlock_key_t key = k_spin_lock(&control_lock);
+    controls[iface].filter = (struct port_callback){.reference = filter};
+    if (!filter) { controls[iface].filter_enabled = false; }
+    k_spin_unlock(&control_lock, key);
+    return 0;
+}
+
+int tr_pkt_filter_config(uint16_t iface, bool enabled)
+{
+    return tr_port_enable_filter(iface, enabled);
+}
+
+int tr_get_port_mode(uint16_t iface, uint8_t *mode)
+{
+    if (!mode) { return -EINVAL; }
+    enum tr_port_mode current;
+    int err = tr_port_get_mode(iface, &current);
+    if (!err) { *mode = (uint8_t)current; }
+    return err;
+}
+
+int tr_set_port_mode(uint16_t iface, uint8_t mode)
+{
+    return tr_port_set_mode(iface, (enum tr_port_mode)mode);
+}
+
+int tr_mb_port_work_control(uint16_t iface, uint16_t command, void *arg)
+{
+    if (iface >= IFACE_LIMIT || command >= MB_PORT_CTRL_ENUM_MAX) { return -EINVAL; }
+    if (command != MB_PORT_GET_RECV_MB_TIMES && command != MB_PORT_CLR_RECV_MB_TIMES) {
+        return -ENOTSUP;
+    }
+    if ((command == MB_PORT_GET_RECV_MB_TIMES && !arg) ||
+        (command == MB_PORT_CLR_RECV_MB_TIMES && arg)) { return -EINVAL; }
+    k_spinlock_key_t key = k_spin_lock(&control_lock);
+    if (command == MB_PORT_GET_RECV_MB_TIMES) { *(uint32_t *)arg = controls[iface].stats.requests; }
+    else { controls[iface].stats.requests = 0; }
     k_spin_unlock(&control_lock, key);
     return 0;
 }
@@ -352,10 +421,21 @@ static uint8_t exception_from_error(int err)
 /* No control locks are held across application callbacks. One snapshot governs
  * each admitted request; changing mode never cancels a handler or serial TX.
  */
-static int call_handler(int iface, struct modbus_context *ctx, struct port_callback callback)
+static int call_handler(int iface, struct modbus_context *ctx,
+                         struct port_callback callback, bool filter)
 {
     routes[iface].caller = k_current_get();
-    int err = callback.handler(iface, &ctx->rx_adu, &ctx->tx_adu, callback.user);
+    int err;
+    if (callback.reference) {
+        int result = callback.reference((uint16_t)iface, &ctx->rx_adu, &ctx->tx_adu);
+        if (filter) {
+            err = result == 0 ? -ENOENT : result == 4 ? TR_MODBUS_SILENT : -ENOTSUP;
+        } else {
+            err = result == -1 ? -ENOENT : result == 0 ? 0 : -ENOTSUP;
+        }
+    } else {
+        err = callback.handler(iface, &ctx->rx_adu, &ctx->tx_adu, callback.user);
+    }
     routes[iface].caller = NULL;
     if (!err && ctx->tx_adu.length > sizeof(ctx->tx_adu.data)) { err = -EMSGSIZE; }
     if (err && err != -ENOENT && err != TR_MODBUS_SILENT) {
@@ -394,13 +474,15 @@ bool tr_modbus_write_request(struct modbus_context *ctx, bool *reply)
     if (iface < 0 || iface >= IFACE_LIMIT) { return false; }
     k_spinlock_key_t key = k_spin_lock(&control_lock);
     struct port_control control = controls[iface];
+    if (!control.slave.handler) { control.slave.reference = reference_handlers[MB_MODE_SLAVE]; }
+    if (!control.callback.handler) { control.callback.reference = reference_handlers[MB_MODE_CALLBACK]; }
     ++controls[iface].stats.requests;
     if (control.mode == TR_MODE_SLEEP) { ++controls[iface].stats.sleep_drops; }
     k_spin_unlock(&control_lock, key);
     if (control.mode == TR_MODE_SLEEP) { return callback_reply(ctx, TR_MODBUS_SILENT, reply); }
     if (rx->unit_id != 0 || policies[iface].legacy_broadcast) {
-        if (control.filter_enabled && control.filter.handler) {
-            int routed = call_handler(iface, ctx, control.filter);
+        if (control.filter_enabled && (control.filter.handler || control.filter.reference)) {
+            int routed = call_handler(iface, ctx, control.filter, true);
             if (routed != -ENOENT) {
                 key = k_spin_lock(&control_lock);
                 ++controls[iface].stats.filtered;
@@ -410,13 +492,13 @@ bool tr_modbus_write_request(struct modbus_context *ctx, bool *reply)
         }
         struct port_callback handler = control.mode == TR_MODE_CALLBACK ?
                                        control.callback : control.slave;
-        int routed = handler.handler ? call_handler(iface, ctx, handler) : -ENOENT;
+        int routed = handler.handler || handler.reference ? call_handler(iface, ctx, handler, false) : -ENOENT;
         if (control.mode == TR_MODE_CALLBACK || routed != -ENOENT) {
             return callback_reply(ctx, routed == -ENOENT ? -ENOTSUP : routed, reply);
         }
         if (routes[iface].fn) {
-            handler = (struct port_callback){routes[iface].fn, routes[iface].user};
-            routed = call_handler(iface, ctx, handler);
+            handler = (struct port_callback){.handler = routes[iface].fn, .user = routes[iface].user};
+            routed = call_handler(iface, ctx, handler, false);
             if (routed != -ENOENT) { return callback_reply(ctx, routed, reply); }
         }
     }

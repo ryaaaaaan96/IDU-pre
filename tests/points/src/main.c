@@ -123,7 +123,7 @@ static void *setup(void)
         .order = DP_HIGH_WORD_FIRST,
     };
     module_add_points(&test_cfg, test_points, test_transmit);
-    zassert_ok(dp_init(&test_cfg));
+    zassert_ok(dp_init_config(&test_cfg));
     zassert_equal(state_of(remote_di).quality, DP_QUALITY_UNINITIALIZED);
     uint16_t initial;
     zassert_equal(tr_read_register(4, 10000, &initial), -EIO);
@@ -425,7 +425,7 @@ ZTEST(points, test_configuration_validation)
     collect.count = 1;
     collect.dev_id = 999;
     zassert_equal(dp_validate(&cfg), -EINVAL);
-    zassert_equal(dp_init(idu_equipment_config()), -EALREADY);
+    zassert_equal(dp_init_config(idu_equipment_config()), -EALREADY);
 }
 
 ZTEST_SUITE(points, NULL, setup, before, NULL, NULL);

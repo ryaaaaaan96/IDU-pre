@@ -1,4 +1,5 @@
 #include <collect/collect.h>
+#include <collect_lib.h>
 #if defined(CONFIG_DP_PARAMS)
 #include <dataprocess/params.h>
 #endif
@@ -295,6 +296,86 @@ int co_get_mode(uint8_t id, enum co_port_mode *mode)
     if (id >= ARRAY_SIZE(buses) || !buses[id].ready || !mode) { return -EINVAL; }
     k_mutex_lock(&schedule_lock, K_FOREVER); *mode = buses[id].mode;
     k_mutex_unlock(&schedule_lock); return 0;
+}
+
+int co_set_port_mode(uint16_t id, uint8_t mode, uint32_t timeout_ms)
+{
+    if (id >= ARRAY_SIZE(buses) || !buses[id].ready || mode >= MODE_OTHER) { return -EINVAL; }
+    if (k_is_in_isr()) { return -EWOULDBLOCK; }
+    struct bus_state *bus = &buses[id];
+    k_timepoint_t deadline = sys_timepoint_calc(K_MSEC(timeout_ms));
+    int busy = timeout_ms ? -ETIMEDOUT : -EBUSY;
+    if (k_mutex_lock(&bus->lock, sys_timepoint_timeout(deadline))) { return busy; }
+    if (bus->init_owner) { k_mutex_unlock(&bus->lock); return -EBUSY; }
+    if (k_mutex_lock(&schedule_lock, sys_timepoint_timeout(deadline))) {
+        k_mutex_unlock(&bus->lock); return busy;
+    }
+    /* The supported reference modes have the same numbers; OTHER does not. */
+    bus->mode = (enum co_port_mode)mode;
+    k_mutex_unlock(&schedule_lock);
+    k_mutex_unlock(&bus->lock);
+    k_sem_give(&bus->wake);
+    return 0;
+}
+
+int co_get_port_mode(uint16_t id, uint8_t *mode)
+{
+    if (id >= ARRAY_SIZE(buses) || !mode) { return -EINVAL; }
+    if (k_is_in_isr()) { return -EWOULDBLOCK; }
+    enum co_port_mode current;
+    int err = co_get_mode((uint8_t)id, &current);
+    /* Native SLEEP cannot be reported as reference OTHER. */
+    if (!err && current == CO_PORT_SLEEP) { return -ENOTSUP; }
+    if (!err) { *mode = (uint8_t)current; }
+    return err;
+}
+
+int co_dev_init(uint16_t dev_id)
+{
+    if (k_is_in_isr()) { return -EWOULDBLOCK; }
+    return co_initialize_device(dev_id);
+}
+
+int co_clean_set_queue(CO_CLEAN_QUEUE_ST *queue)
+{
+    if (!queue || queue->port_id >= ARRAY_SIZE(buses)) { return -EINVAL; }
+    if (k_is_in_isr()) { return -EWOULDBLOCK; }
+    return co_cancel((uint8_t)queue->port_id);
+}
+
+int co_set_scan_pkg_flag(uint8_t dev_id, uint16_t address_model,
+                         uint16_t function_offset, uint8_t flag)
+{
+    if (flag != CO_SCAN_PKG_ON && flag != CO_SCAN_PKG_OFF) { return -EINVAL; }
+    if (k_is_in_isr()) { return -EWOULDBLOCK; }
+    int d = device_index(dev_id);
+    if (d < 0) { return d; }
+    bool found = false, model = false, matched = false;
+    /* Resolve protocol before touching any schedule state. Otherwise an RTU
+     * function could accidentally match an unrelated model offset. */
+    for (size_t i = 0; i < equipment->collect_count; ++i) {
+        const struct co_cfg *p = &equipment->collect[i];
+        if (p->dev_id != dev_id) { continue; }
+        if (found && model != p->model_protocol) { return -EPROTOTYPE; }
+        found = true; model = p->model_protocol;
+    }
+    if (!found) { return -ENOENT; }
+    if (!model && function_offset != 3 && function_offset != 4) { return -EINVAL; }
+    struct bus_state *bus = bus_for(dev_id);
+    if (!bus) { return -ENODEV; }
+    k_mutex_lock(&schedule_lock, K_FOREVER);
+    for (size_t i = 0; i < equipment->collect_count; ++i) {
+        const struct co_cfg *p = &equipment->collect[i];
+        if (p->dev_id != dev_id ||
+            (model ? p->model_id != address_model || p->address != function_offset :
+                     p->address != address_model || p->function != function_offset)) { continue; }
+        disabled[i] = flag == CO_SCAN_PKG_OFF;
+        next_poll[i] = k_uptime_get();
+        matched = true;
+    }
+    k_mutex_unlock(&schedule_lock);
+    if (matched) { k_sem_give(&bus->wake); }
+    return matched ? 0 : -ENOENT;
 }
 
 int co_enable_poll(size_t block, bool enabled)

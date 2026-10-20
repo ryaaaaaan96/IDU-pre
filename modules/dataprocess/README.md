@@ -10,12 +10,18 @@ transmit 提供。数据池数值采用主机字节序、低字在前。
 
 ## 采样与事务
 
-`dp_init()` 接收静态设备配置。应用线程通过 `dataprocess/points.h` 提交本地遥测：
+业务入口 `data_process.h` 保留 `dp_set_sig_value(dev_id, sig_id, size, bytes)`
+的字节长度和同步回调语义；直接读取使用 `dp_get_sig_value()`，需要读回调时
+使用 `dp_fast_para_get()`。`platform_callback.h` 提供配置注册，注册完成后
+调用无参数 `dp_init()`。支持范围与反汇编证据见
+[参考平台对照](../../docs/reference-platform.md)。以下是独立的 Zephyr 扩展接口。
+
+`dp_init_config()` 接收 Zephyr 原生静态设备配置。应用线程通过 `dataprocess/points.h` 提交本地遥测：
 
 ```c
-int dp_set_sig_value(struct dp_key key, const uint16_t *words, size_t word_count,
+int dp_submit_sig_value(struct dp_key key, const uint16_t *words, size_t word_count,
                      k_timeout_t timeout, uint32_t *ticket);
-int dp_set_sig_values(const struct dp_point_update *values, size_t count,
+int dp_submit_sig_values(const struct dp_point_update *values, size_t count,
                       k_timeout_t timeout, uint32_t *ticket);
 ```
 
@@ -43,10 +49,15 @@ int dp_set_sig_values(const struct dp_point_update *values, size_t count,
 ## 声明式初始化和定时器
 
 模块提供初始化机制，由应用明确决定装配顺序。IDU 在 `src/app/startup.c`
-保留 `idu_equipment_init()`：先 `dp_init()`，建立采集接口并注册全部总线，
+保留 `idu_equipment_init()`：先注册配置并调用 `dp_init()`，建立采集接口并注册全部总线，
 再初始化/恢复参数，由应用判断存储故障是否允许降级，最后调用
-`dp_process_start()` 和 `co_start()`。北向转发在首次地址就绪后绑定，
+`dp_process_start()`、`dp_reference_start()` 和 `co_start()`。北向转发在首次地址就绪后绑定，
 不使用 `SYS_INIT` 隐式决定这组依赖顺序。
+
+原格式全局 INIT/TIMER 表通过 `pltcb_reg_cfg_get_*` 成对注册，由
+`dp_reference_start()` 校验并启动。INIT 按表序执行，负返回值使本次启动失败；
+全部 INIT 成功后才启用 type=0 周期定时器。定时工作向 DP 队列提交请求，
+业务函数在 DP 线程执行。原格式表与下面的按点计划是两组显式入口，避免重复注册同一业务。
 
 `dp_process_plan` 对应参考工程的 INIT/TIMER 注册表思路。回调绑定到测点
 handler，使用同一个事务上下文，时间采用 Zephyr `k_timeout_t`：

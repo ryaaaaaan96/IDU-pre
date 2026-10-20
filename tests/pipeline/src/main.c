@@ -122,7 +122,7 @@ static int send_response(int iface, const struct modbus_adu *adu, void *user)
 
 static void *setup(void)
 {
-    zassert_ok(dp_init(&equipment));
+    zassert_ok(dp_init_config(&equipment));
     const struct co_bus_cfg bus = {
         .id = 0, .iface = -1, .simulated = true, .transfer = transfer,
     };

@@ -37,7 +37,7 @@ static const struct dp_equip_cfg equipment = {
 
 static void *setup(void)
 {
-    zassert_ok(dp_init(&equipment));
+    zassert_ok(dp_init_config(&equipment));
     return NULL;
 }
 
@@ -47,7 +47,7 @@ static void publish(int error)
         .key = {1, 1}, .width = 1, .value.words = {7}, .error = error,
     };
     uint32_t ticket;
-    zassert_ok(dp_set_sig_values(&value, 1, K_MSEC(20), &ticket));
+    zassert_ok(dp_submit_sig_values(&value, 1, K_MSEC(20), &ticket));
     zassert_ok(dp_wait_processed(ticket, K_SECONDS(1)));
 }
 

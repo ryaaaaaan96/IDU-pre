@@ -27,6 +27,12 @@
 `idu_equipment_init()` 名称。点表机制由 `dataprocess`、`collect`、`transmit`
 提供；独立的 `quicklz` 只负责解码，与点表配置无关。
 
+业务头文件及原格式 `DEV_TABLE_S` 接入方式见
+[参考平台对照](../../docs/reference-platform.md)。IDU 当前使用
+`dp_register_config_provider(idu_equipment_config)` 注册现有三表，再调用
+`dp_init()`；这样保留 NVS 迁移钩子、明确的采集周期及协议模型。
+不把现有配置强转为旧结构，也不引入 ARC 接口。
+
 ## 修改设备或测点
 
 1. 在 `tables/signal_ids.h` 分配应用 ID；同型号 MV-IO 实例直接加入 `devices/instances.h`。

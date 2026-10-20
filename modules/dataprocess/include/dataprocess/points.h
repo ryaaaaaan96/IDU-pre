@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <data_process.h>
 #include <zephyr/kernel.h>
 #include <zephyr/zbus/zbus.h>
 
@@ -81,6 +82,10 @@ struct dp_point_cfg {
     /* Transaction callback; use dp_txn_* accessors, never reenter the engine. */
     dp_handler_fn handler;
     bool read_callback;
+    /* Reference byte interface: zero uses the native numeric/storage width. */
+    uint8_t size_bytes;
+    uint32_t reference_data_type;
+    DM_PF_SIG_PROC reference_handler;
 };
 
 struct dp_device_cfg {
@@ -162,7 +167,7 @@ struct dp_point_state {
  * publishing/starting collectors. Initialization validates all three tables.
  */
 int dp_validate(const struct dp_equip_cfg *cfg);
-int dp_init(const struct dp_equip_cfg *cfg);
+int dp_init_config(const struct dp_equip_cfg *cfg);
 /* Local telemetry input, from threads only (-EWOULDBLOCK in an ISR).
  * Words use the dp_value layout, not the reference platform's byte-buffer ABI.
  * The single-point form reports no acquisition error; the batch form can report
@@ -176,9 +181,9 @@ int dp_init(const struct dp_equip_cfg *cfg);
  * on success. Wait with dp_wait_processed(), then inspect dp_read() quality/error
  * for processing results. Pure transforms and SAMPLE handlers run in DP.
  */
-int dp_set_sig_value(struct dp_key key, const uint16_t *words, size_t word_count,
+int dp_submit_sig_value(struct dp_key key, const uint16_t *words, size_t word_count,
                      k_timeout_t timeout, uint32_t *ticket);
-int dp_set_sig_values(const struct dp_point_update *values, size_t count,
+int dp_submit_sig_values(const struct dp_point_update *values, size_t count,
                       k_timeout_t timeout, uint32_t *ticket);
 /* General acquisition ingress, also used by collect for remote samples. */
 int dp_publish(struct dp_point_batch *batch, k_timeout_t timeout);

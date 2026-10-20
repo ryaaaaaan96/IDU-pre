@@ -148,7 +148,7 @@ static void *setup(void)
         legacy_record(backup, 41, false, 8);
     }
     const struct dp_equip_cfg *cfg = idu_equipment_config();
-    zassert_ok(dp_init(cfg));
+    zassert_ok(dp_init_config(cfg));
     int south = idu_acquisition_port_init(); zassert_true(south >= 0);
     zassert_ok(co_init(cfg, south, true));
     zassert_ok(dp_params_init(cfg, storage->fa_id));

@@ -91,7 +91,7 @@ static bool accept(const struct modbus_adu *rx, uint8_t unit, void *user)
 
 static void *setup(void)
 {
-    zassert_ok(dp_init(&equipment));
+    zassert_ok(dp_init_config(&equipment));
     client = modbus_iface_get_by_name("RAW_0");
     servers[0] = modbus_iface_get_by_name("RAW_1");
     servers[1] = modbus_iface_get_by_name("RAW_2");
@@ -120,12 +120,12 @@ static void before(void *fixture)
 {
     ARG_UNUSED(fixture);
     for (size_t i = 0; i < ARRAY_SIZE(servers); ++i) {
-        zassert_ok(tr_set_port_mode(servers[i], TR_MODE_SLAVE));
-        zassert_ok(tr_reg_table_func(servers[i], TR_MODE_SLAVE, NULL, NULL));
-        zassert_ok(tr_reg_table_func(servers[i], TR_MODE_CALLBACK, NULL, NULL));
-        zassert_ok(tr_reg_pkt_filter_func(servers[i], NULL, NULL));
+        zassert_ok(tr_port_set_mode(servers[i], TR_MODE_SLAVE));
+        zassert_ok(tr_port_set_handler(servers[i], TR_MODE_SLAVE, NULL, NULL));
+        zassert_ok(tr_port_set_handler(servers[i], TR_MODE_CALLBACK, NULL, NULL));
+        zassert_ok(tr_port_set_filter(servers[i], NULL, NULL));
         zassert_ok(tr_modbus_set_policy(servers[i], NULL));
-        zassert_ok(tr_mb_port_work_control(servers[i], TR_PORT_CLEAR_STATS, NULL));
+        zassert_ok(tr_port_control(servers[i], TR_PORT_CLEAR_STATS, NULL));
     }
     target = 0;
     callback_result = -ENOENT;
@@ -161,10 +161,10 @@ ZTEST(transmit, test_sleep_suppresses_all_handlers_and_preserves_other_port)
 {
     const struct tr_modbus_policy policy = {.accept = accept};
     zassert_ok(tr_modbus_set_policy(servers[0], &policy));
-    zassert_ok(tr_reg_table_func(servers[0], TR_MODE_SLAVE, mode_callback, (void *)&equipment));
-    zassert_ok(tr_reg_pkt_filter_func(servers[0], filter_callback, NULL));
-    zassert_ok(tr_pkt_filter_config(servers[0], true));
-    zassert_ok(tr_set_port_mode(servers[0], TR_MODE_SLEEP));
+    zassert_ok(tr_port_set_handler(servers[0], TR_MODE_SLAVE, mode_callback, (void *)&equipment));
+    zassert_ok(tr_port_set_filter(servers[0], filter_callback, NULL));
+    zassert_ok(tr_port_enable_filter(servers[0], true));
+    zassert_ok(tr_port_set_mode(servers[0], TR_MODE_SLEEP));
     uint16_t word;
     zassert_equal(modbus_read_input_regs(client, 7, 100, &word, 1), -ETIMEDOUT);
     zassert_equal(modbus_write_holding_reg(client, 7, 100, 5), -ETIMEDOUT);
@@ -182,11 +182,11 @@ ZTEST(transmit, test_sleep_suppresses_all_handlers_and_preserves_other_port)
     zassert_ok(modbus_read_input_regs(client, 8, 100, &word, 1));
     zassert_equal(word, 2222);
     target = 0;
-    zassert_ok(tr_set_port_mode(servers[0], TR_MODE_SLAVE));
+    zassert_ok(tr_port_set_mode(servers[0], TR_MODE_SLAVE));
     zassert_ok(modbus_read_input_regs(client, 7, 100, &word, 1));
     zassert_equal(word, 2222);
     struct tr_port_stats stats;
-    zassert_ok(tr_mb_port_work_control(servers[0], TR_PORT_GET_STATS, &stats));
+    zassert_ok(tr_port_control(servers[0], TR_PORT_GET_STATS, &stats));
     zassert_equal(stats.requests, 1);
     zassert_equal(stats.responses, 1);
     zassert_equal(stats.sleep_drops, 4);
@@ -194,13 +194,13 @@ ZTEST(transmit, test_sleep_suppresses_all_handlers_and_preserves_other_port)
 
 ZTEST(transmit, test_callback_mode_does_not_fall_through_to_writer)
 {
-    zassert_equal(tr_set_port_mode(servers[0], TR_MODE_CALLBACK), -ENOENT);
-    zassert_ok(tr_reg_table_func(servers[0], TR_MODE_CALLBACK, mode_callback, (void *)&equipment));
-    zassert_ok(tr_set_port_mode(servers[0], TR_MODE_CALLBACK));
+    zassert_equal(tr_port_set_mode(servers[0], TR_MODE_CALLBACK), -ENOENT);
+    zassert_ok(tr_port_set_handler(servers[0], TR_MODE_CALLBACK, mode_callback, (void *)&equipment));
+    zassert_ok(tr_port_set_mode(servers[0], TR_MODE_CALLBACK));
     enum tr_port_mode mode;
-    zassert_ok(tr_get_port_mode(servers[0], &mode));
+    zassert_ok(tr_port_get_mode(servers[0], &mode));
     zassert_equal(mode, TR_MODE_CALLBACK);
-    zassert_equal(tr_reg_table_func(servers[0], TR_MODE_CALLBACK, NULL, NULL), -EBUSY);
+    zassert_equal(tr_port_set_handler(servers[0], TR_MODE_CALLBACK, NULL, NULL), -EBUSY);
     zassert_equal(modbus_write_holding_reg(client, 7, 100, 5), MODBUS_EXC_ILLEGAL_DATA_ADDR);
     zassert_equal(atomic_get(&writes), 0);
     callback_result = 0;
@@ -210,17 +210,17 @@ ZTEST(transmit, test_callback_mode_does_not_fall_through_to_writer)
     invalid_reply = true;
     zassert_equal(modbus_read_input_regs(client, 7, 100, &word, 1), MODBUS_EXC_SERVER_DEVICE_FAILURE);
     invalid_reply = false;
-    zassert_ok(tr_set_port_mode(servers[0], TR_MODE_SLAVE));
+    zassert_ok(tr_port_set_mode(servers[0], TR_MODE_SLAVE));
     zassert_ok(modbus_write_holding_reg(client, 7, 100, 5));
     zassert_equal(atomic_get(&writes), 1);
 }
 
 ZTEST(transmit, test_filter_precedes_mode_and_routes)
 {
-    zassert_equal(tr_pkt_filter_config(servers[0], true), -ENOENT);
-    zassert_ok(tr_reg_pkt_filter_func(servers[0], filter_callback, NULL));
-    zassert_ok(tr_pkt_filter_config(servers[0], true));
-    zassert_ok(tr_reg_table_func(servers[0], TR_MODE_SLAVE, mode_callback, (void *)&equipment));
+    zassert_equal(tr_port_enable_filter(servers[0], true), -ENOENT);
+    zassert_ok(tr_port_set_filter(servers[0], filter_callback, NULL));
+    zassert_ok(tr_port_enable_filter(servers[0], true));
+    zassert_ok(tr_port_set_handler(servers[0], TR_MODE_SLAVE, mode_callback, (void *)&equipment));
     filter_result = TR_MODBUS_SILENT;
     zassert_equal(modbus_write_holding_reg(client, 7, 100, 5), -ETIMEDOUT);
     zassert_equal(atomic_get(&writes), 0);
@@ -232,10 +232,10 @@ ZTEST(transmit, test_filter_precedes_mode_and_routes)
     zassert_equal(atomic_get(&writes), 1);
     zassert_equal(atomic_get(&callbacks), 1);
     struct tr_port_stats stats;
-    zassert_ok(tr_mb_port_work_control(servers[0], TR_PORT_GET_STATS, &stats));
+    zassert_ok(tr_port_control(servers[0], TR_PORT_GET_STATS, &stats));
     zassert_equal(stats.filtered, 2);
     zassert_equal(stats.callback_errors, 1);
-    zassert_ok(tr_pkt_filter_config(servers[0], false));
+    zassert_ok(tr_port_enable_filter(servers[0], false));
     zassert_ok(modbus_write_holding_reg(client, 7, 100, 5));
     zassert_equal(atomic_get(&filters), 3);
 }
@@ -251,13 +251,13 @@ ZTEST(transmit, test_sleep_allows_admitted_request_to_complete)
 {
     callback_blocks = true;
     callback_result = 0;
-    zassert_ok(tr_reg_table_func(servers[0], TR_MODE_CALLBACK, mode_callback, (void *)&equipment));
-    zassert_ok(tr_set_port_mode(servers[0], TR_MODE_CALLBACK));
+    zassert_ok(tr_port_set_handler(servers[0], TR_MODE_CALLBACK, mode_callback, (void *)&equipment));
+    zassert_ok(tr_port_set_mode(servers[0], TR_MODE_CALLBACK));
     k_thread_create(&transaction_thread, transaction_stack,
                     K_THREAD_STACK_SIZEOF(transaction_stack), transaction,
                     NULL, NULL, NULL, 8, 0, K_NO_WAIT);
     zassert_ok(k_sem_take(&callback_entered, K_MSEC(10)));
-    zassert_ok(tr_set_port_mode(servers[0], TR_MODE_SLEEP));
+    zassert_ok(tr_port_set_mode(servers[0], TR_MODE_SLEEP));
     k_sem_give(&callback_release);
     zassert_ok(k_sem_take(&transaction_done, K_MSEC(30)));
     zassert_ok(k_thread_join(&transaction_thread, K_MSEC(30)));
@@ -270,15 +270,15 @@ ZTEST(transmit, test_sleep_allows_admitted_request_to_complete)
 
 ZTEST(transmit, test_control_validation_and_statistics_clear)
 {
-    zassert_equal(tr_set_port_mode(-1, TR_MODE_SLEEP), -EINVAL);
-    zassert_equal(tr_set_port_mode(servers[0], (enum tr_port_mode)99), -EINVAL);
-    zassert_equal(tr_get_port_mode(servers[0], NULL), -EINVAL);
-    zassert_equal(tr_reg_table_func(servers[0], TR_MODE_SLEEP, mode_callback, NULL), -EINVAL);
-    zassert_equal(tr_mb_port_work_control(servers[0], TR_PORT_GET_STATS, NULL), -EINVAL);
+    zassert_equal(tr_port_set_mode(-1, TR_MODE_SLEEP), -EINVAL);
+    zassert_equal(tr_port_set_mode(servers[0], (enum tr_port_mode)99), -EINVAL);
+    zassert_equal(tr_port_get_mode(servers[0], NULL), -EINVAL);
+    zassert_equal(tr_port_set_handler(servers[0], TR_MODE_SLEEP, mode_callback, NULL), -EINVAL);
+    zassert_equal(tr_port_control(servers[0], TR_PORT_GET_STATS, NULL), -EINVAL);
     struct tr_port_stats stats;
-    zassert_equal(tr_mb_port_work_control(servers[0], TR_PORT_CLEAR_STATS, &stats), -EINVAL);
-    zassert_ok(tr_mb_port_work_control(servers[0], TR_PORT_CLEAR_STATS, NULL));
-    zassert_ok(tr_mb_port_work_control(servers[0], TR_PORT_GET_STATS, &stats));
+    zassert_equal(tr_port_control(servers[0], TR_PORT_CLEAR_STATS, &stats), -EINVAL);
+    zassert_ok(tr_port_control(servers[0], TR_PORT_CLEAR_STATS, NULL));
+    zassert_ok(tr_port_control(servers[0], TR_PORT_GET_STATS, &stats));
     zassert_equal(stats.requests + stats.responses + stats.filtered +
                     stats.sleep_drops + stats.callback_errors, 0);
 }
