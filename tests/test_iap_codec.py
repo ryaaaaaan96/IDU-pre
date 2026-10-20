@@ -38,10 +38,10 @@ WRITE = C.CFUNCTYPE(C.c_int, C.c_void_p, C.c_void_p, C.c_size_t)
 def build():
     BUILD.mkdir(parents=True, exist_ok=True)
     subprocess.run([sys.executable, str(APP / "tests/iap/fixtures.py"), str(BUILD)], check=True)
-    sources = [APP / "src/iap/sgz.c", APP / "src/iap/verify_rng.c",
+    sources = [APP / "app/iap/sgz.c", APP / "app/iap/verify_rng.c",
                APP / "modules/quicklz/src/quicklz.c"] + [TINY / f"source/{x}.c" for x in
         ("aes_encrypt", "aes_decrypt", "sha256", "utils", "ecc", "ecc_dsa")]
-    flags = ["-std=c11", "-Wall", "-Wextra", "-Werror", "-I", str(APP / "include"),
+    flags = ["-std=c11", "-Wall", "-Wextra", "-Werror", "-I", str(APP / "app"),
              "-I", str(APP / "modules/quicklz/include"), "-I", str(TINY / "include")]
     subprocess.run(["gcc", "-shared", "-fPIC", *flags, *map(str, sources),
                     "-o", str(BUILD / "codec.so")], check=True)

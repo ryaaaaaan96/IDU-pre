@@ -1,4 +1,4 @@
-#include "idu_pre.h"
+#include "hardware/idu_pre.h"
 #include <errno.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/kernel.h>

@@ -1,6 +1,6 @@
 /* Map board samples to the product point table. */
 #include "idu_equip.h"
-#include "idu_pre.h"
+#include "hardware/idu_pre.h"
 #include <errno.h>
 
 int idu_snapshot_publish(const struct idu_snapshot *snapshot)

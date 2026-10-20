@@ -1,5 +1,5 @@
 #include "idu_equip.h"
-#include "idu_pre.h"
+#include "hardware/idu_pre.h"
 #include "legacy_registers.h"
 #include <transmit/modbus_adapter.h>
 #include <transmit/transmit.h>

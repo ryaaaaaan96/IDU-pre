@@ -1,10 +1,2 @@
-cmake_minimum_required(VERSION 3.20.0)
-get_filename_component(IDU_APP ${CMAKE_CURRENT_LIST_DIR}/.. ABSOLUTE)
-list(APPEND BOARD_ROOT ${IDU_APP})
-list(APPEND SOC_ROOT ${IDU_APP})
-list(APPEND DTS_ROOT ${IDU_APP})
-set(mcuboot_EXTRA_DTC_OVERLAY_FILE ${IDU_APP}/boards/mcuboot-boot.overlay CACHE STRING "" FORCE)
-set(IDU-pre_EXTRA_DTC_OVERLAY_FILE ${IDU_APP}/boards/mcuboot.overlay CACHE STRING "")
-set(IDU-pre_EXTRA_CONF_FILE ${IDU_APP}/conf/mcuboot.conf CACHE STRING "")
-find_package(Sysbuild REQUIRED HINTS $ENV{ZEPHYR_BASE})
-project(sysbuild LANGUAGES)
+# Zephyr discovers this entry by convention; product boot settings live below.
+include(${CMAKE_CURRENT_LIST_DIR}/../bootloader/CMakeLists.txt)

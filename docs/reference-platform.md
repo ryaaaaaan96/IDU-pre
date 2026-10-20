@@ -34,11 +34,11 @@ python3 applications/IDU-pre/tools/analyze_reference.py \
 
 | 参考工程路径 / 职责 | IDU 对应位置 |
 | --- | --- |
-| `app/main.c:101` 注册设备、默认/范围、定时表，再于 `:142` 起依次启动 DP、本地设备、CO、TR | [src/app/startup.c](../src/app/startup.c) 显式装配；[platform_callback.h](../modules/dataprocess/include/platform_callback.h) 保存配置注册契约 |
-| `app/cfg/equip/dev_cfg.c:43` 的 `DEV_TABLE_S` 实例组合各协议表 | [src/cfg/devices](../src/cfg/devices) 的设备和型号配置 |
-| `app/cfg/equip/table/{process,collect,transmit}.c` 分别描述数据、采集和寄存器映射 | [src/cfg/tables](../src/cfg/tables)，三表内容与处理执行分开 |
-| `app/process` 的业务回调、`app/globalfunction.c` 的回调读写辅助 | [src/process](../src/process) 的业务处理，通用事务机制位于 DP 模块 |
-| `app/port_filter`、`app/plc` 的报文处理和端口控制 | [src/communication](../src/communication) 的产品协议配置和 Zephyr 端口适配 |
+| `app/main.c:101` 注册设备、默认/范围、定时表，再于 `:142` 起依次启动 DP、本地设备、CO、TR | [app/startup.c](../app/startup.c) 显式装配；[platform_callback.h](../modules/dataprocess/include/platform_callback.h) 保存配置注册契约 |
+| `app/cfg/equip/dev_cfg.c:43` 的 `DEV_TABLE_S` 实例组合各协议表 | [app/cfg/devices](../app/cfg/devices) 的设备和型号配置 |
+| `app/cfg/equip/table/{process,collect,transmit}.c` 分别描述数据、采集和寄存器映射 | [app/cfg/tables](../app/cfg/tables)，三表内容与处理执行分开 |
+| `app/process` 的业务回调、`app/globalfunction.c` 的回调读写辅助 | [app/process](../app/process) 的业务处理，通用事务机制位于 DP 模块 |
+| `app/port_filter`、`app/plc` 的报文处理和端口控制 | [app/communication](../app/communication) 的产品协议配置和 Zephyr 端口适配 |
 | `platform/libs/plateform.lib` 的共享数据池、调度、采集、转发 | [modules/dataprocess](../modules/dataprocess)、[collect](../modules/collect)、[transmit](../modules/transmit) 的源码实现 |
 
 参考工程的 `local_equip` 还包含产品功能。IDU 的采样映射、启动顺序和工程量换算继续属于应用。当前顺序为配置注册、`dp_init()`、采集接口、各总线 `co_init()`、参数恢复、`dp_process_start()`、`dp_reference_start()`、`co_start()`；TR 在地址就绪后绑定，产品依赖由应用显式安排。
@@ -93,7 +93,7 @@ Modbus 字序采用 `arc_byte_order.h:60–64` 的实际宏：0 默认按 BIGSMA
 
 ## 点表的 Flash / RAM 分工
 
-产品的 `src/cfg/tables/{process,collect,transmit}.c`、设备配置和点表元数据原本已经
+产品的 `app/cfg/tables/{process,collect,transmit}.c`、设备配置和点表元数据原本已经
 使用 `static const`，不需要将整张表复制进 RAM。新增的原表查询返回 `const` 视图，
 `DEV_TBL_CFG_S.pst_table` 也改为 `const void *`；原表与默认字节数组均可直接放 Flash。
 原生配置继续直接使用这些静态表。只有启用 `CONFIG_DP_REFERENCE_TABLES`，运行时

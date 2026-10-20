@@ -14,7 +14,7 @@ WORKSPACE = APP.parents[1]
 
 
 def legacy_key():
-    text = (APP / "src/iap/legacy_aes_key.h").read_text()
+    text = (APP / "app/iap/legacy_aes_key.h").read_text()
     return bytes(int(n, 16) for n in re.findall(r"0x[0-9a-fA-F]+", text))
 
 

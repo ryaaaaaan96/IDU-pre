@@ -109,3 +109,18 @@ ASan/UBSan 保留，当前执行环境禁用 LeakSanitizer。新增服务的 11 
 DI/ADC 顺序与标定、UART 最后一个停止位之后释放 DE、SPI NOR 上电/擦写/掉电，
 并验证升级中断、交换和回退。桌面结果不能作为这些项目的实物证据。
 早期验证数量与容量见[迁移历史](migration-history.md)。
+
+## 目录迁移验证（2026-10-20）
+
+应用代码和头文件已归入 `app/`，MCUboot 配置与分区归入 `bootloader/`，
+根目录 `include/`、`src/` 已移除。`sysbuild/CMakeLists.txt` 保留 Zephyr 薄入口。
+
+完整 `tests/run.sh` 通过：33 次模拟器执行，Ztest 汇总 189 项通过（包含恢复阶段等
+重复执行）；Python 21 项中 3 项因缺少外部输入跳过。该结果对应迁移后的工作区，
+包含原有暂存的 runtime 改动。默认、MCUboot + IAPv3、MCUboot + AIDC 和
+MCUboot + SMP UART 构建、导出与镜像验证均通过；另外独立构建仅含本次迁移的源码，
+确认不依赖 runtime 暂存改动。
+
+核对 30 个产品 C 文件，除头文件引用路径外内容不变；导入表与来源记录保持原字节。
+15 份 Markdown 的本地链接/锚点及 shell 示例语法检查通过。日志位于工作区
+`build/IDU-pre/tests/layout-*.log`，本次未进行实板测试。

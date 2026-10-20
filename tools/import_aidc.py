@@ -11,7 +11,7 @@ from pathlib import Path
 import argparse, ast, collections, hashlib, json, operator, re
 
 
-CONFIG_DIR = Path(__file__).resolve().parents[1] / 'src/cfg'
+CONFIG_DIR = Path(__file__).resolve().parents[1] / 'app/cfg'
 TABLE_FILES = {
     'points': 'tables/process.c',
     'transmit': 'tables/transmit.c',
@@ -265,7 +265,7 @@ if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source',type=Path,required=True,help='Path to the reference AIDC CODE checkout; only needed to regenerate tables')
     parser.add_argument('--output',type=Path,default=CONFIG_DIR,
-                        help='Configuration directory containing marked C tables (default: src/cfg); missing files use repository templates')
+                        help='Configuration directory containing marked C tables (default: app/cfg); missing files use repository templates')
     parser.add_argument('--report',type=Path,
                         help='Import report path (default: docs/point-table-import.json for repository output, otherwise OUTPUT/migration.json)')
     args=parser.parse_args();generate(args.source,args.output,args.report)

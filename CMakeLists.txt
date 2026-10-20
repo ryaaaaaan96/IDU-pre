@@ -7,5 +7,4 @@ include(${CMAKE_CURRENT_SOURCE_DIR}/modules/modules.cmake)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(idu_pre)
 
-target_include_directories(app PRIVATE include)
-add_subdirectory(src)
+add_subdirectory(app)

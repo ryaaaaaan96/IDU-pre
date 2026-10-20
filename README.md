@@ -34,7 +34,7 @@ bash applications/IDU-pre/tests/run.sh
 | 要做的事 | 文档 |
 | --- | --- |
 | 了解模块职责、数据流与初始化顺序 | [架构设计](docs/collect-process-transmit.md) |
-| 新增设备、测点或导入原表 | [点表维护指南](src/cfg/README.md) |
+| 新增设备、测点或导入原表 | [点表维护指南](app/cfg/README.md) |
 | 查询寄存器、质量和参数事务规则 | [点表与寄存器](docs/point-tables.md) |
 | 使用通用模块/API | [模块接口](modules/README.md)、[DP 使用说明](modules/dataprocess/README.md) |
 | 迁移参考平台调用 | [接口覆盖、差异与 Flash/RAM 分工](docs/reference-platform.md) |
@@ -48,20 +48,20 @@ bash applications/IDU-pre/tests/run.sh
 ```text
 IDU-pre/
 ├── boards/、soc/、dts/   # IDU 板定义、E505 接入及设备树
-├── src/
-│   ├── main.c           # 应用入口、采样周期与休眠
-│   ├── app/             # 启动装配、本地样本映射、健康确认
-│   │   ├── startup.c       # DP、采集总线、参数恢复与处理启动
-│   │   ├── point_service.c # 本地样本到信号的映射
-│   │   └── boot.c          # MCUboot 试运行健康确认
+├── app/
+│   ├── main.c          # 应用入口、采样周期与休眠
+│   ├── startup.c       # DP、采集总线、参数恢复与处理启动
+│   ├── point_service.c # 本地样本到信号的映射
+│   ├── boot.c          # MCUboot 试运行健康确认
 │   ├── hardware/        # GPIO、ADC、LED、外部看门狗
 │   ├── cfg/             # devices/ 设备与型号；tables/ 三表及元数据
 │   ├── process/         # 工程换算、业务回调、参数命令和旧参数导入
 │   ├── communication/   # 端口、协议、路由与采集后端
 │   └── iap/             # IAPv3、SGZ 及镜像校验
-├── include/             # 应用接口
 ├── modules/             # dataprocess、collect、transmit、quicklz
-├── conf/、sysbuild/     # 构建配置与 MCUboot 联合构建
+├── bootloader/          # MCUboot 配置、分区和联合构建
+├── sysbuild/            # Zephyr 约定的薄入口
+├── conf/                # 应用可选配置
 ├── tools/、tests/       # 导入、镜像工具及回归测试
 ├── docs/                # 按主题组织的说明与历史记录
 └── build.sh             # 构建入口
@@ -70,6 +70,17 @@ IDU-pre/
 运行和构建不依赖旧工程或预编译 `plateform.lib`。重新导入和可选互操作测试
 才需要显式提供参考源码。产物在工作区 `build/`，开发签名密钥在
 `build/keys/`，不进入仓库；清理前备份需要保留的密钥。
+
+## 头文件与启动程序边界
+
+应用以 `app/` 为头文件搜索根。共用服务头在 `app/`，硬件、处理、通信和升级头
+分别与实现放在 `app/hardware/`、`app/process/`、`app/communication/`、`app/iap/`；
+跨功能引用使用 `"hardware/idu_pre.h"`、`"iap/idu_sgz.h"` 等路径。
+通用模块继续保留各自的公开 `include/`，由 Zephyr 模块机制导出。
+
+[`bootloader/`](bootloader/README.md) 保存本板 MCUboot 配置、分区和联合构建设置。
+MCUboot 源码仍使用 West 工作区中的独立仓库；`app/boot.c` 的应用健康确认和
+`app/iap/` 的升级接收/解包继续由主应用编译。根 `sysbuild/` 仅保留 Zephyr 约定入口。
 
 ## 实现与验证范围
 

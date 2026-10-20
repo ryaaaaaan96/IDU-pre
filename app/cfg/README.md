@@ -3,7 +3,7 @@
 [文档导航](../../docs/README.md) · [点表与寄存器](../../docs/point-tables.md)
 
 参考工程 `MCUdemo/CODE/app/cfg/equip` 用设备实例关联采集、处理和转发表。
-这里保留这一关系，`src/cfg/devices/` 管设备与型号，`src/cfg/tables/` 管三表
+这里保留这一关系，`app/cfg/devices/` 管设备与型号，`app/cfg/tables/` 管三表
 及信号元数据。本地条目和导入数据直接写在对应 `.c` 中。
 运行时使用本仓库的 Zephyr 模块，不依赖参考工程目录或预编译库。
 
@@ -18,14 +18,14 @@
 | [`tables/point_metadata.c`](tables/point_metadata.c)、[`tables/point_metadata.h`](tables/point_metadata.h) | 通过 `idu_collect_models()`、`idu_process_bindings()` 提供采集模型和处理绑定 |
 | [`tables/imported_signals.h`](tables/imported_signals.h) | 导入点表使用的信号符号 |
 
-业务回调在 [`src/process/`](../process/) 执行。端口和报文处理在
-[`src/communication/`](../communication/)，协议路由、控制命令及兼容窗口在
-[`src/communication/config/`](../communication/config/)，应用选项在
-[`src/Kconfig`](../Kconfig)。点表只声明数据及绑定，不创建线程或操作串口。
-[`src/app/startup.c`](../app/startup.c) 装配初始化，
-[`src/app/point_service.c`](../app/point_service.c) 负责采样映射，
-[`src/process/engineering.c`](../process/engineering.c) 负责工程值换算。
-应用接口在 [`idu_point_service.h`](../../include/idu_point_service.h)，保留
+业务回调在 [`app/process/`](../process) 执行。端口和报文处理在
+[`app/communication/`](../communication)，协议路由、控制命令及兼容窗口在
+[`app/communication/config/`](../communication/config)，应用选项在
+[`app/Kconfig`](../Kconfig)。点表只声明数据及绑定，不创建线程或操作串口。
+[`app/startup.c`](../startup.c) 装配初始化，
+[`app/point_service.c`](../point_service.c) 负责采样映射，
+[`app/process/engineering.c`](../process/engineering.c) 负责工程值换算。
+应用接口在 [`idu_point_service.h`](../idu_point_service.h)，保留
 `idu_equipment_init()` 名称。点表机制由 `dataprocess`、`collect`、`transmit`
 提供；独立的 `quicklz` 只负责解码，与点表配置无关。
 
@@ -41,11 +41,11 @@
    每行配置设备、总线、unit、北向窗口、采集周期和过期时间。新总线还需在
    通信层注册 `co_init_bus()` 后端；添加实例不会自动建立串口或虚拟从机。
 2. 本地点和参数在 `tables/process.c` 修改，MV-IO 型号点在 `devices/mvio_model.h` 的处理
-   定义中修改。需要业务计算时，在 `src/process/` 实现函数并由点表绑定。
+   定义中修改。需要业务计算时，在 `app/process/` 实现函数并由点表绑定。
 3. 同步调整 `tables/collect.c` 或型号的采集宏，明确字段宽度、地址和字序；不要
    跨未定义的寄存器空洞合帧。本地采样点还需修改对应发布方。
 4. 在 `tables/transmit.c` 或型号的转发宏中增加映射。**新增北向窗口还需同步调整
-   `src/communication/config/mvio_config.c` 的 `extensions[]`**；只有映射
+   `app/communication/config/mvio_config.c` 的 `extensions[]`**；只有映射
    不保证请求能进入点表。控制命令放通信层的 `parameter_config.c`。
 5. 检查设备、总线、测点和采集块容量，验证宽度、字序、质量、路由和设备隔离。
    新增持久点还需考虑 NVS schema、旧快照及重启恢复；测试入口见
@@ -68,10 +68,10 @@
 python applications/IDU-pre/tools/import_aidc.py --source /path/to/AIDC_CODE/CODE
 ```
 
-`--output` 默认是 `src/cfg`，工具更新上述区段与 `tables/imported_signals.h`。
+`--output` 默认是 `app/cfg`，工具更新上述区段与 `tables/imported_signals.h`。
 默认仓库输出的来源、诊断报告在 [`docs/point-table-import.json`](../../docs/point-table-import.json)；
 自定义 `--output` 时报告默认放 `<output>/migration.json`，可用 `--report` 指定。
-处理绑定的 `callback` 是原回调名称字符串，实际执行仍在 `src/process/`。
+处理绑定的 `callback` 是原回调名称字符串，实际执行仍在 `app/process/`。
 现有 AIDC 来源、版权注释、`CONFIG_IDU_AIDC_PROFILE`、生成宏和业务函数名
 保持兼容，生成元数据本身不代表相关业务已实现。
 

@@ -10,10 +10,10 @@ fi
 test_dir="build/IDU-pre/tests"
 mkdir -p "$test_dir"
 gcc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined \
-    -I applications/IDU-pre/include \
+    -I applications/IDU-pre/app \
     applications/IDU-pre/tests/test_registers.c \
     applications/IDU-pre/tests/legacy_registers.c \
-    applications/IDU-pre/src/process/engineering.c \
+    applications/IDU-pre/app/process/engineering.c \
     -o "$test_dir/test_registers"
 "$test_dir/test_registers"
 

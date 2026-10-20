@@ -1,5 +1,5 @@
-#include "idu_process.h"
-#include "idu_pre.h"
+#include "process/idu_process.h"
+#include "hardware/idu_pre.h"
 #include "signal_ids.h"
 #include <dataprocess/params.h>
 #include <errno.h>

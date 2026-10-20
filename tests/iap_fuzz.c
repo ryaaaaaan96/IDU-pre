@@ -1,4 +1,4 @@
-#include "idu_sgz.h"
+#include "iap/idu_sgz.h"
 #include <quicklz/quicklz.h>
 #include <assert.h>
 #include <stdio.h>

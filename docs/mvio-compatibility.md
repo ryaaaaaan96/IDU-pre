@@ -46,7 +46,7 @@ AIDC 可选配置不启用这些 MV-IO 特殊收包规则。
 ## 迁移契约与实现边界
 
 依据 `io-interface-board/code/APP/Project` 当前启用的 `DEVICE_CONFIG_MV_IO`
-分支迁移。`src/communication/mvio.c` 使用 Zephyr Modbus 已解码的 ADU，配合点表/process、
+分支迁移。`app/communication/mvio.c` 使用 Zephyr Modbus 已解码的 ADU，配合点表/process、
 NVS 和独立工作队列；不引入旧 FreeRTOS 串口解析任务。缺少的采集串口继续
 使用虚拟后端，现有 USART2/RS485 负责转发。AIDC 可选配置不启用 MV-IO 策略。
 

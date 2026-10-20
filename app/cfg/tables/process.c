@@ -2,9 +2,9 @@
 
 #include "signal_ids.h"
 #include "device_config.h"
-#include "idu_process.h"
-#include "idu_pre.h"
-#include "idu_mvio.h"
+#include "process/idu_process.h"
+#include "hardware/idu_pre.h"
+#include "communication/idu_mvio.h"
 #include "mvio_model.h"
 #include "instances.h"
 #if defined(CONFIG_IDU_AIDC_PROFILE)

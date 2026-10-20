@@ -73,7 +73,7 @@ int dp_submit_sig_values(const struct dp_point_update *values, size_t count,
 
 ## 声明式初始化和定时器
 
-模块提供初始化机制，由应用明确决定装配顺序。IDU 在 `src/app/startup.c`
+模块提供初始化机制，由应用明确决定装配顺序。IDU 在 `app/startup.c`
 保留 `idu_equipment_init()`：先注册配置并调用 `dp_init()`，建立采集接口并注册全部总线，
 再初始化/恢复参数，由应用判断存储故障是否允许降级，最后调用
 `dp_process_start()`、`dp_reference_start()` 和 `co_start()`。北向转发在首次地址就绪后绑定，

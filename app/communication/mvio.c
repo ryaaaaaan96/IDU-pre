@@ -3,9 +3,9 @@
  * the standard Zephyr behavior; legacy broadcasts/247 never reach extensions.
  */
 #include "protocol_config.h"
-#include "idu_mvio.h"
+#include "communication/idu_mvio.h"
 #ifdef CONFIG_IDU_IAPV3
-#include "idu_iap.h"
+#include "iap/idu_iap.h"
 #endif
 #include <transmit/transmit.h>
 #include <transmit/modbus_adapter.h>

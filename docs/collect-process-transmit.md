@@ -1,6 +1,6 @@
 # 采集、处理与转发架构
 
-[文档导航](README.md) · [点表维护](../src/cfg/README.md) · [模块接口](../modules/README.md)
+[文档导航](README.md) · [点表维护](../app/cfg/README.md) · [模块接口](../modules/README.md)
 
 架构参考 `/home/ryan/Documents/demo/MCUdemo/CODE` 的设备与三表组织方式，
 按 `dataprocess`、`collect`、`transmit` 拆成独立 Zephyr 模块，使用
@@ -12,10 +12,10 @@
 
 | 参考工程 | 设计含义 | IDU 实现 |
 | --- | --- | --- |
-| `app/cfg/inc/` | 信号身份和项目配置契约 | 点表契约在 `src/cfg/devices/`、`src/cfg/tables/`；协议契约在 `src/communication/config/protocol_config.h` |
-| `app/cfg/equip/dev_cfg.c` 的设备列表 | 多个实例复用同型号的表 | `src/cfg/devices/device_config.c` 装配，`src/cfg/devices/instances.h` 绑定实例 |
-| `app/cfg/equip/table/*` | 采集、处理、转发分别声明 | `src/cfg/tables/{collect,process,transmit}.c`，复用型号定义在 `src/cfg/devices/mvio_model.h` |
-| `app/process/*` 的业务回调 | 配置绑定行为，执行代码独立维护 | `src/process/` |
+| `app/cfg/inc/` | 信号身份和项目配置契约 | 点表契约在 `app/cfg/devices/`、`app/cfg/tables/`；协议契约在 `app/communication/config/protocol_config.h` |
+| `app/cfg/equip/dev_cfg.c` 的设备列表 | 多个实例复用同型号的表 | `app/cfg/devices/device_config.c` 装配，`app/cfg/devices/instances.h` 绑定实例 |
+| `app/cfg/equip/table/*` | 采集、处理、转发分别声明 | `app/cfg/tables/{collect,process,transmit}.c`，复用型号定义在 `app/cfg/devices/mvio_model.h` |
+| `app/process/*` 的业务回调 | 配置绑定行为，执行代码独立维护 | `app/process/` |
 | `platform/inc/collect_lib.h` | 采集地址、周期、优先级和编码独立配置 | `co_cfg`、字段表、每总线采集线程 |
 | `platform/inc/data_process.h` | 共享数据池、类型/范围、旧值、回调及多输出 | `dp_point_cfg`、`dp_process_ctx`、`dp_txn_*` |
 | `platform/inc/transmit_lib.h` | 北向地址映射到设备和测点 | `dp_transmit_cfg`、`tr_*` |
@@ -51,16 +51,16 @@ UPP、逆变器专用命令及其日志/加密扩展不属于通用三模块接�
 
 | 位置 | 职责 |
 | --- | --- |
-| `src/cfg/devices/` | 设备实例、型号复用与三表装配 |
-| `src/cfg/tables/` | 信号、采集/处理/转发表和来源元数据 |
-| `src/process/` | 纯换算、事务业务回调、参数命令和旧参数导入 |
-| `src/communication/config/` | 协议路由、兼容窗口、控制/诊断寄存器 |
-| `src/communication/ports/` | 虚拟或真实采集后端 |
-| `src/app/` | 初始化装配、本地样本映射和健康确认 |
-| `src/hardware/` | GPIO、ADC、LED、外部看门狗 |
+| `app/cfg/devices/` | 设备实例、型号复用与三表装配 |
+| `app/cfg/tables/` | 信号、采集/处理/转发表和来源元数据 |
+| `app/process/` | 纯换算、事务业务回调、参数命令和旧参数导入 |
+| `app/communication/config/` | 协议路由、兼容窗口、控制/诊断寄存器 |
+| `app/communication/ports/` | 虚拟或真实采集后端 |
+| `app/` | 初始化装配、本地样本映射和健康确认 |
+| `app/hardware/` | GPIO、ADC、LED、外部看门狗 |
 
 配置只声明数据和绑定，通用模块不引用本板 BSP 或设备专用寄存器。
-文件清单与新增设备步骤集中在[点表维护指南](../src/cfg/README.md)。
+文件清单与新增设备步骤集中在[点表维护指南](../app/cfg/README.md)。
 原表、库证据和接口限制集中在[参考平台对照](reference-platform.md)。
 
 ## 数据流与模块边界
@@ -94,14 +94,14 @@ flowchart LR
 - **应用层** 保留本地 ADC 换算、MV-IO 兼容策略和设备配置；通用模块不引用
   板级 GPIO、设备专用寄存器或 BSP。生命周期继续由设备服务与运行层组织。
 
-`src/app/startup.c` 装配初始化流程，保留 `idu_equipment_init()` 函数名；
-`src/app/point_service.c` 负责采样映射，`src/process/engineering.c`
+`app/startup.c` 装配初始化流程，保留 `idu_equipment_init()` 函数名；
+`app/point_service.c` 负责采样映射，`app/process/engineering.c`
 负责工程值换算。这些职责直接依赖 IDU 配置及硬件语义，属于应用层。
 点表机制由 `dataprocess`、`collect`、`transmit` 提供，不另设 equipment 模块。
 
 `modules/quicklz` 是另外一个独立模块，通过 `CONFIG_QUICKLZ` 启用
 `quicklz/quicklz.h` 的 `qlz_decode_level3()`。解码器不依赖硬件、加密或 Zephyr
-运行时；SGZ 容器、密钥、镜像检查和板级向量校验仍在 `src/iap/`。
+运行时；SGZ 容器、密钥、镜像检查和板级向量校验仍在 `app/iap/`。
 
 共享数据池并不保证任意多个测点组成的北向读响应来自同一次采样；当前仍是
 逐测点读取。参数跨设备提交也不是分布式原子事务，错误及部分完成结果遵循
@@ -124,7 +124,7 @@ flowchart LR
 可以按需选择。关闭 Process 后仍可执行纯变换，声明业务回调的配置会在启动
 校验时被拒绝。无参数后端时 `dp_process_save_reboot()` 返回 `-ENOTSUP`。
 
-应用在 `src/app/startup.c` 显式组织启动：`dp_init()` → 创建应用采集接口 →
+应用在 `app/startup.c` 显式组织启动：`dp_init()` → 创建应用采集接口 →
 `co_init()` / `co_init_bus()` 注册全部总线 → `dp_params_init()` / 恢复参数 →
 `dp_process_start()` → `dp_reference_start()` → `co_start()`。参数存储失败后的降级策略由应用决定。
 首轮采样地址就绪后，再由通信层绑定转发接口；不使用 `SYS_INIT` 安排这些步骤。
@@ -153,7 +153,7 @@ Zephyr Modbus 接收。zbus 消息订阅者保存样本副本，避免仅通知�
 
 - [本地采样、事务与参数后端](../modules/dataprocess/README.md)
 - [CO/TR 调度、端口与协议接口](../modules/README.md#collection-and-forwarding)
-- [修改测点、型号与实例](../src/cfg/README.md#修改设备或测点)
+- [修改测点、型号与实例](../app/cfg/README.md#修改设备或测点)
 - [测试入口及已记录验证](testing.md)
 
 <a id="验证入口"></a>

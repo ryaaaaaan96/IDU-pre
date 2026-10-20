@@ -101,7 +101,7 @@ python applications/IDU-pre/tools/import_aidc.py --source /path/to/AIDC_CODE/COD
 `tables/imported_signals.h`，保留标记外的手写配置。默认仓库报告写到
 `docs/point-table-import.json`；自定义 `--output` 时报告默认写到
 `<output>/migration.json`，可用 `--report` 显式指定。
-区段与文件对应关系见[点表维护入口](../src/cfg/README.md#更新导入点表)。
+区段与文件对应关系见[点表维护入口](../app/cfg/README.md#更新导入点表)。
 
 导入结果：172 个去重后的本地点、41 个 DSP 点 × 8 台设备，加 19 个缺失
 定义的占位点，共 519 个原表配置项；另保留 33 个 MV-IO 基础点，合计 552。

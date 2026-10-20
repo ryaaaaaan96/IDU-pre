@@ -1,6 +1,6 @@
 #include "signal_ids.h"
 #include "protocol_config.h"
-#include "idu_process.h"
+#include "process/idu_process.h"
 #include <zephyr/sys/util.h>
 
 /* Command registers bind an exact one-word request to a product action.

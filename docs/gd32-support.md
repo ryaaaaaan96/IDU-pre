@@ -64,7 +64,7 @@ Flash 还有一处具体兼容原因：当前 [上游 `flash_gd32_v1.c`](https:/
 
 证据：[上游 ADC 驱动](https://github.com/zephyrproject-rtos/zephyr/blob/a915b2f12675b48b16d56653ea145dcd8f20cbbf/drivers/adc/adc_gd32.c)、[厂商 ADC 驱动](https://github.com/GD32-MCU-IOT/gd32_zephyr/blob/9a6008dfafc339fedd3a47611adc2fbc58c19027/drivers/adc/adc_gd32.c)、[上游 E50x DTS](https://github.com/zephyrproject-rtos/zephyr/blob/a915b2f12675b48b16d56653ea145dcd8f20cbbf/dts/arm/gd/gd32e50x/gd32e50x.dtsi)、[厂商 E50x DTS](https://github.com/GD32-MCU-IOT/gd32_zephyr/blob/9a6008dfafc339fedd3a47611adc2fbc58c19027/dts/arm/gd/gd32e50x/gd32e50x.dtsi)。
 
-本地 [analog.c](../src/hardware/analog.c) 已调用 `gd32_adc.h` 的官方函数配置 APB2/6、12 位、单通道软件触发，按板级通道顺序采样并平均，校准和转换分别设置等待期限。这是对现有 HAL 的适配。后续若要求业务统一调用 `adc_channel_setup()` / `adc_read()`，可以在应用自有驱动目录封装 E505 HAL，或补齐并向上游提交通用驱动支持；均需验证分频、触发、校准、通道顺序、错误恢复及实际电流换算。
+本地 [analog.c](../app/hardware/analog.c) 已调用 `gd32_adc.h` 的官方函数配置 APB2/6、12 位、单通道软件触发，按板级通道顺序采样并平均，校准和转换分别设置等待期限。这是对现有 HAL 的适配。后续若要求业务统一调用 `adc_channel_setup()` / `adc_read()`，可以在应用自有驱动目录封装 E505 HAL，或补齐并向上游提交通用驱动支持；均需验证分频、触发、校准、通道顺序、错误恢复及实际电流换算。
 
 **本次依赖选择建议。** 保持 `v4.4.2` 及现有固定 HAL 提交。本次所需的 GPIO/UART/SPI/Flash 接口已经存在；厂商下游尚不能消除 E505 时钟和 ADC 缺口，切换整个 Zephyr 分支没有与之对应的直接收益。后续需要某项厂商修复时，先比较具体提交、锁定依赖、单独构建验证；不直接复制整个固件库，也不让生产清单追踪浮动 `main`。本研究没有修改 West 清单或任何上游文件。
 

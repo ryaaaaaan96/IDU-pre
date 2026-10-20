@@ -125,12 +125,12 @@ def main():
         print(f"Using local development key: {key}; retain it for subsequent updates.", flush=True)
     suffix = ("-aidc" if args.aidc else "") + ("-smp" if args.smp_uart else "") + ("-iapv3" if args.iapv3 else "")
     build = WORKSPACE / f"build/IDU-pre/mcuboot{suffix}"
-    conf = [APP / "conf/mcuboot.conf"]
+    conf = [APP / "bootloader/app.conf"]
     if args.aidc:
         conf.append(APP / "conf/aidc-virtual.conf")
     if args.smp_uart:
         conf.append(APP / "conf/smp-uart.conf")
-    overlays = [APP / "boards/mcuboot.overlay"]
+    overlays = [APP / "bootloader/app.overlay"]
     if args.iapv3:
         conf.append(APP / "conf/iapv3.conf")
         overlays.append(APP / "boards/iapv3.overlay")

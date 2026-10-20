@@ -5,7 +5,7 @@ config MODBUS_BUFFER_SIZE
     range 64 1100 if IDU_IAPV3
 
 source "Kconfig.zephyr"
-rsource "src/Kconfig"
+rsource "app/Kconfig"
 
 config IDU_PRE
     bool
@@ -21,4 +21,4 @@ config IDU_ADC_AVERAGE_COUNT
     default 10
     range 1 64
 
-rsource "src/iap/Kconfig"
+rsource "app/iap/Kconfig"

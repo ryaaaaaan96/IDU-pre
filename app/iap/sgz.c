@@ -2,7 +2,7 @@
  * Format reference: io-interface-board Iapv3 (SUNGROW, 1997-2022),
  * QuickLZ 1.5 level 3, no streaming history. No legacy allocator/RTOS code.
  */
-#include "idu_sgz.h"
+#include "iap/idu_sgz.h"
 #include <quicklz/quicklz.h>
 #include "legacy_aes_key.h"
 #include <errno.h>

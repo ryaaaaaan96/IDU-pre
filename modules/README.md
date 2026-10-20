@@ -23,7 +23,7 @@ compatibility.
 | `transmit` | `transmit_lib.h`, `transmit/{transmit,modbus_adapter}.h` | `tr_*` register mappings, port modes and Modbus workqueues |
 | `quicklz` | `quicklz/quicklz.h` | `qlz_decode_level3()` bounded QuickLZ level 3 decoding in plain C |
 
-Product point-table configuration lives in [`src/cfg/`](../src/cfg/README.md),
+Product point-table configuration lives in [`app/cfg/`](../app/cfg/README.md),
 outside these modules. `devices/` binds device instances and reusable models;
 `tables/` holds collection, processing and forwarding tables, signal IDs and
 metadata. Imported data is inline in marked C sections, with symbols in
@@ -31,18 +31,18 @@ metadata. Imported data is inline in marked C sections, with symbols in
 [`docs/point-table-import.json`](../docs/point-table-import.json).
 `tables/point_metadata.h` and `tables/point_metadata.c` expose collection models and
 processing bindings; a binding's `callback` holds the original callback name as
-a string. Execution remains in `src/process/`. Register-to-signal mappings belong
+a string. Execution remains in `app/process/`. Register-to-signal mappings belong
 to the tables. Protocol routing, command dispatch and their contracts
-live in [`src/communication/config/`](../src/communication/config/), while
-application options live in [`src/Kconfig`](../src/Kconfig). Business callbacks
-remain in `src/process/`; hardware and transport code remain in their application
+live in [`app/communication/config/`](../app/communication/config), while
+application options live in [`app/Kconfig`](../app/Kconfig). Business callbacks
+remain in `app/process/`; hardware and transport code remain in their application
 layers. Moving the configuration preserves its data and behavior. `dataprocess` has no
 Modbus or collector dependency. `collect` and `transmit` depend on its data contracts;
 downstream forwarding is optional when `collect` is absent.
 
-Application composition lives in `src/app/startup.c`, sample mapping in
-`src/app/point_service.c`, and engineering conversion in
-`src/process/engineering.c`. `include/idu_point_service.h` exposes initialization,
+Application composition lives in `app/startup.c`, sample mapping in
+`app/point_service.c`, and engineering conversion in
+`app/process/engineering.c`. `app/idu_point_service.h` exposes initialization,
 snapshot publication and sample-period access. The existing
 `idu_equipment_init()` name remains available. These product responsibilities
 stay in the application; there is no separate generic equipment module.
@@ -60,7 +60,7 @@ transforms and basic forwarding remain available; tables declaring business
 handlers or read callbacks are rejected instead of silently ignoring them.
 `TR_MODBUS_ADAPTER` enables whole-PDU routing and isolated forwarding workers,
 and can be selected without `DP_PARAMS`. The full IDU-pre application selects it.
-Supply static `dp_equip_cfg` tables. IDU's `src/app/startup.c` explicitly calls
+Supply static `dp_equip_cfg` tables. IDU's `app/startup.c` explicitly calls
 `dp_register_config_provider(idu_equipment_config)` then `dp_init()`, creates
 the application acquisition interface, registers all buses
 through `co_init()` / `co_init_bus()`, then initializes and recovers parameters.
@@ -109,7 +109,7 @@ dependency and can also be compiled as plain C. It only decodes QuickLZ blocks;
 version 1.5 level 3 compressed and stored blocks use caller-provided buffers,
 without streaming history or allocation. Success returns the decoded byte count.
 SGZ container parsing, keys, image checks and board-specific vector validation
-remain in `src/iap/`. It is independent of the three point-processing modules.
+remain in `app/iap/`. It is independent of the three point-processing modules.
 
 ## Process and parameter contracts
 
@@ -213,7 +213,7 @@ its 552 configured points (560 runtime slots). `ZBUS_MSG_SUBSCRIBER_NET_BUF_STAT
 lookup is linear. Measure timing and stack margins on the target before release.
 
 The application's reusable MV-IO model binds device instances at compile time
-through `src/cfg/devices/instances.h`. The three tables stay const and collection field
+through `app/cfg/devices/instances.h`. The three tables stay const and collection field
 arrays are shared; no runtime copy of model definitions or heap allocation is
 needed. See [the model and pipeline design](../docs/collect-process-transmit.md).
 

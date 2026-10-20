@@ -2,7 +2,7 @@
 #if defined(CONFIG_IDU_AIDC_PROFILE)
 #include "idu_aidc.h"
 #else
-#include "idu_mvio.h"
+#include "communication/idu_mvio.h"
 #endif
 
 /* Project-specific protocol callbacks belong to the communication layer.

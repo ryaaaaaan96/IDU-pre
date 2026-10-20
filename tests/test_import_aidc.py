@@ -120,7 +120,7 @@ class ImportTablesTest(unittest.TestCase):
 
     def test_repository_output_writes_report_to_project_docs(self):
         project = self.root / "project"
-        self.output = project / "src/cfg"
+        self.output = project / "app/cfg"
         with mock.patch.object(importer, "CONFIG_DIR", self.output):
             self.write()
         report = project / "docs/point-table-import.json"
@@ -130,7 +130,7 @@ class ImportTablesTest(unittest.TestCase):
 
     def test_custom_report_overrides_repository_default(self):
         project = self.root / "project"
-        self.output = project / "src/cfg"
+        self.output = project / "app/cfg"
         report = self.root / "custom/report.json"
         with mock.patch.object(importer, "CONFIG_DIR", self.output):
             self.write(report_path=report)

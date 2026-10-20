@@ -1,8 +1,8 @@
-#include "idu_pre.h"
+#include "hardware/idu_pre.h"
 #include "idu_equip.h"
 #include "idu_boot.h"
 #ifdef CONFIG_IDU_IAPV3
-#include "idu_iap.h"
+#include "iap/idu_iap.h"
 #endif
 #include <gd32_gpio.h>
 #include <gd32_rcu.h>

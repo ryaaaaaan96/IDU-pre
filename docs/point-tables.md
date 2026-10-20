@@ -1,9 +1,9 @@
 # 点表、寄存器与参数事务
 
-[文档导航](README.md) · [架构设计](collect-process-transmit.md) · [点表维护指南](../src/cfg/README.md)
+[文档导航](README.md) · [架构设计](collect-process-transmit.md) · [点表维护指南](../app/cfg/README.md)
 
 本页描述 IDU 的点值/质量、北向寄存器、参数持久化及采集后端配置。
-文件职责和新增点步骤集中在[点表维护指南](../src/cfg/README.md)，
+文件职责和新增点步骤集中在[点表维护指南](../app/cfg/README.md)，
 原平台接口覆盖集中在[参考平台对照](reference-platform.md)。
 MV-IO 的 247、广播、有序旧表和保存地址规则见[兼容说明](mvio-compatibility.md)。
 历史迁移和旧库分析见[迁移记录](migration-history.md)。
@@ -81,7 +81,7 @@ Zephyr 4.4.2 的标准输入/保持寄存器读回调把应用读错误统一转
 ## IDU-pre 配置和寄存器
 
 本地设备 `dev_id=1`，远程 IO 设备 `dev_id=10`。二者可以有相同
-`sig_id`，不会覆盖；远程从机地址在 `src/cfg/devices/instances.h` 中配置，当前为 1。
+`sig_id`，不会覆盖；远程从机地址在 `app/cfg/devices/instances.h` 中配置，当前为 1。
 上位机访问 IDU 的地址仍由板上拨码决定（1–16）。
 
 原有 8149–8199 等本地寄存器和 SN/版本别名保留。电流换算从主循环
@@ -120,7 +120,7 @@ Zephyr 4.4.2 的标准输入/保持寄存器读回调把应用读错误统一转
 
 ### 修改点表
 
-新增测点、实例、映射和持久点迁移按[点表维护指南](../src/cfg/README.md#修改设备或测点)执行。
+新增测点、实例、映射和持久点迁移按[点表维护指南](../app/cfg/README.md#修改设备或测点)执行。
 三表与设备表具有静态生命周期，基础配置为 const；运行时默认/范围覆盖使用有界 RAM
 槽位，见[Flash/RAM 分工](reference-platform.md#点表的-flash--ram-分工)。
 

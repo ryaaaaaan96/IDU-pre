@@ -1,7 +1,7 @@
 /* Bounded, sequential E50x sampling. DMA migration can be added separately.
  * Upstream v4.4.2 has no E50x ADC DT node/complete ADC trigger setup.
  */
-#include "idu_pre.h"
+#include "hardware/idu_pre.h"
 #include <errno.h>
 #include <gd32_adc.h>
 #include <gd32_rcu.h>

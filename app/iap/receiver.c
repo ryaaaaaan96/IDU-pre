@@ -2,8 +2,8 @@
  * thread; the Modbus worker only validates and enqueues one bounded job.
  * A packet ACK means accepted. The missing bitmap means persisted/read back.
  */
-#include "idu_iap.h"
-#include "idu_sgz.h"
+#include "iap/idu_iap.h"
+#include "iap/idu_sgz.h"
 #include "iap_public_key.h"
 #include <transmit/modbus_adapter.h>
 #include <dataprocess/params.h>

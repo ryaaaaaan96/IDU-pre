@@ -1,5 +1,5 @@
-#include "idu_iap.h"
-#include "idu_sgz.h"
+#include "iap/idu_iap.h"
+#include "iap/idu_sgz.h"
 #include "fixture.h"
 #include <transmit/modbus_adapter.h>
 #include <zephyr/dfu/mcuboot.h>

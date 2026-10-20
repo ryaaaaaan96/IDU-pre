@@ -4,13 +4,13 @@ list(APPEND ZEPHYR_EXTRA_MODULES ${IDU_APP}/modules/quicklz)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(iap_receiver_tests)
 set(CONFIG_MCUBOOT_SIGNATURE_KEY_FILE ${ZEPHYR_MCUBOOT_MODULE_DIR}/root-ec-p256.pem)
-target_include_directories(app PRIVATE ${IDU_APP}/include ${IDU_APP}/modules/dataprocess/include
+target_include_directories(app PRIVATE ${IDU_APP}/app ${IDU_APP}/modules/dataprocess/include
   ${IDU_APP}/modules/transmit/include ${CMAKE_CURRENT_BINARY_DIR})
 execute_process(COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_LIST_DIR}/fixtures.py
   ${CMAKE_CURRENT_BINARY_DIR} COMMAND_ERROR_IS_FATAL ANY)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_LIST_DIR}/fixtures.py ${IDU_APP}/tools/pack_sgz.py)
 target_sources(app PRIVATE src/main.c)
-add_subdirectory(${IDU_APP}/src/iap iap)
+add_subdirectory(${IDU_APP}/app/iap iap)
 zephyr_ld_options(-Wl,--wrap=boot_is_img_confirmed -Wl,--wrap=boot_request_upgrade
                   -Wl,--wrap=sys_reboot)
