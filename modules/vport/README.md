@@ -33,8 +33,11 @@ Zephyr 驱动 / socket
 协议解析 / 事务匹配 → 采集、转发等业务
 ```
 
-本轮提供可运行的核心与模拟后端测试。CAN/UART/RS485/socket 的实物适配器尚未实现，
-现有 `collect`、`transmit` 和 `device.c.port` 尚未迁移到此接口。
+现有 `collect` / `transmit` 的 Modbus 收发通过 `transmit` 内的
+[通信适配](../../docs/communication-ports.md)接入，包含 RS485 转发、
+虚拟采集及可配置的独立 RTU 采集口。Zephyr 继续负责串口组帧和 DE，
+适配器把完整 ADU 作为 DATAGRAM 路由。点表 `device.c.port` 仍是采集总线号。
+原始 UART 字节流、CAN 和 socket 驱动适配器仍待实现。
 
 ## 数据类型与路由
 
@@ -139,7 +142,8 @@ link，不能给同一个 UART 注册两个独立 link 来绕过互斥。锁只�
 ## 集成与验证
 
 通过 `ZEPHYR_EXTRA_MODULES` 注册本目录或使用上层 `modules.cmake`，
-启用 `CONFIG_VPORT=y`。默认关闭，不增加现有应用的运行时 RAM。
+启用 `CONFIG_VPORT=y`。核心在独立工程中默认关闭；
+IDU 通过 `CONFIG_TR_MODBUS_TRANSPORT=y` 默认启用它，收发缓冲和线程会占用 RAM。
 容量由 `VPORT_MAX_LINKS / MAX_PORTS / MAX_ROUTES / MAX_PAYLOAD / RX_DEPTH`
 配置。默认最大载荷 256 字节，网络后端必须按实际需求配置 MTU；流可按序分块，
 报文超长会拒绝，不做透明分片。回调栈由 `VPORT_STACK_SIZE` 控制。
@@ -157,4 +161,5 @@ build/IDU-pre/tests/vport/zephyr/zephyr.exe
 
 测试工程只加载 `vport` 模块，覆盖 CAN 分流、流来源隔离、peer 匹配、
 原路回复、ISR 投递、接收副本与背压、流缺口、物理发送互斥及配置拒绝。
-真实硬件驱动、协议解析和现有 CO/TR 的迁移需要后续单独接入与验证。
+Modbus 适配另由 `tests/communication/` 覆盖，使用 UART/GPIO emulator；
+CAN/socket 驱动和实板时序仍需后续接入与验证。

@@ -1,19 +1,19 @@
 #include "acquisition/idu_acquisition.h"
 #include "process/idu_process.h"
 #include "communication/idu_protocol.h"
-#include <io_input/idu_inputs.h>
+#include <gpio/idu_inputs.h>
 #include <iap/iap.h>
-#include <led_indicator/led_indicator.h>
-#include <health_monitor/health_monitor.h>
+#include <zephyr/drivers/led.h>
+#include <watchdog/watchdog.h>
 #include <zephyr/ztest.h>
 #include <string.h>
 
-enum service { HEALTH_INIT, LED_INIT, INPUTS_INIT, EQUIPMENT_INIT, IAP_INIT,
+enum service { WATCHDOG_INIT, LED_START, INPUTS_INIT, EQUIPMENT_INIT, IAP_INIT,
                SAMPLE, PUBLISH, PROTOCOL, LED, CHECKPOINT, WATCHDOG_PROGRESS, SERVICES };
 static int errors[SERVICES];
 static unsigned calls[SERVICES], kicks, stops;
 static bool healthy, boot_ready, checkpoint_ready;
-static int led_error, led_set_error;
+static int led_set_error;
 static bool indicator_on;
 static struct idu_snapshot published;
 static struct idu_status acquisition;
@@ -21,8 +21,8 @@ static struct idu_status acquisition;
 static int service(enum service service)
 {
     static const enum idu_status_phase phases[SERVICES] = {
-        [HEALTH_INIT] = IDU_STATUS_STARTING,
-        [LED_INIT] = IDU_STATUS_STARTING,
+        [WATCHDOG_INIT] = IDU_STATUS_STARTING,
+        [LED_START] = IDU_STATUS_STARTING,
         [INPUTS_INIT] = IDU_STATUS_STARTING,
         [EQUIPMENT_INIT] = IDU_STATUS_STARTING,
         [IAP_INIT] = IDU_STATUS_STARTING,
@@ -38,23 +38,35 @@ static int service(enum service service)
     return errors[service];
 }
 
-int health_monitor_start(struct health_monitor *monitor, const struct health_monitor_config *config)
-{ return service(HEALTH_INIT); }
+int watchdog_start(struct watchdog *monitor, const struct watchdog_config *config)
+{ return service(WATCHDOG_INIT); }
 int idu_inputs_init(void) { return service(INPUTS_INIT); }
 int idu_equipment_init(void) { return service(EQUIPMENT_INIT); }
 int iap_start(void) { return service(IAP_INIT); }
-int health_monitor_progress(struct health_monitor *monitor) { ++kicks; return service(WATCHDOG_PROGRESS); }
-void health_monitor_stop(struct health_monitor *monitor) { ++stops; }
+int watchdog_progress(struct watchdog *monitor) { ++kicks; return service(WATCHDOG_PROGRESS); }
+void watchdog_stop(struct watchdog *monitor) { ++stops; }
 
-int led_indicator_init(struct led_indicator *indicator, const struct led_dt_spec *spec)
-{ return service(LED_INIT); }
-int led_indicator_toggle(struct led_indicator *indicator) { return service(LED); }
-int led_indicator_set(struct led_indicator *indicator, bool on)
+static int output_led(bool on)
 {
-    if (!led_set_error) { indicator_on = on; }
-    return led_set_error;
+    int err = acquisition.phase == IDU_STATUS_STARTING ? service(LED_START) :
+              acquisition.phase == IDU_STATUS_CHECKING_HEALTH ? service(LED) : 0;
+    if (!err) { err = led_set_error; }
+    if (!err) { indicator_on = on; }
+    return err;
 }
-int led_indicator_error(struct led_indicator *indicator) { return led_error; }
+static int output_on(const struct device *dev, uint32_t led)
+{
+    ARG_UNUSED(dev); zassert_equal(led, 0);
+    return output_led(true);
+}
+static int output_off(const struct device *dev, uint32_t led)
+{
+    ARG_UNUSED(dev); zassert_equal(led, 0);
+    return output_led(false);
+}
+static DEVICE_API(led, status_led_api) = {.on = output_on, .off = output_off};
+DEVICE_DT_DEFINE(DT_NODELABEL(status_leds), NULL, NULL, NULL, NULL,
+                  POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE, &status_led_api);
 bool idu_equipment_confirm_ready(void) { return boot_ready; }
 bool idu_equipment_healthy(uint32_t max_idle_ms)
 {
@@ -99,7 +111,7 @@ static void reset(void)
     kicks = stops = 0;
     healthy = boot_ready = true;
     checkpoint_ready = false;
-    led_error = led_set_error = 0;
+    led_set_error = 0;
     indicator_on = false;
 }
 
@@ -111,14 +123,14 @@ static void before(void *fixture)
 
 ZTEST(acquisition, test_startup_failure_stops_before_later_services)
 {
-    for (enum service failed = HEALTH_INIT; failed <= IAP_INIT; ++failed) {
+    for (enum service failed = WATCHDOG_INIT; failed <= IAP_INIT; ++failed) {
         reset();
         errors[failed] = -EIO;
         zassert_equal(idu_acquisition_start(&acquisition), -EIO);
         zassert_equal(acquisition.phase, IDU_STATUS_FAULT_LOCKED);
         zassert_equal(acquisition.fault_phase, IDU_STATUS_STARTING);
         zassert_equal(acquisition.last_error, -EIO);
-        for (enum service s = HEALTH_INIT; s <= IAP_INIT; ++s) {
+        for (enum service s = WATCHDOG_INIT; s <= IAP_INIT; ++s) {
             zassert_equal(calls[s], s <= failed ? 1 : 0);
         }
         zassert_equal(stops, 1);
@@ -241,16 +253,19 @@ ZTEST(acquisition, test_status_retains_original_fault_despite_indicator_failure)
     zassert_equal(stops, 1);
 }
 
-ZTEST(acquisition, test_async_led_error_cannot_feed_or_confirm)
+ZTEST(acquisition, test_led_tracks_startup_healthy_cycles_and_fault)
 {
     zassert_ok(idu_acquisition_start(&acquisition));
-    led_error = -EIO;
-    zassert_equal(idu_acquisition_cycle(&acquisition), -EIO);
-    zassert_equal(calls[LED], 0);
-    zassert_equal(kicks, 0);
-    zassert_equal(calls[CHECKPOINT], 0);
-    zassert_equal(acquisition.fault_phase, IDU_STATUS_CHECKING_HEALTH);
     zassert_true(indicator_on);
+    zassert_true(acquisition.led_on);
+    zassert_ok(idu_acquisition_cycle(&acquisition));
+    zassert_false(indicator_on);
+    zassert_false(acquisition.led_on);
+    zassert_ok(idu_acquisition_cycle(&acquisition));
+    zassert_true(indicator_on);
+    idu_status_fail(&acquisition, IDU_STATUS_SAMPLING, -EIO);
+    zassert_true(indicator_on);
+    zassert_equal(stops, 1);
 }
 
 ZTEST(acquisition, test_initial_led_output_failure_stops_startup)

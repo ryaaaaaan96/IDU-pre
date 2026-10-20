@@ -4,8 +4,9 @@
 Modbus 采集与转发、NVS 参数持久化及可选 MCUboot 升级。
 点表链路由 `dataprocess`、`collect`、`transmit` 提供，其他通用能力见[模块列表](modules/README.md)。
 默认使用虚拟南向采集口，现有 USART2 / RS485 用于北向转发。
-独立的 [`vport`](modules/vport/README.md) 提供可注册后端的逻辑端口与路由；
-当前默认关闭，现有 Modbus 链路尚未迁移。
+[`vport`](modules/vport/README.md) 已用于现有 RS485 转发和虚拟采集收发；
+`transmit` 内的[通信适配](docs/communication-ports.md)保留 Zephyr 的 RTU/RAW 实现，
+将完整报文接入逻辑端口。绑定集中在 `app/communication/ports/config.c`。
 
 ## 快速开始
 
@@ -52,7 +53,7 @@ bash applications/IDU-pre/tests/run.sh
 ```text
 app/main.c                            启动入口、采样周期与休眠调度
   └─ acquisition/acquisition.c        采集、发布及通信的执行流程
-       ├─ modules/io_input            GPIO 输入及 IDU 原始采样
+       ├─ modules/gpio                GPIO 输入及 IDU 原始采样
        ├─ status/status.c             业务阶段、故障记录、LED 策略和健康进度
        ├─ status/image_confirm.c      MCUboot 试运行健康确认
        ├─ process/points.c            点表初始化、采样映射及公共回调
@@ -76,13 +77,12 @@ app/main.c                            启动入口、采样周期与休眠调度
 
 引脚、极性、ADC 通道顺序、DI/拨码位序、地址偏移和喂狗时序由板级 DTS 配置，
 平均次数由 `CONFIG_IDU_ADC_AVERAGE_COUNT` 配置。业务层统一通过
-`idu_inputs_sample()` 获取快照；输入及指示模块不认识点号，也不自动写 DP。
+`idu_inputs_sample()` 获取快照；输入模块不认识点号，也不自动写 DP。
 采样字段到测点的映射由 `process/points.c` 完成，点表定义仍在 `app/cfg/`。
 
-LED 操作归 `modules/led_indicator`，直接使用 Zephyr LED 驱动，支持亮、灭、翻转和
-独立于采样周期的定时闪烁。`app/status/status.c` 决定状态对应的显示方式：当前启动和
-故障时常亮，每完成一次正常采样翻转一次；尚未分配各故障的闪烁编码。后续在这里
-调用 `led_indicator_blink()` 设置亮/灭时间，采样等瞬时阶段不重启闪烁周期。
+LED 操作直接放在 `app/status/status.c`，通过 Zephyr LED API 控制：
+启动和故障时常亮，每完成一次正常采样翻转一次；输出失败阻止喂狗与镜像确认。
+后续状态闪烁也在 `status` 中实现，有多个产品复用需求时再抽取模块。
 
 ## 仓库布局
 
@@ -96,7 +96,7 @@ IDU-pre/
 │   ├── cfg/             # device.c 完整设备配置；inc/ 配置头文件；tables/ 三表及默认值
 │   ├── process/         # 点表初始化、采样映射、工程换算及业务回调
 │   └── communication/   # 端口、协议、路由与采集后端
-├── modules/             # analog_input、io_input、led_indicator、health_monitor 及点表/升级/SoC 模块
+├── modules/             # analog_input、gpio、watchdog 及点表/升级/SoC 模块
 ├── bootloader/          # MCUboot 配置、分区和联合构建
 ├── sysbuild/            # Zephyr 约定的薄入口
 ├── conf/                # 应用可选配置
@@ -113,7 +113,7 @@ IDU-pre/
 
 应用以 `app/` 为头文件搜索根。采集、状态、处理和通信头
 分别与实现放在 `app/acquisition/`、`app/status/`、`app/process/`、`app/communication/`；
-跨功能引用使用 `"status/idu_status.h"` 等路径；采样使用 `<io_input/idu_inputs.h>`；IAP 使用 `<iap/iap.h>`、`<iap/sgz.h>`。
+跨功能引用使用 `"status/idu_status.h"` 等路径；采样使用 `<gpio/idu_inputs.h>`；IAP 使用 `<iap/iap.h>`、`<iap/sgz.h>`。
 通用模块继续保留各自的公开 `include/`，由 Zephyr 模块机制导出。
 
 `app/` 根目录只保留 `main.c`、`CMakeLists.txt` 和 `Kconfig`。
@@ -124,13 +124,14 @@ IDU-pre/
 | --- | --- |
 | `acquisition/idu_acquisition.h` | 启动和周期执行 |
 | `status/idu_status.h` | 业务阶段、故障状态、LED 策略及健康进度 |
-| `<io_input/idu_inputs.h>` | 模块提供的 IDU 统一原始采样接口及快照 |
+| `<gpio/idu_inputs.h>` | 模块提供的 IDU 统一原始采样接口及快照 |
 | `status/idu_image_confirm.h` | MCUboot 试运行健康确认 |
 | `process/engineering.h` | 仅依赖标准 C 的工程量换算，可用于主机测试 |
 | `process/idu_process.h` | 点表初始化、采样发布、健康检查及测点业务回调 |
 | `communication/idu_protocol.h` | 上位机端口配置、参数协议回调及 AIDC 串口参数转换 |
 | `communication/idu_mvio.h` | MV-IO 旧协议路由注册 |
 | `communication/ports/idu_acquisition.h` | 采集端口初始化，选择实际 RTU 或虚拟后端 |
+| `communication/ports/config.h` | 逻辑端口号、链路号及启动期注册入口 |
 | `communication/ports/idu_virtual.h` | 虚拟 MV-IO 设备、故障注入及 AIDC 虚拟模型总线 |
 | `communication/config/protocol_config.h` | 产品协议选择、命令和状态映射、旧协议访问范围 |
 

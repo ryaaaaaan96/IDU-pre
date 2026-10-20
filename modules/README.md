@@ -21,13 +21,12 @@ compatibility.
 | Module | Public headers | Responsibility |
 | --- | --- | --- |
 | `analog_input` | `analog_input/analog_input.h` | Configured ADC channel groups, software averaging and ordered raw samples |
-| `io_input` | `digital_io/digital_io.h`, `io_input/idu_inputs.h` | Generic GPIO groups and optional IDU GPIO/ADC sampling profile |
-| `led_indicator` | `led_indicator/led_indicator.h` | Standard LED output, toggle and per-instance software blink timing |
-| `health_monitor` | `health_monitor/health_monitor.h` | Per-instance progress-gated GPIO feeding for external watchdogs |
+| `gpio` | `gpio/digital_io.h`, `gpio/idu_inputs.h` | Generic GPIO groups and optional IDU GPIO/ADC sampling profile |
+| `watchdog` | `watchdog/watchdog.h` | Per-instance progress-gated GPIO feeding for external watchdogs |
 | [`vport`](vport/README.md) | `vport/vport.h` | Registered transport backends, logical routing, CAN ID filters, bounded RX and per-link TX ownership |
 | `dataprocess` | `data_process.h`, `platform_callback.h`, `dataprocess/{points,process,params}.h` | Shared data contracts/store, `dp_*` processing, optional NVS |
 | `collect` | `collect_lib.h`, `collect/collect.h` | `co_*` acquisition, bus scheduling and parameter transport backend |
-| `transmit` | `transmit_lib.h`, `transmit/{transmit,modbus_adapter}.h` | `tr_*` register mappings, port modes and Modbus workqueues |
+| `transmit` | `transmit_lib.h`, `transmit/{transmit,modbus_adapter,modbus_transport}.h` | `tr_*` register mappings, Modbus workqueues and optional vport transport adaptation |
 | `quicklz` | `quicklz/quicklz.h` | `qlz_decode_level3()` bounded QuickLZ level 3 decoding in plain C |
 | [`iap`](iap/README.md) | `iap/{iap,sgz}.h` | IAPv3 reception, SGZ/AES, signed images, flash staging and recovery; devicetree/Kconfig product policy |
 | [`gd32e505`](gd32e505/README.md) | Zephyr `soc_root`, `dts_root`, `adc_*` | E505 SoC, devicetree clock startup and synchronous ADC0 driver |
@@ -49,7 +48,7 @@ Register-to-signal mappings belong
 to the tables. Protocol routing, command dispatch and their contracts
 live in [`app/communication/config/`](../app/communication/config), while
 application options live in [`app/Kconfig`](../app/Kconfig). Business callbacks
-remain in `app/process/`; product input bindings are in the optional `io_input` profile
+remain in `app/process/`; product input bindings are in the optional `gpio` profile
 and protocol adaptation in `app/communication/`. `dataprocess` has no
 Modbus or collector dependency. `collect` and `transmit` depend on its data contracts;
 downstream forwarding is optional when `collect` is absent.
@@ -64,13 +63,16 @@ stay in the application; there is no separate generic equipment module.
 ## Input and watchdog services
 
 Input/health modules can be enabled with `ANALOG_INPUT` (requires ADC),
-`DIGITAL_IO` and `HEALTH_MONITOR` (require GPIO). `io_input` contains the generic
+`DIGITAL_IO` and `WATCHDOG_MONITOR` (require GPIO). `gpio` contains the generic
 `digital_io_*` APIs and an optional `IDU_INPUTS` profile selecting both GPIO and
 analog services. Generic GPIO use does not require an ADC or IDU devicetree node.
 None of these services depend on point tables, Modbus or DP, or allocate heap memory.
 Each input group uses a caller-owned immutable configuration; each watchdog owns
 its timer and state. Physical device/channel configuration must be serialized by
 the caller when several groups share hardware.
+
+The external watchdog service uses `WATCHDOG_MONITOR` to avoid conflicting with
+Zephyr's existing `WATCHDOG` driver option.
 
 `analog_input_init()` sets up ADC channels, and `analog_input_read()` returns
 unsigned raw values in configured order. It supports single-ended resolutions
@@ -83,18 +85,18 @@ hardware oversampling.
 `digital_io_init()` configures 1..32 inputs; `digital_io_read()` returns logical
 active bits in LSB-first or MSB-first order, leaving the caller's result unchanged
 on failure. Pins are sampled sequentially. The implementation now lives in
-`io_input`, retaining its existing public GPIO API.
+`gpio`, retaining its existing public GPIO API.
 
-`health_monitor_start()` uses a configured on-chip GPIO and kernel timer. The
-GPIO must support nonblocking ISR-safe toggles. `health_monitor_progress()` reports
+`watchdog_start()` uses a configured on-chip GPIO and kernel timer. The
+GPIO must support nonblocking ISR-safe toggles. `watchdog_progress()` reports
 completed business work; missing progress or a GPIO failure permanently stops
-feeding. Late progress cannot revive an expired monitor. `health_monitor_stop()`
+feeding. Late progress cannot revive an expired monitor. `watchdog_stop()`
 keeps the GPIO driven at its last level, allowing the external watchdog to reset
 the system. Do not reuse a started instance until reset. Startup is serialized;
 progress and stop synchronize with timer callbacks. This service preserves the
 existing edge-fed external watchdog behavior without assuming a particular IC.
 
-`io_input/src/idu_inputs.c` supplies the optional IDU profile. It binds the
+`gpio/src/idu_inputs.c` supplies the optional IDU profile. It binds the
 product `idu_io` devicetree node (using the application-owned `idu,pre-io` binding),
 `IDU_ADC_AVERAGE_COUNT`, 16 DI, four address switches and eight ADC inputs.
 It preserves the 12-bit/3.3 V electrical contract. `idu_inputs_sample()` returns
@@ -102,33 +104,27 @@ logical DI/address and raw ADC values; it does not operate LEDs or watchdogs.
 `app/process/points.c` alone maps that sample into DP points. The generic GPIO
 and ADC APIs have no fixed IDU channel counts or electrical constraints.
 
-`LED_INDICATOR` requires `LED`; choose the appropriate driver (`LED_GPIO` for
-IDU). `led_indicator_init()` accepts a standard `led_dt_spec`. Set/toggle stop any
-current pattern; `led_indicator_blink(on_ms, off_ms)` starts a repeating pattern.
-Each instance owns a mutex and delayable work item. Software timing uses the
-system workqueue, works with GPIO LED drivers without native blink support, and
-is best effort rather than a real-time waveform. Instances must outlive pending
-work; serialize initialization and call APIs from thread context. The LED driver
-must not block the system workqueue. Async output errors stop blinking and are
-reported by `led_indicator_error()` until the next explicit output command.
-
 Application state, fault latching and state-to-LED policy live in `app/status/`.
+LED output directly uses Zephyr's LED API (`LED` / `LED_GPIO`); no application-owned
+LED module or generic blink worker is retained.
 It also binds the external watchdog configuration and reports completed cycles.
 With MCUboot enabled, healthy progress invokes `status/image_confirm.c` to
 qualify and confirm the trial image. The confirmation state belongs to
 `idu_status`; acquisition only orchestrates sampling, publication and communication.
 Current policy is steady on during startup/fault and one toggle per successful
 sample; specific fault blink codes are intentionally left for product definition.
-Fast sampling/publication phases only update state and do not restart a pattern.
+Fast sampling/publication phases only update state.
 LED failures stop healthy progress and cannot override the original fault.
 
 ## Integration
 
 `VPORT` independently enables the [logical port core](vport/README.md). Register
 immutable link, port and route tables with `vport_init()`, then let backends
-submit received data. It has no DP, Modbus or hardware driver dependency. Real
-transport adapters and migration of the existing CO/TR paths are not included;
-the module is disabled by default.
+submit received data. It has no DP, Modbus or hardware driver dependency.
+IDU enables `TR_MODBUS_TRANSPORT` by default to route existing RS485 forwarding and
+virtual acquisition through this core at the complete-ADU boundary.
+Bindings live in `app/communication/ports/config.c`. Raw UART, CAN and socket
+backends remain separate future work; see [the adapter contract](../docs/communication-ports.md).
 
 Include `modules.cmake` before `find_package(Zephyr ...)` to register these modules,
 or append individual module directories to `ZEPHYR_EXTRA_MODULES`.
@@ -307,9 +303,9 @@ NVS requires FLASH, FLASH_MAP, FLASH_PAGE_LAYOUT and NVS_DATA_CRC. Reserve at le
 three equal erase sectors. The example uses four 4 KB sectors per profile.
 Parameter and device events are notifications; state/result APIs are authoritative.
 
-`transmit/compat/prepare_modbus.py` generates build-local copies of three reviewed Zephyr
+`transmit/compat/prepare_modbus.py` generates build-local copies of four reviewed Zephyr
 4.4.2 sources for whole-PDU routing, isolated RX scheduling and one-byte RAW
-exceptions. The west checkout is unchanged. Strict source hashes intentionally
+exceptions, plus optional vport handoff and TX-completion hooks. The west checkout is unchanged. Strict source hashes intentionally
 stop builds after a Zephyr upgrade until this adapter has been reviewed and tested.
 
 The Zephyr 4.4.2 `modbus_register_user_fc()` API is dispatched only for function

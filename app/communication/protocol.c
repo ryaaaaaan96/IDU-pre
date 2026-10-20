@@ -1,5 +1,6 @@
 #include "communication/idu_protocol.h"
 #include "communication/config/protocol_config.h"
+#include "communication/ports/config.h"
 #include <transmit/modbus_adapter.h>
 #include <transmit/transmit.h>
 #include <errno.h>
@@ -26,6 +27,8 @@ static void changed(int iface, int error, void *user)
 int idu_protocol_set_address(uint8_t address)
 {
     if (address < 1 || address > 16) { return -EINVAL; }
+    int init_err = idu_communication_ports_init();
+    if (init_err) { return init_err; }
     const struct idu_protocol_profile *profile = idu_protocol_config();
     k_mutex_lock(&protocol_lock,K_FOREVER);
     if (interface < 0) {

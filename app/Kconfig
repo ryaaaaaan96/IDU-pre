@@ -15,6 +15,9 @@ endchoice
 config DP_REFERENCE_TABLES
     default y
 
+config TR_MODBUS_TRANSPORT
+    default y if TR_MODBUS_ADAPTER
+
 config MODBUS_NUMOF_RAW_ADU
     default 2 if IDU_COLLECT_VIRTUAL
 

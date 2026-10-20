@@ -3,6 +3,8 @@
 本目录预留可复用的物理/传输后端。当前没有真实驱动适配实现；
 可运行的模拟后端位于 [`tests/vport`](../../../tests/vport/src/main.c)。
 注册与线程契约见[模块说明](../README.md)。
+当前产品的 RS485/虚拟采集通过 `transmit` 内的完整 Modbus 报文适配接入，
+继续使用 Zephyr 串口驱动，见[现有通信链路](../../../docs/communication-ports.md)。
 
 核心只依赖 `vport_backend_ops`，具体适配器按需编译：
 

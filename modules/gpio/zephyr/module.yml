@@ -1,4 +1,4 @@
-name: io_input
+name: gpio
 build:
   cmake: .
   kconfig: Kconfig

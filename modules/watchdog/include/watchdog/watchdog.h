@@ -1,19 +1,19 @@
-#ifndef HEALTH_MONITOR_H
-#define HEALTH_MONITOR_H
+#ifndef WATCHDOG_MONITOR_H
+#define WATCHDOG_MONITOR_H
 
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/kernel.h>
 
-struct health_monitor_config {
+struct watchdog_config {
     struct gpio_dt_spec feed;
     uint32_t feed_interval_ms;
     uint32_t progress_timeout_ms;
 };
 
-struct health_monitor {
+struct watchdog {
     struct k_timer timer;
     struct k_spinlock lock;
-    const struct health_monitor_config *config;
+    const struct watchdog_config *config;
     uint32_t last_progress;
     int error;
     bool initialized;
@@ -26,9 +26,9 @@ struct health_monitor {
  * Timeout, GPIO failure and explicit stop are terminal until the device resets.
  * Stop leaves the pin driven at its last level so the external watchdog expires.
  */
-int health_monitor_start(struct health_monitor *monitor,
-                         const struct health_monitor_config *config);
-int health_monitor_progress(struct health_monitor *monitor);
-void health_monitor_stop(struct health_monitor *monitor);
+int watchdog_start(struct watchdog *monitor,
+                   const struct watchdog_config *config);
+int watchdog_progress(struct watchdog *monitor);
+void watchdog_stop(struct watchdog *monitor);
 
 #endif

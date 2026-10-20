@@ -10,7 +10,7 @@ fi
 test_dir="build/IDU-pre/tests"
 mkdir -p "$test_dir"
 gcc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined \
-    -I applications/IDU-pre/app -I applications/IDU-pre/modules/io_input/include \
+    -I applications/IDU-pre/app -I applications/IDU-pre/modules/gpio/include \
     applications/IDU-pre/tests/test_registers.c \
     applications/IDU-pre/tests/legacy_registers.c \
     applications/IDU-pre/app/process/engineering.c \
@@ -55,11 +55,17 @@ timeout 30s "$test_dir/image_confirm/zephyr/zephyr.exe"
 bash applications/IDU-pre/tests/iap/run.sh
 
 # ADC contracts, modular telemetry, reusable models and event-driven polling.
-for suite in adc io vport pipeline models collector transmit dataprocess reference_dp reference_ports reference_config reference_services; do
+for suite in adc io vport communication pipeline models collector transmit dataprocess reference_dp reference_ports reference_config reference_services; do
     env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
         "applications/IDU-pre/tests/$suite" -d "$test_dir/$suite"
     timeout 30s "$test_dir/$suite/zephyr/zephyr.exe"
 done
+
+# IAPv3 uses extended ADUs; exercise the handoff at its configured capacity.
+env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
+    applications/IDU-pre/tests/communication -d "$test_dir/communication-large" \
+    -- -DEXTRA_CONF_FILE=large.conf
+timeout 30s "$test_dir/communication-large/zephyr/zephyr.exe"
 
 # Reference parameter policies, explicit schema migration and deferred reboot.
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \

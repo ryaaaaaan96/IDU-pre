@@ -6,6 +6,7 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(idu_mvio_tests)
 target_include_directories(app PRIVATE ${IDU_APP}/app)
 target_sources(app PRIVATE src/main.c
+  ${IDU_APP}/app/communication/ports/config.c
   ${IDU_APP}/app/communication/ports/acquisition.c ${IDU_APP}/app/communication/ports/virtual.c
   ${IDU_APP}/app/communication/parameter_protocol.c ${IDU_APP}/app/communication/mvio.c)
 add_subdirectory(${IDU_APP}/app/cfg app_cfg)

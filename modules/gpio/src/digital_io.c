@@ -1,4 +1,4 @@
-#include <digital_io/digital_io.h>
+#include <gpio/digital_io.h>
 #include <errno.h>
 
 static int validate(const struct digital_io_config *config)

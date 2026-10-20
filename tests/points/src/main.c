@@ -5,7 +5,7 @@
 #include "communication/idu_protocol.h"
 #include "communication/ports/idu_acquisition.h"
 #include "communication/ports/idu_virtual.h"
-#include <io_input/idu_inputs.h>
+#include <gpio/idu_inputs.h>
 #include "process/engineering.h"
 #include "legacy_registers.h"
 #include <collect/collect.h>

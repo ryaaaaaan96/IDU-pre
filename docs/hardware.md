@@ -75,7 +75,7 @@ PD8 为最高位。寄存器 DI bit0 对应 DI1，bit15 对应 DI16。
   200 ms 无边沿时复位。点表处理线程也纳入主循环的进展检查。
   Modbus 无有效收包约 20 s 时重置端口，恢复 TX 完成中断丢失等状态；
   工作线程持续卡住 20 s 或重配与回退均失败时停止喂狗。检测以采样周期为粒度。
-  `modules/health_monitor` 将超时或 GPIO 错误锁定，迟到的进度通知不会恢复喂狗；
+  `modules/watchdog` 将超时或 GPIO 错误锁定，迟到的进度通知不会恢复喂狗；
   `app/status/` 记录采集故障阶段和错误码。停止喂狗不会将 PC13 改为浮空。
 - RS485 使用 Zephyr Modbus RTU，115200/8N1，PA15 控制 DE。
   启用非标准串行配置选项以保留旧固件的 8N1；Zephyr 默认无校验时
@@ -84,11 +84,11 @@ PD8 为最高位。寄存器 DI bit0 对应 DI1，bit15 对应 DI16。
 - 本地采样通过 DP 模块的 `dp_submit_sig_value()` / `dp_submit_sig_values()` 设置，
   IDU 只负责采样字段到信号的映射，整份快照一次批量提交。成功表示已入队；
   需要等待时使用返回的 ticket 调用 `dp_wait_processed()`，再读取质量与错误。
-  `modules/io_input` 的 `idu_inputs_sample()` 是统一采样入口，只返回原始值，映射由 `app/process/points.c` 完成；
+  `modules/gpio` 的 `idu_inputs_sample()` 是统一采样入口，只返回原始值，映射由 `app/process/points.c` 完成；
   引脚、通道和时序来自 DTS，平均数来自 Kconfig，模块不绑定测点。
-- LED 由 Zephyr `gpio-leds` 驱动及 `modules/led_indicator` 控制，状态与显示策略归
-  `app/status/`；启动和故障常亮，正常采样完成时翻转。模块已支持定时闪烁，具体状态
-  编码尚未配置；软件闪烁使用系统工作队列，不保证精确脉宽。
+- LED 由 `app/status/status.c` 直接调用 Zephyr `gpio-leds` 驱动，状态与显示策略归
+  `app/status/`；启动和故障常亮，正常采样完成时翻转。后续按业务需要在 status
+  中增加闪烁编码，当前不保留独立 LED 模块或定时闪烁任务。
 - DP 内部通过 zbus 消息副本发布采集批次，处理线程执行点表转换与范围检查，
   用互斥锁更新数据池。采集失败或数据过期时旧协议读不应答，扩展区返回异常。
 - 缺少的第二路串口先使用 Zephyr Modbus RAW client/server 内存回环，

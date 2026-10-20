@@ -4,7 +4,7 @@ execute_process(
           ${ZEPHYR_BASE} ${tr_modbus_generated}
   COMMAND_ERROR_IS_FATAL ANY)
 get_target_property(tr_modbus_sources subsys__modbus SOURCES)
-foreach(name modbus_raw.c modbus_serial.c modbus_server.c)
+foreach(name modbus_core.c modbus_raw.c modbus_serial.c modbus_server.c)
   set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
                ${ZEPHYR_BASE}/subsys/modbus/${name})
   foreach(source IN LISTS tr_modbus_sources)

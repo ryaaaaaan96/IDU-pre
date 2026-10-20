@@ -1,4 +1,4 @@
-#include <io_input/idu_inputs.h>
+#include <gpio/idu_inputs.h>
 #include "process/engineering.h"
 #include "legacy_registers.h"
 #include <assert.h>

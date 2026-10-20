@@ -1,6 +1,6 @@
-#include <io_input/idu_inputs.h>
+#include <gpio/idu_inputs.h>
 #include <analog_input/analog_input.h>
-#include <digital_io/digital_io.h>
+#include <gpio/digital_io.h>
 #include <errno.h>
 
 /* Optional IDU sampling profile; pins and order come from devicetree. */

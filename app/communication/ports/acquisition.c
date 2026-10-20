@@ -1,4 +1,5 @@
 #include "communication/ports/idu_acquisition.h"
+#include "communication/ports/config.h"
 #if defined(CONFIG_IDU_COLLECT_VIRTUAL)
 #include "communication/ports/idu_virtual.h"
 #endif
@@ -19,6 +20,8 @@ BUILD_ASSERT(!DT_SAME_NODE(DT_PARENT(COLLECT_NODE), DT_CHOSEN(zephyr_console)),
 
 int idu_acquisition_port_init(void)
 {
+    int init_err = idu_communication_ports_init();
+    if (init_err) { return init_err; }
 #if defined(CONFIG_IDU_COLLECT_VIRTUAL)
     return idu_virtual_port_init();
 #else

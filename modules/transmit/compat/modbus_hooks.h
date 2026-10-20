@@ -1,6 +1,7 @@
 #ifndef TR_MODBUS_HOOKS_H
 #define TR_MODBUS_HOOKS_H
 #include "modbus_internal.h"
+#include "transport_hooks.h"
 int tr_modbus_submit_work(struct k_work *work);
 bool tr_modbus_write_request(struct modbus_context *ctx, bool *reply);
 bool tr_modbus_accept_request(struct modbus_context *ctx);

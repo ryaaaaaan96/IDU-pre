@@ -10,8 +10,10 @@
 
 独立的 [`modules/vport`](../modules/vport/README.md) 已提供逻辑端口核心，
 以注册后端连接传输链路，支持 CAN ID 分流、多链路汇入及来源保持。
-它不依赖三张点表或 Modbus，默认关闭；下文描述的现有 CO/TR 通信链路
-尚未迁移，真实 CAN/UART/RS485/socket 后端与协议解耦需后续接入。
+它不依赖三张点表或 Modbus。IDU 默认通过
+`transmit` 内的[通信适配](communication-ports.md)将现有 RS485 转发和
+虚拟采集的完整 ADU 接入，绑定在 `app/communication/ports/config.c`。
+Zephyr 保留 RTU 组帧、串口配置和方向控制；CAN/socket 后端待后续接入。
 
 ## 参考设计与 IDU 对应关系
 
@@ -61,7 +63,7 @@ UPP、逆变器专用命令及其日志/加密扩展不属于通用三模块接�
 | `app/communication/config/` | 协议路由、兼容窗口、控制/诊断寄存器 |
 | `app/communication/ports/` | 虚拟或真实采集后端 |
 | `app/` | 初始化装配、本地样本映射和健康确认 |
-| `app/acquisition/` | 采集/发布流程；通过 io_input 采样，通过 status 记录阶段 |
+| `app/acquisition/` | 采集/发布流程；通过 gpio 采样，通过 status 记录阶段 |
 
 配置只声明数据和绑定，通用模块不引用本板 BSP 或设备专用寄存器。
 文件清单与新增设备步骤集中在[点表维护指南](../app/cfg/README.md)。

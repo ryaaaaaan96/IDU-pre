@@ -259,10 +259,15 @@ NVS 相同数据不会重复写入；同值远程写仍需实际确认设备，�
 ### Zephyr Modbus 适配与升级
 
 Zephyr 4.4.2 的 FC16 服务按寄存器调用回调，且接收工作默认放在系统
-工作队列。因此 `modules/transmit/compat` 在构建目录生成三份适配文件：
+工作队列。因此 `modules/transmit/compat` 在构建目录生成四份适配文件：
 北向独立工作队列、FC06/16 整包写入入口，以及 RAW 单字节异常响应
 长度修正，并增加按接口配置的 unit/广播策略。没有修改 west 管理的 Zephyr 源码。RAW 异常码现已真实到达
 客户端，不再期望 `-EMSGSIZE`。
+
+`modbus_core.c` 和串口适配还为 `transmit` 内的通信适配提供完整 ADU
+交接、RAW 接收占用保护及 TX 完成钩子。现有 RS485 转发和虚拟采集
+均经过 vport 收发，串口配置和恢复仍使用原 Zephyr 接口；
+端口绑定与限制见[通信端口接入](communication-ports.md)。
 
 适配脚本锁定已检查的 4.4.2 源文件 SHA-256 和替换锚点。升级到 4.5
 时仍需更新 manifest / west update，另外必须复核此适配层并重新运行

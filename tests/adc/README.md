@@ -11,7 +11,7 @@ timeout 30s build/IDU-pre/tests/adc/zephyr/zephyr.exe
 校准/转换超时、失败恢复、初始化错误传播及并发通道隔离。
 仅 HAL、MMIO、时钟/复位和 pinctrl 由测试替身提供，不模拟实际芯片的电气行为。
 
-`application.c` 使用 Zephyr ADC/GPIO emulator 执行 `io_input` 模块的 `idu_inputs_sample()`，
+`application.c` 使用 Zephyr ADC/GPIO emulator 执行 `gpio` 模块的 `idu_inputs_sample()`，
 验证通道顺序、每通道 10 次整数平均、DI/拨码位序及采样错误传播；
 另测通用 ADC 模块的独立分组、平均参数和缓冲区边界。共 13 项 Ztest，
 已接入 `tests/run.sh`。

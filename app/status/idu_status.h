@@ -2,6 +2,7 @@
 #define IDU_STATUS_H
 
 #include <stdint.h>
+#include <stdbool.h>
 #ifdef CONFIG_BOOTLOADER_MCUBOOT
 #include "status/idu_image_confirm.h"
 #endif
@@ -21,6 +22,7 @@ struct idu_status {
     enum idu_status_phase phase;
     enum idu_status_phase fault_phase;
     int last_error;
+    bool led_on;
 #ifdef CONFIG_BOOTLOADER_MCUBOOT
     struct idu_image_confirm image_confirm;
 #endif

@@ -3,7 +3,7 @@
 #include "process/engineering.h"
 #include "cfg/inc/device.h"
 #include "cfg/inc/signal_ids.h"
-#include <io_input/idu_inputs.h>
+#include <gpio/idu_inputs.h>
 #include "communication/ports/idu_acquisition.h"
 #include <data_process.h>
 #include <platform_callback.h>

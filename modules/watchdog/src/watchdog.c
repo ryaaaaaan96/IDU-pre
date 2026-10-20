@@ -1,8 +1,8 @@
-#include <health_monitor/health_monitor.h>
+#include <watchdog/watchdog.h>
 #include <errno.h>
 #include <limits.h>
 
-static bool expired(struct health_monitor *monitor)
+static bool expired(struct watchdog *monitor)
 {
     return (uint32_t)(k_uptime_get_32() - monitor->last_progress) >=
            monitor->config->progress_timeout_ms;
@@ -10,7 +10,7 @@ static bool expired(struct health_monitor *monitor)
 
 static void feed(struct k_timer *timer)
 {
-    struct health_monitor *monitor = CONTAINER_OF(timer, struct health_monitor, timer);
+    struct watchdog *monitor = CONTAINER_OF(timer, struct watchdog, timer);
     k_spinlock_key_t key = k_spin_lock(&monitor->lock);
     if (monitor->active) {
         monitor->error = expired(monitor) ? -ETIMEDOUT : gpio_pin_toggle_dt(&monitor->config->feed);
@@ -21,8 +21,8 @@ static void feed(struct k_timer *timer)
     if (!active) { k_timer_stop(timer); }
 }
 
-int health_monitor_start(struct health_monitor *monitor,
-                         const struct health_monitor_config *config)
+int watchdog_start(struct watchdog *monitor,
+                   const struct watchdog_config *config)
 {
     if (!monitor || !config || !config->feed_interval_ms ||
         config->progress_timeout_ms <= config->feed_interval_ms ||
@@ -45,7 +45,7 @@ int health_monitor_start(struct health_monitor *monitor,
     return 0;
 }
 
-int health_monitor_progress(struct health_monitor *monitor)
+int watchdog_progress(struct watchdog *monitor)
 {
     if (!monitor) { return -EINVAL; }
     k_spinlock_key_t key = k_spin_lock(&monitor->lock);
@@ -65,7 +65,7 @@ int health_monitor_progress(struct health_monitor *monitor)
     return err;
 }
 
-void health_monitor_stop(struct health_monitor *monitor)
+void watchdog_stop(struct watchdog *monitor)
 {
     if (!monitor) { return; }
     k_spinlock_key_t key = k_spin_lock(&monitor->lock);

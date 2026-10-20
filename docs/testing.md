@@ -40,8 +40,10 @@ build/IDU-pre/tests/reference_services/zephyr/zephyr.exe -flash_in_ram
 | `reference_config`、`reference_dp`、`reference_ports`、`reference_services` | 原表注册、同步字节接口、CO/TR 适配、策略回调和迁移 |
 | `image_confirm`、`iap`、`test_iap_codec.py` | 健康确认、独立 IAP 模块、配置驱动升级、收包/签名拒绝、SGZ/QuickLZ 边界 |
 | `adc`、`test_build_configuration.py` | 标准 ADC API、采样平均、硬件超时恢复、并发隔离与 Sysbuild 配置覆盖 |
-| `io` | GPIO 极性/位序/32 位边界、看门狗超时锁定、LED 极性/闪烁切换及异步故障 |
-| `acquisition` | 采集与 status 集成、无效样本发布、故障保留、LED/看门狗错误阻止试运行确认 |
+| `io` | GPIO 极性/位序/32 位边界、外部看门狗超时与 GPIO 故障锁定 |
+| `vport` | 后端注册、路由、CAN ID 分流、来源隔离、有界 RX、发送互斥 |
+| `communication` | UART/GPIO emulator 上的 RTU/RAW 往返、完整 ADU（含 IAPv3 大报文配置）、背压、交接超时、TX 错误及恢复 |
+| `acquisition` | 采集与 status 集成、无效样本发布、故障保留、状态灯亮灭/翻转、LED/看门狗错误阻止试运行确认 |
 
 `tests/run.sh` 同时验证 Process 关闭、参数/后端可选配置，并用独立 Flash 临时文件
 在新进程中执行参数、MV-IO 和 IAP 恢复阶段。普通运行跳过的 reboot probe 会在
@@ -386,3 +388,31 @@ getter 只返回表，删除按设备号补挂表的装配逻辑。三表由 `de
 
 日志位于 `build/IDU-pre/vport-validation/`。未烧录验证，模拟 CAN 元数据路由
 不能证明 GD32E505 的 CAN 驱动、收发器或实际总线时序已经可用。
+
+## 通信接入与硬件模块整理（2026-10-20）
+
+现有 RS485 转发和虚拟采集通过 `transmit` 的 Modbus 适配接入 vport，
+配置见[通信端口接入](communication-ports.md)。`gpio`、`watchdog` 分别替代
+原输入、健康监控模块的名称；实现逻辑保持不变。LED 模块及通用闪烁任务已删除，
+由 `app/status/status.c` 直接调用 Zephyr LED API。
+
+- `CCACHE_DISABLE=1 ASAN_OPTIONS=detect_leaks=0 bash tests/run.sh` 全量通过：
+  39 次模拟器执行、258 项 Ztest PASS（含恢复阶段等重复执行）；
+  Python 30 项中 27 项通过、3 项缺少外部 QuickLZ/SGZ 输入而跳过。
+  主机 C 保留 ASan/UBSan，仅关闭 LeakSanitizer。
+- `communication` 普通配置和 IAPv3 大报文配置各 9 项通过，覆盖完整 RTU/RAW
+  报文、CRC 元数据、收发错误、接收占用、交接超时、DE 释放及配置恢复。
+- `io` 8 项通过；`acquisition` 11 项通过，验证状态灯亮灭/翻转、
+  首个故障保留，以及 LED/看门狗错误阻止喂狗和镜像确认。
+- 默认、MCUboot + IAPv3、MCUboot + AIDC 构建和镜像检查通过，
+  两种 MCUboot 应用镜像验签通过。
+
+| 配置 | Flash | 静态 RAM |
+| --- | ---: | ---: |
+| 默认 | 97,928 B | 85,832 B |
+| MCUboot + IAPv3 应用 | 120,988 B | 121,928 B |
+| MCUboot + AIDC 应用 | 111,388 B | 121,192 B |
+| MCUboot | 36,632 B | 18,096 B |
+
+日志位于工作区 `build/IDU-pre/vport-integration/`。本轮没有烧录或实板测量；
+UART/GPIO emulator 验证不代表实际 RS485 电气时序、栈余量或 CAN 已通过验证。

@@ -1,5 +1,11 @@
 #include <zephyr/dt-bindings/gpio/gpio.h>
 / {
+    aliases {
+        led0 = &status_led;
+    };
+    status_leds: status-leds {
+        status_led: run {};
+    };
     idu_io: zephyr,user {
         watchdog-gpios = <&gpio0 21 GPIO_ACTIVE_HIGH>;
         watchdog-feed-ms = <10>;

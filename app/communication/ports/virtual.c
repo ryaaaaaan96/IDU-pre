@@ -3,7 +3,7 @@
  */
 #include "communication/ports/idu_virtual.h"
 #include "cfg/inc/signal_ids.h"
-#include <io_input/idu_inputs.h>
+#include <gpio/idu_inputs.h>
 #include <dataprocess/points.h>
 #include <transmit/modbus_adapter.h>
 #include <string.h>

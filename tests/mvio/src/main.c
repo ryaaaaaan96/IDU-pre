@@ -5,6 +5,8 @@
 #include "communication/config/protocol_config.h"
 #include "communication/ports/idu_acquisition.h"
 #include "communication/ports/idu_virtual.h"
+#include "communication/ports/config.h"
+#include <vport/vport.h>
 #include <collect/collect.h>
 #include <dataprocess/params.h>
 #include <dataprocess/points.h>
@@ -206,6 +208,17 @@ ZTEST(mvio, test_saved_address_and_247)
     /* Legacy invalid values ACK without applying; they do not set the DIP. */
     zassert_ok(modbus_write_holding_reg(client, 16, 30459, 0));
     zassert_ok(modbus_write_holding_reg(client, 16, 30459, 247)); zassert_equal(saved(), 246);
+}
+
+ZTEST(mvio, test_application_collection_uses_virtual_ports)
+{
+    struct vport_stats before, after;
+    zassert_ok(vport_get_stats(IDU_LINK_ACQUISITION, &before));
+    struct modbus_adu request = {.fc = 4, .length = 4, .data = {0x1f, 0xd8, 0, 1}};
+    zassert_ok(co_transfer(10, &request));
+    zassert_ok(vport_get_stats(IDU_LINK_ACQUISITION, &after));
+    zassert_true(after.tx_completed > before.tx_completed);
+    zassert_true(after.rx_delivered > before.rx_delivered);
 }
 
 ZTEST(mvio, test_reserved_reads_noop_writes_and_table_walk)

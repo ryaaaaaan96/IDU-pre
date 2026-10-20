@@ -1,0 +1,5 @@
+if(CONFIG_WATCHDOG_MONITOR)
+  zephyr_library()
+  zephyr_include_directories(include)
+  zephyr_library_sources(src/watchdog.c)
+endif()

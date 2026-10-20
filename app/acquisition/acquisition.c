@@ -1,5 +1,5 @@
 #include "acquisition/idu_acquisition.h"
-#include <io_input/idu_inputs.h>
+#include <gpio/idu_inputs.h>
 #include "process/idu_process.h"
 #include "communication/idu_protocol.h"
 #ifdef CONFIG_IDU_IAPV3

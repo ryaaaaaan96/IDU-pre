@@ -1,4 +1,4 @@
-name: led_indicator
+name: watchdog
 build:
   cmake: .
   kconfig: Kconfig

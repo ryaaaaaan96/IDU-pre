@@ -15,6 +15,7 @@
 | 兼容旧 MV-IO | [MV-IO 兼容规则](mvio-compatibility.md) | 基础寄存器、247/广播、有序旧表、旧参数导入 |
 | 使用模块 | [模块接口](../modules/README.md)、[DP](../modules/dataprocess/README.md) | 依赖、配置、API 单位、同步/异步与事务约束 |
 | 扩展逻辑通信端口 | [vport](../modules/vport/README.md) | 后端注册、CAN ID 分流、多链路映射、收发所有权与边界 |
+| 查看现有端口接入 | [通信端口接入](communication-ports.md) | RS485 转发、虚拟采集、绑定表、完整 ADU 路由及恢复 |
 | 迁移参考平台接口 | [参考平台对照](reference-platform.md) | 原库证据、79/89 名称覆盖、差异、const/RAM 分工 |
 | 测试和核对容量 | [验证说明](testing.md) | 测试命令、套件、桌面结果、RAM 对比、实板边界 |
 
