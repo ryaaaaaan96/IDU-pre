@@ -2,7 +2,12 @@
 #define IDU_IAP_H
 #include <stdbool.h>
 #include <zephyr/modbus/modbus.h>
-int idu_iap_init(void);
-bool idu_iap_ready(void);
-int idu_iap_route(int iface, const struct modbus_adu *rx, struct modbus_adu *tx);
+/* Source compatibility for application orchestration and existing mocks.
+ * New integrations use <iap/iap.h>. There is no IDU-specific implementation. */
+int iap_start(void);
+bool iap_ready(void);
+int iap_route(int iface, const struct modbus_adu *rx, struct modbus_adu *tx);
+#define idu_iap_init iap_start
+#define idu_iap_ready iap_ready
+#define idu_iap_route iap_route
 #endif

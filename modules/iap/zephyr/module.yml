@@ -1,0 +1,6 @@
+name: iap
+build:
+  cmake: .
+  kconfig: Kconfig
+  depends:
+    - quicklz

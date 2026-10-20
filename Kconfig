@@ -1,9 +1,5 @@
 mainmenu "IDU-pre"
 
-# First matching range wins; extend only the isolated legacy IAP profile.
-config MODBUS_BUFFER_SIZE
-    range 64 1100 if IDU_IAPV3
-
 source "Kconfig.zephyr"
 rsource "app/Kconfig"
 

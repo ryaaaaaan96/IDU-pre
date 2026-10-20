@@ -1,5 +1,0 @@
-/* Legacy IAPv3 interoperability constant, from SUNGROW MV-IO iapv3_task.c.
- * AES is transport compatibility; MCUboot ECDSA provides authentication. */
-static const uint8_t idu_legacy_aes_key[16] = {
-    0x73, 0x64, 0x6b, 0x6a, 0x73, 0x64, 0x6b, 0x6a, 0x31, 0x32, 0x39, 0x38, 0x37, 0x33, 0x39, 0x31
-};

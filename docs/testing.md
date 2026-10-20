@@ -38,7 +38,7 @@ build/IDU-pre/tests/reference_services/zephyr/zephyr.exe -flash_in_ram
 | `pipeline`、`models` | 无存储数据流、模型复用、多设备及多总线隔离 |
 | `dataprocess`、`collector`、`transmit` | 核心模块独立配置、采集调度、转发模式和恢复 |
 | `reference_config`、`reference_dp`、`reference_ports`、`reference_services` | 原表注册、同步字节接口、CO/TR 适配、策略回调和迁移 |
-| `boot`、`iap`、`test_iap_codec.py` | 健康确认、IAP 收包/签名拒绝、SGZ/QuickLZ 边界 |
+| `boot`、`iap`、`test_iap_codec.py` | 健康确认、独立 IAP 模块、配置驱动升级、收包/签名拒绝、SGZ/QuickLZ 边界 |
 | `adc`、`test_build_configuration.py` | 标准 ADC API、采样平均、硬件超时恢复、并发隔离与 Sysbuild 配置覆盖 |
 
 `tests/run.sh` 同时验证 Process 关闭、参数/后端可选配置，并用独立 Flash 临时文件
@@ -184,3 +184,28 @@ CCACHE_DISABLE=1 ./applications/IDU-pre/build.sh --mcuboot --smp-uart
 硬件替身及 ADC emulator 不验证实际校准、转换精度、采样时序或供电电压；
 ADC 校准已提前到 `POST_KERNEL` 设备初始化，需在实板确认启动和看门狗行为。
 本板时钟数值、通道顺序及采样次数保持不变，本轮没有进行烧录或实板测量。
+
+## IAP 模块与配置验证（2026-10-20）
+
+升级实现归入 [`modules/iap`](../modules/iap/README.md)，产品仅提供设备树和
+Kconfig 配置。保留原线协议、结果日志内容、试运行请求及应用健康确认策略。
+
+- `tests/run.sh` 的测试分段完成：配置测试最初因样例密钥误填为 17 字节被构建检查
+  拒绝，修正为 16 字节后重跑 IAP 段并完成其余测试。排除重跑计数，共 35 次
+  模拟器执行、207 次 Ztest 通过；Python 共 28 项，3 项外部样本测试跳过。
+- 独立 IAP 段共 9 次模拟器执行、23 次通过，未加载 DP 或 transmit 模块。
+  默认配置测试启用与 IDU 相同的 `NVS_DATA_CRC`，包含跨进程掉电／回退恢复；
+  配置驱动变体关闭该全局选项并选择“无状态保存”，使用不同的 AES 密钥、
+  Flash 执行地址、RAM 范围、分区大小、镜像上限和静态位图容量完成升级。
+- 增加配置复制、非法分区／重叠、初始化失败后重试、回调上下文、镜像内存范围、
+  输出上限及打包配置检查；3 万组畸形输入通过 ASan/UBSan。
+- 默认、MCUboot＋IAPv3、MCUboot＋SMP 构建与导出通过。两个 MCUboot 配置的
+  签名、HEX/BIN 一致性、工厂镜像范围及损坏镜像拒绝检查通过。真实 IAP SGZ
+  解密、解包后与导出的签名 BIN 一致；该次 Python 验证 9 项，2 项旧压缩器测试跳过。
+- 从本次修改单独导出源码，在新目录构建 MCUboot＋IAPv3 并验签，排除工作区
+  原有暂存内容对可构建性的影响。文档链接、锚点与 shell 语法检查通过。
+
+日志位于 `build/IDU-pre/tests/iap-module-*.log`；其中 `full.log` 保留首次运行
+及配置样例拒绝记录，`final.log` 为修正后的 IAP 段，`remaining.log` 为其余回归。
+工作区完整回归包含原有 runtime 暂存内容；本轮未烧录，实板 Flash 时序、
+旧上位机互操作、掉电恢复与健康确认仍需验证。

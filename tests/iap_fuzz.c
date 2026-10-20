@@ -1,4 +1,4 @@
-#include "iap/idu_sgz.h"
+#include <iap/sgz.h>
 #include <quicklz/quicklz.h>
 #include <assert.h>
 #include <stdio.h>
@@ -18,7 +18,7 @@ static int write_buf(void *ctx, const void *src, size_t len)
 { (void)ctx; (void)src; return len > sizeof(output) ? -1 : 0; }
 int main(void)
 {
-    struct idu_sgz_workspace ws;
+    struct iap_sgz_workspace ws;
     for (unsigned iteration = 0; iteration < 30000; ++iteration) {
         input_len = (random_byte() * 256 + random_byte()) % sizeof(input);
         for (size_t i = 0; i < input_len; ++i) { input[i] = random_byte(); }
@@ -30,9 +30,9 @@ int main(void)
         int n = qlz_decode_level3(input, input_len, output, sizeof(output));
         assert(n < 0 || (size_t)n <= sizeof(output));
         uint32_t size;
-        (void)idu_sgz_unpack(read_buf, NULL, input_len, write_buf, NULL, &ws, &size);
+        (void)iap_sgz_unpack(read_buf, NULL, input_len, 0x6e000, write_buf, NULL, &ws, &size);
     }
-    assert(idu_sgz_crc32(0, "123456789", 9) == 0xcbf43926);
+    assert(iap_sgz_crc32(0, "123456789", 9) == 0xcbf43926);
     puts("IAP codec: 30000 malformed inputs passed ASan/UBSan");
     return 0;
 }

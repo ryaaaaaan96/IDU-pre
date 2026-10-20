@@ -2,9 +2,8 @@
  * Format reference: io-interface-board Iapv3 (SUNGROW, 1997-2022),
  * QuickLZ 1.5 level 3, no streaming history. No legacy allocator/RTOS code.
  */
-#include "iap/idu_sgz.h"
+#include <iap/sgz.h>
 #include <quicklz/quicklz.h>
-#include "legacy_aes_key.h"
 #include <errno.h>
 #include <string.h>
 #include <tinycrypt/aes.h>
@@ -18,7 +17,7 @@ static uint32_t le(const uint8_t *p, size_t n)
     return v;
 }
 
-uint32_t idu_sgz_crc32(uint32_t crc, const void *buf, size_t len)
+uint32_t iap_sgz_crc32(uint32_t crc, const void *buf, size_t len)
 {
     const uint8_t *p = buf;
     crc = ~crc;
@@ -29,18 +28,18 @@ uint32_t idu_sgz_crc32(uint32_t crc, const void *buf, size_t len)
     return ~crc;
 }
 
-int idu_sgz_decrypt(uint8_t *data, size_t len, uint32_t offset)
+int iap_sgz_decrypt(uint8_t *data, size_t len, uint32_t offset, const uint8_t aes_key[16])
 {
-    if (!data || !len || len % 16 || offset % 16) { return -EINVAL; }
+    if (!aes_key || !data || !len || len % 16 || offset % 16) { return -EINVAL; }
     struct tc_aes_key_sched_struct key;
-    if (!tc_aes128_set_decrypt_key(&key, idu_legacy_aes_key)) { return -EIO; }
+    if (!tc_aes128_set_decrypt_key(&key, aes_key)) { return -EIO; }
     for (size_t i = offset ? 0 : 16; i < len; i += 16) {
         if (!tc_aes_decrypt(data + i, data + i, &key)) { return -EIO; }
     }
     return 0;
 }
 
-static int check_crc(idu_image_read_fn read, void *ctx, uint32_t offset,
+static int check_crc(iap_image_read_fn read, void *ctx, uint32_t offset,
                      uint32_t length, uint32_t expected, uint8_t buf[2048])
 {
     uint32_t crc = 0;
@@ -48,28 +47,28 @@ static int check_crc(idu_image_read_fn read, void *ctx, uint32_t offset,
         size_t n = length < 2048 ? length : 2048;
         int err = read(ctx, offset, buf, n);
         if (err) { return err; }
-        crc = idu_sgz_crc32(crc, buf, n); offset += n; length -= n;
+        crc = iap_sgz_crc32(crc, buf, n); offset += n; length -= n;
     }
     return crc == expected ? 0 : -EBADMSG;
 }
 
-int idu_sgz_unpack(idu_image_read_fn read, void *in, uint32_t received,
-                   idu_image_write_fn write, void *out, struct idu_sgz_workspace *ws,
+int iap_sgz_unpack(iap_image_read_fn read, void *in, uint32_t received, uint32_t max_image_size,
+                   iap_image_write_fn write, void *out, struct iap_sgz_workspace *ws,
                    uint32_t *image_size)
 {
     uint8_t hdr[132];
     if (!read || !write || !ws || !image_size || received < sizeof(hdr) ||
-        received > IDU_SGZ_MAX_SIZE || received % 16) { return -EINVAL; }
+        !max_image_size || received % 16) { return -EINVAL; }
     int err = read(in, 0, hdr, sizeof(hdr));
     if (err) { return err; }
     uint32_t length = le(hdr + 20, 4), head = le(hdr + 24, 4), nums = le(hdr + 28, 4);
     if (memcmp(hdr, "SungrowIAP3.0", 12) || length < sizeof(hdr) || length > received ||
         received - length >= 16 || head < sizeof(hdr) || head > length) { return -EBADMSG; }
-    /* The fitted MV-IO only upgrades its ARM host (UPGRADE_DOWN=0). */
+    /* This legacy transport accepts a single ARM host image (type 2). */
     if (nums != 1 || le(hdr + 32, 4) != 2) { return -ENOTSUP; }
     uint32_t size = le(hdr + 40, 4), crc = le(hdr + 44, 4);
     uint32_t packed = le(hdr + 120, 4), start = le(hdr + 128, 4);
-    if (!size || size > IDU_IMAGE_MAX_SIZE || start < head || start > length ||
+    if (!size || size > max_image_size || start < head || start > length ||
         !packed || packed > length - start || start + packed != length) { return -EFBIG; }
     err = check_crc(read, in, 20, length - 20, le(hdr + 16, 4), ws->plain);
     if (!err) { err = check_crc(read, in, start, packed, le(hdr + 124, 4), ws->plain); }
@@ -87,7 +86,7 @@ int idu_sgz_unpack(idu_image_read_fn read, void *in, uint32_t received,
         int decoded = qlz_decode_level3(ws->compressed, n, ws->plain, sizeof(ws->plain));
         if (decoded < 0) { return decoded; }
         if ((uint32_t)decoded > size - produced) { return -EFBIG; }
-        actual_crc = idu_sgz_crc32(actual_crc, ws->plain, decoded);
+        actual_crc = iap_sgz_crc32(actual_crc, ws->plain, decoded);
         err = write(out, ws->plain, decoded);
         if (err) { return err; }
         produced += decoded; start += n; packed -= n;
@@ -116,13 +115,15 @@ static int signature_decode(const uint8_t *der, size_t len, uint8_t signature[64
     return pos == len ? 0 : -EBADMSG;
 }
 
-int idu_image_verify(idu_image_read_fn read, void *ctx, uint32_t available,
-                      const uint8_t public_key[64], const uint8_t key_hash[32],
+int iap_image_verify(iap_image_read_fn read, void *ctx, uint32_t available,
+                      const struct iap_image_policy *policy,
                       uint8_t image_hash[32])
 {
     uint8_t buf[256], signature[64], expected[32];
-    if (!read || !public_key || !key_hash || !image_hash || available < 544 ||
-        available > IDU_IMAGE_MAX_SIZE) { return -EINVAL; }
+    if (!read || !policy || !policy->public_key || !policy->key_hash ||
+        !image_hash || available < 544 || available > policy->max_size ||
+        policy->load_address > UINT32_MAX - policy->max_size ||
+        policy->sram_start >= policy->sram_end) { return -EINVAL; }
     int err = read(ctx, 0, buf, 32);
     if (err) { return err; }
     uint32_t size = le(buf + 12, 4), protected = le(buf + 10, 2);
@@ -132,8 +133,9 @@ int idu_image_verify(idu_image_read_fn read, void *ctx, uint32_t available,
     err = read(ctx, 512, buf, 8);
     if (err) { return err; }
     uint32_t sp = le(buf, 4), pc = le(buf + 4, 4);
-    if (sp <= 0x20000000 || sp > 0x20020000 || sp % 8 || !(pc & 1) ||
-        (pc & ~1u) < 0x08010200 || (pc & ~1u) >= 0x08010000 + end) { return -ENOEXEC; }
+    if (sp <= policy->sram_start || sp > policy->sram_end || sp % 8 || !(pc & 1) ||
+        (pc & ~1u) < policy->load_address + 512 ||
+        (pc & ~1u) >= policy->load_address + end) { return -ENOEXEC; }
     struct tc_sha256_state_struct hash;
     tc_sha256_init(&hash);
     for (uint32_t off = 0; off < end;) {
@@ -159,7 +161,7 @@ int idu_image_verify(idu_image_read_fn read, void *ctx, uint32_t available,
         if (type == 0x10 && n == 32 && !(found & 1)) {
             memcpy(expected, buf, 32); found |= 1;
         } else if (type == 1 && n == 32 && !(found & 2)) {
-            if (memcmp(buf, key_hash, 32)) { return -EACCES; }
+            if (memcmp(buf, policy->key_hash, 32)) { return -EACCES; }
             found |= 2;
         } else if (type == 0x22 && !(found & 4)) {
             err = signature_decode(buf, n, signature);
@@ -169,6 +171,6 @@ int idu_image_verify(idu_image_read_fn read, void *ctx, uint32_t available,
         pos += n;
     }
     if (found != 7 || memcmp(image_hash, expected, 32) ||
-        !uECC_verify(public_key, image_hash, 32, signature, uECC_secp256r1())) { return -EACCES; }
+        !uECC_verify(policy->public_key, image_hash, 32, signature, uECC_secp256r1())) { return -EACCES; }
     return 0;
 }

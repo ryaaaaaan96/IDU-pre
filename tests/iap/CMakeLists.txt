@@ -1,16 +1,24 @@
 cmake_minimum_required(VERSION 3.20.0)
 get_filename_component(IDU_APP ../.. ABSOLUTE)
-list(APPEND ZEPHYR_EXTRA_MODULES ${IDU_APP}/modules/quicklz)
+list(APPEND ZEPHYR_EXTRA_MODULES ${IDU_APP}/modules/quicklz ${IDU_APP}/modules/iap)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(iap_receiver_tests)
-set(CONFIG_MCUBOOT_SIGNATURE_KEY_FILE ${ZEPHYR_MCUBOOT_MODULE_DIR}/root-ec-p256.pem)
-target_include_directories(app PRIVATE ${IDU_APP}/app ${IDU_APP}/modules/dataprocess/include
-  ${IDU_APP}/modules/transmit/include ${CMAKE_CURRENT_BINARY_DIR})
+target_include_directories(app PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+set(IAP_FIXTURE_ADDRESS 0x08010000)
+set(IAP_FIXTURE_RAM_END 0x20020000)
+set(IAP_FIXTURE_CONFIG ${IDU_APP}/conf/iapv3.conf)
+if(CONFIG_IAP_CONFIGURED)
+  # Deliberately different addresses/key/limits exercise configuration, not IDU constants.
+  set(IAP_FIXTURE_ADDRESS 0x10000)
+  set(IAP_FIXTURE_RAM_END 0x30020000)
+  set(IAP_FIXTURE_CONFIG ${PROJECT_BINARY_DIR}/zephyr/.config)
+endif()
 execute_process(COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_LIST_DIR}/fixtures.py
-  ${CMAKE_CURRENT_BINARY_DIR} COMMAND_ERROR_IS_FATAL ANY)
+  ${CMAKE_CURRENT_BINARY_DIR} ${IAP_FIXTURE_ADDRESS} ${IAP_FIXTURE_RAM_END}
+  ${IAP_FIXTURE_CONFIG} COMMAND_ERROR_IS_FATAL ANY)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
-  ${CMAKE_CURRENT_LIST_DIR}/fixtures.py ${IDU_APP}/tools/pack_sgz.py)
+  ${CMAKE_CURRENT_LIST_DIR}/fixtures.py ${IDU_APP}/tools/pack_sgz.py
+  ${IDU_APP}/modules/iap/scripts/public_key.py ${IDU_APP}/conf/iapv3.conf)
 target_sources(app PRIVATE src/main.c)
-add_subdirectory(${IDU_APP}/app/iap iap)
 zephyr_ld_options(-Wl,--wrap=boot_is_img_confirmed -Wl,--wrap=boot_request_upgrade
                   -Wl,--wrap=sys_reboot)

@@ -84,7 +84,8 @@ def export(build, key, destination, iapv3=False, version="IDU-pre"):
         destination / "IDU-pre-public.pem")
     if iapv3:
         run(sys.executable, APP / "tools/pack_sgz.py", "--bin", binary,
-            "--key", key, "--output", destination / "IDU-pre-update.sgz", "--version", version)
+            "--key", key, "--output", destination / "IDU-pre-update.sgz", "--version", version,
+            "--config", appdir / ".config")
     report = {
         "bootloader": "MCUboot", "mode": "swap-scratch",
         "signature_verified": True, "hardware_verified": False,

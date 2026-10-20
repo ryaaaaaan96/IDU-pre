@@ -101,7 +101,8 @@ flowchart LR
 
 `modules/quicklz` 是另外一个独立模块，通过 `CONFIG_QUICKLZ` 启用
 `quicklz/quicklz.h` 的 `qlz_decode_level3()`。解码器不依赖硬件、加密或 Zephyr
-运行时；SGZ 容器、密钥、镜像检查和板级向量校验仍在 `app/iap/`。
+运行时；SGZ 容器和镜像校验归 [`modules/iap`](../modules/iap/README.md)，
+分区、密钥来源、内存范围和保存策略通过设备树与 Kconfig 配置。
 
 共享数据池并不保证任意多个测点组成的北向读响应来自同一次采样；当前仍是
 逐测点读取。参数跨设备提交也不是分布式原子事务，错误及部分完成结果遵循

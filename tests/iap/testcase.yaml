@@ -7,3 +7,14 @@ tests:
       - modbus
       - nvs
       - mcuboot
+  idu.iap.configured:
+    platform_allow: native_sim/native/64
+    integration_platforms:
+      - native_sim/native/64
+    extra_args:
+      - EXTRA_CONF_FILE=configured.conf
+      - EXTRA_DTC_OVERLAY_FILE=configured.overlay
+    tags:
+      - modbus
+      - nvs
+      - mcuboot

@@ -2,11 +2,9 @@
  * thread; the Modbus worker only validates and enqueues one bounded job.
  * A packet ACK means accepted. The missing bitmap means persisted/read back.
  */
-#include "iap/idu_iap.h"
-#include "iap/idu_sgz.h"
-#include "iap_public_key.h"
-#include <transmit/modbus_adapter.h>
-#include <dataprocess/params.h>
+#include <iap/iap.h>
+#include <iap/sgz.h>
+#include <zephyr/modbus/modbus.h>
 #include <zephyr/dfu/flash_img.h>
 #include <zephyr/dfu/mcuboot.h>
 #include <zephyr/kvss/nvs.h>
@@ -16,19 +14,20 @@
 #include <zephyr/logging/log.h>
 #include <string.h>
 
-LOG_MODULE_REGISTER(idu_iap, LOG_LEVEL_INF);
+LOG_MODULE_REGISTER(iap, LOG_LEVEL_INF);
 enum { IAP_IDLE, IAP_LOGIN, IAP_TRANSFER, IAP_ANALYSIS, IAP_UPGRADING, IAP_SUCCESS, IAP_FAULT, IAP_JUMP };
 enum { NO_CAUSE, VERSION, SPACE, CRC_ERROR, FLASH_ERROR, NO_APP, COMM_ERROR,
        SUBFILE, HEAP, OPEN_FILE, KEY_ERROR, UNKNOWN };
 enum { JOB_NONE, JOB_LOGIN, JOB_PACKET, JOB_FINISH, JOB_EXIT, JOB_RECOVER, JOB_LOGIN_PACKET };
 #define PACKET_MAX 1024
-#define PACKETS_MAX (IDU_SGZ_MAX_SIZE / 16)
+#define PACKETS_MAX (CONFIG_IAP_MAX_CONTAINER_SIZE / 16)
 #define SECTOR 4096
 #define TIMEOUT_MS 480000
 BUILD_ASSERT(CONFIG_MODBUS_BUFFER_SIZE >= PACKET_MAX + 31,
              "IAPv3 requires room for a complete 1 KiB legacy packet");
 static const struct flash_area *staging, *secondary, *primary;
 static struct nvs_fs journal_fs;
+static struct iap_config config;
 /* Persist only upgrade result/expected hash, never unverified resume state. */
 static struct journal { uint32_t magic, phase, size; uint8_t hash[32]; uint32_t crc; } journal;
 static struct {
@@ -39,10 +38,11 @@ static struct {
     uint32_t address;
     int64_t deadline;
 } receiver;
-static uint8_t bitmap[PACKETS_MAX / 8], erased[IDU_SGZ_MAX_SIZE / SECTOR / 8];
+static uint8_t bitmap[DIV_ROUND_UP(PACKETS_MAX, 8)];
+static uint8_t erased[DIV_ROUND_UP(DIV_ROUND_UP(CONFIG_IAP_MAX_CONTAINER_SIZE, SECTOR), 8)];
 static uint8_t packet[PACKET_MAX];
 static uint16_t packet_length;
-static struct idu_sgz_workspace workspace;
+static struct iap_sgz_workspace workspace;
 static struct flash_img_context image;
 K_MUTEX_DEFINE(lock);
 K_SEM_DEFINE(wake, 0, 1);
@@ -64,7 +64,7 @@ static int journal_save(uint32_t phase, uint32_t size, const uint8_t *hash)
     uint8_t wire[48];
     sys_put_le32(next.magic, wire); sys_put_le32(phase, wire + 4); sys_put_le32(size, wire + 8);
     memcpy(wire + 12, next.hash, 32);
-    next.crc = idu_sgz_crc32(0, wire, 44); sys_put_le32(next.crc, wire + 44);
+    next.crc = iap_sgz_crc32(0, wire, 44); sys_put_le32(next.crc, wire + 44);
     int err = nvs_write(&journal_fs, 1, wire, sizeof(wire));
     if (err < 0) { return err; }
     journal = next; return 0;
@@ -78,7 +78,7 @@ static bool may_upload(void)
 static int store_packet(void)
 {
     uint32_t off = (uint32_t)(receiver.number - 1) * receiver.every;
-    int err = idu_sgz_decrypt(packet, packet_length, off);
+    int err = iap_sgz_decrypt(packet, packet_length, off, config.aes_key);
     if (err) { return err; }
     if (bit_get(bitmap, receiver.number - 1)) {
         err = flash_area_read(staging, off, workspace.plain, packet_length);
@@ -105,21 +105,23 @@ static int finish(void)
     if (!may_upload()) { return -EBUSY; }
     int err = flash_img_init_id(&image, secondary->fa_id);
     if (err) { return err; }
-    err = idu_sgz_unpack(area_read, (void *)staging,
-                         (receiver.total - 1u) * receiver.every + receiver.last,
+    err = iap_sgz_unpack(area_read, (void *)staging,
+                         (receiver.total - 1u) * receiver.every + receiver.last, config.image.max_size,
                          image_write, &image, &workspace, &size);
     if (!err) { err = flash_img_buffered_write(&image, NULL, 0, true); }
     if (image.flash_area) { flash_area_close(image.flash_area); image.flash_area = NULL; }
-    if (!err) { err = idu_image_verify(area_read, (void *)secondary, size,
-                                      idu_iap_public_key, idu_iap_key_hash, hash); }
+    if (!err) { err = iap_image_verify(area_read, (void *)secondary, size,
+                                      &config.image, hash); }
     if (!err) {
         k_mutex_lock(&lock, K_FOREVER); state_set(IAP_UPGRADING, NO_CAUSE); k_mutex_unlock(&lock);
     }
     /* Freeze parameter transactions only for the short commit/reboot window. */
-    if (!err) { err = dp_params_prepare_reboot(); frozen = !err; }
+    if (!err && config.prepare_reboot) {
+        err = config.prepare_reboot(config.user); frozen = !err;
+    }
     if (!err) { err = journal_save(2, size, hash); }
     if (!err) { err = boot_request_upgrade(BOOT_UPGRADE_TEST); }
-    if (err) { if (frozen) { dp_params_cancel_reboot(); } return err; }
+    if (err) { if (frozen) { config.cancel_reboot(config.user); } return err; }
     k_mutex_lock(&lock, K_FOREVER);
     state_set(IAP_JUMP, NO_CAUSE);
     k_mutex_unlock(&lock);
@@ -161,11 +163,11 @@ static void worker(void *a, void *b, void *c)
         else if (job == JOB_FINISH) { err = finish(); }
         else if (job == JOB_RECOVER) {
             if (journal.phase == 2 && !boot_is_img_confirmed()) {
-                continue; /* The normal 10 s health policy confirms first. */
+                continue; /* The application health policy must confirm first. */
             }
             uint8_t hash[32];
-            err = journal.phase == 2 ? idu_image_verify(area_read, (void *)primary, journal.size,
-                         idu_iap_public_key, idu_iap_key_hash, hash) : -ETIMEDOUT;
+            err = journal.phase == 2 ? iap_image_verify(area_read, (void *)primary, journal.size,
+                         &config.image, hash) : -ETIMEDOUT;
             if (!err && memcmp(hash, journal.hash, 32)) { err = -ENOEXEC; }
             /* Store terminal result so a later reset doesn't erase the result. */
             int saved = journal_save(err ? 4 : 3, 0, NULL);
@@ -185,33 +187,80 @@ static void worker(void *a, void *b, void *c)
     }
 }
 
-int idu_iap_init(void)
+static void close_areas(void)
+{
+    if (staging) { flash_area_close(staging); staging = NULL; }
+    if (secondary) { flash_area_close(secondary); secondary = NULL; }
+    if (primary) { flash_area_close(primary); primary = NULL; }
+}
+
+/* Staging and NVS use 4 KiB units; smaller hardware erase pages are allowed. */
+static int check_erase_area(const struct flash_area *area)
+{
+    if (!flash_area_device_is_ready(area) || !area->fa_size ||
+        area->fa_size % SECTOR || area->fa_off % SECTOR ||
+        flash_area_align(area) > 16) { return -EINVAL; }
+    for (off_t off = area->fa_off; off < area->fa_off + area->fa_size;) {
+        struct flash_pages_info info;
+        int err = flash_get_page_info_by_offs(flash_area_get_device(area), off, &info);
+        if (err) { return err; }
+        if (!info.size || info.size > SECTOR || SECTOR % info.size ||
+            info.start_offset != off) { return -EINVAL; }
+        off += info.size;
+    }
+    return 0;
+}
+
+static bool overlap(const struct flash_area *a, const struct flash_area *b)
+{
+    return flash_area_get_device(a) == flash_area_get_device(b) &&
+           a->fa_off < b->fa_off + b->fa_size && b->fa_off < a->fa_off + a->fa_size;
+}
+
+int iap_init(const struct iap_config *cfg)
 {
     if (receiver.ready) { return -EALREADY; }
-    int err = flash_area_open(DT_FIXED_PARTITION_ID(DT_NODELABEL(iap_staging)), &staging);
+    if (!cfg || !cfg->aes_key || !cfg->image.public_key || !cfg->image.key_hash ||
+        cfg->image.max_size < 544 ||
+        cfg->image.load_address > UINT32_MAX - cfg->image.max_size ||
+        cfg->image.sram_start >= cfg->image.sram_end ||
+        (!!cfg->prepare_reboot != !!cfg->cancel_reboot)) { return -EINVAL; }
+    int err = flash_area_open(cfg->staging_area_id, &staging);
     if (!err) { err = flash_area_open(DT_FIXED_PARTITION_ID(DT_NODELABEL(slot1_partition)), &secondary); }
     if (!err) { err = flash_area_open(DT_FIXED_PARTITION_ID(DT_NODELABEL(slot0_partition)), &primary); }
-    const struct flash_area *area;
-    if (!err) { err = flash_area_open(DT_FIXED_PARTITION_ID(DT_NODELABEL(iap_journal)), &area); }
-    if (err) { return err; }
-    if (staging->fa_size != IDU_SGZ_MAX_SIZE || secondary->fa_size != 0x70000 ||
-        area->fa_size != 0x4000 || flash_area_align(staging) > 16) { return -EINVAL; }
+    const struct flash_area *area = NULL;
+    if (!err) { err = flash_area_open(cfg->journal_area_id, &area); }
+    if (!err) { err = check_erase_area(staging); }
+    if (!err) { err = check_erase_area(area); }
+    if (!err && (staging->fa_size > CONFIG_IAP_MAX_CONTAINER_SIZE ||
+        cfg->image.max_size > secondary->fa_size || cfg->image.max_size > primary->fa_size ||
+        area->fa_size / SECTOR < 2 || area->fa_size / SECTOR > UINT16_MAX ||
+        overlap(staging, area) || overlap(staging, primary) || overlap(staging, secondary) ||
+        overlap(area, primary) || overlap(area, secondary) || overlap(primary, secondary))) {
+        err = -EINVAL;
+    }
+    if (err) {
+        if (area) { flash_area_close(area); }
+        close_areas(); return err;
+    }
+    memset(&journal_fs, 0, sizeof(journal_fs));
     journal_fs.flash_device = flash_area_get_device(area);
     journal_fs.offset = area->fa_off;
     journal_fs.sector_size = SECTOR;
     journal_fs.sector_count = area->fa_size / SECTOR;
     flash_area_close(area);
     err = nvs_mount(&journal_fs);
-    if (err) { return err; }
+    if (err) { close_areas(); return err; }
     uint8_t wire[48] = {0};
     err = nvs_read(&journal_fs, 1, wire, sizeof(wire));
     journal.magic = sys_get_le32(wire); journal.phase = sys_get_le32(wire + 4);
     journal.size = sys_get_le32(wire + 8); memcpy(journal.hash, wire + 12, 32);
     journal.crc = sys_get_le32(wire + 44);
     if (err != -ENOENT && (err != sizeof(wire) || journal.magic != 0x33415049 || journal.phase > 4 ||
-        journal.crc != idu_sgz_crc32(0, wire, 44))) {
-        return err < 0 ? err : -EBADMSG;
+        journal.crc != iap_sgz_crc32(0, wire, 44))) {
+        close_areas(); return err < 0 ? err : -EBADMSG;
     }
+    config = *cfg;
     receiver.owner = -1;
     if (err > 0 && (journal.phase == 1 || journal.phase == 2)) {
         receiver.busy = true; receiver.job = JOB_RECOVER;
@@ -225,7 +274,7 @@ int idu_iap_init(void)
     return 0;
 }
 
-bool idu_iap_ready(void) { return receiver.ready; }
+bool iap_ready(void) { return receiver.ready; }
 
 static uint16_t missing(void)
 {
@@ -241,7 +290,7 @@ static int read_regs(uint16_t address, uint16_t count, struct modbus_adu *tx)
         20063,20071,20083,20088,20089,20090,20091,20093,20094,20099,20100,20102,20103};
     bool valid = false;
     for (size_t i = 0; i < ARRAY_SIZE(starts); ++i) { valid |= address == starts[i]; }
-    if (!valid || !count || address + (uint32_t)count > 20104) { return TR_MODBUS_SILENT; }
+    if (!valid || !count || address + (uint32_t)count > 20104) { return IAP_ROUTE_SILENT; }
     uint8_t regs[110];
     memset(regs, 0xff, sizeof(regs));
 #define REG(a) (regs + ((a) - 20049) * 2)
@@ -317,7 +366,7 @@ static int write_regs(int iface, uint16_t address, const uint8_t *data, size_t b
         data += 2; remaining -= 2; ++reg;
     }
     if ((every && (every > PACKET_MAX || every % 16)) || total > PACKETS_MAX ||
-        (every && total && (uint32_t)every * total > IDU_SGZ_MAX_SIZE) ||
+        (every && total && (uint32_t)every * total > staging->fa_size) ||
         (!login && !logout && (every != receiver.every || total != receiver.total) && receiver.received) ||
         (number && (!total || number > total))) { return -EINVAL; }
     /* In the old callback CUR_PACKLEN is meaningful only for the final packet;
@@ -347,15 +396,16 @@ static int write_regs(int iface, uint16_t address, const uint8_t *data, size_t b
     return 0;
 }
 
-int idu_iap_route(int iface, const struct modbus_adu *rx, struct modbus_adu *tx)
+int iap_route(int iface, const struct modbus_adu *rx, struct modbus_adu *tx)
 {
-    if (rx->length < 4 || rx->length > sizeof(rx->data)) { return TR_MODBUS_SILENT; }
+    if (!rx || !tx || iface < 0) { return -EINVAL; }
+    if (rx->length < 4 || rx->length > sizeof(rx->data)) { return IAP_ROUTE_SILENT; }
     uint16_t address = sys_get_be16(rx->data), count = sys_get_be16(rx->data + 2);
     if (address < 20049 || address > 20104) { return -ENOENT; }
     if (!receiver.ready || rx->unit_id == 247 ||
-        (rx->unit_id == 0 && rx->fc != 4 && rx->fc != 16)) { return TR_MODBUS_SILENT; }
+        (rx->unit_id == 0 && rx->fc != 4 && rx->fc != 16)) { return IAP_ROUTE_SILENT; }
     k_mutex_lock(&lock, K_FOREVER);
-    int err = TR_MODBUS_SILENT;
+    int err = IAP_ROUTE_SILENT;
     if (rx->fc == 3 || rx->fc == 4) {
         if (rx->length == 4 && count && count <= 55 &&
             (receiver.owner < 0 || receiver.owner == iface)) { err = read_regs(address, count, tx); }
@@ -370,5 +420,5 @@ int idu_iap_route(int iface, const struct modbus_adu *rx, struct modbus_adu *tx)
         }
     }
     k_mutex_unlock(&lock);
-    return rx->unit_id == 0 && rx->fc == 16 ? TR_MODBUS_SILENT : err;
+    return rx->unit_id == 0 && rx->fc == 16 ? IAP_ROUTE_SILENT : err;
 }

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Generate only the MCUboot signing PUBLIC key for IAP pre-boot verification."""
+"""Generate public MCUboot verification material and the legacy transport key."""
 import hashlib
 from pathlib import Path
 import sys
+import re
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
@@ -22,8 +23,11 @@ def public_material(path):
 
 def main():
     raw, digest = public_material(sys.argv[1])
-    lines = ["/* Generated public verification material; contains no private key. */"]
-    for name, data in (("idu_iap_public_key", raw), ("idu_iap_key_hash", digest)):
+    if not re.fullmatch(r"[0-9a-fA-F]{32}", sys.argv[3]):
+        raise ValueError("IAP_AES_KEY_HEX must contain exactly 32 hexadecimal characters")
+    aes = bytes.fromhex(sys.argv[3])
+    lines = ["/* Generated verification/transport material; no signing private key. */"]
+    for name, data in (("iap_public_key", raw), ("iap_key_hash", digest), ("iap_aes_key", aes)):
         lines.append(f"static const uint8_t {name}[{len(data)}] = {{" +
                      ",".join(f"0x{x:02x}" for x in data) + "};")
     Path(sys.argv[2]).write_text("\n".join(lines) + "\n")

@@ -3,7 +3,8 @@
 [Documentation index](../docs/README.md) · [Architecture](../docs/collect-process-transmit.md)
 
 Three reusable modules provide data processing, equipment acquisition and
-protocol forwarding; a fourth provides standalone QuickLZ decoding. The
+protocol forwarding; `quicklz` provides standalone decoding and `iap` provides
+legacy firmware upload, verification and MCUboot staging. The
 `gd32e505` hardware module supplies the out-of-tree SoC port. All have Zephyr
 module metadata for integration with Zephyr 4.4.2. See
 [architecture and application integration](../docs/collect-process-transmit.md).
@@ -23,6 +24,7 @@ compatibility.
 | `collect` | `collect_lib.h`, `collect/collect.h` | `co_*` acquisition, bus scheduling and parameter transport backend |
 | `transmit` | `transmit_lib.h`, `transmit/{transmit,modbus_adapter}.h` | `tr_*` register mappings, port modes and Modbus workqueues |
 | `quicklz` | `quicklz/quicklz.h` | `qlz_decode_level3()` bounded QuickLZ level 3 decoding in plain C |
+| [`iap`](iap/README.md) | `iap/{iap,sgz}.h` | IAPv3 reception, SGZ/AES, signed images, flash staging and recovery; devicetree/Kconfig product policy |
 | [`gd32e505`](gd32e505/README.md) | Zephyr `soc_root`, `dts_root`, `adc_*` | E505 SoC, devicetree clock startup and synchronous ADC0 driver |
 
 Product point-table configuration lives in [`app/cfg/`](../app/cfg/README.md),
@@ -113,8 +115,10 @@ Enable `CONFIG_QUICKLZ` for the `quicklz/quicklz.h` API
 dependency and can also be compiled as plain C. It only decodes QuickLZ blocks;
 version 1.5 level 3 compressed and stored blocks use caller-provided buffers,
 without streaming history or allocation. Success returns the decoded byte count.
-SGZ container parsing, keys, image checks and board-specific vector validation
-remain in `app/iap/`. It is independent of the three point-processing modules.
+SGZ parsing, image checks and configurable vector validation belong to
+[`iap`](iap/README.md). Its configured startup reads partition and memory settings
+from devicetree, keys/size limits from Kconfig, and optionally flushes DP parameters.
+No product adapter C file is needed. QuickLZ remains independent of these services.
 
 ## Process and parameter contracts
 

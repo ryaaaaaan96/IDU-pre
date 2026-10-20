@@ -178,6 +178,14 @@ python applications/IDU-pre/tests/test_mcuboot_artifacts.py \
 <a id="iapv3"></a>
 ## IAPv3 / AES / SGZ 兼容升级
 
+接收、解包、验签和结果恢复由 [`modules/iap`](../modules/iap/README.md) 提供。
+`boards/iapv3.overlay` 的 `iap,staging`／`iap,journal` 选择分区，执行地址和
+RAM 范围取自 `slot0_partition`／`zephyr,sram`；`conf/iapv3.conf` 配置镜像上限、
+AES 密钥及 DP 参数保存策略。公钥文件默认跟随 MCUboot 签名配置。
+无需独立的 IDU IAP 适配 `.c`，启动顺序与试运行健康确认仍由应用编排。
+自动导出 SGZ 时读取本次构建的 `.config`；单独运行 `pack_sgz.py` 时也可用
+`--config <应用 .config>` 保持密钥和上限一致。
+
 适用当前 MV-IO 单 ARM 硬件。现有 USART2/RS485 保持转发用途，升级地址段
 在同一端口内路由；虚拟采集口继续工作。此配置与 `--aidc`、`--smp-uart`
 互斥：AIDC 的升级入口/多设备升级尚未移植，也不允许两个镜像上传端同时写 slot1。
@@ -238,7 +246,8 @@ FC03/04 读取、FC06/16 写入；FC16 按完整寄存器数判断长度，兼�
 IAP 配置额外划分两个外部 NOR 区域：`0x18000–0x1BFFF` 为独立 NVS
 升级日志，`0x201000–0x2F0FFF` 为 960 KiB SGZ 暂存。旧升级配置
 `0x200000–0x200FFF` 只读；slot1 位于 `0x300000`，不会从应用直接写当前镜像或 BOOT。
-日志使用固定 48 字节小端布局和自身 CRC；不启用会改变原参数 NVS 格式的全局数据 CRC。
+日志使用固定 48 字节小端布局和自身 CRC；当前 IDU 的 DP 参数模块还启用全局
+`NVS_DATA_CRC`。IAP 模块不切换该选项，迁移已有 NVS 数据时须保持此配置一致。
 
 解包校验 SGZ CRC、子文件 CRC、输出长度与 CRC，然后校验 MCUboot 头、
 本板向量、SHA256、签名密钥哈希和 ECDSA-P256。公钥从本次 MCUboot 构建的

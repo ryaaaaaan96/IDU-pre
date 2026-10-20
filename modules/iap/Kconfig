@@ -1,0 +1,82 @@
+# Modules are loaded before subsystem defaults; the first matching range wins.
+config MODBUS_BUFFER_SIZE
+    range 64 1100 if IAP
+
+menuconfig IAP
+    bool "Legacy IAPv3 receiver with signed MCUboot images"
+    depends on MODBUS && !MCUMGR_GRP_IMG
+    depends on IMG_MANAGER && MCUBOOT_IMG_MANAGER && IMG_ERASE_PROGRESSIVELY
+    depends on STREAM_FLASH && FLASH_MAP && FLASH_PAGE_LAYOUT && NVS && REBOOT
+    depends on UPDATEABLE_IMAGE_NUMBER = 1
+    depends on !BOOTLOADER_MCUBOOT || MCUBOOT_BOOTLOADER_MODE_SWAP_SCRATCH
+    select QUICKLZ
+    help
+      Single ARM SGZ/QuickLZ level-3 image over legacy Modbus IAPv3, with
+      ECDSA-P256 verification, flash staging and a durable result journal.
+      Supply partition IDs, keys, memory ranges and reboot hooks at startup.
+      Requires a whole-ADU router accepting oversized packets; no DP or
+      transmit module is required. Native tests can emulate MCUboot.
+
+if IAP
+
+config IAP_CONFIGURED
+    bool "Configure IAP from devicetree and Kconfig"
+    default y
+    help
+      iap_start() reads iap,staging and iap,journal chosen partitions,
+      slot0_partition's mapped address and zephyr,sram. Keys and image
+      payload limits come from the options below. Disable when calling
+      iap_init() with an explicit configuration (for example in tests).
+
+if IAP_CONFIGURED
+
+config IAP_IMAGE_MAX_SIZE
+    hex "Maximum signed image bytes (reserve MCUboot trailer space)"
+    default 0x6e000
+    range 0x220 0xffffff
+
+config IAP_PUBLIC_KEY_FILE
+    string "MCUboot P-256 verification PEM file"
+    default MCUBOOT_SIGNATURE_KEY_FILE
+    help
+      Public PEM or the same signing PEM used by MCUboot. Only public
+      verification material is emitted into the firmware. Relative paths
+      are resolved against the application configuration directory.
+
+config IAP_AES_KEY_HEX
+    string "Legacy AES-128 transport key (32 hexadecimal characters)"
+    default ""
+    help
+      Interoperability key for the old host tool. It does not authenticate
+      firmware; MCUboot ECDSA-P256 remains mandatory.
+
+choice IAP_REBOOT_POLICY
+    prompt "State persistence before upgrade/reboot"
+    default IAP_REBOOT_DP_PARAMS if DP_PARAMS
+    default IAP_REBOOT_NO_STATE
+
+config IAP_REBOOT_NO_STATE
+    bool "No application state to save"
+
+config IAP_REBOOT_DP_PARAMS
+    bool "Flush and freeze dataprocess parameters"
+    depends on DP_PARAMS
+    help
+      Use the DP transaction API after signature verification. Failed
+      commit/upgrade requests unfreeze parameter writes. Other products
+      can provide callbacks with iap_init() for a different state store.
+
+endchoice
+
+endif
+
+config IAP_MAX_CONTAINER_SIZE
+    int "Maximum SGZ staging capacity in bytes"
+    default 983040
+    range 4096 1048560
+    help
+      Bounds static packet/erase bitmaps. Actual transfers are limited by
+      the configured staging partition, which may be smaller. The legacy
+      16-bit packet count supports at most 65535 packets of 16 bytes.
+
+endif

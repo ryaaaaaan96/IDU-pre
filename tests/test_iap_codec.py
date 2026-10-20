@@ -8,6 +8,7 @@ import random
 import struct
 import subprocess
 import sys
+import tempfile
 import unittest
 import zlib
 from cryptography.hazmat.primitives import serialization
@@ -30,7 +31,7 @@ def module(name, file):
 
 
 packer = module("pack_sgz", APP / "tools/pack_sgz.py")
-pubtool = module("iap_public_key", APP / "tools/iap_public_key.py")
+pubtool = module("iap_public_key", APP / "modules/iap/scripts/public_key.py")
 READ = C.CFUNCTYPE(C.c_int, C.c_void_p, C.c_uint32, C.c_void_p, C.c_size_t)
 WRITE = C.CFUNCTYPE(C.c_int, C.c_void_p, C.c_void_p, C.c_size_t)
 
@@ -38,10 +39,10 @@ WRITE = C.CFUNCTYPE(C.c_int, C.c_void_p, C.c_void_p, C.c_size_t)
 def build():
     BUILD.mkdir(parents=True, exist_ok=True)
     subprocess.run([sys.executable, str(APP / "tests/iap/fixtures.py"), str(BUILD)], check=True)
-    sources = [APP / "app/iap/sgz.c", APP / "app/iap/verify_rng.c",
+    sources = [APP / "modules/iap/src/sgz.c", APP / "modules/iap/src/verify_rng.c",
                APP / "modules/quicklz/src/quicklz.c"] + [TINY / f"source/{x}.c" for x in
         ("aes_encrypt", "aes_decrypt", "sha256", "utils", "ecc", "ecc_dsa")]
-    flags = ["-std=c11", "-Wall", "-Wextra", "-Werror", "-I", str(APP / "app"),
+    flags = ["-std=c11", "-Wall", "-Wextra", "-Werror", "-I", str(APP / "modules/iap/include"),
              "-I", str(APP / "modules/quicklz/include"), "-I", str(TINY / "include")]
     subprocess.run(["gcc", "-shared", "-fPIC", *flags, *map(str, sources),
                     "-o", str(BUILD / "codec.so")], check=True)
@@ -56,16 +57,22 @@ def build():
                         str(LEGACY / "quicklz.c"), "-o", str(BUILD / "legacy.so")], check=True)
 
 
+class ImagePolicy(C.Structure):
+    _fields_ = [("max_size", C.c_uint32), ("load_address", C.c_uint32),
+                ("sram_start", C.c_uint32), ("sram_end", C.c_uint32),
+                ("public_key", C.c_char_p), ("key_hash", C.c_char_p)]
+
+
 class Codec(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.lib = C.CDLL(str(BUILD / "codec.so"))
         cls.lib.qlz_decode_level3.argtypes = [C.c_void_p, C.c_size_t, C.c_void_p, C.c_size_t]
-        cls.lib.idu_sgz_decrypt.argtypes = [C.c_void_p, C.c_size_t, C.c_uint32]
-        cls.lib.idu_sgz_unpack.argtypes = [READ, C.c_void_p, C.c_uint32, WRITE,
+        cls.lib.iap_sgz_decrypt.argtypes = [C.c_void_p, C.c_size_t, C.c_uint32, C.c_void_p]
+        cls.lib.iap_sgz_unpack.argtypes = [READ, C.c_void_p, C.c_uint32, C.c_uint32, WRITE,
                                           C.c_void_p, C.c_void_p, C.POINTER(C.c_uint32)]
-        cls.lib.idu_image_verify.argtypes = [READ, C.c_void_p, C.c_uint32,
-                                            C.c_void_p, C.c_void_p, C.c_void_p]
+        cls.lib.iap_image_verify.argtypes = [READ, C.c_void_p, C.c_uint32,
+                                            C.POINTER(ImagePolicy), C.c_void_p]
         cls.old = C.CDLL(str(BUILD / "legacy.so")) if LEGACY is not None else None
         if cls.old is not None:
             cls.old.qlz_compress.argtypes = [C.c_void_p, C.c_void_p, C.c_size_t, C.c_void_p]
@@ -75,7 +82,7 @@ class Codec(unittest.TestCase):
         cls.image = Path(os.environ.get("IDU_IAP_IMAGE", BUILD / "fixture.signed.bin")).read_bytes()
         cls.public, cls.digest = pubtool.public_material(cls.key)
 
-    def unpack(self, data):
+    def unpack(self, data, max_image_size=0x6e000):
         result = bytearray()
         @READ
         def read(ctx, off, dst, length):
@@ -88,19 +95,21 @@ class Codec(unittest.TestCase):
             result.extend(C.string_at(src, length))
             return 0
         size = C.c_uint32()
-        ret = self.lib.idu_sgz_unpack(read, None, len(data), write, None,
+        ret = self.lib.iap_sgz_unpack(read, None, len(data), max_image_size, write, None,
                                       C.create_string_buffer(4352), C.byref(size))
         return ret, bytes(result)
 
-    def verify(self, data, public=None, digest=None):
+    def verify(self, data, public=None, digest=None, policy=None):
         @READ
         def read(ctx, off, dst, length):
             if off + length > len(data):
                 return -5
             C.memmove(dst, data[off:off + length], length)
             return 0
-        return self.lib.idu_image_verify(read, None, len(data), public or self.public,
-                                         digest or self.digest, C.create_string_buffer(32))
+        policy = policy or ImagePolicy(0x6e000, 0x08010000, 0x20000000, 0x20020000,
+                                        public or self.public, digest or self.digest)
+        return self.lib.iap_image_verify(read, None, len(data), C.byref(policy),
+                                         C.create_string_buffer(32))
 
     def compress(self, data):
         if self.old is None:
@@ -133,10 +142,10 @@ class Codec(unittest.TestCase):
             for offset in range(0, len(encrypted), step):
                 data = encrypted[offset:offset + step]
                 buf = C.create_string_buffer(data, len(data))
-                self.assertEqual(self.lib.idu_sgz_decrypt(buf, len(data), offset), 0)
+                self.assertEqual(self.lib.iap_sgz_decrypt(buf, len(data), offset, packer.legacy_key()), 0)
                 out.extend(buf.raw)
             self.assertEqual(out, plain)
-        self.assertLess(self.lib.idu_sgz_decrypt(C.create_string_buffer(17), 17, 0), 0)
+        self.assertLess(self.lib.iap_sgz_decrypt(C.create_string_buffer(17), 17, 0, packer.legacy_key()), 0)
 
     def test_stored_sgz_roundtrip(self):
         ret, image = self.unpack(packer.pack(self.image, encrypt=False))
@@ -144,13 +153,50 @@ class Codec(unittest.TestCase):
         self.assertEqual(image, self.image)
         self.assertEqual(self.verify(image), 0)
 
+    def test_image_policy_and_output_limit(self):
+        plain = packer.pack(self.image, encrypt=False)
+        for limit in (0, len(self.image) - 1):
+            ret, output = self.unpack(plain, limit)
+            self.assertLess(ret, 0)
+            self.assertEqual(output, b"")
+        self.assertEqual(self.unpack(plain, len(self.image))[1], self.image)
+        for field, value in (("max_size", len(self.image) - 1),
+                             ("load_address", 0x08020000),
+                             ("load_address", 0xffffffff),
+                             ("sram_start", 0x20020000),
+                             ("sram_end", 0x20010000)):
+            policy = ImagePolicy(0x6e000, 0x08010000, 0x20000000, 0x20020000,
+                                 self.public, self.digest)
+            setattr(policy, field, value)
+            self.assertLess(self.verify(self.image, policy=policy), 0, (field, value))
+
+    def test_configured_transport_key_and_size(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / "iap.conf"
+            key = bytes(range(16))
+            config.write_text(f'CONFIG_IAP_AES_KEY_HEX="{key.hex()}"\n'
+                              'CONFIG_IAP_IMAGE_MAX_SIZE=0x6e000\n')
+            encrypted = packer.pack(self.image, config=config)
+            self.assertNotEqual(encrypted, packer.pack(self.image))
+            data = C.create_string_buffer(encrypted, len(encrypted))
+            self.assertEqual(self.lib.iap_sgz_decrypt(data, len(encrypted), 0, key), 0)
+            self.assertEqual(self.unpack(data.raw)[1], self.image)
+            config.write_text('CONFIG_IAP_AES_KEY_HEX="00"\n'
+                              'CONFIG_IAP_IMAGE_MAX_SIZE=0x6e000\n')
+            with self.assertRaises(ValueError):
+                packer.pack(self.image, config=config)
+            config.write_text(f'CONFIG_IAP_AES_KEY_HEX="{key.hex()}"\n'
+                              'CONFIG_IAP_IMAGE_MAX_SIZE=0x220\n')
+            with self.assertRaises(ValueError):
+                packer.pack(self.image, config=config)
+
     def test_exported_sgz(self):
         filename = os.environ.get("IDU_IAP_SGZ")
         if not filename:
             self.skipTest("production artifact checked when IDU_IAP_SGZ is set")
         encrypted = Path(filename).read_bytes()
         buf = C.create_string_buffer(encrypted, len(encrypted))
-        self.assertEqual(self.lib.idu_sgz_decrypt(buf, len(encrypted), 0), 0)
+        self.assertEqual(self.lib.iap_sgz_decrypt(buf, len(encrypted), 0, packer.legacy_key()), 0)
         ret, image = self.unpack(buf.raw)
         self.assertEqual(ret, 0)
         self.assertEqual(image, self.image)

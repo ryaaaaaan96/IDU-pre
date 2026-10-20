@@ -26,3 +26,9 @@ for phase in pending rollback; do
     env IDU_IAP_PHASE="$phase" timeout 30s "$executable" -flash="$flash_test_file" \
         -test=iap::test_reboot_journal
 done
+
+# Same module with configured partitions, different memory/key/limits and no DP.
+env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
+    applications/IDU-pre/tests/iap -d build/IDU-pre/tests/iap-configured -- \
+    -DEXTRA_CONF_FILE=configured.conf -DEXTRA_DTC_OVERLAY_FILE=configured.overlay
+timeout 30s build/IDU-pre/tests/iap-configured/zephyr/zephyr.exe -flash_in_ram
