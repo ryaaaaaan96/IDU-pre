@@ -3,7 +3,7 @@
 `vport` 负责通用链路和路由。`transmit/src/modbus_transport.c` 将 Zephyr
 已组帧的 Modbus 接口接入它，供现有 `collect` / `transmit` 使用；
 这部分属于已有协议适配层，不另建模块。IDU 默认启用，应用绑定在
-[`app/communication/ports/config.c`](../app/communication/ports/config.c)。
+[`app/cfg/ports.c`](../app/cfg/ports.c)。
 
 | 逻辑端口 | 链路 | Zephyr 接口 | 用途 |
 | --- | --- | --- | --- |
@@ -14,7 +14,26 @@
 选择 `IDU_COLLECT_RTU` 后，采集端口改绑 `idu-collect` 的独立物理 UART，
 不再注册模拟设备端口。当前板上 RS485 只做转发，不运行第二个 RTU 主站。
 点表 `DEV_TABLE_S.port` 仍是采集总线号：bus 0 由
-`idu_acquisition_port_init()` 返回的接口交给 `co_init()`；它不是上述逻辑端口号。
+`co_port_open(&idu_collect_port)` 返回的接口交给 `co_init()`；它不是上述逻辑端口号。
+
+## 模块与产品配置
+
+`app/communication` 已删除，执行逻辑按职责归属既有模块：
+
+| 位置 | 内容 |
+| --- | --- |
+| `modules/transmit/src/server.c` | 多端口生命周期与配置更新 |
+| `modules/transmit/src/registers.c` | 状态读取、命令匹配及普通参数写入入口 |
+| `modules/transmit/src/mvio.c` | MV-IO 旧协议解析；通过回调接入 IAP |
+| `modules/collect/src/port.c` | 采集客户端初始化 |
+| `modules/collect/src/simulator.c` | 配置驱动的模拟设备及故障注入 |
+| `modules/collect/src/model_simulator.c` | 模型默认值后端 |
+| `app/cfg/ports.c`、`forwarding.c` | 传输绑定、协议选择及转发设置 |
+| `app/cfg/parameters.c`、`mvio.c`、`simulation.c` | 命令/状态地址、兼容窗口、模拟初值 |
+| `app/process/serial_settings.c` | 产品参数编码到串口设置的业务转换 |
+
+网络和协议配置保存在 Flash，转发状态由 transmit 管理，模拟寄存器值由
+collect 的实例保存。新增产品提供自己的配置与业务回调，不修改模块源码。
 
 ## 数据路径
 
@@ -45,9 +64,9 @@ AIDC 的 `read_model` 是直接产生样本的内存模型，不是 UPP 通信�
 
 ## 配置与并发
 
-1. 启动时 `tr_modbus_transport_bind()` 校验接口名及一对一映射，不启用硬件。
-2. `vport_init()` 注册 const 链路、端口、路由表。
-3. 调用原有 `modbus_init_*()` / `tr_modbus_init_server()` 启用通信。
+1. `tr_modbus_network_start(&idu_port_network)` 校验并注册绑定及 vport 表；同一配置可重复调用。
+2. `co_port_open(&idu_collect_port)` 初始化配置中的真实客户端或可选仿真设备；接口交给 `co_init()`。
+3. 周期执行 `tr_server_service(&idu_forwarding, sample.address)`，由 transmit 管理启动、地址/串口参数变化和恢复。
 
 绑定和路由表保持到重启；串口地址、格式切换及恢复不改变绑定。
 本适配器目前一接口对应一端口、一链路，固定 `peer=0`。不要给同一 UART

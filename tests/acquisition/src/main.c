@@ -1,6 +1,7 @@
+#include "cfg/inc/ports.h"
+#include <transmit/server.h>
 #include "acquisition/idu_acquisition.h"
 #include "process/idu_process.h"
-#include "communication/idu_protocol.h"
 #include <gpio/idu_inputs.h>
 #include <iap/iap.h>
 #include <zephyr/drivers/led.h>
@@ -88,8 +89,11 @@ int idu_snapshot_publish(const struct idu_snapshot *snapshot)
     return service(PUBLISH);
 }
 
-int idu_protocol_set_address(uint8_t address)
+const struct tr_server_config idu_forwarding;
+
+int tr_server_service(const struct tr_server_config *config, uint8_t address)
 {
+    zassert_equal_ptr(config, &idu_forwarding);
     zassert_equal(address, 7);
     return service(PROTOCOL);
 }

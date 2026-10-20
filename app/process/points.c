@@ -4,15 +4,14 @@
 #include "cfg/inc/device.h"
 #include "cfg/inc/signal_ids.h"
 #include <gpio/idu_inputs.h>
-#include "communication/ports/idu_acquisition.h"
+#include "cfg/inc/ports.h"
+#include <collect/port.h>
+#include <transmit/modbus_transport.h>
 #include <data_process.h>
 #include <platform_callback.h>
 #include <collect/collect.h>
 #include <dataprocess/params.h>
 #include <dataprocess/process.h>
-#if defined(CONFIG_IDU_AIDC_PROFILE)
-#include "communication/ports/idu_virtual.h"
-#endif
 #include <errno.h>
 #include <zephyr/device.h>
 #include <zephyr/storage/flash_map.h>
@@ -29,14 +28,16 @@ int idu_equipment_init(void)
         return err;
     }
     const struct dp_equip_cfg *cfg = dp_config();
-    int iface = idu_acquisition_port_init();
+    err = tr_modbus_network_start(&idu_port_network);
+    if (err) { return err; }
+    int iface = co_port_open(&idu_collect_port);
     if (iface < 0) {
         return iface;
     }
     err = co_init(cfg, iface, IS_ENABLED(CONFIG_IDU_COLLECT_VIRTUAL));
     if (err) { return err; }
 #if defined(CONFIG_IDU_AIDC_PROFILE)
-    err = idu_aidc_bus_init(cfg);
+    err = co_init_bus(cfg, &idu_model_bus);
     if (err) { return err; }
     LOG_WRN("AIDC profile: DSP1..8 use a VIRTUAL UPP model backend");
 #endif

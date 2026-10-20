@@ -24,4 +24,12 @@ extern const struct vport_backend_ops tr_modbus_transport_backend;
 void tr_modbus_transport_receive(const struct vport_source *source,
                           const struct vport_frame *frame, void *user);
 
+struct tr_modbus_network {
+    const struct tr_modbus_transport *endpoints;
+    size_t endpoint_count;
+    const struct vport_config *ports;
+};
+/* 启动期组合注册；同一个常驻配置可重复调用，不接受运行期更换配置。 */
+int tr_modbus_network_start(const struct tr_modbus_network *config);
+
 #endif

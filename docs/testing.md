@@ -43,6 +43,7 @@ build/IDU-pre/tests/reference_services/zephyr/zephyr.exe -flash_in_ram
 | `io` | GPIO 极性/位序/32 位边界、外部看门狗超时与 GPIO 故障锁定 |
 | `vport` | 后端注册、路由、CAN ID 分流、来源隔离、有界 RX、发送互斥 |
 | `communication` | UART/GPIO emulator 上的 RTU/RAW 往返、完整 ADU（含 IAPv3 大报文配置）、背压、交接超时、TX 错误及恢复 |
+| `simulator` | 独立于产品配置的双设备模拟、值/故障隔离、完整多字写入及丢失应答 |
 | `acquisition` | 采集与 status 集成、无效样本发布、故障保留、状态灯亮灭/翻转、LED/看门狗错误阻止试运行确认 |
 
 `tests/run.sh` 同时验证 Process 关闭、参数/后端可选配置，并用独立 Flash 临时文件
@@ -416,3 +417,33 @@ getter 只返回表，删除按设备号补挂表的装配逻辑。三表由 `de
 
 日志位于工作区 `build/IDU-pre/vport-integration/`。本轮没有烧录或实板测量；
 UART/GPIO emulator 验证不代表实际 RS485 电气时序、栈余量或 CAN 已通过验证。
+
+## 通信职责归入模块（2026-10-20）
+
+删除 `app/communication`，产品端口、协议、命令和仿真数据以常驻配置放入
+`app/cfg/`；业务参数转换保留在 `app/process/serial_settings.c`。
+`transmit` 管理各转发口的生命周期、寄存器服务和 MV-IO 协议，
+`collect` 管理采集初始化、可选寄存器模拟器和模型默认值后端。
+模块不引用 IDU 头文件、设备树别名或产品 Kconfig。
+
+- `CCACHE_DISABLE=1 ASAN_OPTIONS=detect_leaks=0 bash tests/run.sh` 全量通过：
+  40 次模拟器执行、268 项 Ztest PASS（包含恢复阶段重复执行）；
+  Python 30 项中 27 项通过、3 项缺少外部 QuickLZ/SGZ 输入而跳过。
+- 新增独立模拟器套件 4 项，验证双设备数据/故障隔离、多字写入原子性、
+  拆分写拒绝、丢失应答不重试及无效布局拒绝。测试不加载应用配置或业务代码。
+- 双转发口经 `tr_server_service()` 启动，新增地址连续更新、端口隔离及
+  重复接口配置拒绝测试；新增网络注册幂等、MV-IO 状态寄存器及配置边界测试。
+  命令业务错误不会被误判为“未处理请求”而继续执行普通参数写入。
+- 既有参数保存/恢复、MV-IO 广播/247 地址、AIDC 模型及串口参数测试通过；
+  三张点表、设备表、默认值和 NVS schema 未修改。
+- 默认、MCUboot + IAPv3、MCUboot + AIDC 最终构建与导出检查通过，
+  MCUboot 应用镜像验签通过。文档本地链接和 `git diff --check` 通过。
+
+| 配置 | Flash | 静态 RAM |
+| --- | ---: | ---: |
+| 默认 | 99,484 B | 85,928 B |
+| MCUboot + IAPv3 应用 | 122,496 B | 122,024 B |
+| MCUboot + AIDC 应用 | 112,676 B | 121,240 B |
+
+日志在工作区 `build/IDU-pre/communication-ownership/`。本轮未烧录验证，
+未验证真实双 UART 采集、CAN 收发或实板栈余量。

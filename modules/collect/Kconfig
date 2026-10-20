@@ -19,4 +19,18 @@ config CO_TIMEOUT_MS
     default 100
     range 10 1000
 
+config CO_SIMULATOR
+    bool "Configured Modbus ADU device simulator"
+    depends on MODBUS_RAW_ADU && TR_MODBUS_ADAPTER
+
+config CO_SIMULATOR_WORDS
+    int "Words per simulated register bank"
+    depends on CO_SIMULATOR
+    default 32
+    range 1 256
+
+config CO_MODEL_SIMULATOR
+    bool "Reference model default-value simulator"
+    depends on DP_REFERENCE_TABLES
+
 endif

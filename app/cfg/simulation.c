@@ -1,0 +1,47 @@
+#include "ports.h"
+#include "signal_ids.h"
+#include <collect/port.h>
+#include <collect/simulator.h>
+
+/* 产品模拟数据；收发、故障注入及整包写入校验由 collect 提供。 */
+static const struct co_simulator_register registers[] = {
+    {.function = 3, .address = 40000, .width = 1, .initial = 100,
+     .writable = true, .minimum = 0, .maximum = 1000},
+    {.function = 3, .address = 40001, .width = 2, .initial = 0,
+     .writable = true, .signed_value = true, .minimum = -100000, .maximum = 100000},
+    {.function = 3, .address = 30459, .width = 1, .unit_address = true},
+    {.function = 4, .address = 8152, .width = 1, .initial = 0x0005},
+    {.function = 4, .address = 8150, .width = 2, .initial = IDU_PROTOCOL_VERSION},
+    {.function = 4, .address = 8163, .width = 1, .initial = 100},
+    {.function = 4, .address = 8164, .width = 1, .initial = 200},
+    {.function = 4, .address = 8165, .width = 1, .initial = 300},
+    {.function = 4, .address = 8166, .width = 1, .initial = 400},
+    {.function = 4, .address = 8167, .width = 1, .initial = 500},
+    {.function = 4, .address = 8168, .width = 1, .initial = 600},
+    {.function = 4, .address = 8169, .width = 1, .initial = 700},
+    {.function = 4, .address = 8170, .width = 1, .initial = 800},
+};
+static const struct co_simulator_config simulation = {
+    .client_iface = "RAW_0", .server_iface = "RAW_1", .dev_id = IDU_DEV_REMOTE_IO,
+    .timeout_us = CONFIG_CO_TIMEOUT_MS * 1000U,
+    .registers = registers, .register_count = ARRAY_SIZE(registers),
+};
+struct co_simulator idu_collect_simulator;
+const struct co_port_config idu_collect_port = {
+    .simulator = &idu_collect_simulator, .simulation = &simulation,
+};
+
+#if defined(CONFIG_IDU_AIDC_PROFILE)
+#include "device.h"
+#include "tables.h"
+#include <collect/model_simulator.h>
+
+static const struct co_model_simulator model = {
+    .first_device = IDU_DEV_DSP_FIRST, .last_device = IDU_DEV_DSP_LAST,
+    .registry = &idu_imported_models, .defaults = idu_point_default,
+};
+const struct co_bus_cfg idu_model_bus = {
+    .id = 1, .iface = -1, .simulated = true,
+    .read_model = co_model_simulator_read, .user = (void *)&model,
+};
+#endif

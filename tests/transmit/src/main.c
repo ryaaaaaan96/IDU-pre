@@ -1,5 +1,6 @@
 #include <dataprocess/points.h>
 #include <transmit/transmit.h>
+#include <transmit/server.h>
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/ztest.h>
@@ -89,6 +90,16 @@ static bool accept(const struct modbus_adu *rx, uint8_t unit, void *user)
     return rx->unit_id == unit;
 }
 
+static struct modbus_user_callbacks server_callbacks;
+static const struct tr_server_config managed[] = {
+    {.iface_name = "RAW_1", .param = {.mode = MODBUS_MODE_RAW,
+        .server = {.user_cb = &server_callbacks}, .rawcb = {.raw_tx_cb = response_tx}},
+     .write = write_register, .recovery_timeout_ms = 20000},
+    {.iface_name = "RAW_2", .param = {.mode = MODBUS_MODE_RAW,
+        .server = {.user_cb = &server_callbacks}, .rawcb = {.raw_tx_cb = response_tx}},
+     .write = write_register, .recovery_timeout_ms = 20000},
+};
+
 static void *setup(void)
 {
     zassert_ok(dp_init_config(&equipment));
@@ -96,17 +107,10 @@ static void *setup(void)
     servers[0] = modbus_iface_get_by_name("RAW_1");
     servers[1] = modbus_iface_get_by_name("RAW_2");
     zassert_true(client >= 0 && servers[0] >= 0 && servers[1] >= 0);
-    static struct modbus_user_callbacks server_callbacks;
     server_callbacks = *tr_callbacks();
     server_callbacks.coil_wr = write_coil;
     for (size_t i = 0; i < ARRAY_SIZE(servers); ++i) {
-        struct modbus_iface_param server = {
-            .mode = MODBUS_MODE_RAW,
-            .server = {.unit_id = 7 + i, .user_cb = &server_callbacks},
-            .rawcb = {.raw_tx_cb = response_tx},
-        };
-        zassert_ok(tr_attach(servers[i], NULL));
-        zassert_ok(tr_modbus_init_server(servers[i], server, write_register, true));
+        zassert_ok(tr_server_service(&managed[i], 7 + i));
     }
     struct modbus_iface_param config = {
         .mode = MODBUS_MODE_RAW, .rx_timeout = 20000,
@@ -281,6 +285,42 @@ ZTEST(transmit, test_control_validation_and_statistics_clear)
     zassert_ok(tr_port_control(servers[0], TR_PORT_GET_STATS, &stats));
     zassert_equal(stats.requests + stats.responses + stats.filtered +
                     stats.sleep_drops + stats.callback_errors, 0);
+}
+
+static void wait_config(int iface)
+{
+    struct tr_modbus_health health;
+    for (size_t i = 0; i < 100; ++i) {
+        zassert_ok(tr_modbus_get_health(iface, &health));
+        if (!health.changing) { k_msleep(1); return; }
+        k_msleep(1);
+    }
+    zassert_unreachable("Configuration did not complete");
+}
+
+ZTEST(transmit, test_managed_servers_reconfigure_independently)
+{
+    zassert_equal(tr_server_service(NULL, 7), -EINVAL);
+    zassert_equal(tr_server_service(&managed[0], 0), -EINVAL);
+    static const struct tr_server_config duplicate = {
+        .iface_name = "RAW_1", .recovery_timeout_ms = 20000,
+    };
+    zassert_equal(tr_server_service(&duplicate, 7), -EEXIST);
+    zassert_ok(tr_server_service(&managed[0], 42));
+    /* A newer desired setting is retried after the in-flight change. */
+    zassert_ok(tr_server_service(&managed[0], 43));
+    wait_config(servers[0]);
+    zassert_ok(tr_server_service(&managed[0], 43));
+    wait_config(servers[0]);
+    uint16_t value;
+    target = 0;
+    zassert_ok(modbus_read_input_regs(client, 43, 100, &value, 1));
+    zassert_equal(value, 2222);
+    target = 1;
+    zassert_ok(modbus_read_input_regs(client, 8, 100, &value, 1));
+    zassert_equal(value, 2222);
+    zassert_ok(tr_server_service(&managed[0], 7));
+    wait_config(servers[0]);
 }
 
 ZTEST_SUITE(transmit, NULL, setup, before, NULL, NULL);

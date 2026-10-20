@@ -1,8 +1,9 @@
+#include "cfg/inc/ports.h"
+#include <collect/port.h>
+#include <transmit/modbus_transport.h>
+#include <transmit/server.h>
 #include "cfg/inc/device.h"
 #include "cfg/inc/imported_signals.h"
-#include "communication/config/protocol_config.h"
-#include "communication/ports/idu_acquisition.h"
-#include "communication/ports/idu_virtual.h"
 #include <collect/collect.h>
 #include <dataprocess/params.h>
 #include <dataprocess/points.h>
@@ -14,9 +15,7 @@
 
 static int configure_serial(struct modbus_iface_param *cfg)
 {
-    const struct idu_protocol_profile *profile = idu_protocol_config();
-
-    return profile->serial ? profile->serial(cfg) : 0;
+    return idu_forwarding.configure ? idu_forwarding.configure(cfg) : 0;
 }
 
 static void *setup(void)
@@ -29,9 +28,10 @@ static void *setup(void)
     zassert_equal(cfg->collect_count,339);
     zassert_equal(cfg->transmit_count,108);
     zassert_ok(dp_validate(cfg));
-    int iface=idu_acquisition_port_init(); zassert_true(iface>=0);
+    zassert_ok(tr_modbus_network_start(&idu_port_network));
+    int iface=co_port_open(&idu_collect_port); zassert_true(iface>=0);
     zassert_ok(co_init(cfg,iface,true));
-    zassert_ok(idu_aidc_bus_init(cfg));
+    zassert_ok(co_init_bus(cfg, &idu_model_bus));
     zassert_ok(dp_params_init(cfg,DT_FIXED_PARTITION_ID(DT_ALIAS(idu_settings))));
     zassert_ok(dp_process_init_device(0));
     return NULL;

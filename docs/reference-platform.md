@@ -38,7 +38,7 @@ python3 applications/IDU-pre/tools/analyze_reference.py \
 | `app/cfg/equip/dev_cfg.c:43` 的 `DEV_TABLE_S` 实例组合各协议表 | [app/cfg/device.c](../app/cfg/device.c) 和 [inc](../app/cfg/inc) 的设备和型号配置 |
 | `app/cfg/equip/table/{process,collect,transmit}.c` 分别描述数据、采集和寄存器映射 | [app/cfg/tables](../app/cfg/tables)，三表内容与处理执行分开 |
 | `app/process` 的业务回调、`app/globalfunction.c` 的回调读写辅助 | [app/process](../app/process) 的业务处理，通用事务机制位于 DP 模块 |
-| `app/port_filter`、`app/plc` 的报文处理和端口控制 | [app/communication](../app/communication) 的产品协议配置和 Zephyr 端口适配 |
+| `app/port_filter`、`app/plc` 的报文处理和端口控制 | [app/cfg](../app/cfg) 提供产品配置；[transmit](../modules/transmit) 执行协议和端口管理 |
 | `platform/libs/plateform.lib` 的共享数据池、调度、采集、转发 | [modules/dataprocess](../modules/dataprocess)、[collect](../modules/collect)、[transmit](../modules/transmit) 的源码实现 |
 
 参考工程的 `local_equip` 还包含产品功能。IDU 的采样映射、启动顺序和工程量换算继续属于应用。当前顺序为配置注册、`dp_init()`、采集接口、各总线 `co_init()`、参数恢复、`dp_process_start()`、`dp_reference_start()`、`co_start()`；TR 在地址就绪后绑定，产品依赖由应用显式安排。

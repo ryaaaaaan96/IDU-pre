@@ -21,6 +21,21 @@ config TR_MODBUS_TRANSPORT
 config MODBUS_NUMOF_RAW_ADU
     default 2 if IDU_COLLECT_VIRTUAL
 
+config TR_SERVER_SERVICE
+    default y
+
+config TR_REGISTER_SERVICE
+    default y
+
+config TR_MVIO
+    default y if !IDU_AIDC_PROFILE
+
+config CO_SIMULATOR
+    default y if IDU_COLLECT_VIRTUAL
+
+config CO_MODEL_SIMULATOR
+    default y if IDU_AIDC_PROFILE
+
 config IDU_SAMPLE_PERIOD_MS
     int "Acquisition period in milliseconds"
     default 500

@@ -1,11 +1,13 @@
+#include "cfg/inc/ports.h"
+#include <collect/port.h>
+#include <collect/simulator.h>
+#include <transmit/modbus_transport.h>
+#include <transmit/server.h>
+#include <transmit/registers.h>
+#include <transmit/mvio.h>
 #include "process/idu_process.h"
 #include "cfg/inc/device.h"
 #include "cfg/inc/signal_ids.h"
-#include "communication/idu_protocol.h"
-#include "communication/config/protocol_config.h"
-#include "communication/ports/idu_acquisition.h"
-#include "communication/ports/idu_virtual.h"
-#include "communication/ports/config.h"
 #include <vport/vport.h>
 #include <collect/collect.h>
 #include <dataprocess/params.h>
@@ -143,9 +145,7 @@ static void write_old_fixture(bool intent)
 
 static int attach_profile(void)
 {
-    const struct idu_protocol_profile *profile = idu_protocol_config();
-
-    return profile->attach ? profile->attach(server) : tr_attach(server, NULL);
+    return idu_forwarding.attach(server, idu_forwarding.protocol);
 }
 
 static void *setup(void)
@@ -161,19 +161,19 @@ static void *setup(void)
     zassert_ok(idu_register_point_tables());
     zassert_ok(dp_init());
     const struct dp_equip_cfg *cfg = dp_config();
-    int south = idu_acquisition_port_init(); zassert_true(south >= 0);
+    zassert_ok(tr_modbus_network_start(&idu_port_network));
+    int south = co_port_open(&idu_collect_port); zassert_true(south >= 0);
     zassert_ok(co_init(cfg, south, true));
     zassert_ok(dp_params_init(cfg, storage->fa_id));
     zassert_ok(dp_process_init_device(0));
     server = modbus_iface_get_by_name("RAW_2"); client = modbus_iface_get_by_name("RAW_3");
     server_param = (struct modbus_iface_param){.mode = MODBUS_MODE_RAW,
-        .server = {.unit_id = 16, .user_cb = idu_parameter_callbacks()}, .rawcb = {.raw_tx_cb = response}};
+        .server = {.unit_id = 16, .user_cb = tr_callbacks()}, .rawcb = {.raw_tx_cb = response}};
     struct modbus_iface_param client_param = {.mode = MODBUS_MODE_RAW, .rx_timeout = 50000,
                                               .rawcb = {.raw_tx_cb = request}};
     zassert_ok(attach_profile());
-    const struct idu_protocol_profile *profile = idu_protocol_config();
-    if (profile->serial) { zassert_ok(profile->serial(&server_param)); }
-    zassert_ok(tr_modbus_init_server(server, server_param, idu_parameter_write, true));
+    if (idu_forwarding.configure) { zassert_ok(idu_forwarding.configure(&server_param)); }
+    zassert_ok(tr_modbus_init_server(server, server_param, tr_register_write, true));
     zassert_ok(modbus_init_client(client, client_param));
     return NULL;
 }
@@ -185,7 +185,7 @@ static void before(void *fixture)
     legacy_record(primary, 37, false, 8); legacy_record(backup, 41, false, 8);
     fresh_nvs(); zassert_ok(dp_params_reload());
     zassert_ok(attach_profile());
-    zassert_ok(idu_virtual_set_register(3, 40000, 100));
+    zassert_ok(co_simulator_set_register(&idu_collect_simulator, 3, 40000, 100));
     struct dp_point_batch batch = {.source = DP_SOURCE_LOCAL, .count = 2,
         .points = {{.key = {1, IDU_SIG_ADDRESS}, .width = 1, .value.words = {16}},
                    {.key = {1, IDU_SIG_DI}, .width = 1, .value.words = {0xa55a}}}};
@@ -338,9 +338,9 @@ ZTEST(mvio, test_previous_schema_intent_never_replays)
 {
     write_old_fixture(true);
     uint32_t previous = checksum(storage);
-    unsigned writes = idu_virtual_write_count();
+    unsigned writes = co_simulator_write_count(&idu_collect_simulator);
     zassert_equal(dp_params_reload(), -EPROTO);
-    zassert_equal(idu_virtual_write_count(), writes);
+    zassert_equal(co_simulator_write_count(&idu_collect_simulator), writes);
     zassert_equal(checksum(storage), previous);
 }
 
@@ -372,7 +372,7 @@ ZTEST(mvio, test_recovery_reinitializes_and_rolls_back)
             zassert_equal(word, 1);
         } else { zassert_equal(tr_modbus_service(server, 20000), -ENOTRECOVERABLE); }
     }
-    zassert_ok(tr_modbus_init_server(server, server_param, idu_parameter_write, true));
+    zassert_ok(tr_modbus_init_server(server, server_param, tr_register_write, true));
 }
 
 ZTEST(mvio, test_idle_service_recovers_without_resetting_parameters)
@@ -448,6 +448,25 @@ ZTEST(mvio, test_reboot_probe)
         uint16_t word; zassert_ok(modbus_read_holding_regs(client, 247, 30459, &word, 1));
         zassert_equal(word, 91);
     } else { zassert_unreachable("unknown phase"); }
+}
+
+ZTEST(mvio, test_parameter_status_through_product_router)
+{
+    struct dp_param_status status;
+    uint16_t value;
+    dp_params_get_status(&status);
+    zassert_ok(modbus_read_holding_regs(client, 16, 32000, &value, 1));
+    zassert_equal(value, status.flags);
+}
+
+ZTEST(mvio, test_invalid_protocol_spans_preserve_registered_router)
+{
+    const struct tr_legacy_span invalid[] = {{.first = 2503, .points = 1, .width = 16}};
+    struct tr_mvio_config config = idu_mvio_protocol;
+    config.input = invalid; config.input_count = ARRAY_SIZE(invalid);
+    zassert_equal(tr_mvio_attach(server, &config), -EINVAL);
+    uint16_t value;
+    zassert_ok(modbus_read_holding_regs(client, 247, 30459, &value, 1));
 }
 
 ZTEST_SUITE(mvio, NULL, setup, before, NULL, NULL);

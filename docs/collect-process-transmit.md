@@ -12,14 +12,14 @@
 以注册后端连接传输链路，支持 CAN ID 分流、多链路汇入及来源保持。
 它不依赖三张点表或 Modbus。IDU 默认通过
 `transmit` 内的[通信适配](communication-ports.md)将现有 RS485 转发和
-虚拟采集的完整 ADU 接入，绑定在 `app/communication/ports/config.c`。
+虚拟采集的完整 ADU 接入，绑定在 `app/cfg/ports.c`。
 Zephyr 保留 RTU 组帧、串口配置和方向控制；CAN/socket 后端待后续接入。
 
 ## 参考设计与 IDU 对应关系
 
 | 参考工程 | 设计含义 | IDU 实现 |
 | --- | --- | --- |
-| `app/cfg/inc/` | 信号身份和项目配置契约 | 点表契约在 `app/cfg/inc/`、`app/cfg/tables/`；协议契约在 `app/communication/config/protocol_config.h` |
+| `app/cfg/inc/` | 信号身份和项目配置契约 | 点表契约在 `app/cfg/inc/`、`app/cfg/tables/`；协议契约在 `app/cfg/inc/ports.h` |
 | `app/cfg/equip/dev_cfg.c` 的设备列表 | 多个实例复用同型号的表 | `app/cfg/device.c` 的 const 设备表直接声明实例及点表关联 |
 | `app/cfg/equip/table/*` | 采集、处理、转发分别声明 | `app/cfg/tables/{collect,process,transmit}.c`，复用型号定义在 `app/cfg/inc/mvio_signals.h` |
 | `app/process/*` 的业务回调 | 配置绑定行为，执行代码独立维护 | `app/process/` |
@@ -60,8 +60,8 @@ UPP、逆变器专用命令及其日志/加密扩展不属于通用三模块接�
 | `app/cfg/device.c`、`app/cfg/inc/` | 设备实例、型号信号与三表关联；配置头文件统一放 inc |
 | `app/cfg/tables/` | 信号、采集/处理/转发表和默认值/范围 |
 | `app/process/` | 纯换算、事务业务回调和参数命令 |
-| `app/communication/config/` | 协议路由、兼容窗口、控制/诊断寄存器 |
-| `app/communication/ports/` | 虚拟或真实采集后端 |
+| `app/cfg/` | 协议路由、兼容窗口、控制/诊断寄存器 |
+| `modules/collect`、`modules/transmit` | 采集后端、协议解析、端口生命周期 |
 | `app/` | 初始化装配、本地样本映射和健康确认 |
 | `app/acquisition/` | 采集/发布流程；通过 gpio 采样，通过 status 记录阶段 |
 

@@ -1,4 +1,5 @@
-#include "communication/ports/config.h"
+#include "ports.h"
+#include <collect/port.h>
 #include <transmit/modbus_transport.h>
 #include <zephyr/device.h>
 
@@ -79,22 +80,25 @@ static const struct vport_config config = {
     .ports = ports, .port_count = ARRAY_SIZE(ports),
     .routes = routes, .route_count = ARRAY_SIZE(routes),
 };
-K_MUTEX_DEFINE(ports_lock);
-static bool bound, ready;
+const struct tr_modbus_network idu_port_network = {
+    .endpoints = endpoints, .endpoint_count = ARRAY_SIZE(endpoints), .ports = &config,
+};
 
-int idu_communication_ports_init(void)
-{
-    k_mutex_lock(&ports_lock, K_FOREVER);
-    int err = 0;
-    if (!ready) {
-        err = vport_validate(&config);
-        if (!err && !bound) {
-            err = tr_modbus_transport_bind(endpoints, ARRAY_SIZE(endpoints));
-            bound = !err;
-        }
-        if (!err) { err = vport_init(&config); }
-        ready = !err;
-    }
-    k_mutex_unlock(&ports_lock);
-    return err;
-}
+#if defined(CONFIG_IDU_COLLECT_RTU)
+#define COLLECT_NODE DT_ALIAS(idu_collect)
+BUILD_ASSERT(DT_NODE_HAS_STATUS(COLLECT_NODE, okay), "Configure idu-collect in devicetree");
+BUILD_ASSERT(!DT_SAME_NODE(DT_PARENT(COLLECT_NODE), DT_PARENT(DT_ALIAS(idu_forward))),
+             "Acquisition and forwarding need separate physical UARTs");
+#if DT_HAS_CHOSEN(zephyr_console)
+BUILD_ASSERT(!DT_SAME_NODE(DT_PARENT(COLLECT_NODE), DT_CHOSEN(zephyr_console)),
+             "Acquisition must not take over the console UART");
+#endif
+const struct co_port_config idu_collect_port = {
+    .iface_name = DEVICE_DT_NAME(COLLECT_NODE),
+    .param = {
+        .mode = MODBUS_MODE_RTU, .rx_timeout = CONFIG_CO_TIMEOUT_MS * 1000U,
+        .serial = {.baud = DT_PROP(DT_PARENT(COLLECT_NODE), current_speed),
+                   .parity = UART_CFG_PARITY_NONE, .stop_bits = UART_CFG_STOP_BITS_1},
+    },
+};
+#endif

@@ -1,5 +1,6 @@
+#include "cfg/inc/ports.h"
+#include <collect/simulator.h>
 #include "cfg/inc/signal_ids.h"
-#include "communication/ports/idu_virtual.h"
 #include <dataprocess/params.h>
 #include <dataprocess/points.h>
 #include <dataprocess/process.h>
@@ -205,7 +206,7 @@ ZTEST(points, test_modules_multibus_modes_state_and_initialization)
     zassert_ok(co_device_status(20, &status)); zassert_equal(status.state, CO_DEVICE_EXCEPTION);
     bus_fault = 0; bus_value = 44;
     zassert_ok(co_initialize_device(20)); zassert_equal(bus_value, 222);
-    zassert_ok(idu_virtual_set_register(4,8152,0x27));
+    zassert_ok(co_simulator_set_register(&idu_collect_simulator, 4,8152,0x27));
     zassert_ok(co_initialize_device(IDU_DEV_REMOTE_IO));
     zassert_equal(value((struct dp_key){IDU_DEV_REMOTE_IO,IDU_SIG_DI}),0x27);
     zassert_ok(co_device_status(20, &status)); zassert_equal(status.state, CO_DEVICE_ONLINE);

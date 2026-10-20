@@ -1,3 +1,5 @@
 zephyr_library()
 zephyr_include_directories(include)
-zephyr_library_sources_ifdef(CONFIG_COLLECT src/collect.c)
+zephyr_library_sources_ifdef(CONFIG_COLLECT src/collect.c src/port.c)
+zephyr_library_sources_ifdef(CONFIG_CO_SIMULATOR src/simulator.c)
+zephyr_library_sources_ifdef(CONFIG_CO_MODEL_SIMULATOR src/model_simulator.c)

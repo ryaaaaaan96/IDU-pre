@@ -1,10 +1,12 @@
+#include "cfg/inc/ports.h"
+#include <collect/port.h>
+#include <collect/simulator.h>
+#include <transmit/modbus_transport.h>
+#include <transmit/registers.h>
 #include <platform_callback.h>
 #include "process/idu_process.h"
 #include "cfg/inc/device.h"
 #include "cfg/inc/signal_ids.h"
-#include "communication/idu_protocol.h"
-#include "communication/ports/idu_acquisition.h"
-#include "communication/ports/idu_virtual.h"
 #include <gpio/idu_inputs.h>
 #include "process/engineering.h"
 #include "legacy_registers.h"
@@ -150,7 +152,8 @@ static void *setup(void)
     uint16_t initial;
     zassert_equal(tr_read_register(4, 10000, &initial), -EIO);
     zassert_equal(tr_read_register(4, 8149, &initial), -EIO);
-    south_client = idu_acquisition_port_init();
+    zassert_ok(tr_modbus_network_start(&idu_port_network));
+    south_client = co_port_open(&idu_collect_port);
     zassert_true(south_client >= 0);
     zassert_ok(co_init(&test_cfg, south_client, true));
     module_bus_init(&test_cfg);
@@ -161,15 +164,15 @@ static void *setup(void)
     north_client = modbus_iface_get_by_name("RAW_3");
     struct modbus_iface_param server = {
         .mode = MODBUS_MODE_RAW,
-        .server = {.unit_id = 16, .user_cb = idu_parameter_callbacks()},
+        .server = {.unit_id = 16, .user_cb = tr_callbacks()},
         .rawcb = {.raw_tx_cb = north_response},
     };
     struct modbus_iface_param client = {
         .mode = MODBUS_MODE_RAW, .rx_timeout = 2000000,
         .rawcb = {.raw_tx_cb = north_request},
     };
-    zassert_ok(tr_attach(north_server, NULL));
-    zassert_ok(tr_modbus_init_server(north_server, server, idu_parameter_write, true));
+    zassert_ok(tr_register_attach(north_server, &idu_parameter_registers));
+    zassert_ok(tr_modbus_init_server(north_server, server, tr_register_write, true));
     zassert_ok(modbus_init_client(north_client, client));
     return NULL;
 }
@@ -180,13 +183,13 @@ static void before(void *fixture)
 {
     ARG_UNUSED(fixture);
     parameter_before();
-    idu_virtual_set_online(true);
-    zassert_ok(idu_virtual_set_register(4, 8152, 0x0005));
-    zassert_ok(idu_virtual_set_register(4, 8150, 0x0101));
-    zassert_ok(idu_virtual_set_register(4, 8151, 0x0100));
-    zassert_ok(idu_virtual_set_register(3, 30459, 1));
+    co_simulator_set_online(&idu_collect_simulator, true);
+    zassert_ok(co_simulator_set_register(&idu_collect_simulator, 4, 8152, 0x0005));
+    zassert_ok(co_simulator_set_register(&idu_collect_simulator, 4, 8150, 0x0101));
+    zassert_ok(co_simulator_set_register(&idu_collect_simulator, 4, 8151, 0x0100));
+    zassert_ok(co_simulator_set_register(&idu_collect_simulator, 3, 30459, 1));
     for (int i = 0; i < 8; ++i) {
-        zassert_ok(idu_virtual_set_register(4, 8163 + i, (i + 1) * 100));
+        zassert_ok(co_simulator_set_register(&idu_collect_simulator, 4, 8163 + i, (i + 1) * 100));
     }
     for (size_t i = 0; i < test_cfg.collect_count; ++i) {
         poll_block(i, 0);
@@ -245,7 +248,7 @@ ZTEST(points, test_end_to_end_remote_forwarding)
 
 ZTEST(points, test_timeout_invalidates_and_recovers)
 {
-    idu_virtual_set_online(false);
+    co_simulator_set_online(&idu_collect_simulator, false);
     poll_block(0, -ETIMEDOUT);
     struct dp_point_state state = state_of(remote_di);
     zassert_equal(state.quality, DP_QUALITY_SIMULATED | DP_QUALITY_COMM_ERROR);
@@ -255,8 +258,8 @@ ZTEST(points, test_timeout_invalidates_and_recovers)
                      4, MODBUS_EXC_ILLEGAL_DATA_ADDR);
     assert_exception(modbus_read_input_regs(north_client, 16, 10009, &value, 1),
                      4, MODBUS_EXC_ILLEGAL_DATA_ADDR);
-    idu_virtual_set_online(true);
-    zassert_ok(idu_virtual_set_register(4, 8152, 0x55aa));
+    co_simulator_set_online(&idu_collect_simulator, true);
+    zassert_ok(co_simulator_set_register(&idu_collect_simulator, 4, 8152, 0x55aa));
     poll_block(0, 0);
     zassert_ok(modbus_read_input_regs(north_client, 16, 10000, &value, 1));
     zassert_equal(value, 0x55aa);
@@ -291,7 +294,7 @@ ZTEST(points, test_application_conversion_and_remote_range_rejection)
     zassert_ok(tr_read_register(4, 8163, &value));
     zassert_equal(value, 34375);
     /* A syntactically successful Modbus reply may still violate point range. */
-    zassert_ok(idu_virtual_set_register(3, 30459, 0));
+    zassert_ok(co_simulator_set_register(&idu_collect_simulator, 3, 30459, 0));
     poll_block(10, 0);
     key = (struct dp_key){IDU_DEV_REMOTE_IO, IDU_SIG_ADDRESS};
     zassert_equal(state_of(key).quality, DP_QUALITY_SIMULATED | DP_QUALITY_BAD_VALUE);
@@ -314,8 +317,8 @@ ZTEST(points, test_signed_values_and_word_order)
     zassert_equal(wire[0], (uint16_t)-123);
     zassert_equal(wire[1], 0x8122);
     zassert_equal(wire[2], 0x3344);
-    zassert_ok(idu_virtual_set_register(4, 8150, 0x3344));
-    zassert_ok(idu_virtual_set_register(4, 8151, 0x1122));
+    zassert_ok(co_simulator_set_register(&idu_collect_simulator, 4, 8150, 0x3344));
+    zassert_ok(co_simulator_set_register(&idu_collect_simulator, 4, 8151, 0x1122));
     poll_block(9, 0);
     zassert_ok(modbus_read_input_regs(north_client, 16, 10010, wire, 2));
     zassert_equal(wire[0], 0x3344);
@@ -485,7 +488,7 @@ static int configure_segment(int iface, const struct modbus_adu *rx, struct modb
 {
     ARG_UNUSED(user);
     struct modbus_iface_param param={.mode=MODBUS_MODE_RAW,
-        .server={.unit_id=sys_get_be16(rx->data+2),.user_cb=idu_parameter_callbacks()},
+        .server={.unit_id=sys_get_be16(rx->data+2),.user_cb=tr_callbacks()},
         .rawcb={.raw_tx_cb=north_response}};
     int err=tr_modbus_reconfigure(iface,param,reconfigured,NULL);
     if (!err) { *tx=*rx; }
@@ -503,7 +506,7 @@ ZTEST(points,test_modules_dynamic_port_configuration_and_routes)
     /* A backend initialization failure must restore the last working config,
      * including when a second failed change follows the first one. */
     struct modbus_iface_param invalid={.mode=MODBUS_MODE_RAW,
-        .server={.unit_id=19,.user_cb=idu_parameter_callbacks()},
+        .server={.unit_id=19,.user_cb=tr_callbacks()},
         .rawcb={.raw_tx_cb=north_response}};
     for (int i=0;i<2;++i) {
         fail_config_init=true;
@@ -523,5 +526,5 @@ ZTEST(points,test_modules_dynamic_port_configuration_and_routes)
     zassert_ok(modbus_write_holding_reg(north_client,17,52000,16));
     zassert_ok(k_sem_take(&config_done,K_SECONDS(1))); zassert_ok(config_error);
     zassert_ok(modbus_read_holding_regs(north_client,16,31000,&word,1));
-    zassert_ok(tr_attach(north_server,NULL));
+    zassert_ok(tr_register_attach(north_server, &idu_parameter_registers));
 }

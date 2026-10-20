@@ -6,6 +6,9 @@
 /* 采集/status 只使用服务接口，无需依赖 DP 头文件。 */
 typedef struct func_para_all FUNC_PARA_ALL;
 
+struct modbus_iface_param;
+int idu_forwarding_settings(struct modbus_iface_param *param);
+
 struct dp_point_cfg;
 struct dp_value;
 struct dp_key;

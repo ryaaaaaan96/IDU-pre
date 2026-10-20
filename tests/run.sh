@@ -55,7 +55,7 @@ timeout 30s "$test_dir/image_confirm/zephyr/zephyr.exe"
 bash applications/IDU-pre/tests/iap/run.sh
 
 # ADC contracts, modular telemetry, reusable models and event-driven polling.
-for suite in adc io vport communication pipeline models collector transmit dataprocess reference_dp reference_ports reference_config reference_services; do
+for suite in adc io vport communication simulator pipeline models collector transmit dataprocess reference_dp reference_ports reference_config reference_services; do
     env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
         "applications/IDU-pre/tests/$suite" -d "$test_dir/$suite"
     timeout 30s "$test_dir/$suite/zephyr/zephyr.exe"

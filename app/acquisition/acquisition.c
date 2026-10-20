@@ -1,7 +1,8 @@
 #include "acquisition/idu_acquisition.h"
 #include <gpio/idu_inputs.h>
 #include "process/idu_process.h"
-#include "communication/idu_protocol.h"
+#include "cfg/inc/ports.h"
+#include <transmit/server.h>
 #ifdef CONFIG_IDU_IAPV3
 #include <iap/iap.h>
 #endif
@@ -57,7 +58,7 @@ int idu_acquisition_cycle(struct idu_status *status)
         return lock_fault(status, status->phase, -ETIMEDOUT);
     }
     idu_status_set_phase(status, IDU_STATUS_SERVICING_COMMUNICATION);
-    err = idu_protocol_set_address(sample.address);
+    err = tr_server_service(&idu_forwarding, sample.address);
     if (err) { return lock_fault(status, status->phase, err); }
 
     idu_status_set_phase(status, IDU_STATUS_CHECKING_HEALTH);

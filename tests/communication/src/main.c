@@ -79,6 +79,10 @@ static const struct vport_config config = {
     .routes = routes, .route_count = ARRAY_SIZE(routes),
 };
 
+static const struct tr_modbus_network network = {
+    .endpoints = endpoints, .endpoint_count = ARRAY_SIZE(endpoints), .ports = &config,
+};
+
 static int read_register(uint16_t address, uint16_t *value)
 {
     atomic_inc(&reads);
@@ -175,8 +179,7 @@ static void check_serial_reply(void)
 
 static void *setup(void)
 {
-    zassert_ok(tr_modbus_transport_bind(endpoints, ARRAY_SIZE(endpoints)));
-    zassert_ok(vport_init(&config));
+    zassert_ok(tr_modbus_network_start(&network));
     serial = modbus_iface_get_by_name(endpoints[0].iface_name);
     client = modbus_iface_get_by_name("RAW_0");
     server = modbus_iface_get_by_name("RAW_1");
@@ -342,6 +345,14 @@ ZTEST(communication, test_unowned_virtual_send_cannot_overwrite_modbus_context)
     zassert_equal(vport_send(20, 2, 0, &frame, K_MSEC(10)), -EACCES);
     uint16_t word;
     zassert_ok(modbus_read_input_regs(client, 1, 7, &word, 1));
+}
+
+ZTEST(communication, test_network_registration_is_idempotent)
+{
+    zassert_ok(tr_modbus_network_start(&network));
+    struct tr_modbus_network other = network;
+    zassert_equal(tr_modbus_network_start(&other), -EALREADY);
+    zassert_equal(tr_modbus_network_start(NULL), -EINVAL);
 }
 
 ZTEST_SUITE(communication, NULL, setup, NULL, NULL, NULL);

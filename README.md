@@ -6,7 +6,7 @@ Modbus 采集与转发、NVS 参数持久化及可选 MCUboot 升级。
 默认使用虚拟南向采集口，现有 USART2 / RS485 用于北向转发。
 [`vport`](modules/vport/README.md) 已用于现有 RS485 转发和虚拟采集收发；
 `transmit` 内的[通信适配](docs/communication-ports.md)保留 Zephyr 的 RTU/RAW 实现，
-将完整报文接入逻辑端口。绑定集中在 `app/communication/ports/config.c`。
+将完整报文接入逻辑端口。绑定集中在 `app/cfg/ports.c`。
 
 ## 快速开始
 
@@ -57,7 +57,7 @@ app/main.c                            启动入口、采样周期与休眠调度
        ├─ status/status.c             业务阶段、故障记录、LED 策略和健康进度
        ├─ status/image_confirm.c      MCUboot 试运行健康确认
        ├─ process/points.c            点表初始化、采样映射及公共回调
-       └─ communication/protocol.c    Modbus 端口配置与恢复
+       └─ modules/transmit/src/server.c   转发端口启动、重配置与恢复
 ```
 
 `app/status/idu_status.h` 定义业务状态：未配置、启动、等待采样、
@@ -65,7 +65,7 @@ app/main.c                            启动入口、采样周期与休眠调度
 `idu_acquisition_start()` 和 `idu_acquisition_cycle()`；故障时记录阶段和错误码，
 停止喂狗并拒绝继续采集。`app/process/idu_process.h` 提供应用级设备服务。
 芯片专用的 JTAG/SWD 配置归属 `boards/idu/idu_pre/board.c`。点表配置、处理、参数事务和协议兼容
-继续分别位于 `app/cfg/`、`modules/` 下的三类通用模块和 `app/communication/mvio.c`。
+继续分别位于 `app/cfg/`、`modules/` 下的三类通用模块和 `modules/transmit/src/mvio.c`。
 
 新增功能时，硬件操作放入对应板级模块，设备数据与存储策略放入设备服务，
 运行顺序由 `acquisition` 编排，状态、故障锁定和 LED 指示策略归 `status`；
@@ -93,9 +93,8 @@ IDU-pre/
 │   ├── main.c          # 应用入口、采样周期与休眠
 │   ├── acquisition/     # 采集、发布及通信执行流程
 │   ├── status/          # 业务状态、LED 策略、健康进度及镜像确认
-│   ├── cfg/             # device.c 完整设备配置；inc/ 配置头文件；tables/ 三表及默认值
-│   ├── process/         # 点表初始化、采样映射、工程换算及业务回调
-│   └── communication/   # 端口、协议、路由与采集后端
+│   ├── cfg/             # 点表及端口/协议配置；inc/ 配置契约；tables/ 三表
+│   └── process/         # 点表初始化、采样映射、工程换算及业务参数回调
 ├── modules/             # analog_input、gpio、watchdog 及点表/升级/SoC 模块
 ├── bootloader/          # MCUboot 配置、分区和联合构建
 ├── sysbuild/            # Zephyr 约定的薄入口
@@ -111,8 +110,8 @@ IDU-pre/
 
 ## 头文件与启动程序边界
 
-应用以 `app/` 为头文件搜索根。采集、状态、处理和通信头
-分别与实现放在 `app/acquisition/`、`app/status/`、`app/process/`、`app/communication/`；
+应用以 `app/` 为头文件搜索根。采集、状态、处理头
+分别与实现放在 `app/acquisition/`、`app/status/`、`app/process/`；配置契约在 `app/cfg/inc/`；
 跨功能引用使用 `"status/idu_status.h"` 等路径；采样使用 `<gpio/idu_inputs.h>`；IAP 使用 `<iap/iap.h>`、`<iap/sgz.h>`。
 通用模块继续保留各自的公开 `include/`，由 Zephyr 模块机制导出。
 
@@ -128,16 +127,16 @@ IDU-pre/
 | `status/idu_image_confirm.h` | MCUboot 试运行健康确认 |
 | `process/engineering.h` | 仅依赖标准 C 的工程量换算，可用于主机测试 |
 | `process/idu_process.h` | 点表初始化、采样发布、健康检查及测点业务回调 |
-| `communication/idu_protocol.h` | 上位机端口配置、参数协议回调及 AIDC 串口参数转换 |
-| `communication/idu_mvio.h` | MV-IO 旧协议路由注册 |
-| `communication/ports/idu_acquisition.h` | 采集端口初始化，选择实际 RTU 或虚拟后端 |
-| `communication/ports/config.h` | 逻辑端口号、链路号及启动期注册入口 |
-| `communication/ports/idu_virtual.h` | 虚拟 MV-IO 设备、故障注入及 AIDC 虚拟模型总线 |
-| `communication/config/protocol_config.h` | 产品协议选择、命令和状态映射、旧协议访问范围 |
+| `cfg/inc/ports.h` | 产品常驻端口、协议和仿真配置声明 |
+| `<transmit/server.h>` | 每端口启动、配置更新及健康维护 |
+| `<transmit/registers.h>`、`<transmit/mvio.h>` | 参数寄存器服务及 MV-IO 协议 |
+| `<collect/port.h>`、`<collect/simulator.h>` | 采集端口初始化及可选模拟设备 |
 
-`communication/` 负责产品通信适配；通用采集调度、点表处理、转发和升级机制
-分别由 `collect`、`dataprocess`、`transmit`、`iap` 提供。虚拟模型总线不实现真实
-UPP 链路，点表及参数处理声明不放入硬件或协议路由头文件。
+应用不再设置 `communication/`。`cfg/` 以 const 表提供接口名、路由、协议范围、
+命令及模拟寄存器初值；`collect` 管理采集端口、轮询和仿真，`transmit` 管理
+转发状态机、协议解析与命令分发，`vport` 管理链路和路由，`iap` 管理升级。
+AIDC 参数编码转换属于业务，保留在 `process/serial_settings.c`；各模块不引用
+IDU 配置头文件。虚拟模型后端只提供模型数据，不实现真实 UPP 链路。
 
 [`bootloader/`](bootloader/README.md) 保存本板 MCUboot 配置、分区和联合构建设置。
 MCUboot 源码仍使用 West 工作区中的独立仓库；`app/status/image_confirm.c` 负责应用健康确认。

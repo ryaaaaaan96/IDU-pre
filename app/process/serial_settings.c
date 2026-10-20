@@ -1,4 +1,4 @@
-#include "communication/idu_protocol.h"
+#include "process/idu_process.h"
 #include "cfg/inc/imported_signals.h"
 #include <dataprocess/params.h>
 #include <zephyr/modbus/modbus.h>
@@ -10,7 +10,7 @@ static uint16_t parameter(uint16_t sig, uint16_t fallback)
     return dp_params_read((struct dp_key){247,sig},&state) ? fallback : state.value.words[0];
 }
 
-int idu_aidc_serial(struct modbus_iface_param *param)
+int idu_forwarding_settings(struct modbus_iface_param *param)
 {
     static const uint32_t baud[]={9600,19200,38400,57600,115200,230400,460800};
     uint16_t b=parameter(AIDC_LOCAL_SIG_UART_PORT1_BAUD,165);

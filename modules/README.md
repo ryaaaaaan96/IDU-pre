@@ -25,8 +25,8 @@ compatibility.
 | `watchdog` | `watchdog/watchdog.h` | Per-instance progress-gated GPIO feeding for external watchdogs |
 | [`vport`](vport/README.md) | `vport/vport.h` | Registered transport backends, logical routing, CAN ID filters, bounded RX and per-link TX ownership |
 | `dataprocess` | `data_process.h`, `platform_callback.h`, `dataprocess/{points,process,params}.h` | Shared data contracts/store, `dp_*` processing, optional NVS |
-| `collect` | `collect_lib.h`, `collect/collect.h` | `co_*` acquisition, bus scheduling and parameter transport backend |
-| `transmit` | `transmit_lib.h`, `transmit/{transmit,modbus_adapter,modbus_transport}.h` | `tr_*` register mappings, Modbus workqueues and optional vport transport adaptation |
+| `collect` | `collect_lib.h`, `collect/{collect,port,simulator,model_simulator}.h` | `co_*` acquisition, bus scheduling, client initialization and optional simulation |
+| `transmit` | `transmit_lib.h`, `transmit/{transmit,modbus_adapter,modbus_transport,server,registers,mvio}.h` | `tr_*` mappings, server lifecycle, register services, protocol handlers and optional vport adaptation |
 | `quicklz` | `quicklz/quicklz.h` | `qlz_decode_level3()` bounded QuickLZ level 3 decoding in plain C |
 | [`iap`](iap/README.md) | `iap/{iap,sgz}.h` | IAPv3 reception, SGZ/AES, signed images, flash staging and recovery; devicetree/Kconfig product policy |
 | [`gd32e505`](gd32e505/README.md) | Zephyr `soc_root`, `dts_root`, `adc_*` | E505 SoC, devicetree clock startup and synchronous ADC0 driver |
@@ -45,11 +45,11 @@ registered DP callbacks currently use common parameters.
 Signal macros and function pointers bind business handlers directly; there is no
 runtime callback-name registry or duplicate model metadata.
 Register-to-signal mappings belong
-to the tables. Protocol routing, command dispatch and their contracts
-live in [`app/communication/config/`](../app/communication/config), while
+to the tables. Protocol windows and command bindings
+live in [`app/cfg/`](../app/cfg); execution belongs to `transmit`, while
 application options live in [`app/Kconfig`](../app/Kconfig). Business callbacks
 remain in `app/process/`; product input bindings are in the optional `gpio` profile
-and protocol adaptation in `app/communication/`. `dataprocess` has no
+and protocol adaptation in `transmit`. `dataprocess` has no
 Modbus or collector dependency. `collect` and `transmit` depend on its data contracts;
 downstream forwarding is optional when `collect` is absent.
 
@@ -59,6 +59,41 @@ Application composition, sample mapping and common callbacks live in
 snapshot publication, sample-period access and application health. The existing
 `idu_equipment_init()` name remains available. These product responsibilities
 stay in the application; there is no separate generic equipment module.
+
+## Communication ownership
+
+There is no application communication implementation directory. Product configuration
+is const data in `app/cfg/`; module code never includes product headers.
+
+| Service | Module API | Product input |
+| --- | --- | --- |
+| Network registration | `tr_modbus_network_start()` | Endpoints and vport tables |
+| Forwarding lifecycle | `tr_server_service()` | Interface, protocol attach callback, serial settings and recovery interval |
+| Parameter registers | `tr_register_route()` / `tr_register_write()` | Command callbacks and status addresses |
+| MV-IO compatibility | `tr_mvio_attach()` | Read/write windows, ordered spans and optional upgrade callbacks |
+| Acquisition port | `co_port_open()` | RTU client configuration or simulator instance |
+| Simulated device | `co_simulator_*()` | Register addresses, widths, limits and initial values |
+| Simulated model | `co_model_simulator_read()` | Model registry, device range and default-value callback |
+
+Enable these independently with `TR_SERVER_SERVICE`, `TR_REGISTER_SERVICE` (requires
+DP parameters), `TR_MVIO`, `CO_SIMULATOR` and `CO_MODEL_SIMULATOR`. The product Kconfig
+selects defaults; standalone module consumers opt in. MV-IO contains actual legacy
+protocol rules; vport never interprets registers or commands. Upgrade callbacks are
+optional and do not introduce an IAP dependency into the protocol implementation.
+
+Each server config owns one interface. The service keeps separate active/pending
+settings, applies changes asynchronously after admitted requests finish, and services
+recovery. Call periodically from the application thread, not a receive/configuration
+callback. Config objects must remain valid and immutable. Do not mix this owner with
+external `modbus_disable()` / reconfiguration on the same interface.
+
+Simulators use caller-owned, zero-initialized state and immutable register layouts.
+Register values are independent across instances. Writes must cover whole 1/2-word
+values; all requested values are checked before committing. Lost acknowledgements
+never trigger an automatic write retry. Register banks are bounded by
+`CO_SIMULATOR_WORDS`; no heap or product-specific register is required. Startup is
+serialized, and each instance exclusively owns its client/server RAW interfaces.
+The model simulator only supplies configured defaults; it is not a UPP transport.
 
 ## Input and watchdog services
 
@@ -123,7 +158,7 @@ immutable link, port and route tables with `vport_init()`, then let backends
 submit received data. It has no DP, Modbus or hardware driver dependency.
 IDU enables `TR_MODBUS_TRANSPORT` by default to route existing RS485 forwarding and
 virtual acquisition through this core at the complete-ADU boundary.
-Bindings live in `app/communication/ports/config.c`. Raw UART, CAN and socket
+Bindings live in `app/cfg/ports.c`. Raw UART, CAN and socket
 backends remain separate future work; see [the adapter contract](../docs/communication-ports.md).
 
 Include `modules.cmake` before `find_package(Zephyr ...)` to register these modules,

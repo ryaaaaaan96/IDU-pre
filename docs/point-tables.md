@@ -106,7 +106,7 @@ Zephyr 4.4.2 的标准输入/保持寄存器读回调把应用读错误统一转
 
 虚拟从机默认返回 DI=`0x0005`，八路电流为 `100,200,...,800`，协议号
 `0x01000101`。这些是固定的测试数据，与板上真实 ADC 无关。
-`idu_virtual_set_register()` 可修改测试值；`idu_virtual_set_online(false)`
+`co_simulator_set_register(&idu_collect_simulator, ...)` 可修改测试值；`co_simulator_set_online(&idu_collect_simulator, false)`
 让客户端真实等待超时。启动日志明确输出 VIRTUAL。
 
 采集表按原结构每行独立请求，共 11 行：DI 和八路电流每 500 ms；协议号、远程地址每 5000 ms。

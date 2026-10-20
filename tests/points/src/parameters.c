@@ -1,7 +1,9 @@
+#include "cfg/inc/ports.h"
+#include <collect/simulator.h>
+#include <transmit/registers.h>
 #include "process/idu_process.h"
 #include "cfg/inc/device.h"
 #include "cfg/inc/signal_ids.h"
-#include "communication/ports/idu_virtual.h"
 #include <dataprocess/params.h>
 #include <dataprocess/points.h>
 #include <dataprocess/process.h>
@@ -26,7 +28,7 @@ static int inject_failure(const struct device *dev, off_t offset, uint8_t data)
 {
     ARG_UNUSED(dev);
     ARG_UNUSED(offset);
-    if ((fail_after_downstream && idu_virtual_write_count() > writes_at_start) ||
+    if ((fail_after_downstream && co_simulator_write_count(&idu_collect_simulator) > writes_at_start) ||
         bytes_before_failure == 0) {
         return -EIO;
     }
@@ -58,8 +60,8 @@ void parameter_before(void)
     flash_simulator_set_callbacks(flash_area_get_device(storage), &flash_callbacks);
     bytes_before_failure = -1;
     fail_after_downstream = false;
-    idu_virtual_set_write_fault(IDU_VIRTUAL_WRITE_OK);
-    idu_virtual_set_online(true);
+    co_simulator_set_write_fault(&idu_collect_simulator, CO_SIMULATOR_WRITE_OK);
+    co_simulator_set_online(&idu_collect_simulator, true);
     if (getenv("IDU_REBOOT_PHASE")) {
         return; /* A dedicated process run must inspect the boot-loaded state. */
     }
@@ -151,11 +153,11 @@ ZTEST(points, test_parameters_local_write_persists_and_applies)
 
 ZTEST(points, test_parameters_full_request_validated_before_write)
 {
-    unsigned count = idu_virtual_write_count();
+    unsigned count = co_simulator_write_count(&idu_collect_simulator);
     uint16_t bad_remote[3] = {321, 0xffff, 0x7fff}; /* Last S32 out of range. */
     zassert_equal(modbus_write_holding_regs(north_client, 16, 31500, bad_remote, 3),
                   MODBUS_EXC_ILLEGAL_DATA_VAL);
-    zassert_equal(idu_virtual_write_count(), count);
+    zassert_equal(co_simulator_write_count(&idu_collect_simulator), count);
     zassert_equal(read_word(31500), 100);
     zassert_equal(modbus_write_holding_reg(north_client, 16, 31000, 99),
                   MODBUS_EXC_ILLEGAL_DATA_VAL);
@@ -186,30 +188,30 @@ ZTEST(points, test_parameters_remote_multiword_round_trip)
 
 ZTEST(points, test_parameters_downstream_rejection_does_not_change_cache)
 {
-    idu_virtual_set_write_fault(IDU_VIRTUAL_WRITE_REJECT);
+    co_simulator_set_write_fault(&idu_collect_simulator, CO_SIMULATOR_WRITE_REJECT);
     zassert_equal(modbus_write_holding_reg(north_client, 16, 31500, 777),
                   MODBUS_EXC_SERVER_DEVICE_FAILURE);
     zassert_equal(read_word(31500), 100);
     zassert_false(param_status().flags & DP_PARAM_PENDING);
     zassert_ok(dp_params_reload());
     zassert_equal(read_word(31500), 100);
-    idu_virtual_set_write_fault(IDU_VIRTUAL_WRITE_OK);
+    co_simulator_set_write_fault(&idu_collect_simulator, CO_SIMULATOR_WRITE_OK);
 }
 
 ZTEST(points, test_parameters_lost_ack_resolved_by_readback)
 {
-    unsigned count = idu_virtual_write_count();
-    idu_virtual_set_write_fault(IDU_VIRTUAL_WRITE_LOSE_ACK);
+    unsigned count = co_simulator_write_count(&idu_collect_simulator);
+    co_simulator_set_write_fault(&idu_collect_simulator, CO_SIMULATOR_WRITE_LOSE_ACK);
     zassert_ok(modbus_write_holding_reg(north_client, 16, 31500, 456));
-    zassert_equal(idu_virtual_write_count(), count + 1); /* No write retry. */
+    zassert_equal(co_simulator_write_count(&idu_collect_simulator), count + 1); /* No write retry. */
     zassert_equal(read_word(31500), 456);
     zassert_false(param_status().flags & DP_PARAM_PENDING);
-    idu_virtual_set_write_fault(IDU_VIRTUAL_WRITE_OK);
+    co_simulator_set_write_fault(&idu_collect_simulator, CO_SIMULATOR_WRITE_OK);
 }
 
 ZTEST(points, test_parameters_pending_survives_remount_and_blocks_writes)
 {
-    idu_virtual_set_write_fault(IDU_VIRTUAL_WRITE_DISCONNECT);
+    co_simulator_set_write_fault(&idu_collect_simulator, CO_SIMULATOR_WRITE_DISCONNECT);
     zassert_equal(modbus_write_holding_reg(north_client, 16, 31500, 678),
                   MODBUS_EXC_GW_TARGET_FAILED_TO_RESP);
     zassert_true(param_status().flags & DP_PARAM_PENDING);
@@ -220,29 +222,29 @@ ZTEST(points, test_parameters_pending_survives_remount_and_blocks_writes)
                   MODBUS_EXC_SERVER_DEVICE_BUSY);
     zassert_ok(dp_params_reload());
     zassert_true(param_status().flags & DP_PARAM_PENDING);
-    unsigned count = idu_virtual_write_count();
-    idu_virtual_set_online(true);
-    idu_virtual_set_write_fault(IDU_VIRTUAL_WRITE_OK);
+    unsigned count = co_simulator_write_count(&idu_collect_simulator);
+    co_simulator_set_online(&idu_collect_simulator, true);
+    co_simulator_set_write_fault(&idu_collect_simulator, CO_SIMULATOR_WRITE_OK);
     zassert_ok(modbus_write_holding_reg(north_client, 16, 31093, 1));
-    zassert_equal(idu_virtual_write_count(), count); /* Recovery only reads. */
+    zassert_equal(co_simulator_write_count(&idu_collect_simulator), count); /* Recovery only reads. */
     zassert_equal(read_word(31500), 678);
     zassert_false(param_status().flags & DP_PARAM_PENDING);
 }
 
 ZTEST(points, test_parameters_ambiguous_readback_never_replays)
 {
-    idu_virtual_set_write_fault(IDU_VIRTUAL_WRITE_DISCONNECT);
+    co_simulator_set_write_fault(&idu_collect_simulator, CO_SIMULATOR_WRITE_DISCONNECT);
     zassert_equal(modbus_write_holding_reg(north_client, 16, 31500, 678),
                   MODBUS_EXC_GW_TARGET_FAILED_TO_RESP);
-    idu_virtual_set_online(true);
-    idu_virtual_set_write_fault(IDU_VIRTUAL_WRITE_OK);
-    zassert_ok(idu_virtual_set_register(3, 40000, 333));
-    unsigned count = idu_virtual_write_count();
+    co_simulator_set_online(&idu_collect_simulator, true);
+    co_simulator_set_write_fault(&idu_collect_simulator, CO_SIMULATOR_WRITE_OK);
+    zassert_ok(co_simulator_set_register(&idu_collect_simulator, 3, 40000, 333));
+    unsigned count = co_simulator_write_count(&idu_collect_simulator);
     zassert_equal(dp_params_recover(), -EBADMSG);
     zassert_true(param_status().flags & DP_PARAM_PENDING);
-    zassert_equal(idu_virtual_write_count(), count);
+    zassert_equal(co_simulator_write_count(&idu_collect_simulator), count);
     /* Device inspected/reset by an operator to its captured pre-write value. */
-    zassert_ok(idu_virtual_set_register(3, 40000, 100));
+    zassert_ok(co_simulator_set_register(&idu_collect_simulator, 3, 40000, 100));
     zassert_ok(dp_params_recover());
     zassert_equal(read_word(31500), 100);
     zassert_false(param_status().flags & DP_PARAM_PENDING);
@@ -250,11 +252,11 @@ ZTEST(points, test_parameters_ambiguous_readback_never_replays)
 
 ZTEST(points, test_parameters_no_downstream_write_without_durable_intent)
 {
-    unsigned count = idu_virtual_write_count();
+    unsigned count = co_simulator_write_count(&idu_collect_simulator);
     bytes_before_failure = 0;
     zassert_equal(modbus_write_holding_reg(north_client, 16, 31500, 987),
                   MODBUS_EXC_SERVER_DEVICE_FAILURE);
-    zassert_equal(idu_virtual_write_count(), count);
+    zassert_equal(co_simulator_write_count(&idu_collect_simulator), count);
     zassert_false(param_status().flags & DP_PARAM_STORAGE_READY);
     zassert_equal(read_word(31500), 100);
     bytes_before_failure = -1;
@@ -264,7 +266,7 @@ ZTEST(points, test_parameters_no_downstream_write_without_durable_intent)
 
 ZTEST(points, test_parameters_power_loss_after_downstream_before_commit)
 {
-    writes_at_start = idu_virtual_write_count();
+    writes_at_start = co_simulator_write_count(&idu_collect_simulator);
     fail_after_downstream = true;
     zassert_equal(modbus_write_holding_reg(north_client, 16, 31500, 987),
                   MODBUS_EXC_SERVER_DEVICE_FAILURE);
@@ -274,7 +276,7 @@ ZTEST(points, test_parameters_power_loss_after_downstream_before_commit)
     zassert_true(param_status().flags & DP_PARAM_PENDING);
     zassert_ok(dp_params_recover());
     zassert_equal(read_word(31500), 987);
-    zassert_equal(idu_virtual_write_count(), writes_at_start + 1);
+    zassert_equal(co_simulator_write_count(&idu_collect_simulator), writes_at_start + 1);
 }
 
 ZTEST(points, test_parameters_torn_flash_write_keeps_whole_snapshot)
@@ -366,9 +368,9 @@ ZTEST(points, test_parameters_business_api_callbacks_and_permissions)
     values[1].key = values[0].key;
     zassert_equal(dp_params_set_values(values, 2), -EINVAL);
     values[1].key = (struct dp_key){IDU_DEV_REMOTE_IO, IDU_SIG_REMOTE_SETPOINT};
-    unsigned count = idu_virtual_write_count();
+    unsigned count = co_simulator_write_count(&idu_collect_simulator);
     zassert_equal(dp_params_set_values(values, 2), -EXDEV); /* Mixed local/remote. */
-    zassert_equal(idu_virtual_write_count(), count);
+    zassert_equal(co_simulator_write_count(&idu_collect_simulator), count);
     zassert_ok(dp_params_restore(IDU_DEV_LOCAL));
     zassert_ok(dp_params_read((struct dp_key){1, 31100}, &state));
     zassert_equal(state.value.words[0], 10);
@@ -407,7 +409,7 @@ ZTEST(points, test_parameters_reboot_probe)
     }
     if (!strcmp(phase, "write")) {
         zassert_ok(modbus_write_holding_reg(north_client, 16, 31000, 750));
-        idu_virtual_set_write_fault(IDU_VIRTUAL_WRITE_DISCONNECT);
+        co_simulator_set_write_fault(&idu_collect_simulator, CO_SIMULATOR_WRITE_DISCONNECT);
         zassert_equal(modbus_write_holding_reg(north_client, 16, 31500, 987),
                       MODBUS_EXC_GW_TARGET_FAILED_TO_RESP);
         zassert_true(param_status().flags & DP_PARAM_PENDING);
@@ -416,10 +418,10 @@ ZTEST(points, test_parameters_reboot_probe)
         zassert_true(param_status().flags & DP_PARAM_PENDING);
         /* The virtual slave RAM restarts with the simulator. Model a real
          * independently powered slave that retained the completed command. */
-        zassert_ok(idu_virtual_set_register(3, 40000, 987));
-        unsigned count = idu_virtual_write_count();
+        zassert_ok(co_simulator_set_register(&idu_collect_simulator, 3, 40000, 987));
+        unsigned count = co_simulator_write_count(&idu_collect_simulator);
         zassert_ok(dp_params_recover());
-        zassert_equal(idu_virtual_write_count(), count);
+        zassert_equal(co_simulator_write_count(&idu_collect_simulator), count);
         zassert_equal(read_word(31500), 987);
     } else {
         zassert_equal(strcmp(phase, "verify"), 0);
@@ -458,4 +460,26 @@ ZTEST(points,test_parameters_failed_save_cannot_reboot)
     zassert_false(param_status().flags & DP_PARAM_STORAGE_READY);
     bytes_before_failure=-1;
     zassert_ok(dp_params_reload());
+}
+
+static int missing_command_target(uint16_t dev)
+{
+    ARG_UNUSED(dev);
+    return -ENOENT;
+}
+
+ZTEST(points, test_command_failure_is_not_treated_as_unhandled_route)
+{
+    static const struct tr_command commands[] = {
+        {.address = 31090, .expected_value = 0xa55a, .execute = missing_command_target},
+    };
+    static const struct tr_register_service service = {
+        .commands = commands, .command_count = ARRAY_SIZE(commands),
+    };
+    const struct modbus_adu request = {
+        .unit_id = 16, .fc = 6, .length = 4, .data = {0x79, 0x72, 0xa5, 0x5a},
+    };
+    struct modbus_adu reply;
+    zassert_equal(tr_register_route(0, &request, &reply, (void *)&service),
+                  MODBUS_EXC_ILLEGAL_DATA_ADDR);
 }

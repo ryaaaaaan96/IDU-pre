@@ -1,9 +1,11 @@
-# 通讯点表配置
+# 点表与模块配置
 
 [文档导航](../../docs/README.md) · [点表与寄存器](../../docs/point-tables.md)
 
 `device.c` 声明产品设备与点表的关联并注册回调；三表校验、执行视图及数据池初始化
 均由 `modules/dataprocess` 完成。
+端口、协议和仿真配置也集中在本目录；只有 const 数据和实例声明，通信执行代码
+归 `collect` / `transmit`，不在应用中重新实现。详见[通信端口接入](../../docs/communication-ports.md)。
 
 点表沿用参考工程的结构：设备表关联处理、采集和转发表，业务通过信号 ID 和
 函数指针连接。设备表、点行及默认值均为 `const`，多个设备共享型号表；DP 按需读取，
@@ -12,7 +14,13 @@
 ```text
 cfg/
 ├── device.c              # 设备关联及配置回调注册
+├── ports.c               # 传输链路、虚拟端口和采集口配置
+├── forwarding.c          # 转发协议和串口配置
+├── parameters.c          # 参数状态/命令寄存器绑定
+├── mvio.c                # MV-IO 兼容范围和升级回调
+├── simulation.c          # 可选模拟设备/模型配置
 ├── inc/                  # 本目录全部配置头文件
+│   ├── ports.h            # 各模块产品配置声明
 │   ├── device.h
 │   ├── tables.h           # 点表声明及编译期数量
 │   ├── mvio_signals.h
@@ -80,7 +88,7 @@ UPP 的 `sig_num` 使用 `IDU_IMPORTED_MODEL_FIELD_COUNT`，由工具统计所�
 3. 在 `collect.c` 定义协议地址、长度、字序和周期编码。当前每个 Modbus 行独立请求，
    不跨未定义空洞合帧；`rqst_cyl` 经设备配置中的转换函数解释，不直接当毫秒。
 4. 在 `transmit.c` 增加北向映射。新窗口也需加入
-   `app/communication/config/mvio_config.c` 的 `extensions[]`，控制命令留在通信配置。
+   `app/cfg/mvio.c` 的 `extensions[]`，控制命令在 `parameters.c` 声明。
    手写三表增删行后，同步修改 `inc/tables.h` 中相应数量；虚拟采集和大点表配置
    的条件分支也须匹配，数量不一致时构建报错。
 5. 同型号 MV-IO 实例直接加入 `device.c` 的 `devices[]`，指定端口、从机地址，
