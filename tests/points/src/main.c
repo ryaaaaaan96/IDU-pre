@@ -1,10 +1,10 @@
-#include "idu_equipment.h"
+#include "process/idu_process.h"
 #include "cfg/devices/device_config.h"
 #include "cfg/tables/signal_ids.h"
 #include "communication/idu_protocol.h"
 #include "communication/ports/idu_acquisition.h"
 #include "communication/ports/idu_virtual.h"
-#include "hardware/idu_pre.h"
+#include "acquisition/inputs.h"
 #include "process/engineering.h"
 #include "legacy_registers.h"
 #include <collect/collect.h>

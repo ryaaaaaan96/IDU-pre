@@ -1,6 +1,21 @@
 #include <zephyr/dt-bindings/adc/adc.h>
+#include <zephyr/dt-bindings/gpio/gpio.h>
 / {
-    idu_io: zephyr,user {
+    idu_io: inputs {
+        compatible = "idu,pre-io";
+        di-gpios = <&gpio0 1 GPIO_ACTIVE_LOW>, <&gpio0 2 GPIO_ACTIVE_LOW>,
+                   <&gpio0 3 GPIO_ACTIVE_LOW>, <&gpio0 4 GPIO_ACTIVE_LOW>,
+                   <&gpio0 5 GPIO_ACTIVE_LOW>, <&gpio0 6 GPIO_ACTIVE_LOW>,
+                   <&gpio0 7 GPIO_ACTIVE_LOW>, <&gpio0 8 GPIO_ACTIVE_LOW>,
+                   <&gpio0 9 GPIO_ACTIVE_LOW>, <&gpio0 10 GPIO_ACTIVE_LOW>,
+                   <&gpio0 11 GPIO_ACTIVE_LOW>, <&gpio0 12 GPIO_ACTIVE_LOW>,
+                   <&gpio0 13 GPIO_ACTIVE_LOW>, <&gpio0 14 GPIO_ACTIVE_LOW>,
+                   <&gpio0 15 GPIO_ACTIVE_LOW>, <&gpio0 16 GPIO_ACTIVE_LOW>;
+        address-gpios = <&gpio0 17 GPIO_ACTIVE_LOW>, <&gpio0 18 GPIO_ACTIVE_LOW>,
+                        <&gpio0 19 GPIO_ACTIVE_LOW>, <&gpio0 20 GPIO_ACTIVE_LOW>;
+        watchdog-gpios = <&gpio0 21 GPIO_ACTIVE_HIGH>;
+        watchdog-feed-ms = <10>;
+        watchdog-health-ms = <1500>;
         io-channels = <&adc0 13>, <&adc0 0>, <&adc0 1>, <&adc0 2>,
                       <&adc0 3>, <&adc0 4>, <&adc0 11>, <&adc0 12>;
     };

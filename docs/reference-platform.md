@@ -34,7 +34,7 @@ python3 applications/IDU-pre/tools/analyze_reference.py \
 
 | 参考工程路径 / 职责 | IDU 对应位置 |
 | --- | --- |
-| `app/main.c:101` 注册设备、默认/范围、定时表，再于 `:142` 起依次启动 DP、本地设备、CO、TR | [app/startup.c](../app/startup.c) 显式装配；[platform_callback.h](../modules/dataprocess/include/platform_callback.h) 保存配置注册契约 |
+| `app/main.c:101` 注册设备、默认/范围、定时表，再于 `:142` 起依次启动 DP、本地设备、CO、TR | [app/process/points.c](../app/process/points.c) 显式装配；[platform_callback.h](../modules/dataprocess/include/platform_callback.h) 保存配置注册契约 |
 | `app/cfg/equip/dev_cfg.c:43` 的 `DEV_TABLE_S` 实例组合各协议表 | [app/cfg/devices](../app/cfg/devices) 的设备和型号配置 |
 | `app/cfg/equip/table/{process,collect,transmit}.c` 分别描述数据、采集和寄存器映射 | [app/cfg/tables](../app/cfg/tables)，三表内容与处理执行分开 |
 | `app/process` 的业务回调、`app/globalfunction.c` 的回调读写辅助 | [app/process](../app/process) 的业务处理，通用事务机制位于 DP 模块 |

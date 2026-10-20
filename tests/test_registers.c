@@ -1,4 +1,4 @@
-#include "hardware/idu_pre.h"
+#include "acquisition/inputs.h"
 #include "process/engineering.h"
 #include "legacy_registers.h"
 #include <assert.h>

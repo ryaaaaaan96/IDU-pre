@@ -7,7 +7,6 @@ project(idu_points_tests)
 target_include_directories(app PRIVATE ${IDU_APP}/app ${IDU_APP}/tests)
 target_sources(app PRIVATE src/main.c
     ${IDU_APP}/tests/legacy_registers.c
-    ${IDU_APP}/app/startup.c ${IDU_APP}/app/point_service.c
     ${IDU_APP}/app/communication/ports/acquisition.c
     ${IDU_APP}/app/communication/ports/virtual.c)
 add_subdirectory(${IDU_APP}/app/cfg app_cfg)

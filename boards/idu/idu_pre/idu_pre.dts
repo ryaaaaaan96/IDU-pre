@@ -53,6 +53,9 @@
 
     idu_io: idu-io {
         compatible = "idu,pre-io";
+        di-bit-order = "lsb-first";
+        address-bit-order = "msb-first";
+        address-offset = <1>;
         io-channels = <&adc0 13>, <&adc0 0>, <&adc0 1>, <&adc0 2>,
                       <&adc0 3>, <&adc0 4>, <&adc0 11>, <&adc0 12>;
         di-gpios = <&gpioc 6 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,

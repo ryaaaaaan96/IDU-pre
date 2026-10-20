@@ -1,0 +1,5 @@
+if(CONFIG_HEALTH_MONITOR)
+  zephyr_library()
+  zephyr_include_directories(include)
+  zephyr_library_sources(src/health_monitor.c)
+endif()

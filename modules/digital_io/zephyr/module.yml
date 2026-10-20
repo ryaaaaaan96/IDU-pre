@@ -1,0 +1,4 @@
+name: digital_io
+build:
+  cmake: .
+  kconfig: Kconfig

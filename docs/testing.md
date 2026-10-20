@@ -40,6 +40,8 @@ build/IDU-pre/tests/reference_services/zephyr/zephyr.exe -flash_in_ram
 | `reference_config`、`reference_dp`、`reference_ports`、`reference_services` | 原表注册、同步字节接口、CO/TR 适配、策略回调和迁移 |
 | `boot`、`iap`、`test_iap_codec.py` | 健康确认、独立 IAP 模块、配置驱动升级、收包/签名拒绝、SGZ/QuickLZ 边界 |
 | `adc`、`test_build_configuration.py` | 标准 ADC API、采样平均、硬件超时恢复、并发隔离与 Sysbuild 配置覆盖 |
+| `io` | 通用数字量组的极性/位序/32 位边界、独立看门狗实例、超时锁定和 GPIO 故障 |
+| `acquisition` | 业务状态顺序、采样故障发布无效质量、通信故障、看门狗过期和试运行确认 |
 
 `tests/run.sh` 同时验证 Process 关闭、参数/后端可选配置，并用独立 Flash 临时文件
 在新进程中执行参数、MV-IO 和 IAP 恢复阶段。普通运行跳过的 reboot probe 会在
@@ -220,3 +222,24 @@ Kconfig 配置。保留原线协议、结果日志内容、试运行请求及应
 未在本次局部回归中运行。默认与 MCUboot＋IAPv3 构建、导出和验签通过；
 默认 BIN 的 SHA256、IAP 镜像内容摘要均与清理前一致。文档链接和差异检查通过。
 日志在 `build/IDU-pre/tests/iap-cleanup-*.log`。本轮未烧录或进行实板验证。
+
+## 硬件模块与应用精简验证（2026-10-20）
+
+硬件服务拆为 `analog_input`、`digital_io` 和 `health_monitor` 三个独立模块。
+应用由 `acquisition` 管理采集状态，通过 `idu_inputs_sample()` 读取原始值，
+`process/points.c` 集中点表初始化、采样映射及公共回调。产品引脚、位序和喂狗时序
+来自设备树；平均次数来自 Kconfig。应用根目录仅保留入口与构建配置。
+
+- 完整 `tests/run.sh` 通过：36 次模拟器执行，219 项 Ztest 通过（含重启阶段及
+  配置变体）；Python 28 项中 3 项因缺少外部 QuickLZ/SGZ 输入跳过。
+  主机 C 回归启用 ASan/UBSan，当前环境仅禁用 LeakSanitizer。
+- ADC 共 13 项，覆盖统一采样、输入顺序、平均及失败质量；新增 IO 模块 8 项，
+  覆盖极性、位序、32 位边界、实例隔离、GPIO 故障和看门狗超时锁定；
+  采集状态机 8 项，覆盖故障阶段、无效样本发布及过期后拒绝试运行确认。
+- 默认及 MCUboot＋IAPv3 构建、导出和镜像检查通过，签名验证通过。
+  默认静态 RAM 为 81,768 B，IAPv3 为 114,608 B；未测运行时栈余量。
+- 文档本地链接、旧代码路径引用及 `git diff --check` 检查通过。
+
+日志位于 `build/IDU-pre/hardware-modules/`。JTAG 释放提前到板级早期初始化，
+保留 SWD；应用故障停止喂狗时保持引脚输出，看门狗超时后不允许迟到进度恢复喂狗。
+本轮没有烧录，需实板确认 PA15/RS485 初始化、DI/ADC 采样和 PC13 看门狗交接。

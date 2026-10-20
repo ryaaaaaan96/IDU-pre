@@ -2,6 +2,9 @@
 include_guard(GLOBAL)
 include(${CMAKE_CURRENT_LIST_DIR}/hardware.cmake)
 list(APPEND ZEPHYR_EXTRA_MODULES
+  ${CMAKE_CURRENT_LIST_DIR}/analog_input
+  ${CMAKE_CURRENT_LIST_DIR}/digital_io
+  ${CMAKE_CURRENT_LIST_DIR}/health_monitor
   ${CMAKE_CURRENT_LIST_DIR}/dataprocess
   ${CMAKE_CURRENT_LIST_DIR}/collect
   ${CMAKE_CURRENT_LIST_DIR}/transmit

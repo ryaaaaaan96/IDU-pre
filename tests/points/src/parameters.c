@@ -1,4 +1,4 @@
-#include "idu_equipment.h"
+#include "process/idu_process.h"
 #include "cfg/tables/signal_ids.h"
 #include "communication/ports/idu_virtual.h"
 #include <dataprocess/params.h>

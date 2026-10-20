@@ -62,15 +62,17 @@ AHB 固定为 `/1`，APB 分频可选 1/2/4/8/16；不提供 IRC、PLL1/2 或 US
   1.71 V ≤ VDDA < 2.4 V 时上限为 14 MHz，2.4–3.63 V 时上限为 35 MHz，最低 0.1 MHz。
   该校验依赖板级填写的电压，不测量供电电压。
 
-[`app/hardware/analog.c`](../../app/hardware/analog.c) 只处理产品采样：
+[`modules/analog_input`](../analog_input) 通过标准 ADC API 处理采样与平均，
+[`app/acquisition/inputs.c`](../../app/acquisition/inputs.c) 装配产品配置：
 通道顺序 13、0、1、2、3、4、11、12，每通道 10 次整数平均，12 位、3.3 V 及
 71.5 周期采样时间与原配置相同。工程量换算继续留在 `app/process/`。
 
 ## 板级与启动程序
 
 PC13 外部看门狗归 [`board.c`](../../boards/idu/idu_pre/board.c)，
-仅 MCUboot 选择 `BOARD_EARLY_INIT_HOOK`；它在 SoC 初始化之后、`PRE_KERNEL_1`
-之前执行。应用的运行期喂狗策略在 `app/hardware/health.c`。
+板级选择 `BOARD_EARLY_INIT_HOOK`，在 SoC 初始化之后、`PRE_KERNEL_1`
+之前释放 JTAG、保留 SWD；仅 MCUboot 将 PC13 设为浮空。
+应用通过 `modules/health_monitor` 按产品设备树配置启动外部喂狗。
 保留 `GD32E50X_XD` 和 FMC 字对齐编程兼容定义。
 
 `sysbuild/` 保留标准入口，镜像和分区策略在 `bootloader/`。

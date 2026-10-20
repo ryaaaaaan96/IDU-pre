@@ -13,7 +13,18 @@ properties:
   address-gpios:
     type: phandle-array
     required: true
-    description: Four switches in most-significant to least-significant bit order
+    description: Four address switches, with ordering selected by address-bit-order
+  di-bit-order:
+    type: string
+    enum: ["lsb-first", "msb-first"]
+    default: "lsb-first"
+  address-bit-order:
+    type: string
+    enum: ["lsb-first", "msb-first"]
+    default: "msb-first"
+  address-offset:
+    type: int
+    default: 1
   watchdog-gpios:
     type: phandle-array
     required: true

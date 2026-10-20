@@ -22,10 +22,9 @@
 [`app/communication/`](../communication)，协议路由、控制命令及兼容窗口在
 [`app/communication/config/`](../communication/config)，应用选项在
 [`app/Kconfig`](../Kconfig)。点表只声明数据及绑定，不创建线程或操作串口。
-[`app/startup.c`](../startup.c) 装配初始化，
-[`app/point_service.c`](../point_service.c) 负责采样映射，
+[`app/process/points.c`](../process/points.c) 负责点表初始化、采样映射及公共回调，
 [`app/process/engineering.c`](../process/engineering.c) 负责工程值换算。
-应用接口统一在 [`idu_equipment.h`](../idu_equipment.h)，保留
+应用接口统一在 [`process/idu_process.h`](../process/idu_process.h)，保留
 `idu_equipment_init()` 名称。点表机制由 `dataprocess`、`collect`、`transmit`
 提供；独立的 `quicklz` 只负责解码，与点表配置无关。
 

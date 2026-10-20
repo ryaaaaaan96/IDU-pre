@@ -10,8 +10,3 @@ config IDU_PRE
     select TRANSMIT if DATAPROCESS
     select DP_PROCESS if DATAPROCESS
     select TR_MODBUS_ADAPTER if DATAPROCESS
-
-config IDU_ADC_AVERAGE_COUNT
-    int "Samples averaged per analog input"
-    default 10
-    range 1 64

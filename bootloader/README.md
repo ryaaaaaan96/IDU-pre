@@ -29,7 +29,7 @@ SoC 根由模块元数据提供，无需把芯片路径写入镜像配置。
 Zephyr 允许模块通过 `sysbuild-cmake` 提供共享构建逻辑；当前并无跨产品共享需求，
 因此保留标准薄入口，不把整个 Sysbuild 工程装进芯片模块。
 
-`app/boot.c` 负责应用试运行确认，[`modules/iap`](../modules/iap/README.md)
+`app/acquisition/boot.c` 负责应用试运行确认，[`modules/iap`](../modules/iap/README.md)
 负责 IAP 接收、SGZ 解包及镜像校验，通过设备树和 Kconfig 提供产品配置；
 这些代码运行在主应用中，和本目录的启动程序配置分开。头文件与所属功能源码同目录，
 应用使用 `app/` 作为头文件搜索根，不再设置根目录 `include/` 或 `src/`。

@@ -1,0 +1,3 @@
+config HEALTH_MONITOR
+    bool "Progress-gated external GPIO watchdog"
+    depends on GPIO

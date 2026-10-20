@@ -20,6 +20,9 @@ compatibility.
 
 | Module | Public headers | Responsibility |
 | --- | --- | --- |
+| `analog_input` | `analog_input/analog_input.h` | Configured ADC channel groups, software averaging and ordered raw samples |
+| `digital_io` | `digital_io/digital_io.h` | Configured GPIO input groups, logical active levels and bit ordering |
+| `health_monitor` | `health_monitor/health_monitor.h` | Per-instance progress-gated GPIO feeding for external watchdogs |
 | `dataprocess` | `data_process.h`, `platform_callback.h`, `dataprocess/{points,process,params}.h` | Shared data contracts/store, `dp_*` processing, optional NVS |
 | `collect` | `collect_lib.h`, `collect/collect.h` | `co_*` acquisition, bus scheduling and parameter transport backend |
 | `transmit` | `transmit_lib.h`, `transmit/{transmit,modbus_adapter}.h` | `tr_*` register mappings, port modes and Modbus workqueues |
@@ -39,17 +42,52 @@ a string. Execution remains in `app/process/`. Register-to-signal mappings belon
 to the tables. Protocol routing, command dispatch and their contracts
 live in [`app/communication/config/`](../app/communication/config), while
 application options live in [`app/Kconfig`](../app/Kconfig). Business callbacks
-remain in `app/process/`; hardware and transport code remain in their application
-layers. Moving the configuration preserves its data and behavior. `dataprocess` has no
+remain in `app/process/`; product input bindings remain in `app/acquisition/`
+and protocol adaptation in `app/communication/`. `dataprocess` has no
 Modbus or collector dependency. `collect` and `transmit` depend on its data contracts;
 downstream forwarding is optional when `collect` is absent.
 
-Application composition lives in `app/startup.c`, sample mapping in
-`app/point_service.c`, and engineering conversion in
-`app/process/engineering.c`. `app/idu_equipment.h` exposes initialization,
+Application composition, sample mapping and common callbacks live in
+`app/process/points.c`; engineering conversion lives in
+`app/process/engineering.c`. `app/process/idu_process.h` exposes initialization,
 snapshot publication, sample-period access and application health. The existing
 `idu_equipment_init()` name remains available. These product responsibilities
 stay in the application; there is no separate generic equipment module.
+
+## Input and watchdog services
+
+The three input/health modules can be registered independently and enabled with
+`ANALOG_INPUT` (requires ADC), `DIGITAL_IO` and `HEALTH_MONITOR` (require GPIO).
+They have no IDU, point-table, Modbus or DP dependencies and allocate no heap.
+Each input group uses a caller-owned immutable configuration; each watchdog owns
+its timer and state. Physical device/channel configuration must be serialized by
+the caller when several groups share hardware.
+
+`analog_input_init()` sets up ADC channels, and `analog_input_read()` returns
+unsigned raw values in configured order. It supports single-ended resolutions
+up to 16 bits, averaging 1..65535 samples with integer truncation. Buffer capacity
+is checked before conversion; a failed batch may contain partial results and
+must be treated as invalid. Product calibration and signal conversion stay in
+the application. The ADC driver determines supported gains, references and
+hardware oversampling.
+
+`digital_io_init()` configures 1..32 inputs; `digital_io_read()` returns logical
+active bits in LSB-first or MSB-first order, leaving the caller's result unchanged
+on failure. Pins are sampled sequentially. Output/LED operations use Zephyr GPIO
+directly instead of adding another hardware abstraction.
+
+`health_monitor_start()` uses a configured on-chip GPIO and kernel timer. The
+GPIO must support nonblocking ISR-safe toggles. `health_monitor_progress()` reports
+completed business work; missing progress or a GPIO failure permanently stops
+feeding. Late progress cannot revive an expired monitor. `health_monitor_stop()`
+keeps the GPIO driven at its last level, allowing the external watchdog to reset
+the system. Do not reuse a started instance until reset. Startup is serialized;
+progress and stop synchronize with timer callbacks. This service preserves the
+existing edge-fed external watchdog behavior without assuming a particular IC.
+
+IDU's `idu_inputs_sample()` combines DI, switch address and raw ADC values.
+`app/process/points.c` alone maps that sample into DP points; these modules never
+publish to DP. `app/acquisition/inputs.c` binds board devicetree and Kconfig values.
 
 ## Integration
 
@@ -67,7 +105,7 @@ transforms and basic forwarding remain available; tables declaring business
 handlers or read callbacks are rejected instead of silently ignoring them.
 `TR_MODBUS_ADAPTER` enables whole-PDU routing and isolated forwarding workers,
 and can be selected without `DP_PARAMS`. The full IDU-pre application selects it.
-Supply static `dp_equip_cfg` tables. IDU's `app/startup.c` explicitly calls
+Supply static `dp_equip_cfg` tables. IDU's `app/process/points.c` explicitly calls
 `dp_register_config_provider(idu_equipment_config)` then `dp_init()`, creates
 the application acquisition interface, registers all buses
 through `co_init()` / `co_init_bus()`, then initializes and recovers parameters.

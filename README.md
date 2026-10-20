@@ -48,26 +48,32 @@ bash applications/IDU-pre/tests/run.sh
 应用入口按三层组织，硬件访问和业务配置通过服务接口连接：
 
 ```text
-app/main.c                         启动入口、采样周期与休眠调度
-  └─ runtime.c                     初始化顺序、单次采集流程、故障停机与升级确认
-       ├─ hardware/                DI、ADC、LED 与外部看门狗
-       ├─ startup.c                点表管线初始化装配
-       ├─ point_service.c          本地采样映射与设备健康状态
-       └─ communication/protocol.c Modbus 端口配置与恢复
+app/main.c                            启动入口、采样周期与休眠调度
+  └─ acquisition/acquisition.c        采集业务状态、故障锁定与升级确认
+       ├─ acquisition/inputs.c        统一采样入口及只读硬件配置
+       ├─ acquisition/boot.c          MCUboot 试运行健康确认
+       ├─ process/points.c            点表初始化、采样映射及公共回调
+       └─ communication/protocol.c    Modbus 端口配置与恢复
 ```
 
-`app/idu_runtime.h` 定义运行生命周期：零初始化后启动，正常状态才能执行
-采集周期，失败后停止喂狗并拒绝继续运行。`app/idu_equipment.h` 提供应用级
-设备服务；运行层不直接依赖点表、NVS 或 Flash 设备树细节。
-芯片专用的 JTAG/SWD 配置归属 `app/hardware/io.c`。点表配置、处理、参数事务和协议兼容
+`app/acquisition/idu_acquisition.h` 定义采集业务状态：未配置、启动、等待采样、
+读取输入、发布点值、维护通信、健康检查及故障锁定。`main.c` 调用
+`idu_acquisition_start()` 和 `idu_acquisition_cycle()`；故障时记录阶段和错误码，
+停止喂狗并拒绝继续采集。`app/process/idu_process.h` 提供应用级设备服务。
+芯片专用的 JTAG/SWD 配置归属 `boards/idu/idu_pre/board.c`。点表配置、处理、参数事务和协议兼容
 继续分别位于 `app/cfg/`、`modules/` 下的三类通用模块和 `app/communication/mvio.c`。
 
 新增功能时，硬件操作放入对应板级模块，设备数据与存储策略放入设备服务，
-运行顺序和故障策略由 `app/runtime.c` 编排。`runtime` 不负责休眠，也不动态分配内存。
+运行顺序和故障策略由采集状态机编排；周期和休眠仍由 `main.c` 管理。
 `app/CMakeLists.txt` 汇总功能目录，各目录的 CMakeLists 负责本组源码及可选配置；
 应用头文件与所属功能源码同目录，通用模块继续独立放在 `modules/`。
-`tests/runtime/` 使用模拟服务覆盖启动失败、无效采样发布、处理超时、通信故障
-和升级确认失败；完整回归入口 `tests/run.sh` 已包含这些用例。
+`tests/acquisition/` 覆盖业务阶段、启动失败、无效采样发布、处理超时、通信及升级确认故障；
+`tests/adc/`、`tests/io/` 覆盖统一采样、通用输入和看门狗，均已接入 `tests/run.sh`。
+
+引脚、极性、ADC 通道顺序、DI/拨码位序、地址偏移和喂狗时序由板级 DTS 配置，
+平均次数由 `CONFIG_IDU_ADC_AVERAGE_COUNT` 配置。业务层统一通过
+`idu_inputs_sample()` 获取快照；三个硬件服务模块不认识点号，也不自动写 DP。
+采样字段到测点的映射由 `process/points.c` 完成，点表定义仍在 `app/cfg/`。
 
 ## 仓库布局
 
@@ -76,15 +82,11 @@ IDU-pre/
 ├── boards/、dts/        # IDU 板定义、早期板级初始化及设备树
 ├── app/
 │   ├── main.c          # 应用入口、采样周期与休眠
-│   ├── startup.c       # DP、采集总线、参数恢复与处理启动
-│   ├── point_service.c # 本地样本到信号的映射
-│   ├── runtime.c       # 启动、采样编排与故障策略
-│   ├── boot.c          # MCUboot 试运行健康确认
-│   ├── hardware/        # GPIO、ADC、LED、外部看门狗
+│   ├── acquisition/     # 采集状态、统一采样及试运行确认
 │   ├── cfg/             # devices/ 设备与型号；tables/ 三表及元数据
-│   ├── process/         # 工程换算、业务回调、参数命令和旧参数导入
+│   ├── process/         # 点表初始化、采样映射、工程换算及业务回调
 │   └── communication/   # 端口、协议、路由与采集后端
-├── modules/             # gd32e505、dataprocess、collect、transmit、quicklz、iap
+├── modules/             # analog_input、digital_io、health_monitor 及点表/升级/SoC 模块
 ├── bootloader/          # MCUboot 配置、分区和联合构建
 ├── sysbuild/            # Zephyr 约定的薄入口
 ├── conf/                # 应用可选配置
@@ -99,20 +101,22 @@ IDU-pre/
 
 ## 头文件与启动程序边界
 
-应用以 `app/` 为头文件搜索根。共用服务头在 `app/`，硬件、处理和通信头
-分别与实现放在 `app/hardware/`、`app/process/`、`app/communication/`；
-跨功能引用使用 `"hardware/idu_pre.h"` 等路径；通用 IAP 使用 `<iap/iap.h>`、`<iap/sgz.h>`。
+应用以 `app/` 为头文件搜索根。采集、处理和通信头
+分别与实现放在 `app/acquisition/`、`app/process/`、`app/communication/`；
+跨功能引用使用 `"acquisition/inputs.h"` 等路径；通用 IAP 使用 `<iap/iap.h>`、`<iap/sgz.h>`。
 通用模块继续保留各自的公开 `include/`，由 Zephyr 模块机制导出。
 
-`app/` 根目录只保留运行管理、应用服务和启动健康三个接口头：
-`idu_runtime.h`、`idu_equipment.h`、`idu_boot.h`。各功能接口按下表引用，
+`app/` 根目录只保留 `main.c`、`CMakeLists.txt` 和 `Kconfig`。
+各功能接口按下表引用，
 调用通用模块时直接包含对应模块头，不通过应用汇总头间接引入。
 
 | 接口 | 职责 |
 | --- | --- |
-| `hardware/idu_pre.h` | 板级采样快照、IO、ADC、LED 和看门狗 |
+| `acquisition/idu_acquisition.h` | 采集业务状态、启动和周期执行 |
+| `acquisition/inputs.h` | 统一原始采样接口、产品快照及健康/指示接口 |
+| `acquisition/idu_boot.h` | MCUboot 试运行健康确认 |
 | `process/engineering.h` | 仅依赖标准 C 的工程量换算，可用于主机测试 |
-| `process/idu_process.h` | 测点处理、参数命令及 MV-IO/AIDC 业务回调 |
+| `process/idu_process.h` | 点表初始化、采样发布、健康检查及测点业务回调 |
 | `communication/idu_protocol.h` | 上位机端口配置、参数协议回调及 AIDC 串口参数转换 |
 | `communication/idu_mvio.h` | MV-IO 旧协议路由注册 |
 | `communication/ports/idu_acquisition.h` | 采集端口初始化，选择实际 RTU 或虚拟后端 |
@@ -124,7 +128,7 @@ IDU-pre/
 UPP 链路，点表及参数处理声明不放入硬件或协议路由头文件。
 
 [`bootloader/`](bootloader/README.md) 保存本板 MCUboot 配置、分区和联合构建设置。
-MCUboot 源码仍使用 West 工作区中的独立仓库；`app/boot.c` 负责应用健康确认。
+MCUboot 源码仍使用 West 工作区中的独立仓库；`app/acquisition/boot.c` 负责应用健康确认。
 [`modules/iap/`](modules/iap/README.md) 负责升级接收、解包和验签，分区／内存取自
 设备树，密钥来源、镜像上限和保存策略由 `conf/iapv3.conf` 等 Kconfig 配置提供，
 产品升级开关归 `app/Kconfig`，运行层和通信层直接调用 `iap_*`，不再保留

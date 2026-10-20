@@ -57,7 +57,7 @@ UPP、逆变器专用命令及其日志/加密扩展不属于通用三模块接�
 | `app/communication/config/` | 协议路由、兼容窗口、控制/诊断寄存器 |
 | `app/communication/ports/` | 虚拟或真实采集后端 |
 | `app/` | 初始化装配、本地样本映射和健康确认 |
-| `app/hardware/` | GPIO、ADC、LED、外部看门狗 |
+| `app/acquisition/` | 采集业务状态、统一原始采样入口及产品配置；调用三个通用硬件服务模块 |
 
 配置只声明数据和绑定，通用模块不引用本板 BSP 或设备专用寄存器。
 文件清单与新增设备步骤集中在[点表维护指南](../app/cfg/README.md)。
@@ -94,8 +94,8 @@ flowchart LR
 - **应用层** 保留本地 ADC 换算、MV-IO 兼容策略和设备配置；通用模块不引用
   板级 GPIO、设备专用寄存器或 BSP。生命周期继续由设备服务与运行层组织。
 
-`app/startup.c` 装配初始化流程，保留 `idu_equipment_init()` 函数名；
-`app/point_service.c` 负责采样映射，`app/process/engineering.c`
+`app/process/points.c` 集中点表初始化、采样映射及公共回调，保留
+`idu_equipment_init()` 函数名；`app/process/engineering.c`
 负责工程值换算。这些职责直接依赖 IDU 配置及硬件语义，属于应用层。
 点表机制由 `dataprocess`、`collect`、`transmit` 提供，不另设 equipment 模块。
 
@@ -125,7 +125,7 @@ flowchart LR
 可以按需选择。关闭 Process 后仍可执行纯变换，声明业务回调的配置会在启动
 校验时被拒绝。无参数后端时 `dp_process_save_reboot()` 返回 `-ENOTSUP`。
 
-应用在 `app/startup.c` 显式组织启动：`dp_init()` → 创建应用采集接口 →
+应用在 `app/process/points.c` 显式组织启动：`dp_init()` → 创建应用采集接口 →
 `co_init()` / `co_init_bus()` 注册全部总线 → `dp_params_init()` / 恢复参数 →
 `dp_process_start()` → `dp_reference_start()` → `co_start()`。参数存储失败后的降级策略由应用决定。
 首轮采样地址就绪后，再由通信层绑定转发接口；不使用 `SYS_INIT` 安排这些步骤。

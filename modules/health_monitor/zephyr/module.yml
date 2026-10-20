@@ -1,0 +1,4 @@
+name: health_monitor
+build:
+  cmake: .
+  kconfig: Kconfig

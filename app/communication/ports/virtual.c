@@ -3,7 +3,7 @@
  */
 #include "communication/ports/idu_virtual.h"
 #include "cfg/devices/device_config.h"
-#include "hardware/idu_pre.h"
+#include "acquisition/inputs.h"
 #include <dataprocess/points.h>
 #include <transmit/modbus_adapter.h>
 #include <string.h>

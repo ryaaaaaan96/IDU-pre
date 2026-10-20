@@ -48,7 +48,7 @@ IDU 无需编写独立的 IAP 适配 `.c`。配置由以下内容提供：
 
 应用在参数服务初始化之后、开放 Modbus 路由之前调用启动接口。模块不使用
 `SYS_INIT` 提前启动，也不注册或占用串口；调用方负责站号过滤及超长 FC16 接收。
-IDU 的 [`app/runtime.c`](../../app/runtime.c) 直接调用 `iap_start()`，
+IDU 的 [`app/acquisition/acquisition.c`](../../app/acquisition/acquisition.c) 直接调用 `iap_start()`，
 [`app/communication/mvio.c`](../../app/communication/mvio.c) 调用
 `iap_ready()`／`iap_route()`；产品开关 `IDU_IAPV3` 归
 [`app/Kconfig`](../../app/Kconfig)，不再保留旧接口别名或应用 IAP 目录。
@@ -56,7 +56,7 @@ IDU 的 [`app/runtime.c`](../../app/runtime.c) 直接调用 `iap_start()`，
 接收器为单实例，多端口共享上传所有权；一个互斥锁、信号量和专用线程处理
 有界任务，Flash 擦写和解包不阻塞 Modbus 回调。初始化失败释放 Flash 句柄并允许重试；
 初始化成功后再次启动返回 `-EALREADY`。不提供运行中停机／重新配置接口。
-应用健康确认仍由 [`app/boot.c`](../../app/boot.c) 执行，不属于上传协议。
+应用健康确认仍由 [`app/acquisition/boot.c`](../../app/acquisition/boot.c) 执行，不属于上传协议。
 
 ## 保持的协议和限制
 

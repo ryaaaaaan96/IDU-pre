@@ -16,7 +16,8 @@
   提供芯片接入；PLL 来源、bypass、倍频与 APB 分频由板级 DTS 指定，
   HAL 输入频率由同一设备树生成。IDU 引脚与 Flash 分区仍由板及产品配置决定。
   MCUboot 的 PC13 浮空操作在 [板级早期钩子](../boards/idu/idu_pre/board.c) 中，
-  于 SoC 时钟初始化后、设备初始化和镜像交换前执行；应用仍由 `idu_health_init()` 启用喂狗。
+  于 SoC 时钟初始化后、设备初始化和镜像交换前执行；应用由 `idu_watchdog_start()` 启用喂狗。
+  应用和 MCUboot 都在该钩子释放 JTAG、保留 SWD，供 PA15 用作 RS485 DE。
 - 根据旧链接脚本暂按 512 KB Flash、128 KB SRAM 设置。
   **仍需核对 MCU 完整型号后缀对应的容量和封装**。
 - 外部 Flash 按旧代码的 4 MB W25Q32、SPI mode 3 设置；驱动用 SFDP
@@ -59,7 +60,7 @@ PD8 为最高位。寄存器 DI bit0 对应 DI1，bit15 对应 DI16。
 - 每 500 ms 获取 16 路 DI 和拨码地址，采集 8 路模拟量。
 - 每个模拟通道连续采集 10 次并取整数平均，分辨率 12 bit。
   模块中的 ADC0 驱动通过标准 `adc_*` API 提供逐通道轮询和转换超时，
-  `analog.c` 保留通道顺序及平均。设备初始化时校准，读取超时后下次读取重置并重新校准；
+  `modules/analog_input` 按产品配置保留通道顺序及平均。设备初始化时校准，读取超时后下次读取重置并重新校准；
   不沿用 FreeRTOS 的连续 DMA 缓冲区。
   平均数和周期由 `CONFIG_IDU_ADC_AVERAGE_COUNT`、
   `CONFIG_IDU_SAMPLE_PERIOD_MS` 调整初始配置；31000 可设置并保存运行周期。
@@ -74,6 +75,8 @@ PD8 为最高位。寄存器 DI bit0 对应 DI1，bit15 对应 DI16。
   200 ms 无边沿时复位。点表处理线程也纳入主循环的进展检查。
   Modbus 无有效收包约 20 s 时重置端口，恢复 TX 完成中断丢失等状态；
   工作线程持续卡住 20 s 或重配与回退均失败时停止喂狗。检测以采样周期为粒度。
+  `modules/health_monitor` 将超时或 GPIO 错误锁定，迟到的进度通知不会恢复喂狗；
+  `app/acquisition/` 记录采集故障阶段和错误码。停止喂狗不会将 PC13 改为浮空。
 - RS485 使用 Zephyr Modbus RTU，115200/8N1，PA15 控制 DE。
   启用非标准串行配置选项以保留旧固件的 8N1；Zephyr 默认无校验时
   使用两个停止位。拨码地址改变后异步重配，等待原响应发送结束后切换。
@@ -81,6 +84,8 @@ PD8 为最高位。寄存器 DI bit0 对应 DI1，bit15 对应 DI16。
 - 本地采样通过 DP 模块的 `dp_submit_sig_value()` / `dp_submit_sig_values()` 设置，
   IDU 只负责采样字段到信号的映射，整份快照一次批量提交。成功表示已入队；
   需要等待时使用返回的 ticket 调用 `dp_wait_processed()`，再读取质量与错误。
+  `idu_inputs_sample()` 是统一采样入口，只返回原始值，映射由 `app/process/points.c` 完成；
+  引脚、通道和时序来自 DTS，平均数来自 Kconfig，通用模块不绑定测点。
 - DP 内部通过 zbus 消息副本发布采集批次，处理线程执行点表转换与范围检查，
   用互斥锁更新数据池。采集失败或数据过期时旧协议读不应答，扩展区返回异常。
 - 缺少的第二路串口先使用 Zephyr Modbus RAW client/server 内存回环，

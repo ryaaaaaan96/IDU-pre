@@ -1,4 +1,4 @@
-#include "idu_boot.h"
+#include "acquisition/idu_boot.h"
 #include <zephyr/ztest.h>
 
 static unsigned writes;

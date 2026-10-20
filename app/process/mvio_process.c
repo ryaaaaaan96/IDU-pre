@@ -1,4 +1,5 @@
 #include "process/idu_process.h"
+#include <dataprocess/points.h>
 #include <zephyr/storage/flash_map.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/sys/crc.h>

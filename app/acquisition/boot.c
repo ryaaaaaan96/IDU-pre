@@ -1,4 +1,4 @@
-#include "idu_boot.h"
+#include "acquisition/idu_boot.h"
 #include <errno.h>
 #include <zephyr/dfu/mcuboot.h>
 #include <zephyr/logging/log.h>

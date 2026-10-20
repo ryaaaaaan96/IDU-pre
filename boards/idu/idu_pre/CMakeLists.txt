@@ -1,1 +1,1 @@
-zephyr_sources_ifdef(CONFIG_MCUBOOT board.c)
+zephyr_sources(board.c)
