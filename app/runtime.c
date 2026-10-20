@@ -2,7 +2,7 @@
 #include "idu_equipment.h"
 #include "hardware/idu_pre.h"
 #ifdef CONFIG_IDU_IAPV3
-#include "iap/idu_iap.h"
+#include <iap/iap.h>
 #endif
 #include <errno.h>
 #include <zephyr/kernel.h>
@@ -28,7 +28,7 @@ int idu_runtime_init(struct idu_runtime *runtime)
     if (!err) { err = idu_analog_init(); }
     if (!err) { err = idu_equipment_init(); }
 #ifdef CONFIG_IDU_IAPV3
-    if (!err) { err = idu_iap_init(); }
+    if (!err) { err = iap_start(); }
 #endif
     if (err) { return stop(runtime, err); }
     runtime->state = IDU_RUNTIME_RUNNING;

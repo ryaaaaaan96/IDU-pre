@@ -5,7 +5,7 @@
 #include "protocol_config.h"
 #include "communication/idu_mvio.h"
 #ifdef CONFIG_IDU_IAPV3
-#include "iap/idu_iap.h"
+#include <iap/iap.h>
 #endif
 #include <transmit/transmit.h>
 #include <transmit/modbus_adapter.h>
@@ -59,7 +59,7 @@ static int legacy_read(int iface, uint8_t fc, uint16_t address, uint16_t count,
         }
         /* Advertise only the initialized, explicitly enabled IAP transport. */
 #ifdef CONFIG_IDU_IAPV3
-        if (fc == 3 && idu_iap_ready()) {
+        if (fc == 3 && iap_ready()) {
             if (reg == IDU_MVIO_REG_IAP_CAPABILITY) { words[0] = 4; }
             else if (reg == IDU_MVIO_REG_IAP_VERSION) { words[0] = 0x1200; }
         }
@@ -81,7 +81,7 @@ static int route(int iface, const struct modbus_adu *rx, struct modbus_adu *tx, 
     if (rx->length < 4 || rx->length > sizeof(rx->data)) { return TR_MODBUS_SILENT; }
     uint16_t address = sys_get_be16(rx->data), count = sys_get_be16(rx->data + 2);
 #ifdef CONFIG_IDU_IAPV3
-    int iap = idu_iap_route(iface, rx, tx);
+    int iap = iap_route(iface, rx, tx);
     if (iap != -ENOENT) { return iap; }
 #endif
     if (rx->unit_id != 0 && rx->unit_id != 247 && in_ranges(address, cfg->extensions, cfg->extension_count)) {

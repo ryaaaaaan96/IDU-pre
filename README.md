@@ -83,8 +83,7 @@ IDU-pre/
 │   ├── hardware/        # GPIO、ADC、LED、外部看门狗
 │   ├── cfg/             # devices/ 设备与型号；tables/ 三表及元数据
 │   ├── process/         # 工程换算、业务回调、参数命令和旧参数导入
-│   ├── communication/   # 端口、协议、路由与采集后端
-│   └── iap/             # 产品选项和旧 IAP 接口名称兼容头，无独立实现
+│   └── communication/   # 端口、协议、路由与采集后端
 ├── modules/             # gd32e505、dataprocess、collect、transmit、quicklz、iap
 ├── bootloader/          # MCUboot 配置、分区和联合构建
 ├── sysbuild/            # Zephyr 约定的薄入口
@@ -109,7 +108,8 @@ IDU-pre/
 MCUboot 源码仍使用 West 工作区中的独立仓库；`app/boot.c` 负责应用健康确认。
 [`modules/iap/`](modules/iap/README.md) 负责升级接收、解包和验签，分区／内存取自
 设备树，密钥来源、镜像上限和保存策略由 `conf/iapv3.conf` 等 Kconfig 配置提供，
-无需产品适配 `.c`。根 `sysbuild/` 仅保留 Zephyr 约定入口。
+产品升级开关归 `app/Kconfig`，运行层和通信层直接调用 `iap_*`，不再保留
+`app/iap/` 兼容目录。根 `sysbuild/` 仅保留 Zephyr 约定入口。
 
 [`modules/gd32e505/`](modules/gd32e505/README.md) 通过 Zephyr 的 `soc_root` / `dts_root` 提供
 E505 登记、设备树时钟配置和标准 ADC 驱动；芯片启动由主应用和 MCUboot 共用，

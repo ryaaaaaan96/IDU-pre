@@ -15,5 +15,3 @@ config IDU_ADC_AVERAGE_COUNT
     int "Samples averaged per analog input"
     default 10
     range 1 64
-
-rsource "app/iap/Kconfig"

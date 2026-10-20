@@ -1,7 +1,7 @@
 #include "idu_runtime.h"
 #include "idu_equipment.h"
 #include "hardware/idu_pre.h"
-#include "iap/idu_iap.h"
+#include <iap/iap.h>
 #include <zephyr/ztest.h>
 #include <string.h>
 
@@ -23,7 +23,7 @@ int idu_health_init(void) { return service(HEALTH_INIT); }
 int idu_io_init(void) { return service(IO_INIT); }
 int idu_analog_init(void) { return service(ANALOG_INIT); }
 int idu_equipment_init(void) { return service(EQUIPMENT_INIT); }
-int idu_iap_init(void) { return service(IAP_INIT); }
+int iap_start(void) { return service(IAP_INIT); }
 void idu_health_kick(void) { ++kicks; }
 void idu_health_stop(void) { ++stops; }
 int idu_led_toggle(void) { return service(LED); }
