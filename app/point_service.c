@@ -2,6 +2,23 @@
 #include "idu_equip.h"
 #include "hardware/idu_pre.h"
 #include <errno.h>
+#include <zephyr/device.h>
+
+bool idu_equipment_healthy(uint32_t max_idle_ms)
+{
+    return dp_healthy(max_idle_ms);
+}
+
+#ifdef CONFIG_BOOTLOADER_MCUBOOT
+bool idu_equipment_boot_ready(void)
+{
+    const struct device *flash = DEVICE_DT_GET(DT_NODELABEL(external_flash));
+    struct dp_param_status status;
+    dp_params_get_status(&status);
+    return device_is_ready(flash) && (status.flags & DP_PARAM_STORAGE_READY) &&
+           !(status.flags & DP_PARAM_PENDING);
+}
+#endif
 
 int idu_snapshot_publish(const struct idu_snapshot *snapshot)
 {

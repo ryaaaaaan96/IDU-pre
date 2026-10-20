@@ -43,6 +43,32 @@ bash applications/IDU-pre/tests/run.sh
 | 核对引脚、时钟与移植条件 | [硬件说明](docs/hardware.md)、[GD32 支持调研](docs/gd32-support.md) |
 | 运行测试、查看已记录结果 | [验证说明](docs/testing.md) |
 
+## 应用架构与模块边界
+
+应用入口按三层组织，硬件访问和业务配置通过服务接口连接：
+
+```text
+app/main.c                         启动入口、采样周期与休眠调度
+  └─ runtime.c                     初始化顺序、单次采集流程、故障停机与升级确认
+       ├─ hardware/                DI、ADC、LED 与外部看门狗
+       ├─ startup.c                点表管线初始化装配
+       ├─ point_service.c          本地采样映射与设备健康状态
+       └─ communication/protocol.c Modbus 端口配置与恢复
+```
+
+`app/idu_runtime.h` 定义运行生命周期：零初始化后启动，正常状态才能执行
+采集周期，失败后停止喂狗并拒绝继续运行。`app/idu_equipment.h` 提供应用级
+设备服务；运行层不直接依赖点表、NVS 或 Flash 设备树细节。
+芯片专用的 JTAG/SWD 配置归属 `app/hardware/io.c`。点表配置、处理、参数事务和协议兼容
+继续分别位于 `app/cfg/`、`modules/` 下的三类通用模块和 `app/communication/mvio.c`。
+
+新增功能时，硬件操作放入对应板级模块，设备数据与存储策略放入设备服务，
+运行顺序和故障策略由 `app/runtime.c` 编排。`runtime` 不负责休眠，也不动态分配内存。
+`app/CMakeLists.txt` 汇总功能目录，各目录的 CMakeLists 负责本组源码及可选配置；
+应用头文件与所属功能源码同目录，通用模块继续独立放在 `modules/`。
+`tests/runtime/` 使用模拟服务覆盖启动失败、无效采样发布、处理超时、通信故障
+和升级确认失败；完整回归入口 `tests/run.sh` 已包含这些用例。
+
 ## 仓库布局
 
 ```text
@@ -52,6 +78,7 @@ IDU-pre/
 │   ├── main.c          # 应用入口、采样周期与休眠
 │   ├── startup.c       # DP、采集总线、参数恢复与处理启动
 │   ├── point_service.c # 本地样本到信号的映射
+│   ├── runtime.c       # 启动、采样编排与故障策略
 │   ├── boot.c          # MCUboot 试运行健康确认
 │   ├── hardware/        # GPIO、ADC、LED、外部看门狗
 │   ├── cfg/             # devices/ 设备与型号；tables/ 三表及元数据

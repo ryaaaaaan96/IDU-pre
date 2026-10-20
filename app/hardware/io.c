@@ -1,5 +1,7 @@
 #include "hardware/idu_pre.h"
 #include <errno.h>
+#include <gd32_gpio.h>
+#include <gd32_rcu.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/sys/util.h>
 
@@ -32,6 +34,10 @@ static int configure_inputs(const struct gpio_dt_spec *pins, size_t count)
 
 int idu_io_init(void)
 {
+    /* PA15 drives RS485 DE: release JTAG while retaining SWD. */
+    rcu_periph_clock_enable(RCU_AF);
+    gpio_pin_remap_config(GPIO_SWJ_SWDPENABLE_REMAP, ENABLE);
+
     int err = configure_inputs(digital_inputs, ARRAY_SIZE(digital_inputs));
     if (!err) {
         err = configure_inputs(address_switches, ARRAY_SIZE(address_switches));

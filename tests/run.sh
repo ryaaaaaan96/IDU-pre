@@ -90,3 +90,7 @@ env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/pipeline -d "$test_dir/pipeline-basic" \
     -- -DEXTRA_CONF_FILE=process-off.conf
 timeout 30s "$test_dir/pipeline-basic/zephyr/zephyr.exe"
+
+env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
+    applications/IDU-pre/tests/runtime -d "$test_dir/runtime"
+timeout 30s "$test_dir/runtime/zephyr/zephyr.exe"

@@ -1,6 +1,7 @@
 #ifndef IDU_EQUIP_H
 #define IDU_EQUIP_H
 
+#include "idu_equipment.h"
 #include "idu_point_service.h"
 #include "signal_ids.h"
 #include "device_config.h"

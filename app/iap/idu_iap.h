@@ -1,7 +1,7 @@
 #ifndef IDU_IAP_H
 #define IDU_IAP_H
 #include <stdbool.h>
-#include <zephyr/modbus/modbus.h>
+struct modbus_adu;
 /* Source compatibility for application orchestration and existing mocks.
  * New integrations use <iap/iap.h>. There is no IDU-specific implementation. */
 int iap_start(void);

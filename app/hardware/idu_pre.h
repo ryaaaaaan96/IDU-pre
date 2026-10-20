@@ -26,7 +26,6 @@ int idu_health_init(void);
 void idu_health_kick(void);
 void idu_health_stop(void);
 int idu_protocol_set_address(uint8_t address);
-int idu_snapshot_publish(const struct idu_snapshot *snapshot);
 uint16_t idu_current_from_raw(uint16_t raw);
 
 #endif
