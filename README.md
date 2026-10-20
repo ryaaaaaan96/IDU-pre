@@ -91,7 +91,7 @@ IDU-pre/
 │   ├── main.c          # 应用入口、采样周期与休眠
 │   ├── acquisition/     # 采集、发布及通信执行流程
 │   ├── status/          # 业务状态、LED 策略、健康进度及镜像确认
-│   ├── cfg/             # device.c 设备装配；inc/ 配置头文件；tables/ 三表及默认值
+│   ├── cfg/             # device.c 完整设备配置；inc/ 配置头文件；tables/ 三表及默认值
 │   ├── process/         # 点表初始化、采样映射、工程换算及业务回调
 │   └── communication/   # 端口、协议、路由与采集后端
 ├── modules/             # analog_input、io_input、led_indicator、health_monitor 及点表/升级/SoC 模块
@@ -179,7 +179,7 @@ Zephyr 版的实际启动、UART/DE 时序、Flash 掉电和升级回退仍需�
   新空分区使用默认值并正常保存、重启加载；已存在的不匹配 schema 拒写并报告错误，
   不自动擦除。升级已有设备前需另行决定迁移方案。保存地址默认 1，实际通信地址仍取拨码。
 
-三张 const 表及默认数组保留在 Flash，运行值、队列、参数缓存和小型设备装配描述留在 RAM。
+设备表、三张点表及默认数组均为 const 并保留在 Flash，运行值、队列和参数缓存留在 RAM。
 详细维护方法见[点表配置说明](app/cfg/README.md)。
 
 ## 原 README 入口

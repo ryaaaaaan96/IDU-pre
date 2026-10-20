@@ -291,9 +291,9 @@ its 553 configured points (560 runtime slots). `ZBUS_MSG_SUBSCRIBER_NET_BUF_STAT
 `sizeof(dp_point_batch)` despite isolated pools in Zephyr 4.4.2. Tables are static;
 lookup is linear. Measure timing and stack margins on the target before release.
 
-The application's reusable MV-IO model binds device instances at compile time
-through `app/cfg/inc/device_instances.h`. Process and acquisition rows are shared
-const arrays; device bindings are assembled once and execution views use caller
+The application's reusable MV-IO model binds device instances and table pointers
+directly in the const device table in `app/cfg/device.c`. Process and acquisition rows are shared
+const arrays; the getter returns the complete configuration and execution views use caller
 scratch storage. There is no full-table RAM copy or heap allocation. See [the model and pipeline design](../docs/collect-process-transmit.md).
 
 NVS requires FLASH, FLASH_MAP, FLASH_PAGE_LAYOUT and NVS_DATA_CRC. Reserve at least

@@ -2,11 +2,11 @@
 
 [文档导航](../../docs/README.md) · [点表与寄存器](../../docs/point-tables.md)
 
-`device.c` 只保留产品设备关系和注册函数；三表校验、执行视图及数据池初始化
+`device.c` 声明产品设备与点表的关联并注册回调；三表校验、执行视图及数据池初始化
 均由 `modules/dataprocess` 完成。
 
 点表沿用参考工程的结构：设备表关联处理、采集和转发表，业务通过信号 ID 和
-函数指针连接。所有点行及默认值为 `const`，多个设备共享型号表；DP 按需读取，
+函数指针连接。设备表、点行及默认值均为 `const`，多个设备共享型号表；DP 按需读取，
 不在 RAM 中复制整套点表。不引入 ARC，也不链接参考平台的预编译库。
 
 ```text
@@ -14,7 +14,6 @@ cfg/
 ├── device.c              # 设备关联及配置回调注册
 ├── inc/                  # 本目录全部配置头文件
 │   ├── device.h
-│   ├── device_instances.h
 │   ├── mvio_signals.h
 │   ├── signal_ids.h
 │   └── imported_signals.h
@@ -26,8 +25,7 @@ cfg/
 
 | 文件 | 内容 |
 | --- | --- |
-| `device.c`、`inc/device.h` | `DEV_TABLE_S` 装配及 `pltcb_*` 注册，周期编码转毫秒 |
-| `inc/device_instances.h` | MV-IO 设备 ID、总线、unit、北向窗口和地址寄存器 |
+| `device.c`、`inc/device.h` | 完整 `DEV_TABLE_S` 配置及 `pltcb_*` 注册，周期编码转毫秒 |
 | `inc/mvio_signals.h` | MV-IO 信号枚举和采集周期编码 |
 | `tables/process.c` | `DM_SIG_CFG_S` 信号定义；`parameters[]` 集中默认值、范围及恢复策略 |
 | `tables/collect.c` | `MODBUS_RTU_TABLE_S`；可选 UPP 模型使用 `UPP_M_MOD_DATA / UPP_M_MOD / UPP_M_MOD_REG` |
@@ -39,6 +37,9 @@ cfg/
 默认值和范围通过原接口 `DM_SIG_DATA_S` 返回，不改变参考结构。
 处理、采集和转发表的行直接使用结构体字段初始化，信号 ID、标志和字序保留命名常量。
 `transmit.c` 逐项列出实际寄存器地址，北向窗口不再通过设备实例宏自动生成。
+与参考工程一致，`device.c` 包含三份表文件，CMake 仅编译 `device.c`。
+这样静态设备配置可直接引用私有数组，并用 `ARRAY_SIZE` 计算数量；三表不单独编译，
+不需要导出全局数组或手工维护行数。此组织方式仅用于应用配置，通用模块仍独立构建。
 
 初始化由 `app/process/points.c` 调用 `idu_register_point_tables()`、`dp_init()`、总线初始化、参数恢复和
 处理/采集启动。原始采样到信号的映射及工程量换算留在业务层，硬件模块只返回样本。
@@ -46,20 +47,21 @@ cfg/
 
 ## 设备如何关联点表
 
-`device.c` 中的 `devices[]` 初始化器只填写设备号、总线端口和采集地址。
-第一次调用 `idu_device_table()` 时，它为各设备补齐 `ptl_tbl_cfg[]`：
+`device.c` 中的 `static const DEV_TABLE_S devices[]` 同时填写设备号、总线端口、
+采集地址及完整的 `ptl_tbl_cfg[]`，不用设备号分支在运行时补挂：
 `proto_type` 标识表类型，`pst_table` 指向 const 表，`sig_num` 保存条目数。
 
 | 设备 | `ptl_tbl_cfg[0]`：处理表 | `ptl_tbl_cfg[1]`：协议表 |
 | --- | --- | --- |
-| 本地设备 1 | `process.c` 的 `local[]` | `PRO_MB_SLAVE` → `transmit.c` 的 `table[]` |
-| MV-IO 设备 10 | `process.c` 的 `mvio[]` | `PRO_MB_MASTER` → `collect.c` 的 `mvio[]` |
+| 本地设备 1 | `process.c` 的 `local_process[]` | `PRO_MB_SLAVE` → `transmit.c` 的 `transmit_table[]` |
+| MV-IO 设备 10 | `process.c` 的 `mvio_process[]` | `PRO_MB_MASTER` → `collect.c` 的 `mvio_collect[]` |
 | 可选本地业务设备 247 | `process.c` 的 `imported_local[]` | 不单独挂协议表；寄存器映射由设备 1 的转发表引用 |
 | 可选 DSP 设备 11–18 | 共用 `process.c` 的 `imported_dsp[]` | `PRO_UPP_MASTER` → `collect.c` 的 `imported_models` |
 
 处理表类型统一为 `PRO_DATA_PROCESS`。`idu_register_point_tables()` 注册设备表 getter，
-`dp_init()` 通过它取得完整关联并校验。设备描述仅启动时装配一次，点表本身仍在 Flash，
-不将整张点表复制到设备结构中。
+`idu_device_table()` 只返回 `devices`，`dp_init()` 取得完整关联并校验。
+设备描述与点表都在 Flash，没有首次调用时修改配置的操作。
+UPP 的 `sig_num` 使用 `IMPORTED_MODEL_FIELD_COUNT`，由各模型字段数组的长度之和计算。
 
 ## 修改设备或测点
 
@@ -71,7 +73,8 @@ cfg/
    不跨未定义空洞合帧；`rqst_cyl` 经设备配置中的转换函数解释，不直接当毫秒。
 4. 在 `transmit.c` 增加北向映射。新窗口也需加入
    `app/communication/config/mvio_config.c` 的 `extensions[]`，控制命令留在通信配置。
-5. 同型号 MV-IO 实例加入 `device_instances.h`，复用处理/采集表，并在 `transmit.c`
+5. 同型号 MV-IO 实例直接加入 `device.c` 的 `devices[]`，指定端口、从机地址，
+   显式引用共享处理/采集表，并在 `transmit.c`
    显式补充该设备的北向映射；新总线仍须注册通信后端。
    检查 Kconfig 的测点、值池、采集任务和参数容量。持久点改变会影响 NVS schema。
 
@@ -101,7 +104,9 @@ int err = idu_point_parameters_get(IDU_PARAMETER_COUNTRY_COMMON,
   国家行须填写完整的默认值、上下限和恢复策略，不逐字段合并。
 - 没有通用记录但已定义的信号仍按原规则补零，范围全零表示使用类型范围。
   未定义的国家返回 `-ENOTSUP`；未定义的设备或信号返回 `-ENOENT`。
-- MV-IO 和 DSP 的设备实例先归一为型号 ID，共享参数记录。数组初值的返回指针只读。
+- 共用同一处理表的设备共享型号参数，参数键使用 `devices[]` 中该型号首个实例的设备号；
+  当前 MV-IO 为 10、DSP 为 11。新增实例放在同型号首个实例之后，避免改变默认值来源。
+  数组初值的返回指针只读。
 - `restore` 表示允许主动恢复默认，不表示启动时强制覆盖已保存参数。
   查询不更新 DP 当前值、不读写 NVS。
 

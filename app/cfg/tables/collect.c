@@ -4,7 +4,7 @@
 #include "signal_ids.h"
 #include <zephyr/sys/util.h>
 
-static const MODBUS_RTU_TABLE_S mvio[] = {
+static const MODBUS_RTU_TABLE_S mvio_collect[] = {
     {.sig_id = IDU_MVIO_DI, .reg_addr = 8152, .reg_num = 1, .reg_type = 4,
      .rqst_cyl = IDU_COLLECT_SAMPLE, .byte_order = BYTE_ORDER_DEFAULT},
     {.sig_id = IDU_MVIO_CURRENT_1 + 0, .reg_addr = 8163, .reg_num = 1, .reg_type = 4,
@@ -108,22 +108,21 @@ static const UPP_M_MOD models[] = {
 static const UPP_M_MOD_REG imported_models = {
     .p_model_ary=models,.model_num=ARRAY_SIZE(models),.cfg_mode=0,
 };
+enum {
+    IMPORTED_MODEL_FIELD_COUNT = ARRAY_SIZE(model_1) +
+        ARRAY_SIZE(model_2) +
+        ARRAY_SIZE(model_99) +
+        ARRAY_SIZE(model_100) +
+        ARRAY_SIZE(model_102) +
+        ARRAY_SIZE(model_103),
+};
 /* END IMPORTED TABLE: collect */
 #endif
-
-const MODBUS_RTU_TABLE_S *idu_collect_table(uint16_t *count)
-{
-    *count = ARRAY_SIZE(mvio);
-    return mvio;
-}
 
 const UPP_M_MOD_REG *idu_model_table(uint16_t *count)
 {
 #if defined(CONFIG_IDU_AIDC_PROFILE)
-    *count = 0;
-    for (size_t i = 0; i < imported_models.model_num; ++i) {
-        *count += imported_models.p_model_ary[i].data_num;
-    }
+    *count = IMPORTED_MODEL_FIELD_COUNT;
     return &imported_models;
 #else
     *count = 0;

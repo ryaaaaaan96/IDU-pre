@@ -10,9 +10,7 @@ int idu_register_point_tables(void);
 const DEV_TABLE_S *idu_device_table(void);
 uint16_t idu_device_count(void);
 const DM_SIG_CFG_S *idu_process_table(uint8_t dev, uint16_t *count);
-const MODBUS_RTU_TABLE_S *idu_collect_table(uint16_t *count);
 const UPP_M_MOD_REG *idu_model_table(uint16_t *count);
-const MB_TABLE_CELL_T *idu_transmit_table(uint16_t *count);
 
 enum idu_parameter_country {
     IDU_PARAMETER_COUNTRY_COMMON = 0,

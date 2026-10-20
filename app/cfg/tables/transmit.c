@@ -3,7 +3,7 @@
 #include "device.h"
 #include "mvio_signals.h"
 
-static const MB_TABLE_CELL_T table[] = {
+static const MB_TABLE_CELL_T transmit_table[] = {
 #if defined(CONFIG_IDU_AIDC_PROFILE)
 /* BEGIN IMPORTED TABLE: transmit */
 /* Imported from user-provided AIDC source tables. Original tables: SUNGROW.
@@ -214,9 +214,3 @@ static const MB_TABLE_CELL_T table[] = {
      .dev_id = IDU_DEV_LOCAL, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
 #endif
 };
-
-const MB_TABLE_CELL_T *idu_transmit_table(uint16_t *count)
-{
-    *count = ARRAY_SIZE(table);
-    return table;
-}

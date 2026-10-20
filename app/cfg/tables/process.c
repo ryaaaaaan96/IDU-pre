@@ -2,12 +2,11 @@
 #include "device.h"
 #include "signal_ids.h"
 #include "mvio_signals.h"
-#include "device_instances.h"
 #include "process/idu_process.h"
 #include <errno.h>
 #include <zephyr/sys/util.h>
 
-static const DM_SIG_CFG_S local[] = {
+static const DM_SIG_CFG_S local_process[] = {
     {.sig_id = IDU_SIG_SAMPLE_PERIOD, .sig_size = 2, .sig_flag = FLAG_PERSISTENCE | FLAG_RT_STORE,
      .data_type = DATA_TYPE_U16, .pf_sig_proc = NULL},
     {.sig_id = IDU_SIG_LABEL, .sig_size = 16, .sig_flag = FLAG_PERSISTENCE | FLAG_RT_STORE,
@@ -56,7 +55,7 @@ static const DM_SIG_CFG_S local[] = {
      .data_type = DATA_TYPE_U16, .pf_sig_proc = NULL},
 };
 
-static const DM_SIG_CFG_S mvio[] = {
+static const DM_SIG_CFG_S mvio_process[] = {
     {.sig_id = IDU_MVIO_DI, .sig_size = 2, .sig_flag = 0,
      .data_type = DATA_TYPE_U16, .pf_sig_proc = NULL},
     {.sig_id = IDU_SIG_CURRENT_1 + 0, .sig_size = 2, .sig_flag = 0,
@@ -332,21 +331,6 @@ static const DM_SIG_CFG_S imported_dsp[] = {
 /* END IMPORTED TABLE: points */
 #endif
 
-const DM_SIG_CFG_S *idu_process_table(uint8_t dev, uint16_t *count)
-{
-    if (dev == IDU_DEV_LOCAL) { *count = ARRAY_SIZE(local); return local; }
-#define MVIO_TABLE(id, bus, unit, north, address_reg) \
-    if (dev == id) { *count = ARRAY_SIZE(mvio); return mvio; }
-    IDU_MVIO_INSTANCES(MVIO_TABLE)
-#undef MVIO_TABLE
-#if defined(CONFIG_IDU_AIDC_PROFILE)
-    if (dev == 247) { *count = ARRAY_SIZE(imported_local); return imported_local; }
-    if (dev >= 11 && dev <= 18) { *count = ARRAY_SIZE(imported_dsp); return imported_dsp; }
-#endif
-    *count = 0;
-    return NULL;
-}
-
 /* 默认值、上下限和恢复策略集中在一张 Flash 数组中。
  * country 未指定时为通用配置；后续国家配置只需增加有差异的行。
  * DM_SIG_CFG_S 和 DM_SIG_DATA_S 保持参考接口定义，不扩展模块结构。
@@ -612,15 +596,21 @@ static const struct point_parameter parameters[] = {
 #endif
 };
 
+/* 共用处理表的设备共用型号参数，以配置中第一个实例的设备号为参数键。 */
 static uint16_t default_device(uint16_t dev)
 {
-#define MVIO_DEFAULT(id, bus, unit, north, address_reg) \
-    if (dev == id) { return IDU_DEV_REMOTE_IO; }
-    IDU_MVIO_INSTANCES(MVIO_DEFAULT)
-#undef MVIO_DEFAULT
-#if defined(CONFIG_IDU_AIDC_PROFILE)
-    if (dev >= 11 && dev <= 18) { return 11; }
-#endif
+    uint16_t count;
+    const DM_SIG_CFG_S *rows = idu_process_table((uint8_t)dev, &count);
+    const DEV_TABLE_S *devices = idu_device_table();
+    if (!rows) {
+        return dev;
+    }
+    for (size_t i = 0; i < idu_device_count(); ++i) {
+        const DEV_TBL_CFG_S *group = &devices[i].ptl_tbl_cfg[0];
+        if (group->proto_type == PRO_DATA_PROCESS && group->pst_table == rows) {
+            return devices[i].dev_id;
+        }
+    }
     return dev;
 }
 

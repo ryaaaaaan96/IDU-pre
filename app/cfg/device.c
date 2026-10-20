@@ -1,67 +1,192 @@
 #include "device.h"
 #include "signal_ids.h"
-#include "device_instances.h"
 #include "mvio_signals.h"
 #include <platform_callback.h>
 #include <errno.h>
 
-#define MVIO_DEVICE(dev, bus, unit, north, address_reg) \
-    {.dev_id = dev, .port = bus, .coll_addr = unit},
-
-/* 产品设备清单：设备号、端口和从机地址由 IDU 配置决定。
- * 同型号设备关联同一份 Flash 点表，仅这些小型设备描述在启动时装配。
- * 本文件不创建线程、不管理数据池，也不负责三表校验。
+/* 配置表按参考工程组织为一个编译单元，保留分文件维护。
+ * 数组在此可见，设备关联直接使用指针和 ARRAY_SIZE，无需手工同步条目数。
+ * tables 下的 .c 文件不再单独加入编译。
  */
-static DEV_TABLE_S devices[] = {
-    {.dev_id = IDU_DEV_LOCAL},
-    IDU_MVIO_INSTANCES(MVIO_DEVICE)
+#include "tables/process.c"
+#include "tables/collect.c"
+#include "tables/transmit.c"
+
+/* 设备身份及其点表关系全部在此声明，设备表和关联的点表均保存在 Flash。
+ * 同型号实例直接指向同一数组；通用校验和运行状态初始化由 DP 模块完成。
+ */
+static const DEV_TABLE_S devices[] = {
+    {
+        .dev_id = IDU_DEV_LOCAL,
+        .ptl_tbl_cfg[0] = {
+            .proto_type = PRO_DATA_PROCESS,
+            .sig_num = ARRAY_SIZE(local_process),
+            .pst_table = local_process,
+        },
+        .ptl_tbl_cfg[1] = {
+            .proto_type = PRO_MB_SLAVE,
+            .sig_num = ARRAY_SIZE(transmit_table),
+            .pst_table = transmit_table,
+        },
+    },
+    {
+        .dev_id = IDU_DEV_REMOTE_IO, .port = 0, .coll_addr = 1,
+        .ptl_tbl_cfg[0] = {
+            .proto_type = PRO_DATA_PROCESS,
+            .sig_num = ARRAY_SIZE(mvio_process),
+            .pst_table = mvio_process,
+        },
+        .ptl_tbl_cfg[1] = {
+            .proto_type = PRO_MB_MASTER,
+            .sig_num = ARRAY_SIZE(mvio_collect),
+            .pst_table = mvio_collect,
+        },
+    },
 #if defined(CONFIG_IDU_AIDC_PROFILE)
-    {.dev_id = 247},
+    {
+        .dev_id = 247,
+        .ptl_tbl_cfg[0] = {
+            .proto_type = PRO_DATA_PROCESS,
+            .sig_num = ARRAY_SIZE(imported_local),
+            .pst_table = imported_local,
+        },
+    },
 /* BEGIN IMPORTED TABLE: devices */
 /* Imported from user-provided AIDC source tables. Original tables: SUNGROW.
  * Regenerate with tools/import_aidc.py; no closed library is linked. */
-    {.dev_id=11,.coll_addr=1,.port=1},
-    {.dev_id=12,.coll_addr=2,.port=1},
-    {.dev_id=13,.coll_addr=3,.port=1},
-    {.dev_id=14,.coll_addr=4,.port=1},
-    {.dev_id=15,.coll_addr=5,.port=1},
-    {.dev_id=16,.coll_addr=6,.port=1},
-    {.dev_id=17,.coll_addr=7,.port=1},
-    {.dev_id=18,.coll_addr=8,.port=1},
+    {
+        .dev_id = 11, .coll_addr = 1, .port = 1,
+        .ptl_tbl_cfg[0] = {
+            .proto_type = PRO_DATA_PROCESS,
+            .sig_num = ARRAY_SIZE(imported_dsp),
+            .pst_table = imported_dsp,
+        },
+        .ptl_tbl_cfg[1] = {
+            .proto_type = PRO_UPP_MASTER,
+            .sig_num = IMPORTED_MODEL_FIELD_COUNT,
+            .pst_table = &imported_models,
+        },
+    },
+    {
+        .dev_id = 12, .coll_addr = 2, .port = 1,
+        .ptl_tbl_cfg[0] = {
+            .proto_type = PRO_DATA_PROCESS,
+            .sig_num = ARRAY_SIZE(imported_dsp),
+            .pst_table = imported_dsp,
+        },
+        .ptl_tbl_cfg[1] = {
+            .proto_type = PRO_UPP_MASTER,
+            .sig_num = IMPORTED_MODEL_FIELD_COUNT,
+            .pst_table = &imported_models,
+        },
+    },
+    {
+        .dev_id = 13, .coll_addr = 3, .port = 1,
+        .ptl_tbl_cfg[0] = {
+            .proto_type = PRO_DATA_PROCESS,
+            .sig_num = ARRAY_SIZE(imported_dsp),
+            .pst_table = imported_dsp,
+        },
+        .ptl_tbl_cfg[1] = {
+            .proto_type = PRO_UPP_MASTER,
+            .sig_num = IMPORTED_MODEL_FIELD_COUNT,
+            .pst_table = &imported_models,
+        },
+    },
+    {
+        .dev_id = 14, .coll_addr = 4, .port = 1,
+        .ptl_tbl_cfg[0] = {
+            .proto_type = PRO_DATA_PROCESS,
+            .sig_num = ARRAY_SIZE(imported_dsp),
+            .pst_table = imported_dsp,
+        },
+        .ptl_tbl_cfg[1] = {
+            .proto_type = PRO_UPP_MASTER,
+            .sig_num = IMPORTED_MODEL_FIELD_COUNT,
+            .pst_table = &imported_models,
+        },
+    },
+    {
+        .dev_id = 15, .coll_addr = 5, .port = 1,
+        .ptl_tbl_cfg[0] = {
+            .proto_type = PRO_DATA_PROCESS,
+            .sig_num = ARRAY_SIZE(imported_dsp),
+            .pst_table = imported_dsp,
+        },
+        .ptl_tbl_cfg[1] = {
+            .proto_type = PRO_UPP_MASTER,
+            .sig_num = IMPORTED_MODEL_FIELD_COUNT,
+            .pst_table = &imported_models,
+        },
+    },
+    {
+        .dev_id = 16, .coll_addr = 6, .port = 1,
+        .ptl_tbl_cfg[0] = {
+            .proto_type = PRO_DATA_PROCESS,
+            .sig_num = ARRAY_SIZE(imported_dsp),
+            .pst_table = imported_dsp,
+        },
+        .ptl_tbl_cfg[1] = {
+            .proto_type = PRO_UPP_MASTER,
+            .sig_num = IMPORTED_MODEL_FIELD_COUNT,
+            .pst_table = &imported_models,
+        },
+    },
+    {
+        .dev_id = 17, .coll_addr = 7, .port = 1,
+        .ptl_tbl_cfg[0] = {
+            .proto_type = PRO_DATA_PROCESS,
+            .sig_num = ARRAY_SIZE(imported_dsp),
+            .pst_table = imported_dsp,
+        },
+        .ptl_tbl_cfg[1] = {
+            .proto_type = PRO_UPP_MASTER,
+            .sig_num = IMPORTED_MODEL_FIELD_COUNT,
+            .pst_table = &imported_models,
+        },
+    },
+    {
+        .dev_id = 18, .coll_addr = 8, .port = 1,
+        .ptl_tbl_cfg[0] = {
+            .proto_type = PRO_DATA_PROCESS,
+            .sig_num = ARRAY_SIZE(imported_dsp),
+            .pst_table = imported_dsp,
+        },
+        .ptl_tbl_cfg[1] = {
+            .proto_type = PRO_UPP_MASTER,
+            .sig_num = IMPORTED_MODEL_FIELD_COUNT,
+            .pst_table = &imported_models,
+        },
+    },
 /* END IMPORTED TABLE: devices */
 #endif
 };
 
-/* 设备表 getter：由 DP 在初始化时调用，启动后只读。 */
+/* getter 仅返回配置，不按设备号决定挂表关系，也不修改配置。 */
 const DEV_TABLE_S *idu_device_table(void)
 {
-    static bool assembled;
-    if (!assembled) {
-        for (size_t i = 0; i < ARRAY_SIZE(devices); ++i) {
-            DEV_TABLE_S *dev = &devices[i];
-            DEV_TBL_CFG_S *process = &dev->ptl_tbl_cfg[0];
-            process->proto_type = PRO_DATA_PROCESS;
-            process->pst_table = idu_process_table(dev->dev_id, &process->sig_num);
-            DEV_TBL_CFG_S *protocol = &dev->ptl_tbl_cfg[1];
-            if (dev->dev_id == IDU_DEV_LOCAL) {
-                protocol->proto_type = PRO_MB_SLAVE;
-                protocol->pst_table = idu_transmit_table(&protocol->sig_num);
-#if defined(CONFIG_IDU_AIDC_PROFILE)
-            } else if (dev->dev_id >= IDU_DEV_DSP_FIRST && dev->dev_id <= IDU_DEV_DSP_LAST) {
-                protocol->proto_type = PRO_UPP_MASTER;
-                protocol->pst_table = idu_model_table(&protocol->sig_num);
-#endif
-            } else if (dev->dev_id != 247) {
-                protocol->proto_type = PRO_MB_MASTER;
-                protocol->pst_table = idu_collect_table(&protocol->sig_num);
-            }
-        }
-        assembled = true;
-    }
     return devices;
 }
 
 uint16_t idu_device_count(void) { return ARRAY_SIZE(devices); }
+
+/* 参数查询同样从设备配置读取关联，无需维护另一份设备号到型号的分支。 */
+const DM_SIG_CFG_S *idu_process_table(uint8_t dev, uint16_t *count)
+{
+    *count = 0;
+    for (size_t i = 0; i < ARRAY_SIZE(devices); ++i) {
+        if (devices[i].dev_id != dev) {
+            continue;
+        }
+        const DEV_TBL_CFG_S *group = &devices[i].ptl_tbl_cfg[0];
+        if (group->proto_type == PRO_DATA_PROCESS) {
+            *count = group->sig_num;
+            return group->pst_table;
+        }
+        break;
+    }
+    return NULL;
+}
 
 /* 参考表保存周期编码；其对应的实际采样周期属于产品配置。 */
 static int collect_period(uint8_t code, uint32_t *ms)

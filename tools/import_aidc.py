@@ -114,6 +114,9 @@ def render_reference_tables(metadata, value):
                        f'.mod_id={model}}},\n')
     collection += ('};\nstatic const UPP_M_MOD_REG imported_models = {\n'
                    '    .p_model_ary=models,.model_num=ARRAY_SIZE(models),.cfg_mode=0,\n};\n')
+    collection += ('enum {\n    IMPORTED_MODEL_FIELD_COUNT = ' +
+                   ' +\n        '.join(f'ARRAY_SIZE(model_{model})' for model in models) +
+                   ',\n};\n')
     return {
         'points': process,
         # Rows belong to the common-country part of process.c's single array.
@@ -125,7 +128,19 @@ def render_reference_tables(metadata, value):
             f'.dev_id={r["device"]},.reg_type={r["function"]},.byte_order=BYTE_ORDER_DEFAULT}},'
             for r in metadata['transmit']) + '\n',
         'devices': notice + '\n'.join(
-            f'    {{.dev_id={dev},.coll_addr={dev-10},.port=1}},'
+            '    {\n'
+            f'        .dev_id = {dev}, .coll_addr = {dev-10}, .port = 1,\n'
+            '        .ptl_tbl_cfg[0] = {\n'
+            '            .proto_type = PRO_DATA_PROCESS,\n'
+            '            .sig_num = ARRAY_SIZE(imported_dsp),\n'
+            '            .pst_table = imported_dsp,\n'
+            '        },\n'
+            '        .ptl_tbl_cfg[1] = {\n'
+            '            .proto_type = PRO_UPP_MASTER,\n'
+            '            .sig_num = IMPORTED_MODEL_FIELD_COUNT,\n'
+            '            .pst_table = &imported_models,\n'
+            '        },\n'
+            '    },'
             for dev in range(11, 19)) + '\n',
     }
 

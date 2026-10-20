@@ -13,7 +13,7 @@
 | 参考工程 | 设计含义 | IDU 实现 |
 | --- | --- | --- |
 | `app/cfg/inc/` | 信号身份和项目配置契约 | 点表契约在 `app/cfg/inc/`、`app/cfg/tables/`；协议契约在 `app/communication/config/protocol_config.h` |
-| `app/cfg/equip/dev_cfg.c` 的设备列表 | 多个实例复用同型号的表 | `app/cfg/device.c` 装配，`app/cfg/inc/device_instances.h` 绑定实例 |
+| `app/cfg/equip/dev_cfg.c` 的设备列表 | 多个实例复用同型号的表 | `app/cfg/device.c` 的 const 设备表直接声明实例及点表关联 |
 | `app/cfg/equip/table/*` | 采集、处理、转发分别声明 | `app/cfg/tables/{collect,process,transmit}.c`，复用型号定义在 `app/cfg/inc/mvio_signals.h` |
 | `app/process/*` 的业务回调 | 配置绑定行为，执行代码独立维护 | `app/process/` |
 | `platform/inc/collect_lib.h` | 采集地址、周期、优先级和编码独立配置 | `MODBUS_RTU_TABLE_S` / UPP 模型表、每总线采集线程 |
@@ -50,7 +50,7 @@ UPP、逆变器专用命令及其日志/加密扩展不属于通用三模块接�
 
 | 位置 | 职责 |
 | --- | --- |
-| `app/cfg/device.c`、`app/cfg/inc/` | 设备实例、型号信号与三表装配；配置头文件统一放 inc |
+| `app/cfg/device.c`、`app/cfg/inc/` | 设备实例、型号信号与三表关联；配置头文件统一放 inc |
 | `app/cfg/tables/` | 信号、采集/处理/转发表和默认值/范围 |
 | `app/process/` | 纯换算、事务业务回调和参数命令 |
 | `app/communication/config/` | 协议路由、兼容窗口、控制/诊断寄存器 |
