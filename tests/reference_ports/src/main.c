@@ -14,6 +14,8 @@ K_MSGQ_DEFINE(cancellations, sizeof(int), 4, 4);
 K_THREAD_STACK_DEFINE(reader_stack, 2048);
 static struct k_thread reader_thread;
 static int reader_error;
+static uint16_t south_value;
+static int port_initializations, completions;
 
 #define SAMPLE(dev, sig) { .key = {dev, sig}, .source = DP_SOURCE_MODBUS, \
                            .type = DP_U16, .width = 1, .maximum = UINT16_MAX }
@@ -58,6 +60,11 @@ static int transfer(void *user, struct modbus_adu *adu)
         zassert_ok(k_sem_take(&transfer_release, K_SECONDS(1)));
     }
     zassert_ok(k_msgq_put(&transfers, &adu->fc, K_NO_WAIT));
+    if (adu->fc == 6 || adu->fc == 16) {
+        south_value = sys_get_be16(adu->data + (adu->fc == 6 ? 2 : 5));
+        adu->length = 4;
+        return 0;
+    }
     adu->data[0] = 2;
     sys_put_be16(123, adu->data + 1);
     adu->length = 3;
@@ -163,12 +170,16 @@ static void before(void *fixture)
     atomic_clear(&block_transfer); atomic_clear(&init_calls);
     k_sem_reset(&transfer_entered); k_sem_reset(&transfer_release);
     zassert_ok(co_set_port_mode(0, MODE_IDLE, 0));
+    zassert_ok(co_init_func_reg(0, NULL));
+    zassert_ok(co_set_value_trans_cb_reg(NULL));
+    port_initializations = completions = 0;
     for (size_t i = 0; i < ARRAY_SIZE(servers); ++i) {
         zassert_ok(tr_set_port_mode(servers[i], MB_MODE_SLAVE));
         zassert_ok(tr_port_set_handler(servers[i], TR_MODE_SLAVE, NULL, NULL));
         zassert_ok(tr_port_set_handler(servers[i], TR_MODE_CALLBACK, NULL, NULL));
         zassert_ok(tr_reg_pkt_filter_func(servers[i], NULL));
         zassert_ok(tr_port_control(servers[i], TR_PORT_CLEAR_STATS, NULL));
+        zassert_ok(tr_port_conn_status_config(servers[i], false));
     }
     zassert_ok(tr_reg_table_func(MB_MODE_SLAVE, NULL));
     zassert_ok(tr_reg_table_func(MB_MODE_CALLBACK, NULL));
@@ -356,6 +367,110 @@ ZTEST(reference_ports, test_command_numbers_do_not_alias_native_stats)
     struct tr_port_stats stats;
     zassert_ok(tr_port_control(servers[0], TR_PORT_GET_STATS, &stats));
     zassert_equal(stats.responses, 1);
+}
+
+static int initialize_port(uint16_t port)
+{
+    zassert_equal(port, 0);
+    zassert_equal(atomic_get(&init_calls), 0);
+    ++port_initializations;
+    return 0;
+}
+
+static int transform_value(CO_SET_VALUE_TRANS_S *data)
+{
+    zassert_equal(data->sig_size, 2);
+    sys_put_le16(sys_get_le16(data->trans_val) + 7, data->trans_val);
+    return 0;
+}
+
+static void write_complete(PARA_DATA_S *data)
+{
+    zassert_equal(data->set_num, 1);
+    ++completions;
+}
+
+ZTEST(reference_ports, test_fast_write_preflight_conversion_and_no_dm)
+{
+    zassert_ok(co_init_func_reg(0, initialize_port));
+    zassert_ok(co_dev_init(1));
+    zassert_equal(port_initializations, 1);
+    struct dp_point_state before_state, after_state;
+    zassert_ok(dp_read((struct dp_key){1, 3}, &before_state));
+    DATA_SET_S items[] = {
+        {.dev_id = 1, .sig_id = 3, .sig_size = 2, .p_value.u16 = 88},
+        {.dev_id = 99, .sig_id = 1, .sig_size = 2, .p_value.u16 = 88},
+    };
+    PARA_DATA_S data = {.set_num = 2, .p_set_data = items};
+    zassert_ok(co_set_value_trans_cb_reg(transform_value));
+    zassert_equal(co_dp_fast_set(&data, write_complete), -EINVAL);
+    zassert_equal(k_msgq_num_used_get(&transfers), 0);
+    zassert_equal(completions, 0);
+    data.set_num = 1;
+    items[0].sig_id = 1; /* FC4 input registers are never inferred writable. */
+    zassert_equal(co_dp_fast_set(&data, write_complete), -ENOTSUP);
+    zassert_equal(k_msgq_num_used_get(&transfers), 0);
+    items[0].sig_id = 3;
+    zassert_ok(co_dp_fast_set(&data, write_complete));
+    zassert_equal(south_value, 95);
+    zassert_equal(completions, 1);
+    zassert_equal(items[0].p_value.u16, 88);
+    zassert_ok(dp_read((struct dp_key){1, 3}, &after_state));
+    zassert_equal(before_state.value.words[0], after_state.value.words[0]);
+}
+
+static void add_crc(uint8_t *frame, size_t size)
+{
+    uint16_t crc = 0xffff;
+    for (size_t i = 0; i < size - 2; ++i) {
+        crc ^= frame[i];
+        for (unsigned bit = 0; bit < 8; ++bit) {
+            crc = (crc >> 1) ^ ((crc & 1) ? 0xa001 : 0);
+        }
+    }
+    sys_put_le16(crc, frame + size - 2);
+}
+
+ZTEST(reference_ports, test_rtu_injection_validates_crc_unit_and_mapping)
+{
+    uint8_t frame[] = {1, 4, 2, 0x12, 0x34, 0, 0};
+    add_crc(frame, sizeof(frame));
+    zassert_ok(co_anlysis_mb_pkg(1, 100, frame, sizeof(frame)));
+    k_sleep(K_MSEC(30));
+    struct dp_point_state state;
+    for (uint16_t sig = 1; sig <= 2; ++sig) {
+        zassert_ok(dp_read((struct dp_key){1, sig}, &state));
+        zassert_equal(state.value.words[0], 0x1234);
+    }
+    frame[3] ^= 1;
+    zassert_equal(co_anlysis_mb_pkg(1, 100, frame, sizeof(frame)), -EBADMSG);
+    frame[0] = 2; add_crc(frame, sizeof(frame));
+    zassert_equal(co_anlysis_mb_pkg(1, 100, frame, sizeof(frame)), -EBADMSG);
+    frame[0] = 1; add_crc(frame, sizeof(frame));
+    zassert_equal(co_anlysis_mb_pkg(1, 200, frame, sizeof(frame)), -ENOENT);
+    uint8_t exception[] = {1, 0x84, 2, 0, 0};
+    add_crc(exception, sizeof(exception));
+    zassert_equal(co_anlysis_mb_pkg(1, 100, exception, sizeof(exception)), -EIO);
+    zassert_ok(dp_read((struct dp_key){1, 1}, &state));
+    zassert_equal(state.value.words[0], 0x1234);
+}
+
+ZTEST(reference_ports, test_connection_status_tracks_adu_timeout)
+{
+    struct tr_connection_status state;
+    zassert_ok(tr_port_conn_status_config(servers[0], true));
+    zassert_ok(tr_port_connection_get(servers[0], &state));
+    zassert_true(state.enabled); zassert_false(state.connected);
+    uint16_t word;
+    zassert_ok(modbus_read_input_regs(client, 7, 100, &word, 1));
+    zassert_ok(tr_port_connection_get(servers[0], &state));
+    zassert_true(state.connected);
+    k_sleep(K_MSEC(CONFIG_TR_CONN_TIMEOUT_MS + 20));
+    zassert_ok(tr_port_connection_get(servers[0], &state));
+    zassert_false(state.connected);
+    zassert_ok(tr_port_conn_status_config(servers[0], false));
+    zassert_ok(tr_port_connection_get(servers[0], &state));
+    zassert_false(state.enabled); zassert_false(state.connected);
 }
 
 ZTEST_SUITE(reference_ports, NULL, setup, before, NULL, NULL);

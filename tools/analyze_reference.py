@@ -37,10 +37,12 @@ TARGETS = {
         "dp_set_sig_value", "dp_fast_para_get",
         "dp_fast_para_set", "dp_set_para_value_flag",
         "dp_set_para_only_dm", "dp_set_para_only_dm_no_store",
+        "dp_load_def_data", "dp_para_value_reg", "dp_set_init", "dp_plat_ver_init",
     ),
     "dp_mgr.o": ("dp_mutex_lock", "dp_mutex_unlock", "dp_dm_get_value"),
     "dp_para_set.o": (
         "dp_set_para_proc", "dp_fast_get_para_proc", "dp_sig_func_done", "dp_para_set",
+        "dp_dev_init_pro", "dp_init_func",
     ),
     "co_mgr.o": (
         "co_set_port_mode", "co_set_port_mode_proc", "co_get_port_mode",
@@ -48,10 +50,12 @@ TARGETS = {
         "co_dp_fast_set", "co_put_passthough_queue",
     ),
     "co_cfg.o": ("co_set_scan_pkg_flag", "co_mb_create_scan_cfg"),
+    "co_modbus.o": ("co_anlysis_mb_pkg", "co_anlysis_mb_pkg_proc", "co_set_value_trans_cb_reg"),
     "co_port_mgr.o": ("co_porc_scan_list",),
     "mb_slave_comm.o": ("tr_set_port_mode", "tr_get_port_mode", "tr_reg_table_func"),
     "mb_slave_work.o": (
         "tr_reg_pkt_filter_func", "tr_pkt_filter_config", "tr_mb_port_work_control",
+        "tr_port_conn_status_config",
     ),
 }
 SOURCE_ANCHORS = {

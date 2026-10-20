@@ -11,6 +11,40 @@ typedef const INIT_DATA_SET_S *(*CFG_GET_INIT_REG_TBL)(void);
 typedef uint16_t (*CFG_GET_INIT_REG_NUM)(void);
 typedef int (*PARA_GET_RANGE_DEF)(uint16_t dev_id, uint16_t sig_id,
                                  DM_SIG_DATA_S *value, bool *recover_default);
+typedef bool (*PARA_GET_IS_LOAD_DEF)(uint16_t dev, uint16_t sig, uint8_t size, uint8_t *value);
+typedef bool (*PARA_GET_IS_RANGE_CHECK)(uint16_t dev, uint16_t sig, uint8_t size, uint8_t *value);
+typedef struct {
+    const uint16_t dev_id, sig_id;
+    const uint8_t sig_store_size, sig_cfg_size;
+    const uint8_t *p_store_value;
+    uint8_t *p_load_value;
+    const uint32_t cfg_data_type;
+} DM_SIG_CFG_DATA_S;
+typedef bool (*PARA_SIZE_MISMATCH_PRO)(DM_SIG_CFG_DATA_S *data);
+typedef struct {
+    uint32_t date_time;
+    uint16_t port_id, dev_id, sig_id, sig_size, reg_addr;
+    DATA_U old_value, new_value;
+    UPP_REG_ADDR upp_addr;
+    FUNC_PARA_REG_TYPE addr_type;
+} DP_PARA_LOG_DATA;
+typedef void (*PARA_WRITE_LOG)(DP_PARA_LOG_DATA *data);
+typedef void (*PARA_RECOVER_FINISH)(void);
+
+/* Register before dp_init. Callbacks are optional. Range/load/migration
+ * callbacks run during validation/recovery and must not reenter DP APIs.
+ * Change/log callbacks are delivered asynchronously by the DP worker.
+ */
+void pltcb_reg_para_is_load_def_cb(PARA_GET_IS_LOAD_DEF callback);
+bool pltcb_para_get_is_load_def(uint16_t dev, uint16_t sig, uint8_t size, uint8_t *value);
+void pltcb_reg_para_is_range_check(PARA_GET_IS_RANGE_CHECK callback);
+bool pltcb_para_get_is_range_check(uint16_t dev, uint16_t sig, uint8_t size, uint8_t *value);
+void pltcb_reg_para_size_mismatch_cb(PARA_SIZE_MISMATCH_PRO callback);
+bool pltcb_para_size_mismatch_pro(DM_SIG_CFG_DATA_S *data);
+void pltcb_reg_para_write_log_cb(PARA_WRITE_LOG callback);
+void pltcb_para_write_log(DP_PARA_LOG_DATA *data);
+void pltcb_reg_para_recover_finish_cb(PARA_RECOVER_FINISH callback);
+void pltcb_para_recover_fininsh(void);
 
 /* Register before dp_init(). Successful initialization freezes registration.
  * Original device table and default/range callbacks retain their contracts.

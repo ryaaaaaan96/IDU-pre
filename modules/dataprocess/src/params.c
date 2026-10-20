@@ -1,4 +1,5 @@
 #include <dataprocess/params.h>
+#include <dataprocess/reference_internal.h>
 #include <dataprocess/process.h>
 #include <errno.h>
 #include <string.h>
@@ -98,19 +99,7 @@ static bool simulated_device(uint16_t dev_id)
 
 static int range_check(const struct dp_point_cfg *p, const struct dp_value *v)
 {
-    int64_t value;
-    uint32_t u32 = v->words[0] | ((uint32_t)v->words[1] << 16);
-    switch (p->type) {
-    case DP_U8:
-    case DP_U16: value = v->words[0]; break;
-    case DP_S16: value = (int16_t)v->words[0]; break;
-    case DP_U32: value = u32; break;
-    case DP_S32: value = (int32_t)u32; break;
-    case DP_WORDS: return 0;
-    default: return -EINVAL;
-    }
-    if (p->type == DP_U8 && value > UINT8_MAX) { return -ERANGE; }
-    return value < p->minimum || value > p->maximum ? -ERANGE : 0;
+    return dp_reference_range(p, v);
 }
 
 int dp_params_validate(const struct dp_equip_cfg *cfg)
@@ -221,6 +210,9 @@ static void commit_cache(uint32_t sequence)
 {
     k_mutex_lock(&cache_lock, K_FOREVER);
     for (size_t i = 0; i < param_count; ++i) {
+        if (status.flags & DP_PARAM_STORAGE_READY) {
+            dp_reference_notify(defs[i], &cache[i].value, &staged[i]);
+        }
         cache[i].value = staged[i];
         cache[i].quality = ((defs[i]->param_flags & DP_PARAM_FORWARD) && simulated_device(defs[i]->key.dev_id)) ?
                             DP_QUALITY_SIMULATED : DP_QUALITY_GOOD;
@@ -260,13 +252,16 @@ static size_t encode_snapshot(uint8_t *buf, uint32_t sequence)
     return offset;
 }
 
-static int decode_snapshot(const uint8_t *buf, size_t len, uint32_t *sequence)
+static int decode_snapshot(const uint8_t *buf, size_t len, uint32_t *sequence, bool allow_mismatch)
 {
+    bool mismatch = allow_mismatch && len >= SNAP_HEADER && equipment->previous_parameter_schema &&
+                    sys_get_le32(buf + 8) == equipment->previous_parameter_schema &&
+                    sys_get_le32(buf + 8) != schema;
     bool previous = len >= SNAP_HEADER && has_added_params &&
                     sys_get_le32(buf + 8) == previous_schema;
     if (len < SNAP_HEADER || sys_get_le32(buf) != SNAP_MAGIC ||
         sys_get_le16(buf + 4) != FORMAT_VERSION ||
-        (sys_get_le32(buf + 8) != schema && !previous)) {
+        (sys_get_le32(buf + 8) != schema && !previous && !mismatch)) {
         return -EPROTO;
     }
     size_t offset = SNAP_HEADER;
@@ -276,17 +271,30 @@ static int decode_snapshot(const uint8_t *buf, size_t len, uint32_t *sequence)
         if (!(p->param_flags & DP_PARAM_PERSIST) || (previous && p->param_added)) {
             continue;
         }
-        if (offset + 6 + 2 * p->width > len ||
+        if (offset + 6 > len ||
             sys_get_le16(buf + offset) != p->key.dev_id ||
             sys_get_le16(buf + offset + 2) != p->key.sig_id ||
-            buf[offset + 4] != p->type || buf[offset + 5] != p->width) {
-            return -EPROTO;
-        }
+            buf[offset + 4] != p->type) { return -EPROTO; }
+        size_t old_width = buf[offset + 5];
         offset += 6;
-        for (size_t w = 0; w < p->width; ++w) {
-            durable_stage[i].words[w] = sys_get_le16(buf + offset);
-            offset += 2;
+        if (!old_width || old_width > 72 || offset + 2 * old_width > len) { return -EPROTO; }
+        if (old_width != p->width) {
+            if (!mismatch) { return -EPROTO; }
+            uint8_t converted[DP_POINT_WORDS * 2] = {0};
+            static const uint32_t types[] = {
+                DATA_TYPE_U16, DATA_TYPE_S16, DATA_TYPE_U32, DATA_TYPE_S32,
+                DATA_TYPE_U16ARRAY, DATA_TYPE_U8,
+            };
+            DM_SIG_CFG_DATA_S data = {.dev_id = p->key.dev_id, .sig_id = p->key.sig_id,
+                .sig_store_size = old_width * 2, .sig_cfg_size = dp_reference_size(p),
+                .p_store_value = buf + offset, .p_load_value = converted,
+                .cfg_data_type = p->reference_data_type ? p->reference_data_type : types[p->type]};
+            if (!pltcb_para_size_mismatch_pro(&data)) { return -EPROTO; }
+            dp_reference_unpack(&durable_stage[i], converted, data.sig_cfg_size);
+        } else {
+            for (size_t w = 0; w < p->width; ++w) { durable_stage[i].words[w] = sys_get_le16(buf + offset + w * 2); }
         }
+        offset += old_width * 2;
         if (range_check(p, &durable_stage[i])) {
             return -ERANGE;
         }
@@ -339,7 +347,7 @@ static int intent_validate(void)
     }
     uint32_t sequence;
     int err = decode_snapshot(intent + INTENT_HEADER + 4U * intent[7],
-                               sys_get_le16(intent + 16), &sequence);
+                               sys_get_le16(intent + 16), &sequence, false);
     return err ? err : sequence == sys_get_le32(intent + 12) ? 0 : -EPROTO;
 }
 
@@ -463,7 +471,9 @@ static int mount_locked(void)
         return err;
     }
     for (size_t i = 0; i < param_count; ++i) {
-        staged[i] = durable_stage[i] = defs[i]->initial;
+        err = dp_reference_default(defs[i], &durable_stage[i], false);
+        if (err) { return err; }
+        staged[i] = durable_stage[i];
     }
     uint32_t sequence = 0;
     bool recovered = false, empty = false, migrate = false;
@@ -483,7 +493,7 @@ static int mount_locked(void)
         if (len < 0 || len > sizeof(snapshot)) {
             return len < 0 ? len : -EMSGSIZE;
         }
-        err = decode_snapshot(snapshot, len, &sequence);
+        err = decode_snapshot(snapshot, len, &sequence, true);
         if (err) {
             return err; /* Unknown schema is not reformatted or silently reset. */
         }
@@ -492,8 +502,9 @@ static int mount_locked(void)
     }
     for (size_t i = 0; i < param_count; ++i) {
         const struct dp_point_cfg *p = defs[i];
-        if ((empty || (migrate && p->param_added)) && p->seed_missing) {
-            err = p->seed_missing(p, &durable_stage[i]);
+        if (empty || (migrate && p->param_added)) {
+            err = p->seed_missing ? p->seed_missing(p, &durable_stage[i]) :
+                                   dp_reference_default(p, &durable_stage[i], true);
             if (!err) { err = range_check(p, &durable_stage[i]); }
             if (err) { return err; }
         }
@@ -813,7 +824,8 @@ int dp_params_restore(uint16_t dev_id)
     bool found = false;
     for (size_t i = 0; i < param_count; ++i) {
         if (defs[i]->key.dev_id == dev_id && (defs[i]->param_flags & DP_PARAM_RESTORE)) {
-            staged[i] = defs[i]->initial;
+            err = dp_reference_default(defs[i], &staged[i], true);
+            if (err) { return end_transaction(err); }
             selected[i] = true;
             found = true;
         }

@@ -42,6 +42,7 @@ struct dp_process_result {
 struct dp_process_ctx {
     const struct dp_process_request *request;
     void *transaction;
+    uint8_t finish_actions;
 };
 typedef void (*dp_process_done_fn)(const struct dp_process_result *result, void *user);
 
@@ -65,6 +66,7 @@ int dp_txn_emit(struct dp_process_ctx *ctx, struct dp_key key,
 /* Flags address already captured outputs; they do not create a write. */
 int dp_txn_get_flags(struct dp_process_ctx *ctx, struct dp_key key, uint8_t *flags);
 int dp_txn_set_flags(struct dp_process_ctx *ctx, struct dp_key key, uint8_t flags);
+int dp_txn_register_old(struct dp_process_ctx *ctx, struct dp_key key, const struct dp_value *value);
 int dp_reference_read_at(struct dp_key key, uint16_t port_id, uint8_t function,
                          uint16_t address, uint16_t count, struct dp_point_state *state);
 int dp_txn_get_state(struct dp_process_ctx *ctx, struct dp_key key,

@@ -2,6 +2,7 @@
 #include <dataprocess/points.h>
 #include <dataprocess/process.h>
 #include <dataprocess/params.h>
+#include <dataprocess/reference_internal.h>
 #include <errno.h>
 #include <string.h>
 #include <zephyr/logging/log.h>
@@ -104,6 +105,8 @@ static struct dp_process_ctx *callback_context(void)
     k_spin_unlock(&scope_lock, lock);
     return ctx;
 }
+
+struct dp_process_ctx *dp_reference_context(void) { return callback_context(); }
 
 static int enter(void)
 {
@@ -443,4 +446,126 @@ int32_t dp_set_para_only_dm(uint16_t dev, uint16_t sig, uint8_t size, uint8_t *b
 { (void)dev; (void)sig; (void)size; (void)bytes; return -ENOTSUP; }
 int32_t dp_set_para_only_dm_no_store(uint16_t dev, uint16_t sig, uint8_t size, uint8_t *bytes)
 { (void)dev; (void)sig; (void)size; (void)bytes; return -ENOTSUP; }
+#endif
+
+/* A copied, single-flight collector request survives an asynchronous completion.
+ * On timeout its storage remains reserved until the backend completes, avoiding
+ * dangling caller buffers and preventing a late ACK from completing a new job.
+ */
+static PARA_SET_FUNC reference_collector;
+static struct k_spinlock collector_lock;
+#if defined(CONFIG_DP_PROCESS)
+static PARA_DATA_S collector_request;
+static DATA_SET_S collector_items[CONFIG_DP_PROCESS_MAX_OUTPUTS];
+static uint8_t collector_bytes[CONFIG_DP_PROCESS_MAX_OUTPUTS][DP_POINT_WORDS * 2];
+static bool collector_busy, collector_waiting, collector_done;
+K_SEM_DEFINE(collector_complete, 0, 1);
+#endif
+
+int32_t dp_para_reg_set_func(PARA_SET_FUNC callback)
+{
+    if (k_is_in_isr()) { return -EWOULDBLOCK; }
+    k_spinlock_key_t lock = k_spin_lock(&collector_lock);
+    int err = 0;
+#if defined(CONFIG_DP_PROCESS)
+    if (collector_busy) { err = -EBUSY; }
+#endif
+    if (!err && reference_collector && callback != reference_collector) { err = -EBUSY; }
+    if (!err) { reference_collector = callback; }
+    k_spin_unlock(&collector_lock, lock);
+    return err;
+}
+
+#if defined(CONFIG_DP_PROCESS)
+static void collected(PARA_DATA_S *data)
+{
+    k_spinlock_key_t lock = k_spin_lock(&collector_lock);
+    if (data == &collector_request && collector_busy) {
+        collector_done = true;
+        if (collector_waiting) { k_sem_give(&collector_complete); }
+        else { collector_busy = false; }
+    }
+    k_spin_unlock(&collector_lock, lock);
+}
+
+int dp_reference_collect(PARA_DATA_S *data)
+{
+    if (!data || !data->p_set_data || !data->set_num ||
+        data->set_num > ARRAY_SIZE(collector_items) || k_is_in_isr()) { return -EINVAL; }
+    if (data->type != DP_FAST_SET && data->type != DP_TIMER_SET && data->type != DP_NO_DM_SET) { return -ENOTSUP; }
+    k_spinlock_key_t lock = k_spin_lock(&collector_lock);
+    PARA_SET_FUNC callback = reference_collector;
+    int err = !callback ? -ENODEV : collector_busy ? -EBUSY : 0;
+    if (!err) { collector_busy = collector_waiting = true; collector_done = false; }
+    k_spin_unlock(&collector_lock, lock);
+    if (err) { return err; }
+    k_sem_reset(&collector_complete);
+    collector_request = *data;
+    collector_request.p_set_data = collector_items;
+    for (size_t i = 0; i < data->set_num; ++i) {
+        const DATA_SET_S *item = &data->p_set_data[i];
+        const uint8_t *bytes = item->sig_size > 4 ? item->p_value.pst : item->p_value.str;
+        if (!bytes || !item->sig_size || item->sig_size > sizeof(collector_bytes[i]) ||
+            item->extra.addr_type != FUNC_PARA_REG_TYPE_MB) { err = -EINVAL; break; }
+        collector_items[i] = *item;
+        if (item->sig_size > 4) {
+            memcpy(collector_bytes[i], bytes, item->sig_size);
+            collector_items[i].p_value.pst = collector_bytes[i];
+        }
+    }
+    bool accepted = false;
+    if (!err) {
+        err = callback(&collector_request, collected);
+        accepted = !err;
+        if (err > 0) { err = -EIO; }
+        if (!err) { err = k_sem_take(&collector_complete, K_SECONDS(1)) ? -ETIMEDOUT : 0; }
+    }
+    lock = k_spin_lock(&collector_lock);
+    collector_waiting = false;
+    /* A backend error means rejection, with no later completion permitted. */
+    if (!accepted || err != -ETIMEDOUT || collector_done) { collector_busy = false; }
+    k_spin_unlock(&collector_lock, lock);
+    return err;
+}
+
+int32_t dp_set_para_not_dm(PARA_DATA_S *data, PARA_SET_STATUS status)
+{
+    struct dp_process_ctx *ctx = callback_context();
+    int err = dp_reference_collect(data);
+    if (err) { return err; }
+    if (ctx) {
+        for (size_t i = 0; i < data->set_num; ++i) {
+            struct dp_key key = {data->p_set_data[i].dev_id, data->p_set_data[i].sig_id};
+            uint8_t flags;
+            if (!dp_txn_get_flags(ctx, key, &flags)) {
+                (void)dp_txn_set_flags(ctx, key, flags | DP_OP_NO_DM | DP_OP_NO_COLLECT);
+            }
+        }
+    }
+    if (status) { status(data); }
+    return 0;
+}
+
+int32_t dp_para_value_reg(uint16_t type, DATA_SET_S *data)
+{
+    struct dp_process_ctx *ctx = callback_context();
+    if (!ctx) { return -EPERM; }
+    if (!data || (type != PARA_VALUE_REG_OLD && type != PARA_VALUE_REG_NEW)) { return -EINVAL; }
+    const struct dp_point_cfg *point;
+    int err = lookup(data->dev_id, data->sig_id, data->sig_size, true, &point);
+    uint8_t *bytes = data_bytes(data);
+    if (err || !bytes) { return err ? err : -EINVAL; }
+    struct dp_value value;
+    unpack(&value, bytes, data->sig_size);
+    if (type == PARA_VALUE_REG_OLD) { return dp_txn_register_old(ctx, point->key, &value); }
+    uint8_t flags = 0;
+    (void)dp_txn_get_flags(ctx, point->key, &flags);
+    return dp_txn_emit(ctx, point->key, &value, flags);
+}
+#else
+int dp_reference_collect(PARA_DATA_S *data) { ARG_UNUSED(data); return -ENOTSUP; }
+int32_t dp_set_para_not_dm(PARA_DATA_S *data, PARA_SET_STATUS status)
+{ ARG_UNUSED(data); ARG_UNUSED(status); return -ENOTSUP; }
+int32_t dp_para_value_reg(uint16_t type, DATA_SET_S *data)
+{ ARG_UNUSED(type); ARG_UNUSED(data); return -ENOTSUP; }
 #endif

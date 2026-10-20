@@ -1,8 +1,7 @@
 #include <collect/collect.h>
 #include <collect_lib.h>
-#if defined(CONFIG_DP_PARAMS)
+#include <dataprocess/reference_internal.h>
 #include <dataprocess/params.h>
-#endif
 #if defined(CONFIG_DP_PROCESS)
 #include <dataprocess/process.h>
 #endif
@@ -35,6 +34,9 @@ static struct co_device_status statuses[CONFIG_DP_MAX_DEVICES];
 static int64_t next_poll[CONFIG_DP_POINTS_MAX_POLLS];
 static bool disabled[CONFIG_DP_POINTS_MAX_POLLS];
 static bool started;
+static CO_PORT_PF_PROC init_callbacks[CONFIG_DP_MAX_BUSES];
+static CO_SET_VALUE_TRANS_CB value_transform;
+static struct k_spinlock reference_callbacks_lock;
 K_MUTEX_DEFINE(schedule_lock);
 NET_BUF_POOL_FIXED_DEFINE(device_event_pool, 2, sizeof(struct co_device_status),
                          sizeof(struct zbus_channel *), NULL);
@@ -218,6 +220,8 @@ int co_init_bus(const struct dp_equip_cfg *cfg, const struct co_bus_cfg *config)
     err = dp_params_set_transport(&transport);
     if (err) { return err; }
 #endif
+    err = dp_para_reg_set_func(co_dp_fast_set);
+    if (err) { return err; }
     equipment = cfg;
     struct bus_state *bus = &buses[config->id];
     k_mutex_init(&bus->lock);
@@ -411,7 +415,11 @@ int co_initialize_device(uint16_t dev_id)
     k_mutex_unlock(&schedule_lock);
     k_mutex_unlock(&bus->lock);
     k_sem_give(&bus->wake);
-    int err = bus->cfg.initialize ? bus->cfg.initialize(bus->cfg.user, dev_id) : 0;
+    k_spinlock_key_t callback_key = k_spin_lock(&reference_callbacks_lock);
+    CO_PORT_PF_PROC initialize = init_callbacks[bus->cfg.id];
+    k_spin_unlock(&reference_callbacks_lock, callback_key);
+    int err = initialize ? initialize(bus->cfg.id) : 0;
+    if (!err && bus->cfg.initialize) { err = bus->cfg.initialize(bus->cfg.user, dev_id); }
     for (size_t i = 0; !err && i < equipment->collect_count; ++i) {
         if (equipment->collect[i].dev_id == dev_id && equipment->collect[i].init_only) { err = collect_poll(i, true); }
     }
@@ -546,4 +554,141 @@ int co_start(void)
         k_thread_name_set(&bus->thread, "dp_bus");
     }
     return 0;
+}
+
+int co_init_func_reg(uint16_t port, CO_PORT_PF_PROC callback)
+{
+    if (port >= ARRAY_SIZE(init_callbacks) || k_is_in_isr()) { return -EINVAL; }
+    k_spinlock_key_t key = k_spin_lock(&reference_callbacks_lock);
+    init_callbacks[port] = callback;
+    k_spin_unlock(&reference_callbacks_lock, key);
+    return 0;
+}
+
+int co_set_value_trans_cb_reg(CO_SET_VALUE_TRANS_CB callback)
+{
+    if (k_is_in_isr()) { return -EWOULDBLOCK; }
+    k_spinlock_key_t key = k_spin_lock(&reference_callbacks_lock);
+    value_transform = callback;
+    k_spin_unlock(&reference_callbacks_lock, key);
+    return 0;
+}
+
+struct reference_write {
+    uint16_t dev, address, count;
+    uint16_t words[MIN(CO_MAX_REGS, DP_POINT_WORDS)];
+};
+static struct reference_write reference_writes[CONFIG_DP_PROCESS_MAX_OUTPUTS];
+K_MUTEX_DEFINE(reference_write_lock);
+
+int co_dp_fast_set(PARA_DATA_S *data, PARA_SET_STATUS status)
+{
+    if (!data || !data->p_set_data || !data->set_num || data->set_num > ARRAY_SIZE(reference_writes) ||
+        k_is_in_isr()) { return -EINVAL; }
+    if (data->type > DP_NO_DM_SET) { return -ENOTSUP; }
+    if (k_mutex_lock(&reference_write_lock, K_NO_WAIT)) { return -EBUSY; }
+    k_spinlock_key_t key = k_spin_lock(&reference_callbacks_lock);
+    CO_SET_VALUE_TRANS_CB transform = value_transform;
+    k_spin_unlock(&reference_callbacks_lock, key);
+    int err = 0;
+    for (size_t i = 0; i < data->set_num; ++i) {
+        DATA_SET_S *item = &data->p_set_data[i];
+        const struct dp_point_cfg *p = dp_find((struct dp_key){item->dev_id, item->sig_id});
+        const uint8_t *bytes = item->sig_size > 4 ? item->p_value.pst : item->p_value.str;
+        if (!p || !bytes || item->sig_size != dp_reference_size(p) || p->width > CO_MAX_REGS ||
+            item->extra.addr_type != FUNC_PARA_REG_TYPE_MB || !bus_for(item->dev_id)) {
+            err = -EINVAL; break;
+        }
+        if (p->source == DP_SOURCE_CONSTANT) { err = -EACCES; break; }
+        struct reference_write *write = &reference_writes[i];
+        enum dp_word_order order = p->write_order;
+        uint16_t address = p->write_address;
+        bool mapped = p->source == DP_SOURCE_PARAMETER && (p->param_flags & DP_PARAM_FORWARD);
+        if (!mapped) {
+            for (size_t b = 0; b < equipment->collect_count && !mapped; ++b) {
+                const struct co_cfg *poll = &equipment->collect[b];
+                if (poll->dev_id != item->dev_id || poll->model_protocol || poll->function != 3) { continue; }
+                for (size_t f = 0; f < poll->field_count; ++f) {
+                    if (poll->fields[f].sig_id == item->sig_id && poll->fields[f].width == p->width) {
+                        address = poll->address + poll->fields[f].offset;
+                        order = poll->fields[f].order; mapped = true; break;
+                    }
+                }
+            }
+        }
+        if (!mapped || (uint32_t)address + p->width > 65536) { err = -ENOTSUP; break; }
+        CO_SET_VALUE_TRANS_S converted = {.dev_id = item->dev_id, .sig_id = item->sig_id,
+                                         .sig_size = item->sig_size};
+        if (transform) {
+            if (item->sig_size > sizeof(converted.trans_val)) { err = -EMSGSIZE; break; }
+            memcpy(converted.trans_val, bytes, item->sig_size);
+            if (!transform(&converted)) {
+                if (converted.sig_size != item->sig_size || converted.dev_id != item->dev_id ||
+                    converted.sig_id != item->sig_id) { err = -EINVAL; break; }
+                bytes = converted.trans_val;
+            }
+        }
+        struct dp_value value;
+        dp_reference_unpack(&value, bytes, item->sig_size);
+        err = dp_check_value(p, &value);
+        if (err) { break; }
+        *write = (struct reference_write){.dev = item->dev_id, .address = address, .count = p->width};
+        for (size_t w = 0; w < p->width; ++w) { write->words[w] = dp_order_word(value.words, p->width, w, order); }
+    }
+    for (size_t i = 0; !err && i < data->set_num; ++i) {
+        const struct reference_write *w = &reference_writes[i];
+        err = co_write(w->dev, w->address, w->words, w->count);
+        if (err > 0) { err = -EIO; }
+    }
+    k_mutex_unlock(&reference_write_lock);
+    if (!err && status) { status(data); }
+    return err;
+}
+
+int co_anlysis_mb_pkg(uint8_t dev, uint16_t address, uint8_t *frame, uint16_t length)
+{
+    struct bus_state *bus = bus_for(dev);
+    int device = device_index(dev);
+    if (!bus || !frame || device < 0 || length < 5 || length > 256 || k_is_in_isr()) { return -EINVAL; }
+    uint16_t crc = 0xffff;
+    for (size_t i = 0; i < length; ++i) {
+        crc ^= frame[i];
+        for (unsigned b = 0; b < 8; ++b) { crc = (crc >> 1) ^ ((crc & 1) ? 0xa001 : 0); }
+    }
+    if (crc || frame[0] != equipment->devices[device].unit_id) { return -EBADMSG; }
+    if ((frame[1] == 0x83 || frame[1] == 0x84) && length == 5 && frame[2]) {
+        record_status(dev, frame[2]); return -EIO;
+    }
+    if ((frame[1] != 3 && frame[1] != 4) || !frame[2] || frame[2] % 2 ||
+        length != 5U + frame[2] || (uint32_t)address + frame[2] / 2 > 65536) { return -EBADMSG; }
+    struct dp_point_batch batch = {.source = DP_SOURCE_MODBUS,
+        .flags = bus->cfg.simulated ? DP_QUALITY_SIMULATED : 0};
+    for (size_t b = 0; b < equipment->collect_count; ++b) {
+        const struct co_cfg *poll = &equipment->collect[b];
+        if (poll->dev_id != dev || poll->model_protocol || poll->function != frame[1]) { continue; }
+        for (size_t f = 0; f < poll->field_count; ++f) {
+            const struct co_field *field = &poll->fields[f];
+            uint32_t begin = poll->address + field->offset;
+            if (begin < address || begin + field->width > (uint32_t)address + frame[2] / 2) { continue; }
+            if (batch.count == ARRAY_SIZE(batch.points)) { return -ENOSPC; }
+            for (size_t i = 0; i < batch.count; ++i) {
+                if (batch.points[i].key.sig_id == field->sig_id) { return -EEXIST; }
+            }
+            struct dp_point_update *point = &batch.points[batch.count++];
+            point->key = (struct dp_key){dev, field->sig_id}; point->width = field->width;
+            uint16_t words[DP_POINT_WORDS];
+            for (size_t w = 0; w < field->width; ++w) { words[w] = sys_get_be16(frame + 3 + 2 * (begin - address + w)); }
+            for (size_t w = 0; w < field->width; ++w) { point->value.words[w] = dp_order_word(words, field->width, w, field->order); }
+        }
+    }
+    if (!batch.count) { return -ENOENT; }
+    int err = dp_publish(&batch, K_MSEC(20));
+    if (!err) { record_status(dev, 0); }
+    return err;
+}
+
+void co_set_reboot_system(void)
+{
+    if (dp_reference_context()) { dp_set_reboot(); }
+    else { dp_reboot_system(); }
 }

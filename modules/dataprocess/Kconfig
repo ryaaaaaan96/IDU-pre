@@ -6,6 +6,17 @@ menuconfig DATAPROCESS
 
 if DATAPROCESS
 
+config DP_REFERENCE_OVERRIDES
+    int "Maximum runtime default/range overrides (base tables stay const)"
+    default 4
+    range 1 32
+
+config DP_REFERENCE_EVENTS
+    int "Pending reference change/log notifications"
+    default 4
+    range 1 32
+    depends on DP_PROCESS
+
 config DP_REFERENCE_TABLES
     bool "Compile reference DEV_TABLE_S point tables"
     depends on DP_PROCESS

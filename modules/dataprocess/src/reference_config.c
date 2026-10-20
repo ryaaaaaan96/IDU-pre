@@ -341,7 +341,8 @@ static int compile_tables(void)
     size_t count = pltcb_cfg_get_dev_num();
     if (!table || !count || count > CONFIG_DP_MAX_DEVICES) { return -EINVAL; }
     compiled = (struct dp_equip_cfg){.points = points, .devices = devices,
-        .collect = polls, .transmit = maps};
+        .collect = polls, .transmit = maps,
+        .reference_devices = table, .reference_device_count = count};
     for (size_t d = 0; d < count; ++d) {
         const DEV_TABLE_S *device = &table[d];
         const DEV_TBL_CFG_S *process = &device->ptl_tbl_cfg[0];
@@ -385,7 +386,7 @@ static int compile_tables(void)
         if (has_collect) {
             devices[compiled.device_count++] = (struct dp_device_cfg){
                 .dev_id = device->dev_id, .unit_id = device->coll_addr,
-                .bus_id = device->port};
+                .bus_id = device->port, .dev_code = device->dev_code};
         }
     }
     return dp_validate(&compiled);

@@ -28,6 +28,11 @@ struct tr_port_stats {
 enum tr_port_control { TR_PORT_GET_STATS, TR_PORT_CLEAR_STATS };
 /* GET takes struct tr_port_stats *, CLEAR takes NULL. Requires the adapter. */
 int tr_port_control(int iface, enum tr_port_control command, void *arg);
+struct tr_connection_status {
+    bool enabled, connected;
+    int64_t last_activity;
+};
+int tr_port_connection_get(int iface, struct tr_connection_status *status);
 struct tr_segment {
     uint16_t begin, end;
     uint8_t function; /* zero: any function with a register-address PDU */

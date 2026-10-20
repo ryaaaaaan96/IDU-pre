@@ -44,6 +44,10 @@ int tr_reg_pkt_filter_func(uint16_t port_id, TR_FUNC_CB filter);
 int tr_pkt_filter_config(uint16_t port_id, bool enabled);
 int tr_get_port_mode(uint16_t port_id, uint8_t *mode);
 int tr_set_port_mode(uint16_t port_id, uint8_t mode);
+/* Enables accepted-ADU activity monitoring, timeout CONFIG_TR_CONN_TIMEOUT_MS.
+ * Observe through tr_port_connection_get(); no physical carrier is inferred.
+ */
+int tr_port_conn_status_config(uint16_t port_id, bool enabled);
 /* GET_RECV_MB writes uint32_t accepted complete ADUs reaching dispatch;
  * CLR_RECV_MB clears that count (NULL arg). All other reference commands return
  * -ENOTSUP without reading/writing arg: physical CRC/TX counters and raw port

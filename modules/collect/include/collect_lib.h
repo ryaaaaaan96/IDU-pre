@@ -22,6 +22,12 @@ typedef enum {
 } CO_PORT_MODE;
 typedef enum { CO_SCAN_PKG_ON = 0, CO_SCAN_PKG_OFF = 1 } CO_SCAN_PKG_FLAG;
 typedef struct { uint16_t port_id; } CO_CLEAN_QUEUE_ST;
+typedef int32_t (*CO_PORT_PF_PROC)(uint16_t port_id);
+typedef struct {
+    uint16_t dev_id, sig_id, sig_size;
+    uint8_t trans_val[64];
+} CO_SET_VALUE_TRANS_S;
+typedef int32_t (*CO_SET_VALUE_TRANS_CB)(CO_SET_VALUE_TRANS_S *data);
 
 /* port_id is the configured co_bus_cfg.id. Returns 0 or -errno, never ARC
  * status codes. Thread context only. timeout_ms bounds lock acquisition;
@@ -30,6 +36,22 @@ typedef struct { uint16_t port_id; } CO_CLEAN_QUEUE_ST;
 int co_set_port_mode(uint16_t port_id, uint8_t mode, uint32_t timeout_ms);
 int co_get_port_mode(uint16_t port_id, uint8_t *mode);
 int co_dev_init(uint16_t dev_id);
+int co_init_func_reg(uint16_t port_id, CO_PORT_PF_PROC callback);
+int co_set_value_trans_cb_reg(CO_SET_VALUE_TRANS_CB callback);
+/* Synchronous reference lower-layer write. Values are copied/validated before
+ * sending. A later failure can follow earlier successful device writes.
+ * Completion runs once on complete success; no DM or NVS changes are made.
+ * Uses explicit parameter forwarding addresses or FC3 collection mappings;
+ * FC4 input registers are not inferred writable. Conversion applies only to
+ * this reference direct-write path, never the durable native transport.
+ */
+int co_dp_fast_set(PARA_DATA_S *data, PARA_SET_STATUS status);
+/* Complete RTU response including unit/function/byte-count/CRC. reg_addr uses
+ * the configured address convention; no implicit +/-1 conversion. All mapped
+ * fields must fit one bounded DP batch, otherwise nothing is published.
+ */
+int co_anlysis_mb_pkg(uint8_t dev_id, uint16_t reg_addr, uint8_t *frame, uint16_t length);
+void co_set_reboot_system(void);
 /* Cancels queued requests once with -ECANCELED; an executing request finishes. */
 int co_clean_set_queue(CO_CLEAN_QUEUE_ST *queue);
 /* RTU: address/function; model backend: model/offset. All matching blocks are

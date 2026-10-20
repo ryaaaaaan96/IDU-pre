@@ -1,0 +1,8 @@
+tests:
+  idu.reference_services:
+    platform_allow: native_sim/native/64
+    integration_platforms: [native_sim/native/64]
+  idu.reference_services.params:
+    platform_allow: native_sim/native/64
+    integration_platforms: [native_sim/native/64]
+    extra_args: EXTRA_CONF_FILE=params.conf

@@ -92,6 +92,7 @@ struct dp_device_cfg {
     uint16_t dev_id;
     uint8_t unit_id;
     uint8_t bus_id;
+    uint16_t dev_code;
 };
 
 struct co_field {
@@ -137,6 +138,13 @@ struct dp_equip_cfg {
     size_t transmit_count;
     /* Legacy overlapping maps require an exact start + complete point read. */
     bool exact_overlapping_reads;
+    /* Optional original catalogs may reside entirely in flash. */
+    const DEV_TABLE_S *reference_devices;
+    size_t reference_device_count;
+    /* Explicitly authorized previous NVS schema for size-mismatch conversion.
+     * Zero rejects unknown schemas as before. Pending intents never migrate.
+     */
+    uint32_t previous_parameter_schema;
 };
 
 struct dp_point_update {

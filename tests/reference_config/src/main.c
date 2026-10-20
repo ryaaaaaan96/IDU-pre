@@ -143,6 +143,13 @@ ZTEST(reference_configuration, test_original_tables_validate_before_initializati
     zassert_ok(dp_init());
     const struct dp_equip_cfg *cfg = dp_config();
     zassert_not_null(cfg);
+    zassert_equal(dp_dev_get_num(), ARRAY_SIZE(table));
+    zassert_equal_ptr(dp_dev_get_tbl(), table);
+    zassert_equal_ptr(dp_dev_get_from_devid(11), &table[1]);
+    zassert_equal_ptr(dp_devid_get_prototbl(11, PRO_MB_MASTER), &table[1].ptl_tbl_cfg[1]);
+    uint16_t signal_count;
+    zassert_equal_ptr(dp_sigcfg_get_by_devid(247, PRO_DATA_PROCESS, &signal_count), local_signals);
+    zassert_equal(signal_count, ARRAY_SIZE(local_signals));
     zassert_equal(cfg->point_count, 3);
     zassert_equal(cfg->device_count, 1);
     zassert_equal(cfg->devices[0].dev_id, 11);
@@ -176,9 +183,11 @@ ZTEST(reference_configuration, test_original_tables_validate_before_initializati
     zassert_not_equal(k_sem_take(&timer_fired, K_MSEC(40)), 0);
     zassert_equal(dp_get_sig_value(247, 1, 1, value), 1);
     zassert_equal(value[0], 31); /* Earlier successful INIT is not rolled back. */
+    zassert_ok(dp_set_init(247));
+    zassert_equal(init_calls, 2); /* Per-device INIT includes the registered table. */
     reject_init = false;
     zassert_ok(dp_reference_start());
-    zassert_equal(init_calls, 2);
+    zassert_equal(init_calls, 3);
     zassert_ok(k_sem_take(&timer_fired, K_MSEC(200)));
     zassert_equal(dp_reference_start(), -EALREADY);
 

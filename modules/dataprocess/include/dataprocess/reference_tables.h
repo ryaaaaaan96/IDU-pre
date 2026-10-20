@@ -35,7 +35,7 @@ typedef struct dm_sig_data_s {
 typedef struct dev_tbl_cfg_s {
     uint16_t proto_type;
     uint16_t sig_num;
-    void *pst_table;
+    const void *pst_table;
 } DEV_TBL_CFG_S;
 
 typedef struct dev_table_s {

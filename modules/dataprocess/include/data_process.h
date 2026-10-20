@@ -57,6 +57,9 @@ typedef struct {
     DATA_SET_S *p_set_data;
 } PARA_DATA_S;
 typedef void (*PARA_SET_STATUS)(PARA_DATA_S *data);
+typedef void (*DM_PF_ATTR_SIG_CHG_PROC)(uint16_t dev, uint16_t sig, uint8_t size,
+                                       uint32_t type, const uint8_t *value);
+typedef enum { PARA_VALUE_REG_OLD, PARA_VALUE_REG_NEW } PARA_VALUE_REG_TYPE;
 typedef int32_t (*PARA_SET_FUNC)(PARA_DATA_S *data, PARA_SET_STATUS status);
 typedef enum { DP_PARA_SET, DP_PARA_GET, DP_PARA_INIT } DP_PARA_OPT;
 typedef enum { DP_FAST_SET, DP_TIMER_SET, DP_NO_DM_SET } DP_CALLBACK_TYPE;
@@ -125,5 +128,59 @@ int dp_reference_invoke(DM_PF_SIG_PROC callback, bool timer);
 int dp_reference_submit(DM_PF_SIG_PROC callback, bool timer);
 int dp_reference_process(struct dp_process_ctx *ctx, struct dp_key key);
 
+typedef struct dev_table_s DEV_TABLE_S;
+typedef struct dev_tbl_cfg_s DEV_TBL_CFG_S;
+typedef struct dm_sig_data_s DM_SIG_DATA_S;
 #include <dataprocess/reference_tables.h>
+
+/* Configuration views are read-only and remain valid for the configuration's
+ * lifetime. Native catalogs without original protocol tables return NULL for
+ * those tables, never reinterpret a native layout as a reference layout.
+ */
+int32_t dp_dev_get_num(void);
+const DEV_TABLE_S *dp_dev_get_tbl(void);
+const DEV_TABLE_S *dp_dev_get_from_devid(uint16_t dev_id);
+int32_t dp_dev_get_from_portid(uint16_t port_id, DEV_TABLE_S *device);
+int32_t dp_dev_get_coll_addr(uint8_t dev_id);
+uint8_t dp_dev_get_port(uint8_t dev_id);
+uint16_t dp_dev_get_code(uint8_t dev_id);
+const DEV_TBL_CFG_S *dp_devid_get_prototbl(uint8_t dev_id, uint16_t protocol);
+const void *dp_sigcfg_get_by_devcfg(const DEV_TBL_CFG_S *tables, uint16_t protocol,
+                                   uint16_t *count);
+const void *dp_sigcfg_get_by_devid(uint16_t dev_id, uint16_t protocol, uint16_t *count);
+/* For values over 4 bytes, getter callers supply def_value.pst with room for
+ * the configured byte length. Setter copies it into a bounded sparse override;
+ * const configuration and current values are unchanged. No NVS persistence.
+ */
+int32_t dp_get_para_def_range(uint16_t dev_id, uint16_t sig_id, DM_SIG_DATA_S *data);
+int32_t dp_set_para_def_range(uint16_t dev_id, uint16_t sig_id, DM_SIG_DATA_S *data);
+/* Run matching registered INIT functions, then the device's point handlers.
+ * Earlier successful initializers are not rolled back on a later failure.
+ */
+int32_t dp_set_init(uint16_t dev_id);
+int32_t dp_dm_reset_dev_data(uint8_t dev_id);
+/* Up to three observers; copied changes run on the DP jobs thread. The bounded
+ * event queue drops notifications on overflow without undoing committed data.
+ */
+int32_t dp_reg_sig_callback(DM_PF_ATTR_SIG_CHG_PROC callback);
+int32_t dp_para_value_reg(uint16_t type, DATA_SET_S *data);
+/* Reference direct-collector path, separate from durable native transports.
+ * Register once. Backend returns 0 when accepted and completes exactly once;
+ * an error means rejection with no later completion. Requests are copied.
+ * NO_DM waits up to 1 s; timeout holds storage until a late completion arrives.
+ * Direct device writes cannot be rolled back by a later transaction failure.
+ */
+int32_t dp_para_reg_set_func(PARA_SET_FUNC callback);
+int32_t dp_set_para_not_dm(PARA_DATA_S *data, PARA_SET_STATUS status);
+/* Callback-only flags, applied after successful transaction commit. */
+void dp_flush_para_store(void);
+void dp_set_reboot(void);
+/* Requires DP_PARAMS; flushes and schedules reboot after 100 ms. */
+void dp_reboot_system(void);
+/* Only RESTORE parameters. Both honor the default policy; factory additionally
+ * flushes durable storage, without erasing partitions or implicitly rebooting.
+ * Void legacy APIs report failures through logging; native APIs return errno.
+ */
+void dp_load_def_data(void);
+void dp_reset_factory(void);
 #endif

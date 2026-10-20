@@ -54,11 +54,17 @@ timeout 30s "$test_dir/boot/zephyr/zephyr.exe"
 bash applications/IDU-pre/tests/iap/run.sh
 
 # Modular telemetry pipeline, reusable device models and event-driven polling.
-for suite in pipeline models collector transmit dataprocess reference_dp reference_ports reference_config; do
+for suite in pipeline models collector transmit dataprocess reference_dp reference_ports reference_config reference_services; do
     env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
         "applications/IDU-pre/tests/$suite" -d "$test_dir/$suite"
     timeout 30s "$test_dir/$suite/zephyr/zephyr.exe"
 done
+
+# Reference parameter policies, explicit schema migration and deferred reboot.
+env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
+    applications/IDU-pre/tests/reference_services -d "$test_dir/reference_services-params" \
+    -- -DEXTRA_CONF_FILE=params.conf
+timeout 30s "$test_dir/reference_services-params/zephyr/zephyr.exe" -flash_in_ram
 
 # Byte getters remain available when the processing worker is disabled.
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \

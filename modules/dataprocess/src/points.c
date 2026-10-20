@@ -1,4 +1,5 @@
 #include <dataprocess/points.h>
+#include <dataprocess/reference_internal.h>
 #if defined(CONFIG_DP_PARAMS)
 #include <dataprocess/params.h>
 #endif
@@ -15,8 +16,8 @@ LOG_MODULE_REGISTER(dp, LOG_LEVEL_INF);
 
 static const struct dp_equip_cfg *equipment;
 struct stored_point {
-    uint16_t *words;
     int64_t sampled_at;
+    uint16_t *words;
     uint32_t generation;
     int error;
     uint16_t quality;
@@ -24,6 +25,7 @@ struct stored_point {
 static struct stored_point states[CONFIG_DP_POINTS_MAX_POINTS];
 static uint16_t point_words[CONFIG_DP_POINTS_VALUE_WORDS];
 static uint32_t generation;
+static int64_t reset_epoch[CONFIG_DP_MAX_DEVICES];
 static atomic_t ready;
 static atomic_t last_progress;
 static uint32_t published_ticket;
@@ -68,23 +70,21 @@ static int point_index(const struct dp_equip_cfg *cfg, struct dp_key key)
     return -ENOENT;
 }
 
-static int64_t number(const struct dp_point_cfg *p, const struct dp_value *v)
+/* Caller holds store_lock, including the final commit check after callbacks. */
+static bool obsolete_samples(const struct dp_point_update *values, size_t count, int64_t sampled_at)
 {
-    uint32_t u32 = v->words[0] | ((uint32_t)v->words[1] << 16);
-    switch (p->type) {
-    case DP_U8:
-    case DP_U16: return v->words[0];
-    case DP_S16: return (int16_t)v->words[0];
-    case DP_U32: return u32;
-    case DP_S32: return (int32_t)u32;
-    default: return 0;
+    for (size_t i = 0; i < count; ++i) {
+        for (size_t d = 0; d < equipment->device_count; ++d) {
+            if (values[i].key.dev_id == equipment->devices[d].dev_id &&
+                reset_epoch[d] && sampled_at <= reset_epoch[d]) { return true; }
+        }
     }
+    return false;
 }
 
 static bool value_in_range(const struct dp_point_cfg *p, const struct dp_value *v)
 {
-    int64_t n = number(p, v);
-    return p->type == DP_WORDS || ((p->type != DP_U8 || n <= UINT8_MAX) && n >= p->minimum && n <= p->maximum);
+    return dp_reference_range(p, v) == 0;
 }
 
 static bool valid_fc(uint8_t function)
@@ -103,6 +103,8 @@ int dp_validate(const struct dp_equip_cfg *cfg)
         (cfg->transmit_count && !cfg->transmit)) {
         return -EINVAL;
     }
+    if ((cfg->reference_device_count && !cfg->reference_devices) ||
+        cfg->reference_device_count > CONFIG_DP_MAX_DEVICES + 2) { return -EINVAL; }
     size_t words_needed = 0;
     for (size_t i = 0; i < cfg->point_count; ++i) {
         const struct dp_point_cfg *p = &cfg->points[i];
@@ -407,6 +409,10 @@ static void process_thread(void *a, void *b, void *c)
         if (channel != &dp_samples_chan || !atomic_get(&ready)) {
             continue;
         }
+        k_mutex_lock(&store_lock, K_FOREVER);
+        bool obsolete = obsolete_samples(batch.points, batch.count, batch.sampled_at);
+        k_mutex_unlock(&store_lock);
+        if (obsolete) { atomic_set(&consumed_ticket, batch.ticket); continue; }
         uint16_t quality[DP_BATCH_POINTS];
         bool callbacks = false, all_valid = true;
         k_mutex_lock(&store_lock, K_FOREVER);
@@ -444,11 +450,21 @@ static void process_thread(void *a, void *b, void *c)
         ARG_UNUSED(callbacks); ARG_UNUSED(all_valid);
 #endif
         k_mutex_lock(&store_lock, K_FOREVER);
+        if (obsolete_samples(batch.points, batch.count, batch.sampled_at)) {
+            k_mutex_unlock(&store_lock);
+            atomic_set(&consumed_ticket, batch.ticket);
+            continue;
+        }
         ++generation;
         for (size_t i = 0; i < batch.count; ++i) {
             const struct dp_point_update *u = &batch.points[i];
             struct stored_point *state = &states[point_index(equipment, u->key)];
-            if (!u->error) { memcpy(state->words, u->value.words, u->width * 2); }
+            if (!u->error) {
+                struct dp_value old = {0};
+                memcpy(old.words, state->words, u->width * 2);
+                dp_reference_notify(dp_find(u->key), &old, &u->value);
+                memcpy(state->words, u->value.words, u->width * 2);
+            }
             state->sampled_at = batch.sampled_at;
             state->quality = quality[i] | batch.flags;
             state->error = u->error;
@@ -497,9 +513,16 @@ int dp_commit_sample(const struct dp_point_update *values, size_t count,
         if (err) { return err; }
     }
     k_mutex_lock(&store_lock, K_FOREVER);
+    if (obsolete_samples(values, count, sampled_at)) {
+        k_mutex_unlock(&store_lock);
+        return -ECANCELED;
+    }
     ++generation;
     for (size_t i = 0; i < count; ++i) {
         int n = point_index(equipment, values[i].key);
+        struct dp_value old = {0};
+        memcpy(old.words, states[n].words, values[i].width * 2);
+        dp_reference_notify(dp_find(values[i].key), &old, &values[i].value);
         memcpy(states[n].words, values[i].value.words, values[i].width * 2);
         states[n].quality = DP_QUALITY_GOOD | flags;
         states[n].sampled_at = sampled_at;
@@ -515,4 +538,31 @@ int dp_commit_sample(const struct dp_point_update *values, size_t count,
 int dp_commit(const struct dp_point_update *values, size_t count)
 {
     return dp_commit_sample(values, count, 0, k_uptime_get());
+}
+
+/* Reset only registered remote acquisition devices. Samples already queued at
+ * reset time cannot overwrite the reset state; later fresh polls resume it.
+ */
+int dp_store_reset_device(uint16_t dev)
+{
+    if (!equipment || !dev || k_is_in_isr()) { return -EINVAL; }
+    int device = -1;
+    for (size_t d = 0; d < equipment->device_count; ++d) {
+        if (equipment->devices[d].dev_id == dev) { device = d; break; }
+    }
+    if (device < 0) { return -EACCES; }
+    k_mutex_lock(&store_lock, K_FOREVER);
+    reset_epoch[device] = MAX(k_uptime_get(), 1);
+    ++generation;
+    for (size_t i = 0; i < equipment->point_count; ++i) {
+        const struct dp_point_cfg *p = &equipment->points[i];
+        if (p->key.dev_id != dev || p->source != DP_SOURCE_MODBUS) { continue; }
+        memcpy(states[i].words, p->initial.words, p->width * 2);
+        states[i].quality = DP_QUALITY_UNINITIALIZED;
+        states[i].sampled_at = 0;
+        states[i].error = -ENODATA;
+        states[i].generation = generation;
+    }
+    k_mutex_unlock(&store_lock);
+    return 0;
 }

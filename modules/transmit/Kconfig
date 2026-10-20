@@ -5,6 +5,11 @@ menuconfig TRANSMIT
 
 if TRANSMIT
 
+config TR_CONN_TIMEOUT_MS
+    int "Accepted Modbus request inactivity timeout (ms)"
+    default 5000
+    range 10 3600000
+
 config TR_MODBUS_ADAPTER
     bool "Whole-PDU Modbus routing and isolated forwarding workers"
     default y if DP_PARAMS

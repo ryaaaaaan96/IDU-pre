@@ -1,5 +1,6 @@
 #include <dataprocess/process.h>
 #include <dataprocess/params.h>
+#include <dataprocess/reference_internal.h>
 #include <errno.h>
 #include <string.h>
 #if defined(CONFIG_DP_PARAMS)
@@ -15,6 +16,8 @@ static struct entry entries[CONFIG_DP_PROCESS_MAX_OUTPUTS];
 static size_t entry_count;
 static uint16_t transaction_quality;
 static k_tid_t owner;
+static const struct dp_process_request *active_request;
+static struct k_spinlock context_lock;
 K_MUTEX_DEFINE(process_lock);
 static struct dp_point_update group[CONFIG_DP_PROCESS_MAX_OUTPUTS];
 struct async_job {
@@ -67,6 +70,14 @@ static int capture(struct dp_key key)
     entries[i] = (struct entry){.item.point = {.key = key, .width = p->width,
                                                .value = state.value}, .old = state};
     return i;
+}
+
+const struct dp_process_request *dp_process_current_request(void)
+{
+    k_spinlock_key_t lock = k_spin_lock(&context_lock);
+    const struct dp_process_request *request = owner == k_current_get() ? active_request : NULL;
+    k_spin_unlock(&context_lock, lock);
+    return request;
 }
 
 static bool context_valid(struct dp_process_ctx *ctx)
@@ -140,6 +151,15 @@ int dp_txn_emit(struct dp_process_ctx *ctx, struct dp_key key,
     return 0;
 }
 
+int dp_txn_register_old(struct dp_process_ctx *ctx, struct dp_key key, const struct dp_value *value)
+{
+    if (!context_valid(ctx) || !value) { return -EINVAL; }
+    int i = capture(key);
+    if (i < 0) { return i; }
+    entries[i].old.value = *value;
+    return 0;
+}
+
 int dp_process_execute(const struct dp_process_request *request,
                         struct dp_process_result *result)
 {
@@ -155,7 +175,10 @@ int dp_process_execute(const struct dp_process_request *request,
     if (owner == k_current_get()) {
         k_mutex_unlock(&process_lock); result->error = -EDEADLK; return -EDEADLK;
     }
+    k_spinlock_key_t context_key = k_spin_lock(&context_lock);
     owner = k_current_get();
+    active_request = request;
+    k_spin_unlock(&context_lock, context_key);
     entry_count = 0;
     transaction_quality = request->quality_flags;
     struct dp_process_ctx ctx = {.request = request, .transaction = entries};
@@ -240,8 +263,12 @@ int dp_process_execute(const struct dp_process_request *request,
         }
     }
 out:
+    err = dp_reference_finish(&ctx, err);
     result->error = err;
+    context_key = k_spin_lock(&context_lock);
     owner = NULL;
+    active_request = NULL;
+    k_spin_unlock(&context_lock, context_key);
     k_mutex_unlock(&process_lock);
     return err;
 }
@@ -522,6 +549,7 @@ static void process_jobs_thread(void *a, void *b, void *c)
         if (reboot && !dp_params_flush()) { dp_process_reboot(); }
         dp_params_flush_due();
 #endif
+        dp_reference_drain_events();
     }
 }
 K_THREAD_DEFINE(dp_jobs_tid, CONFIG_DP_PROCESS_STACK_SIZE,

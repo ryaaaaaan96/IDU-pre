@@ -15,6 +15,8 @@ struct port_callback {
     TR_FUNC_CB reference;
 };
 struct port_control {
+    int64_t last_activity;
+    bool connection_enabled, seen_activity;
     enum tr_port_mode mode;
     struct port_callback slave, callback, filter;
     bool filter_enabled;
@@ -477,6 +479,10 @@ bool tr_modbus_write_request(struct modbus_context *ctx, bool *reply)
     if (!control.slave.handler) { control.slave.reference = reference_handlers[MB_MODE_SLAVE]; }
     if (!control.callback.handler) { control.callback.reference = reference_handlers[MB_MODE_CALLBACK]; }
     ++controls[iface].stats.requests;
+    if (controls[iface].connection_enabled && control.mode != TR_MODE_SLEEP) {
+        controls[iface].last_activity = k_uptime_get();
+        controls[iface].seen_activity = true;
+    }
     if (control.mode == TR_MODE_SLEEP) { ++controls[iface].stats.sleep_drops; }
     k_spin_unlock(&control_lock, key);
     if (control.mode == TR_MODE_SLEEP) { return callback_reply(ctx, TR_MODBUS_SILENT, reply); }
@@ -545,4 +551,29 @@ bool tr_modbus_write_request(struct modbus_context *ctx, bool *reply)
         sys_put_be16(rx->fc == 6 ? words[0] : count, ctx->tx_adu.data + 2);
     }
     return true;
+}
+
+int tr_port_conn_status_config(uint16_t iface, bool enabled)
+{
+    if (iface >= IFACE_LIMIT || k_is_in_isr()) { return -EINVAL; }
+    k_spinlock_key_t lock = k_spin_lock(&control_lock);
+    controls[iface].connection_enabled = enabled;
+    controls[iface].seen_activity = false;
+    controls[iface].last_activity = 0;
+    k_spin_unlock(&control_lock, lock);
+    return 0;
+}
+
+int tr_port_connection_get(int iface, struct tr_connection_status *status)
+{
+    if (iface < 0 || iface >= IFACE_LIMIT || !status) { return -EINVAL; }
+    k_spinlock_key_t lock = k_spin_lock(&control_lock);
+    const struct port_control *control = &controls[iface];
+    *status = (struct tr_connection_status){.enabled = control->connection_enabled,
+        .last_activity = control->last_activity,
+        .connected = control->connection_enabled && control->seen_activity &&
+                     control->mode != TR_MODE_SLEEP &&
+                     k_uptime_get() - control->last_activity < CONFIG_TR_CONN_TIMEOUT_MS};
+    k_spin_unlock(&control_lock, lock);
+    return 0;
 }

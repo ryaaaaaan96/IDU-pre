@@ -89,62 +89,106 @@ Modbus 字序采用 `arc_byte_order.h:60–64` 的实际宏：0 默认按 BIGSMA
 
 [transmit_lib.h](../modules/transmit/include/transmit_lib.h) 的 `TR_FUNC_CB` 有一项明确适配：接收 `const struct modbus_adu *request` 与 `struct modbus_adu *response`，不接收原始字节流。过滤器 0 继续、4 静默消费；模式处理器 -1 继续、0 使用 response 回复。原多帧过滤、CRC 前过滤、回调自行发送和 AES=2 语义没有被宣称兼容。SLEEP 不回复、不执行业务回调。原生更完整的错误和统计接口用 `tr_port_*` 命名，避免同名不同参数。旧端口控制仅 GET/CLR_RECV_MB 映射为进入分发的完整 ADU 计数，其他命令返回 `-ENOTSUP`，不拿软件统计冒充硬件 CRC/TX 计数。
 
+## 点表的 Flash / RAM 分工
+
+产品的 `src/cfg/tables/{process,collect,transmit}.c`、设备配置和点表元数据原本已经
+使用 `static const`，不需要将整张表复制进 RAM。新增的原表查询返回 `const` 视图，
+`DEV_TBL_CFG_S.pst_table` 也改为 `const void *`；原表与默认字节数组均可直接放 Flash。
+原生配置继续直接使用这些静态表。只有启用 `CONFIG_DP_REFERENCE_TABLES`，运行时
+将参考表编译为 native 表的有界数组才需要 RAM；产品当前没有启用这层编译。
+
+测点当前值、质量、采样时间、NVS 缓存和事务暂存必须可写。运行状态的字段顺序已调整，
+GD32E505 上每个 `stored_point` 从 32 字节缩至 24 字节；64 点容量节省 512 字节，
+大点表配置的 560 点容量节省 4480 字节。动态修改默认值/范围使用
+`CONFIG_DP_REFERENCE_OVERRIDES` 个稀疏覆盖槽（默认 4 个），不复制或改写整张 const 表。
+覆盖只在本次运行有效，不持久化，也不立即改变当前值；满时返回 `-ENOSPC`。
+读取大于 4 字节的默认值时，调用方须为 `def_value.pst` 提供配置长度的可写缓冲区。
+
+新增服务也占用缓冲区，不能将上述状态数组节省量直接当作整机净节省量。采集直接写入
+缓冲按 `min(CO_MAX_REGS, DP_POINT_WORDS)` 分配，通知队列长度通过
+`CONFIG_DP_REFERENCE_EVENTS` 配置。最终固件占用见文末。
+
 ## 覆盖清单
 
-下表描述源码入口与适配范围，不表示硬件验证或完整回归结果。
+按四个原头文件的 89 个不同名称统计，目前提供 **79 个同名入口**，比此前增加 39 个。
+这是源码接口适配数量，不是完整行为或二进制兼容率。关闭相关 Kconfig 后，需对应机制的
+接口会返回 `-ENOTSUP`；旧 void 接口失败会记录日志，不以空成功实现替代功能。
 
-| 范围 | 实现位置 / 限制 |
+| 本次增加 | 数量 | 行为和限制 |
+| --- | ---: | --- |
+| DP 设备与协议表查询 | 10 | 原表返回只读指针；原生配置生成有界设备描述，包含本地测点设备和采集设备。没有原协议表时返回 NULL，不进行结构强转。按端口查询复制第一个匹配设备；缺失 port/code 返回 0，需先查设备判断是否存在。 |
+| DP 默认值/范围、设备初始化及数据重置 | 4 | 稀疏覆盖保留 const；`dp_set_init` 先执行匹配设备的注册 INIT，再执行测点 INIT，失败返回错误，早先成功效果不回滚。重置仅接受已配置的远端设备，遥测回到初值并标为未初始化；已排队的旧采样失效，不重置本地、常量或持久化参数。 |
+| DP 变化通知、参数登记和直接下发 | 4 | `dp_reg_sig_callback` 最多 3 个观察者；`dp_para_value_reg` 仅在回调内登记 OLD/NEW；注册采集函数用于 `dp_set_para_not_dm`，与 native 持久化传输分开。 |
+| DP 延时存储刷新、重启和默认恢复 | 5 | 回调内刷新/重启标记仅在本次事务成功后执行；失败取消。默认恢复只选 RESTORE 参数；factory 额外刷写 NVS，不擦分区、不隐式重启。 |
+| PLTCB 参数策略和通知 | 10 | 默认值策略、范围检查策略、长度迁移、参数日志及恢复完成的五组注册/调用接口；注册须在 DP 初始化前完成。 |
+| CO 初始化回调、转换、直接写、RTU 注入、重启 | 5 | 使用 Zephyr 总线串行机制；具体边界如下。 |
+| TR 连接状态配置 | 1 | 接收 ADU 的活动超时检测；状态通过扩展 `tr_port_connection_get` 查询，不代表电气连接状态。 |
+
+新增 DP 查询为：`dp_dev_get_num/tbl/from_devid/from_portid/coll_addr/port/code`、
+`dp_devid_get_prototbl`、`dp_sigcfg_get_by_devcfg/by_devid`。
+具体实现位于 [reference_services.c](../modules/dataprocess/src/reference_services.c)、
+[data_process.c](../modules/dataprocess/src/data_process.c)、
+[collect.c](../modules/collect/src/collect.c) 和
+[modbus_adapter.c](../modules/transmit/src/modbus_adapter.c)。
+
+### 回调、存储与直接下发的约定
+
+- 变化通知和参数日志复制提交值后进入有界队列，由现有 DP 业务线程调用，避免持有数据池
+  或缓存锁执行用户代码。队列满会丢通知并记录警告，不撤销已提交的数据；不是可靠审计日志。
+  参数日志仅覆盖不超过 4 字节的变化，记录 Modbus 端口/地址；无 UTC 时 `date_time=0`，
+  不伪造 UPP 地址。恢复完成通知仅在所选参数全部恢复成功后调用。
+- 范围策略返回 false 可跳过数值上下限检查，仍保留类型容量和字节长度校验。
+  默认策略返回 false 时采用回调填入的值；两类回调都须快速、不可重入 DP。
+  初始化成功后冻结 PLTCB 注册，旧 void 注册函数不能报告错误，应用必须遵守启动顺序。
+- NVS 长度迁移须在 `dp_equip_cfg.previous_parameter_schema` 中明确授权一个旧签名，
+  并由迁移回调返回 true。只允许已识别的同设备/同信号/同类型条目转换长度，结果仍校验范围。
+  未知签名、拒绝转换及损坏记录均报错且不格式化；未完成事务意图不走该长度迁移路径。
+  持久化格式以 word 保存，不能据此检测奇数字节长度变化但 word 数不变的布局差异。
+- `dp_para_reg_set_func` 注册一次，CO 初始化注册 `co_dp_fast_set`。直接下发复制请求数据，
+  后端返回 0 表示接受且必须恰好完成一次，错误表示拒绝且不得随后完成。等待上限 1 秒；
+  若已接受但超时，仍保留数据直到迟到完成，期间新请求返回 `-EBUSY`。同步下发接口不能
+  从 ISR 调用，后端接受调用本身必须及时返回。原生持久化参数仍走带读回和恢复的 native
+  transport；不将这个简化的完成回调套入 NVS 事务。
+- `dp_set_para_not_dm` 成功后给当前事务已存在的匹配输出设置 NO_DM/NO_COLLECT；
+  后续处理失败无法撤销已经到达外设的直接写入。`co_dp_fast_set` 发送前校验整批并复制转换值，
+  使用参数显式转发地址或 FC3 采集映射，不把 FC4 输入寄存器推断为可写。写值转换回调返回
+  0 使用转换值，其他返回值沿用原值；该回调仅作用于参考直接写路径。发送阶段后项失败时，
+  先前成功的外设写入不会回滚，完成回调只在全部成功时调用一次。
+- `co_anlysis_mb_pkg` 接收完整 RTU 响应（含单元号、功能码、字节数、CRC），支持 FC3/FC4；
+  所有匹配字段须容纳在一个 DP batch，否则不入队。`reg_addr` 使用配置表地址，不暗加减 1。
+  原应用 `PRE_COLLECT.C` 的请求地址减 1、解析时加 1 属于其产品地址约定，不搬到通用模块。
+- `dp_flush_para_store` / `dp_set_reboot` 只能在处理回调中设置标记。`dp_reboot_system` 和
+  `co_set_reboot_system` 通过 DP 保存后延时 100 ms 重启，不复刻旧平台的长时间阻塞，
+  也不保证串口硬件已发送完毕；产品升级仍使用原有停机/发送完成流程。
+- `dp_load_def_data` / `dp_reset_factory` 都遵循默认恢复策略，跨设备恢复可能在后项失败前
+  已完成前项。`dp_para_value_reg` 的 OLD=0 / NEW=1 是明确的新定义：参考公开头未定义
+  这两个常量，所检查库的此函数只是返回成功的桩；同库 `dp_load_def_data` 也为空桩。
+  新实现提供实际功能，不声称从桩函数恢复出未知业务逻辑。
+- `tr_port_conn_status_config` 启用后，依据完整 ADU 的活动时间和
+  `CONFIG_TR_CONN_TIMEOUT_MS` 判定连接；SLEEP 为断开。没有旧产品告警点号自动映射。
+
+### 仍未提供的 10 个入口
+
+| 接口 | 原因 |
 | --- | --- |
-| 原配置注册、设备三表编译 | `modules/dataprocess/src/reference_config.c`；仅上述显式支持子集 |
-| 同步 byte set/get、fast set/get、事务回调辅助 | [data_process.c](../modules/dataprocess/src/data_process.c)；事务执行需要 `CONFIG_DP_PROCESS`，类型、容量和持久化受 native 配置约束 |
-| 原 CO 模式、设备初始化、清队列、周期扫描开关 | `modules/collect/src/collect.c`；五个接口，OTHER 不支持 |
-| 原 TR 模式、全局处理器、每端口过滤器、有限控制 | `modules/transmit/src/modbus_adapter.c`；六个接口，回调使用 Zephyr ADU |
-| 原全局 INIT/TIMER 表注册 | `reference_config.c` 的 `dp_reference_start()`；INIT 按表序，TIMER 仅周期 type=0；native `dp_process_plan` 仍可独立使用 |
+| `dp_dev_add`、`dp_dev_del`、`dp_reg_devchg_callback` | 当前采用启动后固定的 const 配置；动态增删还要处理运行中采集、索引、事务、NVS schema 和读者生命周期，不能只改设备数组。原库 add/del 的成功桩不作为实现。 |
+| `dp_plat_ver_init` | 原实现写入固定本地设备/信号的版本字段，需确定产品点号与编码；不以 Zephyr 版本字符串替代产品版本协议。 |
+| `dp_set_para_can_id`、`dp_updata_meter_coller_set` | 依赖 CAN 标识和电表采集产品策略，当前没有对应驱动配置/数据定义。 |
+| `co_put_passthough_queue` | 原始透传包所有权、路由、应答关联与非 Modbus 协议未定义，不能直接塞进现有请求队列。 |
+| `co_get_port_dev_bind_inf`、`co_set_dev_bind_status` | 依赖旧 DSP 设备发现/绑定模型，当前为静态 Zephyr 总线配置。 |
+| `tr_aes_pkt_send` | 缺少旧帧格式、密钥/IV、认证与重放约定；仅有 AES 算法不足以兼容线协议。 |
 
-以下原公开能力不在上述覆盖范围内，不提供返回成功的空实现：
+原 `MB_TABLE_SEG_S` 原始分段回调、增量表、其他 TR 硬件控制命令以及 UPP 完整协议栈、
+IEC104/61850、MQTT/FTP/WEB、EGD、CAN/PLC 产品业务、旧日志/文件/升级服务和 ARC
+仍不在本次范围。已有 native 路由/分段/升级接口继续使用，不宣称兼容全部旧平台。
 
-- DP 设备动态增删/变化通知和旧设备查询族、信号变化通知、参数注册/转发器注册、恢复出厂/载入默认、旧定时和 NO_DM 设置、默认范围动态修改、旧重启/平台版本/CAN 标识/电表采集配置/设备数据重置接口。原库 `dp_dev_add()` / `dp_dev_del()` 本身只是成功返回的桩，这不构成新版应提供相同空行为的理由。
-- PLTCB 的按点决定载入默认值、动态范围检查、长度不匹配迁移、参数日志和恢复结束通知；IDU 现有迁移功能走明确的 native 配置，不等于实现这些旧入口。
-- CO 的原始透传包队列、`co_dp_fast_set()`、每端口初始化回调注册、旧重启接口、原始 Modbus 包解析注入、写值转换注册、DSP 设备绑定查询/设置。已有 native 功能不能据此视为同名原接口可直接调用。
-- TR 的旧连接状态配置、AES 发包、原 `MB_TABLE_SEG_S` 原始分段回调及增量表；产品现有路由/分段配置继续使用 native 接口。
-- 范围外子系统包括 UPP 完整协议栈、IEC104/61850、MQTT/FTP/WEB、EGD、CAN/PLC 专用业务、旧日志/文件/升级服务，以及 ARC OS/HAL。保留某些协议枚举用于识别和拒绝，不代表实现了对应协议。
+完整原接口原型、来源与导出对象见审计工具生成的 `audit.json` / `audit.txt`。
+回归位于 [reference_services](../tests/reference_services)、[reference_config](../tests/reference_config)、
+[reference_dp](../tests/reference_dp) 和 [reference_ports](../tests/reference_ports)。
 
-按四个原头文件的 89 个名称统计，当前提供 40 个同名入口，适配限制如上。其余 49 个未提供的入口如下，不能凭功能相近就按原签名调用：
+## 验证记录（2026-10-20）
 
-```text
-DP:
-dp_dev_add, dp_dev_del, dp_dev_get_code, dp_dev_get_coll_addr,
-dp_dev_get_from_devid, dp_dev_get_from_portid, dp_dev_get_num,
-dp_dev_get_port, dp_dev_get_tbl, dp_devid_get_prototbl,
-dp_dm_reset_dev_data, dp_flush_para_store, dp_get_para_def_range,
-dp_load_def_data, dp_para_reg_set_func, dp_para_value_reg,
-dp_plat_ver_init, dp_reboot_system, dp_reg_devchg_callback,
-dp_reg_sig_callback, dp_reset_factory, dp_set_init,
-dp_set_para_can_id, dp_set_para_def_range, dp_set_para_not_dm,
-dp_set_reboot, dp_sigcfg_get_by_devcfg, dp_sigcfg_get_by_devid,
-dp_updata_meter_coller_set
-
-CO:
-co_anlysis_mb_pkg, co_dp_fast_set, co_get_port_dev_bind_inf,
-co_init_func_reg, co_put_passthough_queue, co_set_dev_bind_status,
-co_set_reboot_system, co_set_value_trans_cb_reg
-
-TR:
-tr_aes_pkt_send, tr_port_conn_status_config
-
-PLTCB:
-pltcb_para_get_is_load_def, pltcb_para_get_is_range_check,
-pltcb_para_recover_fininsh, pltcb_para_size_mismatch_pro, pltcb_para_write_log,
-pltcb_reg_para_is_load_def_cb, pltcb_reg_para_is_range_check,
-pltcb_reg_para_recover_finish_cb, pltcb_reg_para_size_mismatch_cb,
-pltcb_reg_para_write_log_cb
-```
-
-完整原接口原型、来源行与导出对象见工具生成的 `audit.json` / `audit.txt`。对应边界用例位于 [reference_config](../tests/reference_config)、[reference_dp](../tests/reference_dp)、[reference_ports](../tests/reference_ports)。新增覆盖应同时更新源码、边界测试和本文，不能只补声明。
-
-## 本次验证（2026-10-20）
-
-工作区根目录执行以下命令均通过，输出位于 `build/IDU-pre/tests/reference-*.log`：
+本轮验证命令：
 
 ```bash
 CCACHE_DISABLE=1 ASAN_OPTIONS=detect_leaks=0 bash applications/IDU-pre/tests/run.sh
@@ -153,11 +197,26 @@ CCACHE_DISABLE=1 ./applications/IDU-pre/build.sh --mcuboot --iapv3
 CCACHE_DISABLE=1 ./applications/IDU-pre/build.sh --mcuboot --aidc
 ```
 
-新增参考接口用例共 22 项：DP 10 项、关闭 DP_PROCESS 后 3 项、CO/TR 8 项、
-配置与 INIT/TIMER 集成 1 项。完整测试入口通过；旧 QuickLZ 对照与外部 SGZ
-样本相关的 3 项因未提供 `IDU_LEGACY_IAP_DIR` / `IDU_IAP_SGZ` 而跳过。
-ASan/UBSan 保留，当前执行环境禁用 LeakSanitizer。
+完整测试入口通过：33 次 native simulator 执行，Ztest 汇总 189 项通过（含重启阶段等
+重复执行）；Python 共 21 项，其中依赖外部旧 QuickLZ/SGZ 样本的 3 项跳过。
+ASan/UBSan 保留，当前执行环境禁用 LeakSanitizer。新增服务的 11 项测试分别在
+启用/关闭参数存储时通过，CO/TR 用例由 8 项增至 11 项。最后补充的迁移类型元数据修改
+再次运行参数服务回归并通过。
 
-另外导出暂存内容后独立构建默认固件，确认提交不依赖工作区其他未提交修改。
-三种产品构建的静态 RAM 占比分别约为 61.44%、86.46%、91.31%；最后一项为
-大点表配置，实板运行时的栈余量、采集时序和通信表现仍需验证。本次未进行实板测试。
+默认、MCUboot + IAPv3、MCUboot + 大点表固件均构建通过，镜像检查与签名验证通过；
+最终修改后通过 `cmake --build` 增量重建三种配置。另导出仅含本次暂存内容的源码并构建
+默认固件，确认提交不依赖工作区既有的应用 runtime 重构。
+
+| 固件配置 | 修改前静态 RAM | 修改后静态 RAM | 净变化 | 当前占 128 KiB |
+| --- | ---: | ---: | ---: | ---: |
+| 默认 | 80,536 B | 81,728 B | +1,192 B | 62.35% |
+| MCUboot + IAPv3 | 113,328 B | 114,512 B | +1,184 B | 87.37% |
+| MCUboot + 大点表 | 119,680 B | 117,088 B | −2,592 B | 89.33% |
+
+这里包含新增服务缓冲与状态数组压缩的共同影响，不表示所有配置均净省 RAM。
+`nm -S` 确认三个产品三表的 `table` 符号位于 `0x080…` 只读区；状态数组在 RAM，
+默认/IAPv3 从 `0x800` 缩至 `0x600` 字节，大点表从 `0x4600` 缩至 `0x3480`。
+构建前后 ELF section/symbol 清单保存在工作区
+`build/IDU-pre/tests/interfaces-memory-{before,after}.json`，日志位于
+`build/IDU-pre/tests/extensions-*.log`，均不提交。本轮没有实板验证；运行时栈余量和
+实际通信时序仍需实板确认。
