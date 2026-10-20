@@ -31,8 +31,9 @@ class ImportTablesTest(unittest.TestCase):
         self.templates.mkdir()
         self.output = self.root / "output"
         self.contents = {
-            "tables/defaults.c": "manual defaults\n" + region("defaults"),
-            "tables/process.c": "manual points before\n" + region("points") + "manual points after\n",
+            "tables/process.c": ("manual points before\n" + region("points") +
+                                 "manual defaults\n" + region("defaults") +
+                                 "manual country overrides\n"),
             "tables/transmit.c": "manual mapping\n" + region("transmit"),
             "tables/collect.c": region("fields") + "manual polls\n" + region("collect"),
             "device.c": "manual device\n" + region("devices"),
@@ -54,6 +55,11 @@ class ImportTablesTest(unittest.TestCase):
         expected = (region("fields", self.rows["fields"]) + "manual polls\n" +
                     region("collect", self.rows["collect"]))
         self.assertEqual((self.output / "tables/collect.c").read_text(), expected)
+        expected = ("manual points before\n" + region("points", self.rows["points"]) +
+                    "manual defaults\n" + region("defaults", self.rows["defaults"]) +
+                    "manual country overrides\n")
+        self.assertEqual((self.output / "tables/process.c").read_text(), expected)
+        self.assertFalse((self.output / "tables/defaults.c").exists())
         self.assertEqual((self.output / "inc/imported_signals.h").read_text(), self.symbols)
         self.assertEqual(json.loads((self.output / "migration.json").read_text()),
                          self.metadata)
@@ -64,11 +70,15 @@ class ImportTablesTest(unittest.TestCase):
 
     def test_existing_manual_content_is_preserved_and_reimport_is_stable(self):
         (self.output / "tables").mkdir(parents=True)
-        manual = ("// custom CRLF prefix\r\n" + region("points") +
+        manual = ("// custom CRLF prefix\r\n" + region("points", "old points\n") +
+                  "static const struct point_parameter parameters[] = {\n" +
+                  region("defaults", "old defaults\n") +
+                  "    {.country=123,.dev_id=1,.sig_id=42},\n};\n" +
                   "// custom CRLF suffix\r\n")
         (self.output / "tables/process.c").write_bytes(manual.encode())
         self.write()
-        expected = manual.replace("old rows\n", self.rows["points"])
+        expected = manual.replace("old points\n", self.rows["points"]).replace(
+            "old defaults\n", self.rows["defaults"])
         self.assertEqual((self.output / "tables/process.c").read_bytes(), expected.encode())
         before = snapshot(self.output)
         self.write()

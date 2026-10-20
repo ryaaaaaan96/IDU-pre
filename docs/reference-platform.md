@@ -66,7 +66,7 @@ python3 applications/IDU-pre/tools/analyze_reference.py \
 Modbus 字序采用 `arc_byte_order.h:60–64` 的实际宏：0 默认按 BIGSMALL、1 SMALL、2 BIGSMALL、3 SMALLBIG、4 BIG。0/2 对应 native 低字在前，4 对应高字在前，1/3 另需字节交换。UPP 的 `PUB_BYTE_ORDER_BIG=0` 是另一套编码，不能混用；无需引入该头里的 ARC 函数。
 
 IDU 的三张应用点表也使用这些原结构，通过设备表及默认/范围 getter 注册。
-`defaults.c` 提供原接口的 `DM_SIG_DATA_S`，回调直接写在 `DM_SIG_CFG_S.pf_sig_proc` 中，
+`process.c` 的 `parameters[]` 提供原接口的 `DM_SIG_DATA_S`，回调直接写在 `DM_SIG_CFG_S.pf_sig_proc` 中，
 信号 ID 使用宏或枚举；不再通过 `point_metadata` 字符串分发。
 `dp_reference_prepare()` 可在启动线程前取得已校验配置。原生扩展
 `dp_register_config_provider()` / `dp_init_config()` 仍供独立模块使用，与原表注册互斥。
@@ -102,7 +102,9 @@ IDU 的三张应用点表也使用这些原结构，通过设备表及默认/范
 
 ## 点表的 Flash / RAM 分工
 
-产品的 `app/cfg/tables/{process,collect,transmit,defaults}.c` 使用 `static const`。
+产品的 `app/cfg/tables/{process,collect,transmit}.c` 使用 `static const`。
+默认值和范围集中在 `process.c` 的单一数组中，预留按国家查询及缺项回退通用参数；
+当前注册回调仍使用通用配置，未引入运行期国家切换或改变 NVS 恢复策略。
 同型号设备共享处理和采集行。`DEV_TBL_CFG_S.pst_table` 使用 `const void *`，
 设备装配和少量总线描述留在 RAM；点行不复制为整张 native 数组。
 启用 `CONFIG_DP_REFERENCE_TABLES` 后，`dp_config_point/collect/transmit()` 在调用者

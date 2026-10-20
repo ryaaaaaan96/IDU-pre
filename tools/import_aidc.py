@@ -14,7 +14,7 @@ import argparse, ast, collections, hashlib, json, operator, re
 CONFIG_DIR = Path(__file__).resolve().parents[1] / 'app/cfg'
 TABLE_FILES = {
     'points': 'tables/process.c',
-    'defaults': 'tables/defaults.c',
+    'defaults': 'tables/process.c',
     'transmit': 'tables/transmit.c',
     'fields': 'tables/collect.c',
     'collect': 'tables/collect.c',
@@ -116,8 +116,8 @@ def render_reference_tables(metadata, value):
                    '    .p_model_ary=models,.model_num=ARRAY_SIZE(models),.cfg_mode=0,\n};\n')
     return {
         'points': process,
-        'defaults': notice + 'static const struct point_default imported_defaults[] = {\n' +
-                    '\n'.join(defaults) + '\n};\n',
+        # Rows belong to the common-country part of process.c's single array.
+        'defaults': notice + '\n'.join(defaults) + '\n',
         'fields': fields,
         'collect': collection,
         'transmit': notice + '\n'.join(

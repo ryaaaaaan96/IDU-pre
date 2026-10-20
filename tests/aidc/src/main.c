@@ -56,6 +56,35 @@ ZTEST(aidc,test_original_tables_and_model_acquisition)
     zassert_ok(tr_read(0,4,10012,&v,1)); zassert_equal(v,1);
 }
 
+ZTEST(aidc, test_imported_parameter_defaults_and_restore_policy)
+{
+    DM_SIG_DATA_S data;
+    bool restore;
+    zassert_ok(idu_point_parameters_get(IDU_PARAMETER_COUNTRY_COMMON,
+        247, AIDC_LOCAL_SIG_UART_PORT1_BAUD, &data, &restore));
+    zassert_equal(data.def_value.u32, 165);
+    zassert_equal(data.min_value.u32, 161);
+    zassert_equal(data.max_value.u32, 167);
+    zassert_true(restore);
+    zassert_true(idu_point_restore(247, AIDC_LOCAL_SIG_UART_PORT1_BAUD, 4, NULL));
+    zassert_ok(idu_point_parameters_get(IDU_PARAMETER_COUNTRY_COMMON,
+        247, AIDC_LOCAL_SIG_DEV_SN, &data, &restore));
+    zassert_false(restore);
+    zassert_false(idu_point_restore(247, AIDC_LOCAL_SIG_DEV_SN, 20, NULL));
+    const uint16_t zero_sn[10] = {0};
+    zassert_mem_equal(data.def_value.pst, zero_sn, sizeof(zero_sn));
+
+    /* 8 个 DSP 实例仍然共用同一组初值和范围。 */
+    for (uint16_t dev = 11; dev <= 18; ++dev) {
+        zassert_ok(idu_point_parameters_get(IDU_PARAMETER_COUNTRY_COMMON,
+            dev, AIDC_AC2_BAT_LOW_THRESH, &data, &restore));
+        zassert_equal(data.def_value.s32, 500);
+        zassert_equal(data.min_value.s32, 0);
+        zassert_equal(data.max_value.s32, 65535);
+        zassert_true(restore);
+    }
+}
+
 ZTEST(aidc,test_original_write_map_and_serial_enum)
 {
     uint16_t words[]={162,0}; /* legacy enum for 19200 baud */

@@ -275,7 +275,7 @@ GPIO 输入与 IDU 采样实现合并到 `modules/io_input`，通用 GPIO 和 ID
 
 ## 参考结构点表与直接注册验证（2026-10-20）
 
-三张应用表改为参考结构，默认值另存 `defaults.c`，共享 const 型号表通过模块的
+三张应用表改为参考结构，当时默认值另存 `defaults.c`，共享 const 型号表通过模块的
 临时执行视图读取。删除 `point_metadata` 和字符串回调分发，产品入口只注册回调，
 `dp_init()` 负责通用校验和数据池初始化。质量寄存器、样本年龄过期和旧 NVS 迁移暂缓。
 
@@ -298,3 +298,24 @@ GPIO 输入与 IDU 采样实现合并到 `modules/io_input`，通用 GPIO 和 ID
 
 配置目录随后整理为 `cfg/device.c`、`cfg/inc/*.h`、`cfg/tables/*.c`；构建引用、
 导入输出、快照复现测试和维护文档一并更新。
+
+## 默认值合并及国家参数查询验证（2026-10-20）
+
+删除 `defaults.c`，原默认值、上下限和恢复策略逐行保持不变，合并到
+`process.c` 的单一 const `parameters[]`。新增按国家查询接口，当前只有通用配置，
+DP 回调继续读取通用参数，未接入运行期国家选择。
+
+- `CCACHE_DISABLE=1 ASAN_OPTIONS=detect_leaks=0 bash tests/run.sh` 通过：
+  36 次模拟器执行、232 项 Ztest PASS；Python 29 项中 26 项通过，
+  3 项因缺少外部输入跳过；主机 C 保留 ASan/UBSan。
+- 新增验证覆盖只读查询不改变当前值及 NVS 代次、未知国家/设备/信号拒绝、
+  空指针及失败输出保护、有符号范围和数组初值、DSP 实例复用及恢复策略。
+- 导入测试验证 `process.c` 两个标记区一并更新，保留标记外的手写国家配置；
+  仓库来源快照仍可复现全部导入行，未重新读取外部 AIDC 源码。
+- `CCACHE_DISABLE=1 ./build.sh` 和 `CCACHE_DISABLE=1 ./build.sh --mcuboot --aidc`
+  通过，包括默认布局检查及 MCUboot 签名验证。
+- 默认固件 Flash/RAM 为 94,164 / 82,088 B；大点表固件为
+  107,672 / 118,024 B。RAM 与合并前相同；`nm -S` 确认大点表的
+  `parameters[]` 为 `0x08024b3c` 的只读符号。
+
+具体国家参数尚未提供，本轮不验证国家业务值或国家切换；未做实板验证。

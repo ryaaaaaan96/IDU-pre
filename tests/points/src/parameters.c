@@ -1,4 +1,5 @@
 #include "process/idu_process.h"
+#include "cfg/inc/device.h"
 #include "cfg/inc/signal_ids.h"
 #include "communication/ports/idu_virtual.h"
 #include <dataprocess/params.h>
@@ -67,6 +68,67 @@ void parameter_before(void)
     zassert_ok(dp_params_restore(IDU_DEV_LOCAL));
     zassert_ok(dp_params_restore(IDU_DEV_REMOTE_IO));
     zassert_ok(dp_params_restore(20));
+}
+
+ZTEST(points, test_country_parameter_lookup_is_read_only)
+{
+    DM_SIG_DATA_S data;
+    bool restore;
+
+    zassert_ok(modbus_write_holding_reg(north_client, 16, 31000, 750));
+    uint32_t sequence = param_status().sequence;
+    zassert_ok(idu_point_parameters_get(IDU_PARAMETER_COUNTRY_COMMON,
+        IDU_DEV_LOCAL, IDU_SIG_SAMPLE_PERIOD, &data, &restore));
+    zassert_equal(data.def_value.u16, CONFIG_IDU_SAMPLE_PERIOD_MS);
+    zassert_equal(data.min_value.u16, 100);
+    zassert_equal(data.max_value.u16, 1000);
+    zassert_true(restore);
+    bool recover = true;
+    zassert_ok(idu_point_default(IDU_DEV_LOCAL, IDU_SIG_SAMPLE_PERIOD, &data, &recover));
+    zassert_false(recover);
+    zassert_equal(read_word(31000), 750);
+    zassert_ok(dp_params_reload());
+    zassert_equal(read_word(31000), 750);
+    zassert_equal(param_status().sequence, sequence);
+
+    /* 型号参数保留有符号范围，数组初值保持原字序。 */
+    zassert_ok(idu_point_parameters_get(IDU_PARAMETER_COUNTRY_COMMON,
+        IDU_DEV_REMOTE_IO, IDU_SIG_REMOTE_OFFSET, &data, &restore));
+    zassert_equal(data.def_value.s32, 0);
+    zassert_equal(data.min_value.s32, -100000);
+    zassert_equal(data.max_value.s32, 100000);
+    zassert_ok(idu_point_parameters_get(IDU_PARAMETER_COUNTRY_COMMON,
+        IDU_DEV_LOCAL, IDU_SIG_LABEL, &data, &restore));
+    const uint16_t label[] = {0x4944, 0x552d, 0x7072, 0x6500, 0, 0, 0, 0};
+    zassert_mem_equal(data.def_value.pst, label, sizeof(label));
+    zassert_ok(idu_point_parameters_get(IDU_PARAMETER_COUNTRY_COMMON,
+        IDU_DEV_LOCAL, IDU_SIG_DI, &data, &restore));
+    zassert_equal(data.def_value.u16, 0);
+    zassert_equal(data.min_value.u16, 0);
+    zassert_equal(data.max_value.u16, 0);
+}
+
+ZTEST(points, test_country_parameter_lookup_rejects_unknown_keys)
+{
+    DM_SIG_DATA_S data = {.def_value.u32 = 42, .min_value.u32 = 1, .max_value.u32 = 99};
+    DM_SIG_DATA_S original = data;
+    bool restore = false;
+
+    zassert_equal(idu_point_parameters_get(UINT16_MAX, IDU_DEV_LOCAL,
+        IDU_SIG_SAMPLE_PERIOD, &data, &restore), -ENOTSUP);
+    zassert_equal(idu_point_parameters_get(IDU_PARAMETER_COUNTRY_COMMON, 257,
+        IDU_SIG_SAMPLE_PERIOD, &data, &restore), -ENOENT);
+    zassert_equal(idu_point_parameters_get(IDU_PARAMETER_COUNTRY_COMMON, IDU_DEV_LOCAL,
+        UINT16_MAX, &data, &restore), -ENOENT);
+    zassert_equal(idu_point_parameters_get(IDU_PARAMETER_COUNTRY_COMMON, IDU_DEV_LOCAL,
+        IDU_SIG_SAMPLE_PERIOD, NULL, &restore), -EINVAL);
+    zassert_equal(idu_point_parameters_get(IDU_PARAMETER_COUNTRY_COMMON, IDU_DEV_LOCAL,
+        IDU_SIG_SAMPLE_PERIOD, &data, NULL), -EINVAL);
+    zassert_equal(data.def_value.u32, original.def_value.u32);
+    zassert_equal(data.min_value.u32, original.min_value.u32);
+    zassert_equal(data.max_value.u32, original.max_value.u32);
+    zassert_false(restore);
+    zassert_false(idu_point_restore(257, IDU_SIG_SAMPLE_PERIOD, 2, NULL));
 }
 
 ZTEST(points, test_parameters_local_write_persists_and_applies)

@@ -33,13 +33,15 @@ compatibility.
 
 Product point-table configuration lives in [`app/cfg/`](../app/cfg/README.md),
 outside these modules. `device.c` binds device instances and reusable models; `inc/` holds configuration headers;
-`tables/` holds collection, processing and forwarding tables, signal IDs and
-metadata. Imported data is inline in marked C sections, with symbols in
+`tables/` holds collection, processing and forwarding tables, including default
+values and ranges in `process.c`. Imported data is inline in marked C sections, with symbols in
 `inc/imported_signals.h` and provenance in
 [`docs/point-table-import.json`](../docs/point-table-import.json).
 The three application tables use the reference `DM_SIG_CFG_S`,
 `MODBUS_RTU_TABLE_S` / UPP model layouts and `MB_TABLE_CELL_T`.
-`defaults.c` supplies `DM_SIG_DATA_S` through the reference callback.
+The single const `parameters[]` array in `process.c` supplies `DM_SIG_DATA_S`
+through the reference callback. A country lookup API is reserved in the application;
+registered DP callbacks currently use common parameters.
 Signal macros and function pointers bind business handlers directly; there is no
 runtime callback-name registry or duplicate model metadata.
 Register-to-signal mappings belong
