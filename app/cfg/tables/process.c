@@ -1,12 +1,13 @@
 #include "imported_signals.h"
 #include "device.h"
+#include "tables.h"
 #include "signal_ids.h"
 #include "mvio_signals.h"
 #include "process/idu_process.h"
 #include <errno.h>
 #include <zephyr/sys/util.h>
 
-static const DM_SIG_CFG_S local_process[] = {
+const DM_SIG_CFG_S idu_local_process[] = {
     {.sig_id = IDU_SIG_SAMPLE_PERIOD, .sig_size = 2, .sig_flag = FLAG_PERSISTENCE | FLAG_RT_STORE,
      .data_type = DATA_TYPE_U16, .pf_sig_proc = NULL},
     {.sig_id = IDU_SIG_LABEL, .sig_size = 16, .sig_flag = FLAG_PERSISTENCE | FLAG_RT_STORE,
@@ -55,7 +56,10 @@ static const DM_SIG_CFG_S local_process[] = {
      .data_type = DATA_TYPE_U16, .pf_sig_proc = NULL},
 };
 
-static const DM_SIG_CFG_S mvio_process[] = {
+BUILD_ASSERT(ARRAY_SIZE(idu_local_process) == IDU_LOCAL_PROCESS_COUNT,
+             "Update IDU_LOCAL_PROCESS_COUNT in tables.h");
+
+const DM_SIG_CFG_S idu_mvio_process[] = {
     {.sig_id = IDU_MVIO_DI, .sig_size = 2, .sig_flag = 0,
      .data_type = DATA_TYPE_U16, .pf_sig_proc = NULL},
     {.sig_id = IDU_SIG_CURRENT_1 + 0, .sig_size = 2, .sig_flag = 0,
@@ -88,11 +92,14 @@ static const DM_SIG_CFG_S mvio_process[] = {
 #endif
 };
 
+BUILD_ASSERT(ARRAY_SIZE(idu_mvio_process) == IDU_MVIO_PROCESS_COUNT,
+             "Update IDU_MVIO_PROCESS_COUNT in tables.h");
+
 #if defined(CONFIG_IDU_AIDC_PROFILE)
 /* BEGIN IMPORTED TABLE: points */
 /* Imported from user-provided AIDC source tables. Original tables: SUNGROW.
  * Regenerate with tools/import_aidc.py; no closed library is linked. */
-static const DM_SIG_CFG_S imported_local[] = {
+const DM_SIG_CFG_S idu_imported_local_process[] = {
     {.sig_id=AIDC_LOCAL_SIG_TR_ADDR,.sig_size=2,.sig_flag=5,.data_type=DATA_TYPE_U16,.pf_sig_proc=NULL},
     {.sig_id=AIDC_LOCAL_SIG_VER_PUBLISH,.sig_size=2,.sig_flag=0,.data_type=DATA_TYPE_U16,.pf_sig_proc=idu_initialize_point},
     {.sig_id=AIDC_LOCAL_SIG_VER_BUILD,.sig_size=2,.sig_flag=0,.data_type=DATA_TYPE_U16,.pf_sig_proc=idu_initialize_point},
@@ -285,7 +292,9 @@ static const DM_SIG_CFG_S imported_local[] = {
     {.sig_id=AIDC_LOCAL_SIG_BAT_DEFAULT_VOL,.sig_size=4,.data_type=DATA_TYPE_U16ARRAY}, /* Missing source definition: no INIT value. */
     {.sig_id=AIDC_LOCAL_SIG_SOFT_START,.sig_size=4,.data_type=DATA_TYPE_U16ARRAY}, /* Missing source definition: no INIT value. */
 };
-static const DM_SIG_CFG_S imported_dsp[] = {
+BUILD_ASSERT(ARRAY_SIZE(idu_imported_local_process) == IDU_IMPORTED_LOCAL_PROCESS_COUNT,
+             "Update IDU_IMPORTED_LOCAL_PROCESS_COUNT in tables.h");
+const DM_SIG_CFG_S idu_imported_dsp_process[] = {
     {.sig_id=AIDC_PARAM_PRODUCT_TYPE,.sig_size=30,.sig_flag=0,.data_type=DATA_TYPE_STRING,.pf_sig_proc=NULL},
     {.sig_id=AIDC_PARAM_PRODUCT_CODE,.sig_size=16,.sig_flag=0,.data_type=DATA_TYPE_STRING,.pf_sig_proc=NULL},
     {.sig_id=AIDC_PARAM_CLIENT_CODE,.sig_size=20,.sig_flag=0,.data_type=DATA_TYPE_STRING,.pf_sig_proc=NULL},
@@ -328,6 +337,8 @@ static const DM_SIG_CFG_S imported_dsp[] = {
     {.sig_id=AIDC_GRID_FREQUENCY,.sig_size=4,.sig_flag=0,.data_type=DATA_TYPE_S32,.pf_sig_proc=NULL},
     {.sig_id=AIDC_ALTITUDE_DEFAULT,.sig_size=4,.sig_flag=0,.data_type=DATA_TYPE_S32,.pf_sig_proc=NULL},
 };
+BUILD_ASSERT(ARRAY_SIZE(idu_imported_dsp_process) == IDU_IMPORTED_DSP_PROCESS_COUNT,
+             "Update IDU_IMPORTED_DSP_PROCESS_COUNT in tables.h");
 /* END IMPORTED TABLE: points */
 #endif
 

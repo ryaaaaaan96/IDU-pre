@@ -36,6 +36,7 @@ class ImportTablesTest(unittest.TestCase):
                                  "manual country overrides\n"),
             "tables/transmit.c": "manual mapping\n" + region("transmit"),
             "tables/collect.c": region("fields") + "manual polls\n" + region("collect"),
+            "inc/tables.h": "manual declarations\n" + region("counts") + "manual counts\n",
             "device.c": "manual device\n" + region("devices"),
         }
         for filename, content in self.contents.items():
@@ -60,6 +61,9 @@ class ImportTablesTest(unittest.TestCase):
                     "manual country overrides\n")
         self.assertEqual((self.output / "tables/process.c").read_text(), expected)
         self.assertFalse((self.output / "tables/defaults.c").exists())
+        self.assertEqual((self.output / "inc/tables.h").read_text(),
+                         "manual declarations\n" + region("counts", self.rows["counts"]) +
+                         "manual counts\n")
         self.assertEqual((self.output / "inc/imported_signals.h").read_text(), self.symbols)
         self.assertEqual(json.loads((self.output / "migration.json").read_text()),
                          self.metadata)
@@ -158,7 +162,7 @@ class ImportTablesTest(unittest.TestCase):
     def test_report_cannot_replace_a_generated_table_or_symbol_header(self):
         before = snapshot(self.root)
         for relative in ("tables/process.c", "tables/../tables/process.c",
-                         "inc/imported_signals.h"):
+                         "inc/imported_signals.h", "inc/tables.h"):
             with self.subTest(relative=relative):
                 with self.assertRaisesRegex(ValueError, "Report path conflicts with table output"):
                     self.write(report_path=self.output / relative)
@@ -167,17 +171,19 @@ class ImportTablesTest(unittest.TestCase):
 
 
 class ReferenceSnapshotTest(unittest.TestCase):
+    def setUp(self):
+        self.project = Path(__file__).resolve().parents[1]
+        self.metadata = json.loads((self.project / 'docs/point-table-import.json').read_text())
+        self.symbols = importer.Symbols()
+        self.symbols.read((self.project / 'app/cfg/inc/imported_signals.h').read_text())
+        self.symbols.expr.update({k[5:]: v for k, v in list(self.symbols.expr.items())
+                                  if k.startswith('AIDC_')})
+
     def test_snapshot_renders_current_tables_with_direct_callbacks(self):
-        project = Path(__file__).resolve().parents[1]
-        metadata = json.loads((project / 'docs/point-table-import.json').read_text())
-        symbols = importer.Symbols()
-        symbols.read((project / 'app/cfg/inc/imported_signals.h').read_text())
-        symbols.expr.update({k[5:]: v for k, v in list(symbols.expr.items())
-                             if k.startswith('AIDC_')})
-        rows = importer.render_reference_tables(metadata, symbols.value)
+        rows = importer.render_reference_tables(self.metadata, self.symbols.value)
         self.assertEqual(set(rows), set(importer.TABLE_FILES))
         for name, content in rows.items():
-            path = project / 'app/cfg' / importer.TABLE_FILES[name]
+            path = self.project / 'app/cfg' / importer.TABLE_FILES[name]
             text = path.read_text()
             self.assertEqual(importer.replace_imported_tables(text, {name: content}, path), text)
         self.assertIn('.pf_sig_proc=idu_serial_setting', rows['points'])
@@ -185,6 +191,23 @@ class ReferenceSnapshotTest(unittest.TestCase):
         self.assertIn('.pf_sig_proc=idu_unsupported_service', rows['points'])
         self.assertNotIn('idu_aidc_process', rows['points'])
         self.assertNotIn('point_metadata.c', importer.TABLE_FILES.values())
+
+    def test_counts_follow_changed_points_models_and_mappings(self):
+        # Both defined local points and unresolved mappings occupy DP rows.
+        for dev in (247, 11):
+            row = next(r for r in self.metadata['process_descriptors'] if r['device'] == dev)
+            self.metadata['process_descriptors'].remove(row)
+        self.metadata['unresolved_mappings'].pop()
+        self.metadata['transmit'].pop()
+        rows = importer.render_reference_tables(self.metadata, self.symbols.value)
+        counts = importer.Symbols()
+        counts.read(rows['counts'])
+        self.assertEqual(counts.value('IDU_IMPORTED_LOCAL_PROCESS_COUNT'), 189)
+        self.assertEqual(counts.value('IDU_IMPORTED_DSP_PROCESS_COUNT'), 40)
+        self.assertEqual(counts.value('IDU_IMPORTED_MODEL_FIELD_COUNT'), 40)
+        self.assertEqual(counts.value('IDU_IMPORTED_TRANSMIT_COUNT'), 106)
+        self.assertEqual(len(importer.entries(rows['points'], 'idu_imported_local_process')), 189)
+        self.assertEqual(len(importer.entries(rows['points'], 'idu_imported_dsp_process')), 40)
 
 
 if __name__ == "__main__":

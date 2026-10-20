@@ -1,16 +1,9 @@
 #include "device.h"
+#include "tables.h"
 #include "signal_ids.h"
 #include "mvio_signals.h"
 #include <platform_callback.h>
 #include <errno.h>
-
-/* 配置表按参考工程组织为一个编译单元，保留分文件维护。
- * 数组在此可见，设备关联直接使用指针和 ARRAY_SIZE，无需手工同步条目数。
- * tables 下的 .c 文件不再单独加入编译。
- */
-#include "tables/process.c"
-#include "tables/collect.c"
-#include "tables/transmit.c"
 
 /* 设备身份及其点表关系全部在此声明，设备表和关联的点表均保存在 Flash。
  * 同型号实例直接指向同一数组；通用校验和运行状态初始化由 DP 模块完成。
@@ -20,26 +13,26 @@ static const DEV_TABLE_S devices[] = {
         .dev_id = IDU_DEV_LOCAL,
         .ptl_tbl_cfg[0] = {
             .proto_type = PRO_DATA_PROCESS,
-            .sig_num = ARRAY_SIZE(local_process),
-            .pst_table = local_process,
+            .sig_num = IDU_LOCAL_PROCESS_COUNT,
+            .pst_table = idu_local_process,
         },
         .ptl_tbl_cfg[1] = {
             .proto_type = PRO_MB_SLAVE,
-            .sig_num = ARRAY_SIZE(transmit_table),
-            .pst_table = transmit_table,
+            .sig_num = IDU_TRANSMIT_COUNT,
+            .pst_table = idu_transmit_table,
         },
     },
     {
         .dev_id = IDU_DEV_REMOTE_IO, .port = 0, .coll_addr = 1,
         .ptl_tbl_cfg[0] = {
             .proto_type = PRO_DATA_PROCESS,
-            .sig_num = ARRAY_SIZE(mvio_process),
-            .pst_table = mvio_process,
+            .sig_num = IDU_MVIO_PROCESS_COUNT,
+            .pst_table = idu_mvio_process,
         },
         .ptl_tbl_cfg[1] = {
             .proto_type = PRO_MB_MASTER,
-            .sig_num = ARRAY_SIZE(mvio_collect),
-            .pst_table = mvio_collect,
+            .sig_num = IDU_MVIO_COLLECT_COUNT,
+            .pst_table = idu_mvio_collect,
         },
     },
 #if defined(CONFIG_IDU_AIDC_PROFILE)
@@ -47,8 +40,8 @@ static const DEV_TABLE_S devices[] = {
         .dev_id = 247,
         .ptl_tbl_cfg[0] = {
             .proto_type = PRO_DATA_PROCESS,
-            .sig_num = ARRAY_SIZE(imported_local),
-            .pst_table = imported_local,
+            .sig_num = IDU_IMPORTED_LOCAL_PROCESS_COUNT,
+            .pst_table = idu_imported_local_process,
         },
     },
 /* BEGIN IMPORTED TABLE: devices */
@@ -58,104 +51,104 @@ static const DEV_TABLE_S devices[] = {
         .dev_id = 11, .coll_addr = 1, .port = 1,
         .ptl_tbl_cfg[0] = {
             .proto_type = PRO_DATA_PROCESS,
-            .sig_num = ARRAY_SIZE(imported_dsp),
-            .pst_table = imported_dsp,
+            .sig_num = IDU_IMPORTED_DSP_PROCESS_COUNT,
+            .pst_table = idu_imported_dsp_process,
         },
         .ptl_tbl_cfg[1] = {
             .proto_type = PRO_UPP_MASTER,
-            .sig_num = IMPORTED_MODEL_FIELD_COUNT,
-            .pst_table = &imported_models,
+            .sig_num = IDU_IMPORTED_MODEL_FIELD_COUNT,
+            .pst_table = &idu_imported_models,
         },
     },
     {
         .dev_id = 12, .coll_addr = 2, .port = 1,
         .ptl_tbl_cfg[0] = {
             .proto_type = PRO_DATA_PROCESS,
-            .sig_num = ARRAY_SIZE(imported_dsp),
-            .pst_table = imported_dsp,
+            .sig_num = IDU_IMPORTED_DSP_PROCESS_COUNT,
+            .pst_table = idu_imported_dsp_process,
         },
         .ptl_tbl_cfg[1] = {
             .proto_type = PRO_UPP_MASTER,
-            .sig_num = IMPORTED_MODEL_FIELD_COUNT,
-            .pst_table = &imported_models,
+            .sig_num = IDU_IMPORTED_MODEL_FIELD_COUNT,
+            .pst_table = &idu_imported_models,
         },
     },
     {
         .dev_id = 13, .coll_addr = 3, .port = 1,
         .ptl_tbl_cfg[0] = {
             .proto_type = PRO_DATA_PROCESS,
-            .sig_num = ARRAY_SIZE(imported_dsp),
-            .pst_table = imported_dsp,
+            .sig_num = IDU_IMPORTED_DSP_PROCESS_COUNT,
+            .pst_table = idu_imported_dsp_process,
         },
         .ptl_tbl_cfg[1] = {
             .proto_type = PRO_UPP_MASTER,
-            .sig_num = IMPORTED_MODEL_FIELD_COUNT,
-            .pst_table = &imported_models,
+            .sig_num = IDU_IMPORTED_MODEL_FIELD_COUNT,
+            .pst_table = &idu_imported_models,
         },
     },
     {
         .dev_id = 14, .coll_addr = 4, .port = 1,
         .ptl_tbl_cfg[0] = {
             .proto_type = PRO_DATA_PROCESS,
-            .sig_num = ARRAY_SIZE(imported_dsp),
-            .pst_table = imported_dsp,
+            .sig_num = IDU_IMPORTED_DSP_PROCESS_COUNT,
+            .pst_table = idu_imported_dsp_process,
         },
         .ptl_tbl_cfg[1] = {
             .proto_type = PRO_UPP_MASTER,
-            .sig_num = IMPORTED_MODEL_FIELD_COUNT,
-            .pst_table = &imported_models,
+            .sig_num = IDU_IMPORTED_MODEL_FIELD_COUNT,
+            .pst_table = &idu_imported_models,
         },
     },
     {
         .dev_id = 15, .coll_addr = 5, .port = 1,
         .ptl_tbl_cfg[0] = {
             .proto_type = PRO_DATA_PROCESS,
-            .sig_num = ARRAY_SIZE(imported_dsp),
-            .pst_table = imported_dsp,
+            .sig_num = IDU_IMPORTED_DSP_PROCESS_COUNT,
+            .pst_table = idu_imported_dsp_process,
         },
         .ptl_tbl_cfg[1] = {
             .proto_type = PRO_UPP_MASTER,
-            .sig_num = IMPORTED_MODEL_FIELD_COUNT,
-            .pst_table = &imported_models,
+            .sig_num = IDU_IMPORTED_MODEL_FIELD_COUNT,
+            .pst_table = &idu_imported_models,
         },
     },
     {
         .dev_id = 16, .coll_addr = 6, .port = 1,
         .ptl_tbl_cfg[0] = {
             .proto_type = PRO_DATA_PROCESS,
-            .sig_num = ARRAY_SIZE(imported_dsp),
-            .pst_table = imported_dsp,
+            .sig_num = IDU_IMPORTED_DSP_PROCESS_COUNT,
+            .pst_table = idu_imported_dsp_process,
         },
         .ptl_tbl_cfg[1] = {
             .proto_type = PRO_UPP_MASTER,
-            .sig_num = IMPORTED_MODEL_FIELD_COUNT,
-            .pst_table = &imported_models,
+            .sig_num = IDU_IMPORTED_MODEL_FIELD_COUNT,
+            .pst_table = &idu_imported_models,
         },
     },
     {
         .dev_id = 17, .coll_addr = 7, .port = 1,
         .ptl_tbl_cfg[0] = {
             .proto_type = PRO_DATA_PROCESS,
-            .sig_num = ARRAY_SIZE(imported_dsp),
-            .pst_table = imported_dsp,
+            .sig_num = IDU_IMPORTED_DSP_PROCESS_COUNT,
+            .pst_table = idu_imported_dsp_process,
         },
         .ptl_tbl_cfg[1] = {
             .proto_type = PRO_UPP_MASTER,
-            .sig_num = IMPORTED_MODEL_FIELD_COUNT,
-            .pst_table = &imported_models,
+            .sig_num = IDU_IMPORTED_MODEL_FIELD_COUNT,
+            .pst_table = &idu_imported_models,
         },
     },
     {
         .dev_id = 18, .coll_addr = 8, .port = 1,
         .ptl_tbl_cfg[0] = {
             .proto_type = PRO_DATA_PROCESS,
-            .sig_num = ARRAY_SIZE(imported_dsp),
-            .pst_table = imported_dsp,
+            .sig_num = IDU_IMPORTED_DSP_PROCESS_COUNT,
+            .pst_table = idu_imported_dsp_process,
         },
         .ptl_tbl_cfg[1] = {
             .proto_type = PRO_UPP_MASTER,
-            .sig_num = IMPORTED_MODEL_FIELD_COUNT,
-            .pst_table = &imported_models,
+            .sig_num = IDU_IMPORTED_MODEL_FIELD_COUNT,
+            .pst_table = &idu_imported_models,
         },
     },
 /* END IMPORTED TABLE: devices */

@@ -1,10 +1,11 @@
 #include "imported_signals.h"
 #include "device.h"
+#include "tables.h"
 #include "mvio_signals.h"
 #include "signal_ids.h"
 #include <zephyr/sys/util.h>
 
-static const MODBUS_RTU_TABLE_S mvio_collect[] = {
+const MODBUS_RTU_TABLE_S idu_mvio_collect[] = {
     {.sig_id = IDU_MVIO_DI, .reg_addr = 8152, .reg_num = 1, .reg_type = 4,
      .rqst_cyl = IDU_COLLECT_SAMPLE, .byte_order = BYTE_ORDER_DEFAULT},
     {.sig_id = IDU_MVIO_CURRENT_1 + 0, .reg_addr = 8163, .reg_num = 1, .reg_type = 4,
@@ -35,6 +36,9 @@ static const MODBUS_RTU_TABLE_S mvio_collect[] = {
      .reg_type = 3, .flag = FLAG_0x03_w_0x10},
 #endif
 };
+
+BUILD_ASSERT(ARRAY_SIZE(idu_mvio_collect) == IDU_MVIO_COLLECT_COUNT,
+             "Update IDU_MVIO_COLLECT_COUNT in tables.h");
 
 #if defined(CONFIG_IDU_AIDC_PROFILE)
 /* BEGIN IMPORTED TABLE: fields */
@@ -105,25 +109,24 @@ static const UPP_M_MOD models[] = {
     {.p_data=model_102,.data_num=ARRAY_SIZE(model_102),.mod_id=102},
     {.p_data=model_103,.data_num=ARRAY_SIZE(model_103),.mod_id=103},
 };
-static const UPP_M_MOD_REG imported_models = {
+const UPP_M_MOD_REG idu_imported_models = {
     .p_model_ary=models,.model_num=ARRAY_SIZE(models),.cfg_mode=0,
 };
-enum {
-    IMPORTED_MODEL_FIELD_COUNT = ARRAY_SIZE(model_1) +
-        ARRAY_SIZE(model_2) +
-        ARRAY_SIZE(model_99) +
-        ARRAY_SIZE(model_100) +
-        ARRAY_SIZE(model_102) +
-        ARRAY_SIZE(model_103),
-};
+BUILD_ASSERT(ARRAY_SIZE(model_1) +
+             ARRAY_SIZE(model_2) +
+             ARRAY_SIZE(model_99) +
+             ARRAY_SIZE(model_100) +
+             ARRAY_SIZE(model_102) +
+             ARRAY_SIZE(model_103) == IDU_IMPORTED_MODEL_FIELD_COUNT,
+             "Update IDU_IMPORTED_MODEL_FIELD_COUNT in tables.h");
 /* END IMPORTED TABLE: collect */
 #endif
 
 const UPP_M_MOD_REG *idu_model_table(uint16_t *count)
 {
 #if defined(CONFIG_IDU_AIDC_PROFILE)
-    *count = IMPORTED_MODEL_FIELD_COUNT;
-    return &imported_models;
+    *count = IDU_IMPORTED_MODEL_FIELD_COUNT;
+    return &idu_imported_models;
 #else
     *count = 0;
     return NULL;

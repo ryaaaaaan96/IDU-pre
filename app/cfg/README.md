@@ -14,6 +14,7 @@ cfg/
 ├── device.c              # 设备关联及配置回调注册
 ├── inc/                  # 本目录全部配置头文件
 │   ├── device.h
+│   ├── tables.h           # 点表声明及编译期数量
 │   ├── mvio_signals.h
 │   ├── signal_ids.h
 │   └── imported_signals.h
@@ -26,6 +27,7 @@ cfg/
 | 文件 | 内容 |
 | --- | --- |
 | `device.c`、`inc/device.h` | 完整 `DEV_TABLE_S` 配置及 `pltcb_*` 注册，周期编码转毫秒 |
+| `inc/tables.h` | `extern const` 点表声明、手写及导入点表的数量枚举 |
 | `inc/mvio_signals.h` | MV-IO 信号枚举和采集周期编码 |
 | `tables/process.c` | `DM_SIG_CFG_S` 信号定义；`parameters[]` 集中默认值、范围及恢复策略 |
 | `tables/collect.c` | `MODBUS_RTU_TABLE_S`；可选 UPP 模型使用 `UPP_M_MOD_DATA / UPP_M_MOD / UPP_M_MOD_REG` |
@@ -37,9 +39,13 @@ cfg/
 默认值和范围通过原接口 `DM_SIG_DATA_S` 返回，不改变参考结构。
 处理、采集和转发表的行直接使用结构体字段初始化，信号 ID、标志和字序保留命名常量。
 `transmit.c` 逐项列出实际寄存器地址，北向窗口不再通过设备实例宏自动生成。
-与参考工程一致，`device.c` 包含三份表文件，CMake 仅编译 `device.c`。
-这样静态设备配置可直接引用私有数组，并用 `ARRAY_SIZE` 计算数量；三表不单独编译，
-不需要导出全局数组或手工维护行数。此组织方式仅用于应用配置，通用模块仍独立构建。
+三表由 CMake 独立编译，通过 `inc/tables.h` 的 `extern const` 声明供设备表引用，
+`device.c` 不包含 `.c` 文件。设备关联仍为编译期常量，没有运行时装配。
+数量使用枚举常量：C 的 `extern const` 数量变量不能用于静态结构体初始化，
+不完整数组的声明也不能直接用于 `ARRAY_SIZE`。
+每张表在定义处使用 `BUILD_ASSERT(ARRAY_SIZE(...) == ..._COUNT)` 校验；
+声明和定义都不指定数组长度，避免缺少初始化项时被自动补零。
+手写点表增删条目需同步调整枚举，导入点表的数量由导入工具同步生成。
 
 初始化由 `app/process/points.c` 调用 `idu_register_point_tables()`、`dp_init()`、总线初始化、参数恢复和
 处理/采集启动。原始采样到信号的映射及工程量换算留在业务层，硬件模块只返回样本。
@@ -53,15 +59,17 @@ cfg/
 
 | 设备 | `ptl_tbl_cfg[0]`：处理表 | `ptl_tbl_cfg[1]`：协议表 |
 | --- | --- | --- |
-| 本地设备 1 | `process.c` 的 `local_process[]` | `PRO_MB_SLAVE` → `transmit.c` 的 `transmit_table[]` |
-| MV-IO 设备 10 | `process.c` 的 `mvio_process[]` | `PRO_MB_MASTER` → `collect.c` 的 `mvio_collect[]` |
-| 可选本地业务设备 247 | `process.c` 的 `imported_local[]` | 不单独挂协议表；寄存器映射由设备 1 的转发表引用 |
-| 可选 DSP 设备 11–18 | 共用 `process.c` 的 `imported_dsp[]` | `PRO_UPP_MASTER` → `collect.c` 的 `imported_models` |
+| 本地设备 1 | `process.c` 的 `idu_local_process[]` | `PRO_MB_SLAVE` → `transmit.c` 的 `idu_transmit_table[]` |
+| MV-IO 设备 10 | `process.c` 的 `idu_mvio_process[]` | `PRO_MB_MASTER` → `collect.c` 的 `idu_mvio_collect[]` |
+| 可选本地业务设备 247 | `process.c` 的 `idu_imported_local_process[]` | 不单独挂协议表；寄存器映射由设备 1 的转发表引用 |
+| 可选 DSP 设备 11–18 | 共用 `process.c` 的 `idu_imported_dsp_process[]` | `PRO_UPP_MASTER` → `collect.c` 的 `idu_imported_models` |
 
 处理表类型统一为 `PRO_DATA_PROCESS`。`idu_register_point_tables()` 注册设备表 getter，
 `idu_device_table()` 只返回 `devices`，`dp_init()` 取得完整关联并校验。
 设备描述与点表都在 Flash，没有首次调用时修改配置的操作。
-UPP 的 `sig_num` 使用 `IMPORTED_MODEL_FIELD_COUNT`，由各模型字段数组的长度之和计算。
+UPP 的 `sig_num` 使用 `IDU_IMPORTED_MODEL_FIELD_COUNT`，由工具统计所选模型字段数，
+在 `collect.c` 用各模型字段数组的实际长度之和校验。模型内部数组保持 `static const`，
+只导出设备绑定需要的注册表。
 
 ## 修改设备或测点
 
@@ -73,6 +81,8 @@ UPP 的 `sig_num` 使用 `IMPORTED_MODEL_FIELD_COUNT`，由各模型字段数组
    不跨未定义空洞合帧；`rqst_cyl` 经设备配置中的转换函数解释，不直接当毫秒。
 4. 在 `transmit.c` 增加北向映射。新窗口也需加入
    `app/communication/config/mvio_config.c` 的 `extensions[]`，控制命令留在通信配置。
+   手写三表增删行后，同步修改 `inc/tables.h` 中相应数量；虚拟采集和大点表配置
+   的条件分支也须匹配，数量不一致时构建报错。
 5. 同型号 MV-IO 实例直接加入 `device.c` 的 `devices[]`，指定端口、从机地址，
    显式引用共享处理/采集表，并在 `transmit.c`
    显式补充该设备的北向映射；新总线仍须注册通信后端。
@@ -116,11 +126,12 @@ int err = idu_point_parameters_get(IDU_PARAMETER_COUNTRY_COMMON,
 
 ## 更新导入点表
 
-`tools/import_aidc.py` 更新 `.c` 中的成对标记区，保留标记外的手写内容：
+`tools/import_aidc.py` 更新 `.c` 和头文件中的成对标记区，保留标记外的手写内容：
 
 - `process.c`：`points`、`defaults`；后者仅生成 `parameters[]` 内的通用参数行。
 - `collect.c`：`fields`、`collect`；`transmit.c`：`transmit`。
 - `device.c`：`devices`。
+- `inc/tables.h`：`counts`，与导入数组一起更新数量枚举。
 
 从工作区执行：
 

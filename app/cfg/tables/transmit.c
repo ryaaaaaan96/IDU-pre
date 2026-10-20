@@ -1,9 +1,9 @@
 #include "imported_signals.h"
 #include "signal_ids.h"
-#include "device.h"
+#include "tables.h"
 #include "mvio_signals.h"
 
-static const MB_TABLE_CELL_T transmit_table[] = {
+const MB_TABLE_CELL_T idu_transmit_table[] = {
 #if defined(CONFIG_IDU_AIDC_PROFILE)
 /* BEGIN IMPORTED TABLE: transmit */
 /* Imported from user-provided AIDC source tables. Original tables: SUNGROW.
@@ -214,3 +214,6 @@ static const MB_TABLE_CELL_T transmit_table[] = {
      .dev_id = IDU_DEV_LOCAL, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
 #endif
 };
+
+BUILD_ASSERT(ARRAY_SIZE(idu_transmit_table) == IDU_TRANSMIT_COUNT,
+             "Update IDU_TRANSMIT_COUNT in tables.h");

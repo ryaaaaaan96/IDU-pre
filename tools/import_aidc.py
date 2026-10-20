@@ -4,7 +4,7 @@
 Only integer enum/define expressions are evaluated (AST allowlist). Identical
 rows are deduplicated; conflicting IDs/mappings abort. Original source attribution
 and hashes are retained. Runtime firmware never reads the reference repository.
-Generated rows replace marked regions in complete C tables; text outside those
+Generated rows and counts replace marked regions in C tables/headers; text outside those
 regions is preserved. All destination markers are checked before any file is written.
 """
 from pathlib import Path
@@ -18,6 +18,7 @@ TABLE_FILES = {
     'transmit': 'tables/transmit.c',
     'fields': 'tables/collect.c',
     'collect': 'tables/collect.c',
+    'counts': 'inc/tables.h',
     'devices': 'device.c',
 }
 
@@ -82,8 +83,12 @@ def render_reference_tables(metadata, value):
             f'    {{.sig_id={signal_symbol(row)},.sig_size={row["count"]*2},'
             '.data_type=DATA_TYPE_U16ARRAY}, /* Missing source definition: no INIT value. */')
     process = notice
-    for dev, name in ((247, 'imported_local'), (11, 'imported_dsp')):
-        process += f'static const DM_SIG_CFG_S {name}[] = {{\n' + '\n'.join(groups[dev]) + '\n};\n'
+    for dev, name, count in (
+            (247, 'idu_imported_local_process', 'IDU_IMPORTED_LOCAL_PROCESS_COUNT'),
+            (11, 'idu_imported_dsp_process', 'IDU_IMPORTED_DSP_PROCESS_COUNT')):
+        process += f'const DM_SIG_CFG_S {name}[] = {{\n' + '\n'.join(groups[dev]) + '\n};\n'
+        process += (f'BUILD_ASSERT(ARRAY_SIZE({name}) == {count},\n'
+                    f'             "Update {count} in tables.h");\n')
 
     # Retain only the selected fields used by the existing model backend.
     # The full original field catalog remains in the provenance report.
@@ -112,17 +117,24 @@ def render_reference_tables(metadata, value):
     for model in models:
         collection += (f'    {{.p_data=model_{model},.data_num=ARRAY_SIZE(model_{model}),'
                        f'.mod_id={model}}},\n')
-    collection += ('};\nstatic const UPP_M_MOD_REG imported_models = {\n'
+    collection += ('};\nconst UPP_M_MOD_REG idu_imported_models = {\n'
                    '    .p_model_ary=models,.model_num=ARRAY_SIZE(models),.cfg_mode=0,\n};\n')
-    collection += ('enum {\n    IMPORTED_MODEL_FIELD_COUNT = ' +
-                   ' +\n        '.join(f'ARRAY_SIZE(model_{model})' for model in models) +
-                   ',\n};\n')
+    collection += ('BUILD_ASSERT(' +
+                   ' +\n             '.join(f'ARRAY_SIZE(model_{model})' for model in models) +
+                   ' == IDU_IMPORTED_MODEL_FIELD_COUNT,\n'
+                   '             "Update IDU_IMPORTED_MODEL_FIELD_COUNT in tables.h");\n')
     return {
         'points': process,
         # Rows belong to the common-country part of process.c's single array.
         'defaults': notice + '\n'.join(defaults) + '\n',
         'fields': fields,
         'collect': collection,
+        'counts': (notice + 'enum {\n'
+                   f'    IDU_IMPORTED_LOCAL_PROCESS_COUNT = {len(groups[247])},\n'
+                   f'    IDU_IMPORTED_DSP_PROCESS_COUNT = {len(groups[11])},\n'
+                   f'    IDU_IMPORTED_MODEL_FIELD_COUNT = {sum(map(len, models.values()))},\n'
+                   f'    IDU_IMPORTED_TRANSMIT_COUNT = {len(metadata["transmit"])},\n'
+                   '};\n'),
         'transmit': notice + '\n'.join(
             f'    {{.sig_id={signal_symbol(r)},.reg_addr={r["address"]},.reg_num={r["count"]},'
             f'.dev_id={r["device"]},.reg_type={r["function"]},.byte_order=BYTE_ORDER_DEFAULT}},'
@@ -132,13 +144,13 @@ def render_reference_tables(metadata, value):
             f'        .dev_id = {dev}, .coll_addr = {dev-10}, .port = 1,\n'
             '        .ptl_tbl_cfg[0] = {\n'
             '            .proto_type = PRO_DATA_PROCESS,\n'
-            '            .sig_num = ARRAY_SIZE(imported_dsp),\n'
-            '            .pst_table = imported_dsp,\n'
+            '            .sig_num = IDU_IMPORTED_DSP_PROCESS_COUNT,\n'
+            '            .pst_table = idu_imported_dsp_process,\n'
             '        },\n'
             '        .ptl_tbl_cfg[1] = {\n'
             '            .proto_type = PRO_UPP_MASTER,\n'
-            '            .sig_num = IMPORTED_MODEL_FIELD_COUNT,\n'
-            '            .pst_table = &imported_models,\n'
+            '            .sig_num = IDU_IMPORTED_MODEL_FIELD_COUNT,\n'
+            '            .pst_table = &idu_imported_models,\n'
             '        },\n'
             '    },'
             for dev in range(11, 19)) + '\n',
@@ -167,7 +179,7 @@ def replace_imported_tables(text, tables, filename):
 
 
 def write_tables(output, tables, symbols, metadata, template_dir=None, report_path=None):
-    """Prepare every C file before writing; missing files use repository templates."""
+    """Prepare all tables/headers before writing; missing files use repository templates."""
     if set(tables) != set(TABLE_FILES):
         raise ValueError('Incomplete imported table set')
     output = Path(output)
