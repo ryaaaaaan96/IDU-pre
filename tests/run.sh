@@ -34,7 +34,7 @@ env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/aidc -d "$test_dir/aidc"
 timeout 30s "$test_dir/aidc/zephyr/zephyr.exe" -flash_in_ram
 
-# Active MV-IO firmware contracts, legacy flash import and bounded port recovery.
+# Active MV-IO contracts, legacy partition isolation and bounded port recovery.
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/mvio -d "$test_dir/mvio"
 timeout 30s "$test_dir/mvio/zephyr/zephyr.exe" -flash_in_ram

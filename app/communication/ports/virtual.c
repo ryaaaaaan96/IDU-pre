@@ -2,8 +2,7 @@
  * the actual client/server stacks without claiming to emulate UART/RTU timing.
  */
 #include "communication/ports/idu_virtual.h"
-#include "cfg/tables/signal_ids.h"
-#include "cfg/devices/device_config.h"
+#include "cfg/inc/signal_ids.h"
 #include <io_input/idu_inputs.h>
 #include <dataprocess/points.h>
 #include <transmit/modbus_adapter.h>
@@ -156,7 +155,8 @@ int idu_virtual_port_init(void)
     if (client_iface < 0 || server_iface < 0) {
         return -ENODEV;
     }
-    const struct dp_equip_cfg *cfg = idu_equipment_config();
+    const struct dp_equip_cfg *cfg = dp_config();
+    if (!cfg) { return -EACCES; }
     size_t bus_devices = 0;
     for (size_t i = 0; i < cfg->device_count; ++i) {
         if (cfg->devices[i].bus_id == 0) { ++bus_devices; }

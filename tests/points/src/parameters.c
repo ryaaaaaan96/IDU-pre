@@ -1,5 +1,5 @@
 #include "process/idu_process.h"
-#include "cfg/tables/signal_ids.h"
+#include "cfg/inc/signal_ids.h"
 #include "communication/ports/idu_virtual.h"
 #include <dataprocess/params.h>
 #include <dataprocess/points.h>

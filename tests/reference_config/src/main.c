@@ -133,12 +133,43 @@ ZTEST(reference_configuration, test_original_tables_validate_before_initializati
     local_signals[0].sig_flag = FLAG_COLLECT;
     zassert_equal(dp_init(), -1); /* No forwarding without durability policy. */
     local_signals[0].sig_flag = 0;
-    acquisition[0].flag = 1;
-    zassert_equal(dp_init(), -1); /* Unsupported segmented tables fail closed. */
+    acquisition[0].flag = 8;
+    zassert_equal(dp_init(), -1); /* Unsupported FC17 policy fails closed. */
     acquisition[0].flag = 0;
     acquisition[0].byte_order = 7;
     zassert_equal(dp_init(), -1);
     acquisition[0].byte_order = BYTE_ORDER_BIG;
+
+    /* A model table uses a registry pointer and a total field count. */
+    UPP_M_MOD_DATA model_field = {.sig_id = 10, .mod_data_offset = 20,
+        .mod_data_len = 4, .mod_data_type = DATA_TYPE_U32,
+        .data_len = 4, .data_type = DATA_TYPE_U32, .rw_mode = 1,
+        .rqst_cyl = 200, .dec_p = 1};
+    UPP_M_MOD model = {.p_data = &model_field, .data_num = 1, .mod_id = 99};
+    UPP_M_MOD_REG registry = {.p_model_ary = &model, .model_num = 1};
+    DEV_TBL_CFG_S original = table[1].ptl_tbl_cfg[1];
+    table[1].ptl_tbl_cfg[1] = (DEV_TBL_CFG_S){PRO_UPP_MASTER, 1, &registry};
+    const struct dp_equip_cfg *prepared;
+    zassert_not_equal(dp_reference_prepare(&prepared), 0); /* Missing cycle policy. */
+    zassert_is_null(prepared);
+    zassert_ok(dp_register_model_period(period));
+    model_field.dec_p = 2;
+    zassert_not_equal(dp_reference_prepare(&prepared), 0);
+    model_field.dec_p = 1;
+    model_field.data_type = DATA_TYPE_U16;
+    zassert_not_equal(dp_reference_prepare(&prepared), 0);
+    model_field.data_type = DATA_TYPE_U32;
+    table[1].ptl_tbl_cfg[1].sig_num = 2;
+    zassert_not_equal(dp_reference_prepare(&prepared), 0);
+    table[1].ptl_tbl_cfg[1].sig_num = 1;
+    zassert_ok(dp_reference_prepare(&prepared));
+    struct co_cfg model_poll;
+    zassert_not_null(dp_config_collect(prepared, 0, &model_poll));
+    zassert_true(model_poll.model_protocol);
+    zassert_equal(model_poll.model_id, 99);
+    zassert_equal(model_poll.address, 20);
+    zassert_equal(model_poll.count, 2);
+    table[1].ptl_tbl_cfg[1] = original;
 
     zassert_ok(dp_init());
     const struct dp_equip_cfg *cfg = dp_config();
@@ -155,12 +186,21 @@ ZTEST(reference_configuration, test_original_tables_validate_before_initializati
     zassert_equal(cfg->devices[0].dev_id, 11);
     zassert_equal(cfg->devices[0].unit_id, 1);
     zassert_equal(cfg->collect_count, 1);
-    zassert_equal(cfg->collect[0].address, 500);
-    zassert_equal(cfg->collect[0].period_ms, 8000);
-    zassert_equal(cfg->collect[0].fields[0].order, DP_HIGH_WORD_FIRST);
+    struct co_cfg poll;
+    zassert_not_null(dp_config_collect(cfg, 0, &poll));
+    zassert_is_null(cfg->collect); /* No full table copy in RAM. */
+    zassert_equal(poll.address, 500);
+    zassert_equal(poll.period_ms, 8000);
+    zassert_equal(poll.fields[0].order, DP_HIGH_WORD_FIRST);
     zassert_equal(cfg->transmit_count, 1);
-    zassert_equal(cfg->transmit[0].order, DP_HIGH_WORD_BYTE_SWAP);
-    zassert_equal(cfg->points[2].source, DP_SOURCE_MODBUS);
+    struct dp_transmit_cfg map;
+    zassert_not_null(dp_config_transmit(cfg, 0, &map));
+    zassert_is_null(cfg->transmit);
+    zassert_equal(map.order, DP_HIGH_WORD_BYTE_SWAP);
+    struct dp_point_cfg point;
+    zassert_not_null(dp_config_point(cfg, 2, &point));
+    zassert_is_null(cfg->points);
+    zassert_equal(point.source, DP_SOURCE_MODBUS);
     zassert_true(range_calls >= 3);
     uint8_t value[7] = {0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa};
     zassert_equal(dp_get_sig_value(247, 1, 1, value + 1), 1);
@@ -174,6 +214,18 @@ ZTEST(reference_configuration, test_original_tables_validate_before_initializati
     zassert_ok(dp_set_sig_value(11, 10, sizeof(remote), remote));
     zassert_equal(dp_get_sig_value(11, 10, sizeof(value), value), sizeof(value));
     zassert_mem_equal(value, remote, sizeof(remote));
+
+    /* Overrides use signal keys, not addresses of temporary stack views. */
+    DM_SIG_DATA_S limits = {.def_value.u16 = 42, .max_value.u16 = 100};
+    zassert_ok(dp_set_para_def_range(247, 1, &limits));
+    limits = (DM_SIG_DATA_S){.def_value.u32 = 123, .max_value.u32 = UINT32_MAX};
+    zassert_ok(dp_set_para_def_range(11, 10, &limits));
+    zassert_ok(dp_get_para_def_range(247, 1, &limits));
+    zassert_equal(limits.def_value.u16, 42);
+    zassert_equal(limits.max_value.u16, 100);
+    zassert_ok(dp_get_para_def_range(11, 10, &limits));
+    zassert_equal(limits.def_value.u32, 123);
+    zassert_equal(local_signals[0].sig_id, 1);
 
     zassert_equal(dp_reference_start(), -ENOTSUP);
     zassert_equal(init_calls, 0); /* Validate every timer before INIT effects. */

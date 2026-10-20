@@ -1,8 +1,8 @@
 /* Product point initialization, sample mapping and common point callbacks. */
 #include "process/idu_process.h"
 #include "process/engineering.h"
-#include "cfg/devices/device_config.h"
-#include "cfg/tables/signal_ids.h"
+#include "cfg/inc/device.h"
+#include "cfg/inc/signal_ids.h"
 #include <io_input/idu_inputs.h>
 #include "communication/ports/idu_acquisition.h"
 #include <data_process.h>
@@ -23,18 +23,12 @@ LOG_MODULE_REGISTER(idu_points, LOG_LEVEL_INF);
 /* Buses must exist before parameter recovery; INIT precedes polling. */
 int idu_equipment_init(void)
 {
-    const struct dp_equip_cfg *cfg = idu_equipment_config();
-    /* Project configuration is registered before the platform starts. Native
-     * IDU tables retain NVS migration hooks and explicit acquisition metadata.
-     */
-    int err = dp_register_config_provider(idu_equipment_config);
+    int err = idu_register_point_tables();
+    if (!err) { err = dp_init(); }
     if (err) {
         return err;
     }
-    err = dp_init();
-    if (err) {
-        return err;
-    }
+    const struct dp_equip_cfg *cfg = dp_config();
     int iface = idu_acquisition_port_init();
     if (iface < 0) {
         return iface;
@@ -102,22 +96,31 @@ int idu_snapshot_publish(const struct idu_snapshot *snapshot)
     for (unsigned i = 0; i < IDU_ANALOG_COUNT; ++i) {
         values[i + 2] = (struct dp_point_update){
             .key = {IDU_DEV_LOCAL, IDU_SIG_CURRENT_1 + i}, .width = 1,
-            .value.words = {snapshot->raw[i]}, .error = snapshot->valid ? 0 : -EIO,
+            .value.words = {idu_current_from_raw(snapshot->raw[i])},
+            .error = !snapshot->valid ? -EIO : snapshot->raw[i] > 4095 ? -ERANGE : 0,
         };
     }
     return dp_submit_sig_values(values, ARRAY_SIZE(values), K_MSEC(20), NULL);
 }
 
-int idu_process_current(const struct dp_point_cfg *cfg, struct dp_value *value,
-                        const struct dp_value *old_value)
+int32_t idu_default_point(FUNC_PARA_ALL *in, FUNC_PARA_ALL *out,
+                          void *new_value, void *old_value)
 {
-    ARG_UNUSED(cfg);
+    ARG_UNUSED(out);
+    ARG_UNUSED(new_value);
     ARG_UNUSED(old_value);
-    if (value->words[0] > 4095) {
-        return -ERANGE;
-    }
-    value->words[0] = idu_current_from_raw(value->words[0]);
-    return 0;
+    if (!in || in->para_num != 1 || !in->para_all) { return -EINVAL; }
+    /* DP already loaded the registered default. INIT marks identities ready. */
+    return in->type == DP_PARA_INIT ? dp_set_para_value(in->para_all) :
+           in->type == DP_PARA_SET ? -EACCES : 0;
+}
+
+int32_t idu_initialize_point(FUNC_PARA_ALL *in, FUNC_PARA_ALL *out,
+                             void *new_value, void *old_value)
+{
+    ARG_UNUSED(out); ARG_UNUSED(new_value); ARG_UNUSED(old_value);
+    if (!in || in->para_num != 1 || !in->para_all) { return -EINVAL; }
+    return in->type == DP_PARA_INIT ? dp_set_para_value(in->para_all) : 0;
 }
 
 uint16_t idu_sample_period_ms(void)

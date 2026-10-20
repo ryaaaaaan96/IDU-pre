@@ -1,5 +1,5 @@
 #include "communication/idu_protocol.h"
-#include "cfg/tables/imported_signals.h"
+#include "cfg/inc/imported_signals.h"
 #include <dataprocess/params.h>
 #include <zephyr/modbus/modbus.h>
 #include <errno.h>

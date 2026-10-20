@@ -1,4 +1,4 @@
-#include "cfg/tables/signal_ids.h"
+#include "cfg/inc/signal_ids.h"
 #include "communication/ports/idu_virtual.h"
 #include <dataprocess/params.h>
 #include <dataprocess/points.h>
@@ -69,7 +69,15 @@ static int second_bus(void *user, struct modbus_adu *adu)
 void module_add_points(struct dp_equip_cfg *cfg, struct dp_point_cfg *points,
                         struct dp_transmit_cfg *maps)
 {
-    memcpy(collect_blocks,cfg->collect,cfg->collect_count*sizeof(*collect_blocks));
+    for (size_t i = 0; i < cfg->collect_count; ++i) {
+        struct co_cfg scratch;
+        const struct co_cfg *poll = dp_config_collect(cfg, i, &scratch);
+        collect_blocks[i] = *poll;
+        if (poll->fields == &scratch.reference_field) {
+            collect_blocks[i].fields = &collect_blocks[i].reference_field;
+        }
+    }
+    cfg->collect_get = NULL;
     collect_blocks[0].init_only=true;
     cfg->collect=collect_blocks;
     devices[0] = cfg->devices[0];

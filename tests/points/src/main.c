@@ -1,6 +1,7 @@
+#include <platform_callback.h>
 #include "process/idu_process.h"
-#include "cfg/devices/device_config.h"
-#include "cfg/tables/signal_ids.h"
+#include "cfg/inc/device.h"
+#include "cfg/inc/signal_ids.h"
 #include "communication/idu_protocol.h"
 #include "communication/ports/idu_acquisition.h"
 #include "communication/ports/idu_virtual.h"
@@ -10,6 +11,7 @@
 #include <collect/collect.h>
 #include <dataprocess/params.h>
 #include <dataprocess/points.h>
+#include <dataprocess/process.h>
 #include <transmit/modbus_adapter.h>
 #include <transmit/transmit.h>
 #include <zephyr/sys/byteorder.h>
@@ -96,11 +98,19 @@ static int reject_42(const struct dp_point_cfg *cfg, struct dp_value *value,
 void module_add_points(struct dp_equip_cfg *, struct dp_point_cfg *, struct dp_transmit_cfg *);
 void module_bus_init(const struct dp_equip_cfg *);
 
+static const struct dp_equip_cfg *app_cfg;
+
 static void *setup(void)
 {
-    const struct dp_equip_cfg *app_cfg = idu_equipment_config();
+    zassert_ok(idu_register_point_tables());
+    zassert_ok(dp_reference_prepare(&app_cfg));
+    zassert_not_null(app_cfg);
     test_cfg = *app_cfg;
-    memcpy(test_points, app_cfg->points, app_cfg->point_count * sizeof(test_points[0]));
+    for (size_t i = 0; i < app_cfg->point_count; ++i) {
+        struct dp_point_cfg scratch;
+        test_points[i] = *dp_config_point(app_cfg, i, &scratch);
+    }
+    test_cfg.point_get = NULL;
     test_cfg.points = test_points;
     test_points[test_cfg.point_count++] = (struct dp_point_cfg){
         .key = {1, 11000}, .source = DP_SOURCE_LOCAL, .type = DP_S16,
@@ -121,8 +131,11 @@ static void *setup(void)
         .width = 1, .maximum = 1000, .initial.words = {7},
         .param_flags = DP_PARAM_PERSIST, /* Readable, immutable, not restorable. */
     };
-    memcpy(test_transmit, app_cfg->transmit,
-           app_cfg->transmit_count * sizeof(test_transmit[0]));
+    for (size_t i = 0; i < app_cfg->transmit_count; ++i) {
+        struct dp_transmit_cfg scratch;
+        test_transmit[i] = *dp_config_transmit(app_cfg, i, &scratch);
+    }
+    test_cfg.transmit_get = NULL;
     test_cfg.transmit = test_transmit;
     test_transmit[test_cfg.transmit_count++] = (struct dp_transmit_cfg){
         .function = 4, .address = 11000, .count = 1, .key = {1, 11000},
@@ -136,12 +149,14 @@ static void *setup(void)
     zassert_equal(state_of(remote_di).quality, DP_QUALITY_UNINITIALIZED);
     uint16_t initial;
     zassert_equal(tr_read_register(4, 10000, &initial), -EIO);
-    zassert_ok(tr_read_register(4, 8149, &initial));
+    zassert_equal(tr_read_register(4, 8149, &initial), -EIO);
     south_client = idu_acquisition_port_init();
     zassert_true(south_client >= 0);
     zassert_ok(co_init(&test_cfg, south_client, true));
     module_bus_init(&test_cfg);
     zassert_ok(dp_params_init(&test_cfg, DT_FIXED_PARTITION_ID(DT_ALIAS(idu_settings))));
+    zassert_ok(dp_process_init_device(0));
+    zassert_ok(tr_read_register(4, 8149, &initial));
     north_server = modbus_iface_get_by_name("RAW_2");
     north_client = modbus_iface_get_by_name("RAW_3");
     struct modbus_iface_param server = {
@@ -210,16 +225,18 @@ ZTEST(points, test_legacy_registers_preserved)
 
 ZTEST(points, test_end_to_end_remote_forwarding)
 {
-    uint16_t wire[13];
+    uint16_t wire[9];
     zassert_ok(modbus_read_input_regs(north_client, 16, 10000, wire, ARRAY_SIZE(wire)));
     zassert_equal(wire[0], 5);
     for (unsigned i = 0; i < 8; ++i) {
         zassert_equal(wire[i + 1], (i + 1) * 100);
     }
-    zassert_equal(wire[9], DP_QUALITY_SIMULATED | DP_QUALITY_GOOD);
-    zassert_equal(wire[10], 0x0101);
-    zassert_equal(wire[11], 0x0100);
-    zassert_equal(wire[12], 1);
+    assert_exception(modbus_read_input_regs(north_client, 16, 10009, wire, 1),
+                     4, MODBUS_EXC_ILLEGAL_DATA_ADDR);
+    zassert_ok(modbus_read_input_regs(north_client, 16, 10010, wire, 3));
+    zassert_equal(wire[0], 0x0101);
+    zassert_equal(wire[1], 0x0100);
+    zassert_equal(wire[2], 1);
     zassert_ok(modbus_read_holding_regs(north_client, 16, 30460, wire, 1));
     zassert_equal(wire[0], 1);
     zassert_equal(state_of(local_di).value.words[0], 0xa55a);
@@ -236,8 +253,8 @@ ZTEST(points, test_timeout_invalidates_and_recovers)
     uint16_t value;
     assert_exception(modbus_read_input_regs(north_client, 16, 10000, &value, 1),
                      4, MODBUS_EXC_ILLEGAL_DATA_ADDR);
-    zassert_ok(modbus_read_input_regs(north_client, 16, 10009, &value, 1));
-    zassert_equal(value, state.quality);
+    assert_exception(modbus_read_input_regs(north_client, 16, 10009, &value, 1),
+                     4, MODBUS_EXC_ILLEGAL_DATA_ADDR);
     idu_virtual_set_online(true);
     zassert_ok(idu_virtual_set_register(4, 8152, 0x55aa));
     poll_block(0, 0);
@@ -245,25 +262,26 @@ ZTEST(points, test_timeout_invalidates_and_recovers)
     zassert_equal(value, 0x55aa);
 }
 
-ZTEST(points, test_stale_data_is_not_reported_as_valid)
+ZTEST(points, test_reference_tables_do_not_enable_age_expiry)
 {
     k_msleep(2001);
-    zassert_equal(state_of(remote_di).quality, DP_QUALITY_SIMULATED | DP_QUALITY_STALE);
+    zassert_equal(state_of(remote_di).quality, DP_QUALITY_SIMULATED | DP_QUALITY_GOOD);
     uint16_t value;
-    zassert_equal(tr_read_register(4, 10000, &value), -EIO);
+    zassert_ok(tr_read_register(4, 10000, &value));
     zassert_ok(tr_read_register(4, 8149, &value)); /* Constant never expires. */
     poll_block(0, 0);
     zassert_ok(tr_read_register(4, 10000, &value));
 }
 
-ZTEST(points, test_process_callback_and_range_rejection)
+ZTEST(points, test_application_conversion_and_remote_range_rejection)
 {
     struct dp_key key = {IDU_DEV_LOCAL, IDU_SIG_CURRENT_1};
     uint32_t old = state_of(key).generation;
     local_sample.raw[0] = 4096;
     zassert_ok(idu_snapshot_publish(&local_sample));
     wait_after(key, old);
-    zassert_equal(state_of(key).quality, DP_QUALITY_BAD_VALUE);
+    zassert_equal(state_of(key).quality, DP_QUALITY_COMM_ERROR);
+    zassert_equal(state_of(key).error, -ERANGE);
     uint16_t value;
     zassert_equal(tr_read_register(4, 8163, &value), -EIO);
     old = state_of(key).generation;
@@ -274,7 +292,7 @@ ZTEST(points, test_process_callback_and_range_rejection)
     zassert_equal(value, 34375);
     /* A syntactically successful Modbus reply may still violate point range. */
     zassert_ok(idu_virtual_set_register(3, 30459, 0));
-    poll_block(3, 0);
+    poll_block(10, 0);
     key = (struct dp_key){IDU_DEV_REMOTE_IO, IDU_SIG_ADDRESS};
     zassert_equal(state_of(key).quality, DP_QUALITY_SIMULATED | DP_QUALITY_BAD_VALUE);
 }
@@ -298,7 +316,7 @@ ZTEST(points, test_signed_values_and_word_order)
     zassert_equal(wire[2], 0x3344);
     zassert_ok(idu_virtual_set_register(4, 8150, 0x3344));
     zassert_ok(idu_virtual_set_register(4, 8151, 0x1122));
-    poll_block(2, 0);
+    poll_block(9, 0);
     zassert_ok(modbus_read_input_regs(north_client, 16, 10010, wire, 2));
     zassert_equal(wire[0], 0x3344);
     zassert_equal(wire[1], 0x1122);
@@ -321,8 +339,10 @@ ZTEST(points, test_invalid_batch_cannot_partially_update_store)
     batch.source = DP_SOURCE_MODBUS;
     zassert_equal(dp_publish(&batch, K_NO_WAIT), -EINVAL);
     batch.source = DP_SOURCE_LOCAL;
-    batch.points[0].key.sig_id = 8149; /* Cannot overwrite constant identity. */
+    batch.points[0].key.sig_id = IDU_SIG_SAMPLE_PERIOD; /* Telemetry cannot write parameters. */
     zassert_equal(dp_publish(&batch, K_NO_WAIT), -EINVAL);
+    uint8_t identity[2] = {0};
+    zassert_equal(dp_set_sig_value(IDU_DEV_LOCAL, 8149, sizeof(identity), identity), -EACCES);
     k_msleep(2);
     zassert_equal(state_of(local_di).generation, old.generation);
     zassert_equal(state_of(local_di).value.words[0], old.value.words[0]);
@@ -406,16 +426,20 @@ ZTEST(points, test_positive_modbus_exception_invalidates_sample)
 
 ZTEST(points, test_configuration_validation)
 {
-    struct dp_equip_cfg cfg = *idu_equipment_config();
+    struct dp_equip_cfg cfg = *app_cfg;
     zassert_ok(dp_validate(&cfg));
-    struct dp_point_cfg points[2] = {cfg.points[0], cfg.points[0]};
+    struct dp_point_cfg scratch;
+    struct dp_point_cfg first = *dp_config_point(&cfg, 0, &scratch);
+    struct dp_point_cfg points[2] = {first, first};
     struct dp_equip_cfg small = {.points = points, .point_count = 2};
     zassert_equal(dp_validate(&small), -EEXIST);
     small.point_count = 1;
     points[0].width = 2;
     zassert_equal(dp_validate(&small), -EINVAL);
-    points[0] = cfg.points[0];
-    struct dp_transmit_cfg maps[2] = {cfg.transmit[0], cfg.transmit[0]};
+    points[0] = first;
+    struct dp_transmit_cfg map_scratch;
+    struct dp_transmit_cfg map = *dp_config_transmit(&cfg, 0, &map_scratch);
+    struct dp_transmit_cfg maps[2] = {map, map};
     small.transmit = maps;
     small.transmit_count = 2;
     zassert_equal(dp_validate(&small), -EEXIST);
@@ -426,7 +450,9 @@ ZTEST(points, test_configuration_validation)
         .function = 4, .address = 65535, .count = 2, .kind = DP_MAP_ZERO,
     };
     zassert_equal(dp_validate(&small), -EINVAL);
-    struct co_cfg collect = cfg.collect[0];
+    struct co_cfg collect;
+    zassert_not_null(dp_config_collect(&cfg, 0, &collect));
+    cfg.collect_get = NULL;
     cfg.collect = &collect;
     cfg.collect_count = 1;
     collect.count = CO_MAX_REGS + 1;
@@ -434,7 +460,7 @@ ZTEST(points, test_configuration_validation)
     collect.count = 1;
     collect.dev_id = 999;
     zassert_equal(dp_validate(&cfg), -EINVAL);
-    zassert_equal(dp_init_config(idu_equipment_config()), -EALREADY);
+    zassert_equal(dp_init_config(app_cfg), -EALREADY);
 }
 
 ZTEST_SUITE(points, NULL, setup, before, NULL, NULL);

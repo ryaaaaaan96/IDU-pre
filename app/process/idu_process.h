@@ -3,14 +3,14 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+/* 采集/status 只使用服务接口，无需依赖 DP 头文件。 */
+typedef struct func_para_all FUNC_PARA_ALL;
 
 struct dp_point_cfg;
 struct dp_value;
 struct dp_key;
 struct dp_process_ctx;
 
-int idu_process_current(const struct dp_point_cfg *cfg, struct dp_value *value,
-                        const struct dp_value *old_value);
 int idu_process_restore(uint16_t dev);
 int idu_process_flush(uint16_t unused);
 int idu_process_recover(uint16_t unused);
@@ -27,9 +27,19 @@ bool idu_equipment_confirm_ready(void);
 #endif
 
 /* Profile-specific point handlers; selected by the product process table. */
-int idu_mvio_seed_address(const struct dp_point_cfg *cfg, struct dp_value *value);
-int idu_mvio_prepare_address(const struct dp_point_cfg *cfg, struct dp_value *value,
-                             const struct dp_value *old);
-int idu_aidc_process(struct dp_process_ctx *ctx, struct dp_key key);
+int32_t idu_default_point(FUNC_PARA_ALL *in, FUNC_PARA_ALL *out,
+                          void *new_value, void *old_value);
+int32_t idu_serial_setting(FUNC_PARA_ALL *in, FUNC_PARA_ALL *out,
+                              void *new_value, void *old_value);
+int32_t idu_protocol_identity(FUNC_PARA_ALL *in, FUNC_PARA_ALL *out,
+                              void *new_value, void *old_value);
+int32_t idu_firmware_version(FUNC_PARA_ALL *in, FUNC_PARA_ALL *out,
+                              void *new_value, void *old_value);
+int32_t idu_point_alias(FUNC_PARA_ALL *in, FUNC_PARA_ALL *out,
+                              void *new_value, void *old_value);
+int32_t idu_unsupported_service(FUNC_PARA_ALL *in, FUNC_PARA_ALL *out,
+                              void *new_value, void *old_value);
+int32_t idu_initialize_point(FUNC_PARA_ALL *in, FUNC_PARA_ALL *out,
+                              void *new_value, void *old_value);
 
 #endif

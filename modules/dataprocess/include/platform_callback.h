@@ -32,7 +32,8 @@ typedef void (*PARA_WRITE_LOG)(DP_PARA_LOG_DATA *data);
 typedef void (*PARA_RECOVER_FINISH)(void);
 
 /* Register before dp_init. Callbacks are optional. Range/load/migration
- * callbacks run during validation/recovery and must not reenter DP APIs.
+ * callbacks may also run during configuration lookup. They must be deterministic,
+ * nonblocking, and must not change configuration or reenter DP APIs.
  * Change/log callbacks are delivered asynchronously by the DP worker.
  */
 void pltcb_reg_para_is_load_def_cb(PARA_GET_IS_LOAD_DEF callback);
@@ -48,7 +49,7 @@ void pltcb_para_recover_fininsh(void);
 
 /* Register before dp_init(). Successful initialization freezes registration.
  * Original device table and default/range callbacks retain their contracts.
- * CONFIG_DP_REFERENCE_TABLES compiles supported tables into the Zephyr engine.
+ * CONFIG_DP_REFERENCE_TABLES exposes supported const tables to the engine.
  */
 void pltcb_reg_cfg_get_dev_tbl(CFG_GET_DEV_TBL callback);
 const DEV_TABLE_S *pltcb_cfg_get_dev_tbl(void);
@@ -89,5 +90,12 @@ int dp_register_config_provider(dp_config_provider_fn provider);
  */
 typedef int (*dp_collect_period_fn)(uint8_t encoded, uint32_t *period_ms);
 int dp_register_collect_period(dp_collect_period_fn convert);
+/* Model backends have a separate scheduling policy from Modbus RTU. */
+int dp_register_model_period(dp_collect_period_fn convert);
+/* Validate and expose immutable reference table views before starting workers.
+ * The returned configuration belongs to DP and is valid until reset. No copies
+ * of point/collect/transmit descriptors are allocated. Register providers first.
+ */
+int dp_reference_prepare(const struct dp_equip_cfg **cfg);
 
 #endif

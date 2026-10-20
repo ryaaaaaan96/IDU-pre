@@ -91,7 +91,7 @@ IDU-pre/
 │   ├── main.c          # 应用入口、采样周期与休眠
 │   ├── acquisition/     # 采集、发布及通信执行流程
 │   ├── status/          # 业务状态、LED 策略、健康进度及镜像确认
-│   ├── cfg/             # devices/ 设备与型号；tables/ 三表及元数据
+│   ├── cfg/             # device.c 设备装配；inc/ 配置头文件；tables/ 三表及默认值
 │   ├── process/         # 点表初始化、采样映射、工程换算及业务回调
 │   └── communication/   # 端口、协议、路由与采集后端
 ├── modules/             # analog_input、io_input、led_indicator、health_monitor 及点表/升级/SoC 模块
@@ -161,6 +161,23 @@ IDU 的引脚、外部看门狗和分区属于板级及产品配置，分别留�
 已记录的桌面验证包括主机回归、native_sim、固件构建和镜像检查。
 Zephyr 版的实际启动、UART/DE 时序、Flash 掉电和升级回退仍需实板验证。
 历史测试数量、容量和外部支持状态均以文档中的日期或提交为准。
+
+## 点表暂缓的扩展
+
+应用三表使用参考结构 `DM_SIG_CFG_S`、`MODBUS_RTU_TABLE_S` / UPP 模型表、
+`MB_TABLE_CELL_T`，由 `DEV_TABLE_S` 关联。信号使用宏或枚举，业务回调直接绑定；
+默认值和范围放 `app/cfg/tables/defaults.c`。不再设置 `point_metadata` 中间层。
+
+按当前范围，以下扩展暂不启用，后续有需求再单独设计配置：
+
+- **质量码寄存器映射**：10009、10014–10023 暂无映射；内部通信错误和质量状态仍保留。
+- **采样过期时间**：不因样本年龄自动置 STALE；通信请求自身的超时和失败处理仍保留。
+- **旧参数与 NVS 迁移**：不从旧 MV-IO 分区导入地址，不注册 schema 增量或长度迁移。
+  新空分区使用默认值并正常保存、重启加载；已存在的不匹配 schema 拒写并报告错误，
+  不自动擦除。升级已有设备前需另行决定迁移方案。保存地址默认 1，实际通信地址仍取拨码。
+
+三张 const 表及默认数组保留在 Flash，运行值、队列、参数缓存和小型设备装配描述留在 RAM。
+详细维护方法见[点表配置说明](app/cfg/README.md)。
 
 ## 原 README 入口
 

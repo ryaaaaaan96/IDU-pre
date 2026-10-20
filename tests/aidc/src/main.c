@@ -1,4 +1,5 @@
-#include "cfg/devices/device_config.h"
+#include "cfg/inc/device.h"
+#include "cfg/inc/imported_signals.h"
 #include "communication/config/protocol_config.h"
 #include "communication/ports/idu_acquisition.h"
 #include "communication/ports/idu_virtual.h"
@@ -20,12 +21,14 @@ static int configure_serial(struct modbus_iface_param *cfg)
 
 static void *setup(void)
 {
-    const struct dp_equip_cfg *cfg=idu_equipment_config();
-    zassert_equal(cfg->point_count,552);
-    zassert_equal(cfg->collect_count,332);
+    zassert_ok(idu_register_point_tables());
+    zassert_ok(dp_init());
+    const struct dp_equip_cfg *cfg=dp_config();
+    zassert_not_null(cfg);
+    zassert_equal(cfg->point_count,553);
+    zassert_equal(cfg->collect_count,339);
     zassert_equal(cfg->transmit_count,108);
     zassert_ok(dp_validate(cfg));
-    zassert_ok(dp_init_config(cfg));
     int iface=idu_acquisition_port_init(); zassert_true(iface>=0);
     zassert_ok(co_init(cfg,iface,true));
     zassert_ok(idu_aidc_bus_init(cfg));
@@ -36,9 +39,11 @@ static void *setup(void)
 
 ZTEST(aidc,test_original_tables_and_model_acquisition)
 {
-    const struct dp_equip_cfg *cfg=idu_equipment_config();
-    for (size_t i=4;i<cfg->collect_count;++i) {
-        zassert_true(cfg->collect[i].model_protocol);
+    const struct dp_equip_cfg *cfg=dp_config();
+    for (size_t i=11;i<cfg->collect_count;++i) {
+        struct co_cfg poll;
+        zassert_not_null(dp_config_collect(cfg, i, &poll));
+        zassert_true(poll.model_protocol);
         zassert_ok(co_poll(i));
     }
     k_sleep(K_MSEC(50));
@@ -77,4 +82,53 @@ ZTEST(aidc,test_ambiguous_legacy_addresses_require_whole_point)
     zassert_equal(tr_read(1,4,43001,words,3),-ERANGE);
     zassert_equal(tr_read(1,4,43002,words,1),-ERANGE);
 }
+ZTEST(aidc, test_direct_business_callbacks)
+{
+    DATA_SET_S item = {.dev_id = 247, .sig_id = AIDC_LOCAL_SIG_2500, .sig_size = 4};
+    PARA_DATA_S request = {.set_num = 1, .p_set_data = &item};
+    zassert_equal(dp_fast_para_get(&request), 4);
+    zassert_equal(item.p_value.u32, 0x50413000U);
+    item.sig_id = AIDC_LOCAL_SIG_2502;
+    zassert_equal(dp_fast_para_get(&request), 4);
+    zassert_equal(item.p_value.u32, 0x01000300U);
+
+    uint8_t version[30] = {0};
+    item.sig_id = AIDC_LOCAL_SIG_VERSION;
+    item.sig_size = sizeof(version);
+    item.p_value.pst = version;
+    zassert_equal(dp_fast_para_get(&request), sizeof(version));
+    /* Protocol strings retain high-byte-first characters in each word. */
+    zassert_equal(version[0], 'D');
+    zassert_equal(version[1], 'I');
+
+    struct dp_param_status before, after;
+    uint8_t value[16] = {1};
+    uint8_t original[16], current[16];
+    zassert_equal(dp_get_sig_value(247, AIDC_LOCAL_SIG_TR_AES_KEY_VAL,
+                                  sizeof(original), original), sizeof(original));
+    dp_params_get_status(&before);
+    zassert_equal(dp_set_sig_value(247, AIDC_LOCAL_SIG_TR_AES_KEY_VAL,
+                                   sizeof(value), value), -ENOTSUP);
+    dp_params_get_status(&after);
+    zassert_equal(after.sequence, before.sequence);
+    zassert_equal(dp_get_sig_value(247, AIDC_LOCAL_SIG_TR_AES_KEY_VAL,
+                                  sizeof(current), current), sizeof(current));
+    zassert_mem_equal(current, original, sizeof(original));
+
+    uint16_t volatile_value = 27;
+    zassert_ok(tr_write(7, 30098, &volatile_value, 1));
+    zassert_ok(tr_read(7, 3, 30098, &volatile_value, 1));
+    zassert_equal(volatile_value, 27);
+    dp_params_get_status(&after);
+    zassert_equal(after.sequence, before.sequence); /* FC03 alone never means NVS. */
+    volatile_value = 1;
+    zassert_equal(tr_write(7, 31999, &volatile_value, 1), -ENOTSUP);
+    struct dp_point_state state;
+    zassert_ok(dp_read((struct dp_key){247, AIDC_LOCAL_SIG_31999}, &state));
+    zassert_equal(state.value.words[0], 0);
+    zassert_equal(state.quality, DP_QUALITY_UNINITIALIZED);
+    zassert_equal(tr_read(7, 3, 31999, &volatile_value, 1), -ENOTSUP);
+
+}
+
 ZTEST_SUITE(aidc,NULL,setup,NULL,NULL,NULL);

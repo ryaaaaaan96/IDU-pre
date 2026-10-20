@@ -184,7 +184,7 @@
       "initial": [
         1
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {
         "sig_id": "LOCAL_SIG_TR_ADDR",
         "is_recover": "6",
@@ -287,7 +287,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -305,7 +305,7 @@
         2,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {
         "sig_id": "LOCAL_SIG_UART_PORT1_WORKMODE",
         "is_recover": "6",
@@ -332,7 +332,7 @@
         165,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {
         "sig_id": "LOCAL_SIG_UART_PORT1_BAUD",
         "is_recover": "6",
@@ -359,7 +359,7 @@
         85,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {
         "sig_id": "LOCAL_SIG_UART_PORT1_PARITY",
         "is_recover": "6",
@@ -386,7 +386,7 @@
         161,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {
         "sig_id": "LOCAL_SIG_UART_PORT1_STOP_BITS",
         "is_recover": "6",
@@ -413,7 +413,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -431,7 +431,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -449,7 +449,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -467,7 +467,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -485,7 +485,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -503,7 +503,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -521,7 +521,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -539,7 +539,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -557,7 +557,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -575,7 +575,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -593,7 +593,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -611,7 +611,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -629,7 +629,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -647,7 +647,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -665,7 +665,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -683,7 +683,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -701,7 +701,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -719,7 +719,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -737,7 +737,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -755,7 +755,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -773,7 +773,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -791,7 +791,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -809,7 +809,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -827,7 +827,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -845,7 +845,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -863,7 +863,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -897,7 +897,7 @@
       "initial": [
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -914,7 +914,7 @@
       "initial": [
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -931,7 +931,7 @@
       "initial": [
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -948,7 +948,7 @@
       "initial": [
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -1210,7 +1210,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -1279,7 +1279,7 @@
         5,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {
         "sig_id": "LOCAL_SIG_UART_PORT1_IFS",
         "is_recover": "6",
@@ -1306,7 +1306,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -1324,7 +1324,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -1342,7 +1342,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -1360,7 +1360,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -1378,7 +1378,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -1396,7 +1396,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -1414,7 +1414,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -1432,7 +1432,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -1450,7 +1450,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -1468,7 +1468,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -1486,7 +1486,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -1504,7 +1504,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -1521,7 +1521,7 @@
       "initial": [
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -1538,7 +1538,7 @@
       "initial": [
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -1555,7 +1555,7 @@
       "initial": [
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -1579,7 +1579,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {
         "sig_id": "LOCAL_SIG_ETH_IP",
         "is_recover": "6",
@@ -1610,7 +1610,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {
         "sig_id": "LOCAL_SIG_ETH_MASK",
         "is_recover": "6",
@@ -1641,7 +1641,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {
         "sig_id": "LOCAL_SIG_ETH_GATEWAY",
         "is_recover": "6",
@@ -1672,7 +1672,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {
         "sig_id": "LOCAL_SIG_ETH_DNS1",
         "is_recover": "6",
@@ -1703,7 +1703,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {
         "sig_id": "LOCAL_SIG_ETH_DNS2",
         "is_recover": "6",
@@ -1727,7 +1727,7 @@
       "initial": [
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -1792,7 +1792,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -1810,7 +1810,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -1842,7 +1842,7 @@
         0,
         0
       ],
-      "parameter": true,
+      "parameter": false,
       "range": {}
     },
     {
@@ -1859,7 +1859,7 @@
       "initial": [
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -2316,7 +2316,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -2350,7 +2350,7 @@
       "initial": [
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -2502,7 +2502,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -2970,7 +2970,7 @@
         0,
         0
       ],
-      "parameter": 1,
+      "parameter": true,
       "range": {}
     },
     {
@@ -2988,7 +2988,7 @@
         0,
         0
       ],
-      "parameter": true,
+      "parameter": false,
       "range": {}
     },
     {
@@ -3005,7 +3005,7 @@
       "initial": [
         0
       ],
-      "parameter": true,
+      "parameter": false,
       "range": {}
     },
     {
@@ -3022,7 +3022,7 @@
       "initial": [
         0
       ],
-      "parameter": true,
+      "parameter": false,
       "range": {}
     },
     {
@@ -3039,7 +3039,7 @@
       "initial": [
         0
       ],
-      "parameter": true,
+      "parameter": false,
       "range": {}
     },
     {
@@ -3056,7 +3056,7 @@
       "initial": [
         0
       ],
-      "parameter": true,
+      "parameter": false,
       "range": {}
     },
     {
@@ -3074,7 +3074,7 @@
         0,
         0
       ],
-      "parameter": true,
+      "parameter": false,
       "range": {}
     },
     {
@@ -3092,7 +3092,7 @@
         0,
         0
       ],
-      "parameter": true,
+      "parameter": false,
       "range": {}
     },
     {
@@ -3110,7 +3110,7 @@
         0,
         0
       ],
-      "parameter": true,
+      "parameter": false,
       "range": {}
     },
     {
@@ -3128,7 +3128,7 @@
         0,
         0
       ],
-      "parameter": true,
+      "parameter": false,
       "range": {}
     },
     {
@@ -3145,7 +3145,7 @@
       "initial": [
         0
       ],
-      "parameter": true,
+      "parameter": false,
       "range": {}
     },
     {
@@ -3162,7 +3162,7 @@
       "initial": [
         0
       ],
-      "parameter": true,
+      "parameter": false,
       "range": {}
     },
     {
@@ -3179,7 +3179,7 @@
       "initial": [
         0
       ],
-      "parameter": true,
+      "parameter": false,
       "range": {}
     },
     {
@@ -3196,7 +3196,7 @@
       "initial": [
         0
       ],
-      "parameter": true,
+      "parameter": false,
       "range": {}
     },
     {
@@ -3214,7 +3214,7 @@
         0,
         0
       ],
-      "parameter": true,
+      "parameter": false,
       "range": {}
     },
     {
@@ -3232,7 +3232,7 @@
         0,
         0
       ],
-      "parameter": true,
+      "parameter": false,
       "range": {}
     },
     {
@@ -3249,7 +3249,7 @@
       "initial": [
         0
       ],
-      "parameter": true,
+      "parameter": false,
       "range": {}
     },
     {
@@ -3266,7 +3266,7 @@
       "initial": [
         0
       ],
-      "parameter": true,
+      "parameter": false,
       "range": {}
     },
     {
@@ -13991,7 +13991,7 @@
     }
   ],
   "point_count": 519,
-  "parameter_count": 84,
+  "parameter_count": 66,
   "model_poll_count": 328,
   "scope": "UPP fields retain original model offsets/cycle codes. Virtual backend timing is an explicit test setting, not a decoded legacy scheduler."
 }

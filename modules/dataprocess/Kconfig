@@ -18,31 +18,14 @@ config DP_REFERENCE_EVENTS
     depends on DP_PROCESS
 
 config DP_REFERENCE_TABLES
-    bool "Compile reference DEV_TABLE_S point tables"
+    bool "Use reference DEV_TABLE_S point tables"
     depends on DP_PROCESS
     help
       Accept the reference device/process/Modbus table layouts through
       platform_callback.h. Unsupported protocols and flags fail initialization.
+      Read const rows on demand through stack-local execution descriptors.
       Native Zephyr tables can use dp_register_config_provider without this
-      option or its extra bounded table storage.
-
-config DP_REFERENCE_MAX_POINTS
-    int "Maximum compiled reference points"
-    default 64
-    range 1 768
-    depends on DP_REFERENCE_TABLES
-
-config DP_REFERENCE_MAX_COLLECT
-    int "Maximum compiled reference acquisition entries"
-    default 16
-    range 1 512
-    depends on DP_REFERENCE_TABLES
-
-config DP_REFERENCE_MAX_TRANSMIT
-    int "Maximum compiled reference forwarding entries"
-    default 64
-    range 1 1024
-    depends on DP_REFERENCE_TABLES
+      option. No full-table RAM copies are allocated.
 
 config DP_PROCESS
     bool "Business transactions, sample handlers and timers"

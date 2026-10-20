@@ -32,14 +32,17 @@ compatibility.
 | [`gd32e505`](gd32e505/README.md) | Zephyr `soc_root`, `dts_root`, `adc_*` | E505 SoC, devicetree clock startup and synchronous ADC0 driver |
 
 Product point-table configuration lives in [`app/cfg/`](../app/cfg/README.md),
-outside these modules. `devices/` binds device instances and reusable models;
+outside these modules. `device.c` binds device instances and reusable models; `inc/` holds configuration headers;
 `tables/` holds collection, processing and forwarding tables, signal IDs and
 metadata. Imported data is inline in marked C sections, with symbols in
-`tables/imported_signals.h` and provenance in
+`inc/imported_signals.h` and provenance in
 [`docs/point-table-import.json`](../docs/point-table-import.json).
-`tables/point_metadata.h` and `tables/point_metadata.c` expose collection models and
-processing bindings; a binding's `callback` holds the original callback name as
-a string. Execution remains in `app/process/`. Register-to-signal mappings belong
+The three application tables use the reference `DM_SIG_CFG_S`,
+`MODBUS_RTU_TABLE_S` / UPP model layouts and `MB_TABLE_CELL_T`.
+`defaults.c` supplies `DM_SIG_DATA_S` through the reference callback.
+Signal macros and function pointers bind business handlers directly; there is no
+runtime callback-name registry or duplicate model metadata.
+Register-to-signal mappings belong
 to the tables. Protocol routing, command dispatch and their contracts
 live in [`app/communication/config/`](../app/communication/config), while
 application options live in [`app/Kconfig`](../app/Kconfig). Business callbacks
@@ -133,7 +136,7 @@ handlers or read callbacks are rejected instead of silently ignoring them.
 `TR_MODBUS_ADAPTER` enables whole-PDU routing and isolated forwarding workers,
 and can be selected without `DP_PARAMS`. The full IDU-pre application selects it.
 Supply static `dp_equip_cfg` tables. IDU's `app/process/points.c` explicitly calls
-`dp_register_config_provider(idu_equipment_config)` then `dp_init()`, creates
+`idu_register_point_tables()` then `dp_init()`, creates
 the application acquisition interface, registers all buses
 through `co_init()` / `co_init_bus()`, then initializes and recovers parameters.
 The application decides whether a storage failure permits degraded operation.
@@ -282,14 +285,14 @@ The value pool allocates each point's actual width and is validated at startup.
 Transaction entries include captured dependencies as well as emitted outputs.
 
 The AIDC example increases point width to 32 words and changes these bounds for
-its 552 configured points (560 runtime slots). `ZBUS_MSG_SUBSCRIBER_NET_BUF_STATIC_DATA_SIZE` must cover
+its 553 configured points (560 runtime slots). `ZBUS_MSG_SUBSCRIBER_NET_BUF_STATIC_DATA_SIZE` must cover
 `sizeof(dp_point_batch)` despite isolated pools in Zephyr 4.4.2. Tables are static;
 lookup is linear. Measure timing and stack margins on the target before release.
 
 The application's reusable MV-IO model binds device instances at compile time
-through `app/cfg/devices/instances.h`. The three tables stay const and collection field
-arrays are shared; no runtime copy of model definitions or heap allocation is
-needed. See [the model and pipeline design](../docs/collect-process-transmit.md).
+through `app/cfg/inc/device_instances.h`. Process and acquisition rows are shared
+const arrays; device bindings are assembled once and execution views use caller
+scratch storage. There is no full-table RAM copy or heap allocation. See [the model and pipeline design](../docs/collect-process-transmit.md).
 
 NVS requires FLASH, FLASH_MAP, FLASH_PAGE_LAYOUT and NVS_DATA_CRC. Reserve at least
 three equal erase sectors. The example uses four 4 KB sectors per profile.

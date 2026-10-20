@@ -12,6 +12,9 @@ config IDU_COLLECT_RTU
 
 endchoice
 
+config DP_REFERENCE_TABLES
+    default y
+
 config MODBUS_NUMOF_RAW_ADU
     default 2 if IDU_COLLECT_VIRTUAL
 

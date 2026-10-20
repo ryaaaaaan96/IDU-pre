@@ -79,6 +79,36 @@ typedef struct mb_table_cell_t {
     uint8_t byte_order;
 } MB_TABLE_CELL_T, MB_TABLE_CELL_S;
 
+/* UPP model-table subset from upp_m_ex.h. The backend exchanges decoded
+ * host-order words; this declares model data, not the UPP serial protocol.
+ */
+typedef struct upp_m_model_data {
+    uint16_t mod_data_offset;
+    uint16_t mod_data_len;
+    uint16_t mod_data_type;
+    uint16_t data_len;
+    uint32_t sig_id;
+    uint16_t data_type;
+    uint8_t rw_mode : 3;
+    uint8_t byte_order : 2;
+    uint8_t set_pri : 2;
+    uint8_t scan_pri : 1;
+    uint8_t rqst_cyl;
+    double dec_p;
+} UPP_M_MOD_DATA;
+
+typedef struct upp_m_model {
+    const UPP_M_MOD_DATA *p_data;
+    uint16_t data_num;
+    uint16_t mod_id;
+} UPP_M_MOD;
+
+typedef struct upp_m_model_reg {
+    const UPP_M_MOD *p_model_ary;
+    uint32_t model_num;
+    uint32_t cfg_mode;
+} UPP_M_MOD_REG;
+
 /* Numeric encodings are protocol metadata; no arc_byte_order.h is needed. */
 #define BYTE_ORDER_DEFAULT 0
 #define BYTE_ORDER_SMALL 1

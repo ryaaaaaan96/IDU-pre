@@ -63,7 +63,7 @@ static bool same_key(struct dp_key a, struct dp_key b)
 static int point_index(const struct dp_equip_cfg *cfg, struct dp_key key)
 {
     for (size_t i = 0; i < cfg->point_count; ++i) {
-        if (same_key(cfg->points[i].key, key)) {
+        if (same_key(dp_config_key(cfg, i), key)) {
             return (int)i;
         }
     }
@@ -94,20 +94,22 @@ static bool valid_fc(uint8_t function)
 
 int dp_validate(const struct dp_equip_cfg *cfg)
 {
-    if (!cfg || !cfg->points || !cfg->point_count ||
+    if (!cfg || (!cfg->points && !cfg->point_get) || !cfg->point_count ||
         cfg->point_count > CONFIG_DP_POINTS_MAX_POINTS ||
         cfg->collect_count > CONFIG_DP_POINTS_MAX_POLLS ||
         cfg->device_count > CONFIG_DP_MAX_DEVICES ||
         (cfg->device_count && !cfg->devices) ||
-        (cfg->collect_count && !cfg->collect) ||
-        (cfg->transmit_count && !cfg->transmit)) {
+        (cfg->collect_count && !cfg->collect && !cfg->collect_get) ||
+        (cfg->transmit_count && !cfg->transmit && !cfg->transmit_get)) {
         return -EINVAL;
     }
     if ((cfg->reference_device_count && !cfg->reference_devices) ||
         cfg->reference_device_count > CONFIG_DP_MAX_DEVICES + 2) { return -EINVAL; }
     size_t words_needed = 0;
     for (size_t i = 0; i < cfg->point_count; ++i) {
-        const struct dp_point_cfg *p = &cfg->points[i];
+        struct dp_point_cfg p_scratch;
+        const struct dp_point_cfg *p = dp_config_point(cfg, i, &p_scratch);
+        if (!p) { return -EINVAL; }
         if (!IS_ENABLED(CONFIG_DP_PROCESS) && (p->handler || p->read_callback || p->reference_handler)) {
             return -ENOTSUP;
         }
@@ -149,7 +151,9 @@ int dp_validate(const struct dp_equip_cfg *cfg)
         }
     }
     for (size_t i = 0; i < cfg->collect_count; ++i) {
-        const struct co_cfg *c = &cfg->collect[i];
+        struct co_cfg c_scratch;
+        const struct co_cfg *c = dp_config_collect(cfg, i, &c_scratch);
+        if (!c) { return -EINVAL; }
         bool found = false;
         for (size_t d = 0; d < cfg->device_count; ++d) {
             found |= cfg->devices[d].dev_id == c->dev_id;
@@ -164,9 +168,12 @@ int dp_validate(const struct dp_equip_cfg *cfg)
         for (size_t f = 0; f < c->field_count; ++f) {
             const struct co_field *field = &c->fields[f];
             int index = point_index(cfg, (struct dp_key){c->dev_id, field->sig_id});
-            if (index < 0 || !field->width ||
-                field->width != cfg->points[index].width ||
-                cfg->points[index].source != DP_SOURCE_MODBUS ||
+            struct dp_point_cfg point_scratch;
+            const struct dp_point_cfg *point = index < 0 ? NULL :
+                dp_config_point(cfg, index, &point_scratch);
+            if (!point || !field->width ||
+                field->width != point->width ||
+                point->source != DP_SOURCE_MODBUS ||
                 field->offset + field->width > c->count ||
                 (unsigned)field->order > DP_HIGH_WORD_BYTE_SWAP) {
                 LOG_ERR("Invalid poll field %u:%u width=%u",c->dev_id,field->sig_id,field->width);
@@ -174,7 +181,9 @@ int dp_validate(const struct dp_equip_cfg *cfg)
             }
             /* Exactly one collection owner for each signal. */
             for (size_t b = 0; b <= i; ++b) {
-                const struct co_cfg *other = &cfg->collect[b];
+                struct co_cfg other_scratch;
+                const struct co_cfg *other = dp_config_collect(cfg, b, &other_scratch);
+                if (!other) { return -EINVAL; }
                 size_t end = b == i ? f : other->field_count;
                 for (size_t n = 0; n < end; ++n) {
                     if (other->dev_id == c->dev_id &&
@@ -186,7 +195,9 @@ int dp_validate(const struct dp_equip_cfg *cfg)
         }
     }
     for (size_t i = 0; i < cfg->transmit_count; ++i) {
-        const struct dp_transmit_cfg *t = &cfg->transmit[i];
+        struct dp_transmit_cfg t_scratch;
+        const struct dp_transmit_cfg *t = dp_config_transmit(cfg, i, &t_scratch);
+        if (!t) { return -EINVAL; }
         if (!valid_fc(t->function) || !t->count ||
             (uint32_t)t->address + t->count > 65536 ||
             (unsigned)t->kind > DP_MAP_ZERO || (unsigned)t->order > DP_HIGH_WORD_BYTE_SWAP) {
@@ -194,15 +205,20 @@ int dp_validate(const struct dp_equip_cfg *cfg)
         }
         if (t->kind != DP_MAP_ZERO) {
             int index = point_index(cfg, t->key);
-            if (index < 0 || (t->kind == DP_MAP_VALUE &&
-                             t->count > cfg->points[index].width) ||
+            struct dp_point_cfg point_scratch;
+            const struct dp_point_cfg *point = index < 0 ? NULL :
+                dp_config_point(cfg, index, &point_scratch);
+            if (!point || (t->kind == DP_MAP_VALUE &&
+                             t->count > point->width) ||
                 (t->kind == DP_MAP_QUALITY && t->count != 1)) {
                 LOG_ERR("Invalid mapping %u device=%u sig=%u count=%u",t->address,t->key.dev_id,t->key.sig_id,t->count);
                 return -EINVAL;
             }
         }
         for (size_t j = 0; j < i; ++j) {
-            const struct dp_transmit_cfg *other = &cfg->transmit[j];
+            struct dp_transmit_cfg other_scratch;
+            const struct dp_transmit_cfg *other = dp_config_transmit(cfg, j, &other_scratch);
+            if (!other) { return -EINVAL; }
             if (t->function == other->function &&
                 t->address < (uint32_t)other->address + other->count &&
                 other->address < (uint32_t)t->address + t->count) {
@@ -216,7 +232,9 @@ int dp_validate(const struct dp_equip_cfg *cfg)
     return dp_params_validate(cfg);
 #else
     for (size_t i = 0; i < cfg->point_count; ++i) {
-        if (cfg->points[i].source == DP_SOURCE_PARAMETER) {
+        struct dp_point_cfg scratch;
+        const struct dp_point_cfg *p = dp_config_point(cfg, i, &scratch);
+        if (p->source == DP_SOURCE_PARAMETER) {
             return -ENOTSUP;
         }
     }
@@ -238,12 +256,14 @@ int dp_init_config(const struct dp_equip_cfg *cfg)
     zbus_chan_set_msg_sub_pool(&dp_processed_chan, &notification_pool);
     size_t offset = 0;
     for (size_t i = 0; i < cfg->point_count; ++i) {
+        struct dp_point_cfg scratch;
+        const struct dp_point_cfg *p = dp_config_point(cfg, i, &scratch);
         states[i].words = point_words + offset;
-        memcpy(states[i].words, cfg->points[i].initial.words, cfg->points[i].width * 2);
-        offset += cfg->points[i].width;
-        states[i].quality = cfg->points[i].source == DP_SOURCE_CONSTANT ?
+        memcpy(states[i].words, p->initial.words, p->width * 2);
+        offset += p->width;
+        states[i].quality = p->source == DP_SOURCE_CONSTANT ?
                             DP_QUALITY_GOOD : DP_QUALITY_UNINITIALIZED;
-        states[i].error = cfg->points[i].source == DP_SOURCE_CONSTANT ? 0 : -ENODATA;
+        states[i].error = p->source == DP_SOURCE_CONSTANT ? 0 : -ENODATA;
     }
     atomic_set(&last_progress, k_uptime_get_32());
     atomic_set(&ready, 1);
@@ -267,8 +287,9 @@ static int validate_batch(const struct dp_point_batch *batch)
         if (index < 0) {
             return index;
         }
-        if (update->width != equipment->points[index].width ||
-            equipment->points[index].source != batch->source) {
+        struct dp_point_cfg scratch;
+        const struct dp_point_cfg *p = dp_config_point(equipment, index, &scratch);
+        if (update->width != p->width || p->source != batch->source) {
             return -EINVAL;
         }
         for (size_t j = 0; j < i; ++j) {
@@ -355,7 +376,8 @@ int dp_wait_processed(uint32_t ticket, k_timeout_t timeout)
 static uint16_t effective_quality(size_t index)
 {
     uint16_t quality = states[index].quality;
-    const struct dp_point_cfg *p = &equipment->points[index];
+    struct dp_point_cfg p_scratch;
+    const struct dp_point_cfg *p = dp_config_point(equipment, index, &p_scratch);
     if ((quality & 0xffU) == DP_QUALITY_GOOD && p->source != DP_SOURCE_CONSTANT &&
         p->stale_ms && k_uptime_get() - states[index].sampled_at >= p->stale_ms) {
         quality = (quality & DP_QUALITY_SIMULATED) | DP_QUALITY_STALE;
@@ -372,15 +394,17 @@ int dp_read(struct dp_key key, struct dp_point_state *state)
     if (index < 0) {
         return index;
     }
+    struct dp_point_cfg point_scratch;
+    const struct dp_point_cfg *point = dp_config_point(equipment, index, &point_scratch);
 #if defined(CONFIG_DP_PARAMS)
-    if (equipment->points[index].source == DP_SOURCE_PARAMETER) {
+    if (point->source == DP_SOURCE_PARAMETER) {
         return dp_params_read(key, state);
     }
 #endif
     k_mutex_lock(&store_lock, K_FOREVER);
     *state = (struct dp_point_state){.sampled_at = states[index].sampled_at,
         .generation = states[index].generation, .error = states[index].error};
-    memcpy(state->value.words, states[index].words, equipment->points[index].width * 2);
+    memcpy(state->value.words, states[index].words, point->width * 2);
     state->quality = effective_quality(index);
     k_mutex_unlock(&store_lock);
     return 0;
@@ -419,7 +443,8 @@ static void process_thread(void *a, void *b, void *c)
         for (size_t i = 0; i < batch.count; ++i) {
             struct dp_point_update *u = &batch.points[i];
             int n = point_index(equipment, u->key);
-            const struct dp_point_cfg *p = &equipment->points[n];
+            struct dp_point_cfg p_scratch;
+            const struct dp_point_cfg *p = dp_config_point(equipment, n, &p_scratch);
             quality[i] = u->error ? DP_QUALITY_COMM_ERROR : DP_QUALITY_GOOD;
             if (!u->error) {
                 struct dp_value old = {0};
@@ -462,7 +487,7 @@ static void process_thread(void *a, void *b, void *c)
             if (!u->error) {
                 struct dp_value old = {0};
                 memcpy(old.words, state->words, u->width * 2);
-                dp_reference_notify(dp_find(u->key), &old, &u->value);
+                dp_reference_notify(dp_find(u->key, &(struct dp_point_cfg){0}), &old, &u->value);
                 memcpy(state->words, u->value.words, u->width * 2);
             }
             state->sampled_at = batch.sampled_at;
@@ -488,10 +513,9 @@ K_THREAD_DEFINE(dp_process_tid, CONFIG_DP_POINTS_STACK_SIZE,
 
 const struct dp_equip_cfg *dp_config(void) { return equipment; }
 
-const struct dp_point_cfg *dp_find(struct dp_key key)
+const struct dp_point_cfg *dp_find(struct dp_key key, struct dp_point_cfg *scratch)
 {
-    int i = equipment ? point_index(equipment, key) : -ENOENT;
-    return i < 0 ? NULL : &equipment->points[i];
+    return dp_config_find(equipment, key, scratch);
 }
 
 int dp_check_value(const struct dp_point_cfg *p, const struct dp_value *v)
@@ -506,7 +530,8 @@ int dp_commit_sample(const struct dp_point_update *values, size_t count,
 {
     if (!equipment || !values || !count) { return -EINVAL; }
     for (size_t i = 0; i < count; ++i) {
-        const struct dp_point_cfg *p = dp_find(values[i].key);
+        struct dp_point_cfg p_scratch;
+        const struct dp_point_cfg *p = dp_find(values[i].key, &p_scratch);
         if (!p || p->source == DP_SOURCE_PARAMETER || p->source == DP_SOURCE_CONSTANT ||
             values[i].width != p->width || values[i].error) { return -EINVAL; }
         int err = dp_check_value(p, &values[i].value);
@@ -522,7 +547,7 @@ int dp_commit_sample(const struct dp_point_update *values, size_t count,
         int n = point_index(equipment, values[i].key);
         struct dp_value old = {0};
         memcpy(old.words, states[n].words, values[i].width * 2);
-        dp_reference_notify(dp_find(values[i].key), &old, &values[i].value);
+        dp_reference_notify(dp_find(values[i].key, &(struct dp_point_cfg){0}), &old, &values[i].value);
         memcpy(states[n].words, values[i].value.words, values[i].width * 2);
         states[n].quality = DP_QUALITY_GOOD | flags;
         states[n].sampled_at = sampled_at;
@@ -555,7 +580,8 @@ int dp_store_reset_device(uint16_t dev)
     reset_epoch[device] = MAX(k_uptime_get(), 1);
     ++generation;
     for (size_t i = 0; i < equipment->point_count; ++i) {
-        const struct dp_point_cfg *p = &equipment->points[i];
+        struct dp_point_cfg p_scratch;
+        const struct dp_point_cfg *p = dp_config_point(equipment, i, &p_scratch);
         if (p->key.dev_id != dev || p->source != DP_SOURCE_MODBUS) { continue; }
         memcpy(states[i].words, p->initial.words, p->width * 2);
         states[i].quality = DP_QUALITY_UNINITIALIZED;

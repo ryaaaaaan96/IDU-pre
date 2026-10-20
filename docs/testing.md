@@ -33,8 +33,8 @@ build/IDU-pre/tests/reference_services/zephyr/zephyr.exe -flash_in_ram
 
 | 测试 | 主要内容 |
 | --- | --- |
-| `test_registers.c`、`test_boot_image.py`、`test_import_aidc.py` | 转换/寄存器回归、镜像边界、导入工具 |
-| `points`、`aidc`、`mvio` | 产品点表、NVS/事务、MV-IO 报文和旧参数迁移 |
+| `test_registers.c`、`test_boot_image.py`、`test_import_aidc.py` | 转换/寄存器回归、镜像边界、导入标记保护及离线快照复现 |
+| `points`、`aidc`、`mvio` | 原格式产品点表、NVS/事务、MV-IO 报文及旧 schema 拒写 |
 | `pipeline`、`models` | 无存储数据流、模型复用、多设备及多总线隔离 |
 | `dataprocess`、`collector`、`transmit` | 核心模块独立配置、采集调度、转发模式和恢复 |
 | `reference_config`、`reference_dp`、`reference_ports`、`reference_services` | 原表注册、同步字节接口、CO/TR 适配、策略回调和迁移 |
@@ -271,3 +271,30 @@ GPIO 输入与 IDU 采样实现合并到 `modules/io_input`，通用 GPIO 和 ID
 `idu_status` 持有。确认规则不变；移动后单独重跑 11 项采集/status 集成测试与
 3 项镜像确认测试通过，默认及 MCUboot＋IAPv3 再次构建、导出与验签通过。
 原 `tests/boot` 改为 `tests/image_confirm`，完整回归入口已同步更新。
+
+
+## 参考结构点表与直接注册验证（2026-10-20）
+
+三张应用表改为参考结构，默认值另存 `defaults.c`，共享 const 型号表通过模块的
+临时执行视图读取。删除 `point_metadata` 和字符串回调分发，产品入口只注册回调，
+`dp_init()` 负责通用校验和数据池初始化。质量寄存器、样本年龄过期和旧 NVS 迁移暂缓。
+
+- `CCACHE_DISABLE=1 ASAN_OPTIONS=detect_leaks=0 bash tests/run.sh` 全部通过：
+  36 次模拟器执行、229 项 Ztest PASS；Python 29 项中 26 项通过、3 项因缺少外部输入跳过。
+  主机 C 回归保留 ASan/UBSan。
+- AIDC 4 项和 reference_config 1 项通过：直接版本/协议回调、
+  未实现业务拒写且参数不变、FC03 非持久点仅更新 RAM、UPP 模型结构和周期策略校验、临时视图下默认覆盖按键隔离。
+- `./build.sh`、`./build.sh --mcuboot --iapv3`、`./build.sh --mcuboot --aidc`
+  均构建通过，默认镜像布局检查及 MCUboot 签名/导出检查通过。
+- 当前静态 RAM 分别为 82,088 B、114,920 B、118,024 B。默认和 IAPv3 比上一轮
+  各增加 208 B，设备装配与逐行采集调度仍占 RAM；没有声称整机净节省。
+- `nm -S` 验证原处理/采集/转发表、默认数组及共享 DSP 表位于 `0x080…` 的只读区，
+  模块不分配整套 native 点表副本。
+- 导入工具用仓库中的来源快照验证标记区可复现。原 AIDC 来源目录当前不可用，
+  未执行从该外部源码重新解析；来源文件哈希保持原记录。
+
+本轮没有烧录或实板测量；UART 帧数从合并块改为逐行请求，实际总线负载、启动耗时、
+运行时栈余量及 Flash 掉电行为仍需实板验证。旧 schema 不匹配时拒写，不自动格式化。
+
+配置目录随后整理为 `cfg/device.c`、`cfg/inc/*.h`、`cfg/tables/*.c`；构建引用、
+导入输出、快照复现测试和维护文档一并更新。

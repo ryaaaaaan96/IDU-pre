@@ -35,7 +35,7 @@ python3 applications/IDU-pre/tools/analyze_reference.py \
 | 参考工程路径 / 职责 | IDU 对应位置 |
 | --- | --- |
 | `app/main.c:101` 注册设备、默认/范围、定时表，再于 `:142` 起依次启动 DP、本地设备、CO、TR | [app/process/points.c](../app/process/points.c) 显式装配；[platform_callback.h](../modules/dataprocess/include/platform_callback.h) 保存配置注册契约 |
-| `app/cfg/equip/dev_cfg.c:43` 的 `DEV_TABLE_S` 实例组合各协议表 | [app/cfg/devices](../app/cfg/devices) 的设备和型号配置 |
+| `app/cfg/equip/dev_cfg.c:43` 的 `DEV_TABLE_S` 实例组合各协议表 | [app/cfg/device.c](../app/cfg/device.c) 和 [inc](../app/cfg/inc) 的设备和型号配置 |
 | `app/cfg/equip/table/{process,collect,transmit}.c` 分别描述数据、采集和寄存器映射 | [app/cfg/tables](../app/cfg/tables)，三表内容与处理执行分开 |
 | `app/process` 的业务回调、`app/globalfunction.c` 的回调读写辅助 | [app/process](../app/process) 的业务处理，通用事务机制位于 DP 模块 |
 | `app/port_filter`、`app/plc` 的报文处理和端口控制 | [app/communication](../app/communication) 的产品协议配置和 Zephyr 端口适配 |
@@ -43,7 +43,7 @@ python3 applications/IDU-pre/tools/analyze_reference.py \
 
 参考工程的 `local_equip` 还包含产品功能。IDU 的采样映射、启动顺序和工程量换算继续属于应用。当前顺序为配置注册、`dp_init()`、采集接口、各总线 `co_init()`、参数恢复、`dp_process_start()`、`dp_reference_start()`、`co_start()`；TR 在地址就绪后绑定，产品依赖由应用显式安排。
 
-## 配置契约与编译范围
+## 配置契约与支持范围
 
 [reference_tables.h](../modules/dataprocess/include/dataprocess/reference_tables.h) 保留原表结构的字段语义，使用标准整数和布尔类型：
 
@@ -57,15 +57,24 @@ python3 applications/IDU-pre/tools/analyze_reference.py \
 | `MB_TABLE_CELL_T` / `_S`，`transmit_lib.h:66` | 外部寄存器到设备/信号及字序的映射 |
 | `INIT_DATA_SET_S` / `TIME_DATA_SET_S`，`data_process.h:355–368` | 全局初始化/定时处理函数；定时周期为毫秒，调用时四个参数均为空 |
 
-`platform_callback.h:37–54` 的原注册关系为设备表 getter、数量 getter，以及 `PARA_GET_RANGE_DEF(dev_id, sig_id, DM_SIG_DATA_S *, bool *recover_default)`。新版通过 `pltcb_reg_cfg_get_dev_tbl()`、`pltcb_reg_cfg_get_dev_num()`、`pltcb_reg_para_range_def_cb()` 注册，在 `dp_init(void)` 中使用有界静态数组编译，成功初始化后冻结注册。实现见 [reference_config.c](../modules/dataprocess/src/reference_config.c)。
+`platform_callback.h:37–54` 的原注册关系为设备表 getter、数量 getter，以及 `PARA_GET_RANGE_DEF(dev_id, sig_id, DM_SIG_DATA_S *, bool *recover_default)`。新版通过 `pltcb_reg_cfg_get_dev_tbl()`、`pltcb_reg_cfg_get_dev_num()`、`pltcb_reg_para_range_def_cb()` 注册，在 `dp_init(void)` 中校验并建立按需读取视图，成功初始化后冻结注册。实现见 [reference_config.c](../modules/dataprocess/src/reference_config.c)。
 
-启用 `CONFIG_DP_REFERENCE_TABLES` 后，编译器接收 U8、U16、S16、U32、S32、STRING、U8ARRAY、U16ARRAY，以及 `PRO_DATA_PROCESS`、简单的 Modbus MASTER/SLAVE 表。字节长度须精确匹配类型及配置容量。持久化本地点需要 `CONFIG_DP_PARAMS`，NVS 分区及恢复仍由应用启动。默认/范围来自注册回调；未注册时初值为零并使用类型范围。回调给出的最小值和最大值均为零时，表示不额外检查范围，仍保留类型的完整取值范围，不将值限制为零。持久化点要求强制恢复默认值时会拒绝配置，避免静默覆盖已有 NVS 数据。
+启用 `CONFIG_DP_REFERENCE_TABLES` 后，配置适配接收 U8、U16、S16、U32、S32、STRING、U8ARRAY、U16ARRAY，以及 `PRO_DATA_PROCESS`、Modbus MASTER/SLAVE 表以及下述 UPP 模型表子集。字节长度须精确匹配类型及配置容量。持久化本地点需要 `CONFIG_DP_PARAMS`，NVS 分区及恢复仍由应用启动。`FLAG_PERSISTENCE` 决定是否存储，FC03 映射本身不隐含 NVS；无持久标志的本地点仍可通过 FC03/06/16 运行回调并更新 RAM。默认/范围来自注册回调；未注册时初值为零并使用类型范围。回调给出的最小值和最大值均为零时，表示不额外检查范围，仍保留类型的完整取值范围，不将值限制为零。持久化点要求强制恢复默认值时会拒绝配置，避免静默覆盖已有 NVS 数据。
 
-原 `rqst_cyl` 的头文件只写“查询频率”。反汇编 `co_port_mgr.o:co_porc_scan_list+0x70 / +0x112 / +0x11a` 可见计数递减和重装，不能直接当作毫秒。当前要求显式注册 `dp_register_collect_period()`，由产品将该编码转换为毫秒，零表示仅初始化读取。帧合并、特殊采集数据类型、`scan_pri`、`FLAG_COLLECT` 和未支持协议会使初始化失败，不会被忽略。
+原 `rqst_cyl` 的头文件只写“查询频率”。反汇编 `co_port_mgr.o:co_porc_scan_list+0x70 / +0x112 / +0x11a` 可见计数递减和重装，不能直接当作毫秒。当前要求显式注册 `dp_register_collect_period()`，由产品将该编码转换为毫秒，零表示仅初始化读取。每个 Modbus 行独立请求，支持 `FLAG_FRAME`；不自动合帧。特殊采集数据类型、`scan_pri` 和未支持协议使初始化失败。`FLAG_COLLECT` 仅支持带明确 FC3 写目标的持久参数，由 FC06/16 下发并回读确认。
 
 Modbus 字序采用 `arc_byte_order.h:60–64` 的实际宏：0 默认按 BIGSMALL、1 SMALL、2 BIGSMALL、3 SMALLBIG、4 BIG。0/2 对应 native 低字在前，4 对应高字在前，1/3 另需字节交换。UPP 的 `PUB_BYTE_ORDER_BIG=0` 是另一套编码，不能混用；无需引入该头里的 ARC 函数。
 
-现有 IDU 表含产品迁移钩子和采集模型，继续通过显式扩展 `dp_register_config_provider(idu_equipment_config)` 使用，不伪装成 `DEV_TABLE_S`。该入口与原表 getter 互斥，底层 native 初始化入口是 `dp_init_config(cfg)`。
+IDU 的三张应用点表也使用这些原结构，通过设备表及默认/范围 getter 注册。
+`defaults.c` 提供原接口的 `DM_SIG_DATA_S`，回调直接写在 `DM_SIG_CFG_S.pf_sig_proc` 中，
+信号 ID 使用宏或枚举；不再通过 `point_metadata` 字符串分发。
+`dp_reference_prepare()` 可在启动线程前取得已校验配置。原生扩展
+`dp_register_config_provider()` / `dp_init_config()` 仍供独立模块使用，与原表注册互斥。
+
+`PRO_UPP_MASTER` 指向 `UPP_M_MOD_REG`，`sig_num` 是模型字段总数；支持
+`cfg_mode=0`、读/读写字段、相同长度及类型、比例 1、无特殊优先级的配置。
+周期必须经 `dp_register_model_period()` 显式解释。后端交换已解码的主机字序 word，
+当前 IDU 只提供虚拟实现，不包含 UPP 帧编码、链路或设备管理。
 
 原 INIT/TIMER 表使用 `pltcb_reg_cfg_get_init_reg_tbl/num()`、`pltcb_reg_cfg_get_timer_reg_tbl/num()` 成对注册。`dp_reference_start()` 在参数恢复及 DP 处理启动之后，先校验整组配置，再按表序执行 INIT，最后启用 TIMER。支持参考应用 `app/timer/timefunction.c:35–44` 实际使用的 type=0 周期定时，其他类型拒绝。Zephyr 延迟工作只向 DP 业务队列提交请求，业务回调在线程中执行，不占用系统工作队列。INIT 中途失败时，前面已成功的回调不会回滚；成功启动不能重复执行。
 
@@ -93,11 +102,13 @@ Modbus 字序采用 `arc_byte_order.h:60–64` 的实际宏：0 默认按 BIGSMA
 
 ## 点表的 Flash / RAM 分工
 
-产品的 `app/cfg/tables/{process,collect,transmit}.c`、设备配置和点表元数据原本已经
-使用 `static const`，不需要将整张表复制进 RAM。新增的原表查询返回 `const` 视图，
-`DEV_TBL_CFG_S.pst_table` 也改为 `const void *`；原表与默认字节数组均可直接放 Flash。
-原生配置继续直接使用这些静态表。只有启用 `CONFIG_DP_REFERENCE_TABLES`，运行时
-将参考表编译为 native 表的有界数组才需要 RAM；产品当前没有启用这层编译。
+产品的 `app/cfg/tables/{process,collect,transmit,defaults}.c` 使用 `static const`。
+同型号设备共享处理和采集行。`DEV_TBL_CFG_S.pst_table` 使用 `const void *`，
+设备装配和少量总线描述留在 RAM；点行不复制为整张 native 数组。
+启用 `CONFIG_DP_REFERENCE_TABLES` 后，`dp_config_point/collect/transmit()` 在调用者
+提供的栈缓冲中构造当前条目的执行视图；指针不得保留到缓冲失效后。
+参数索引、通知和默认覆盖分别保留索引或信号键，不保存临时视图指针。
+默认/范围与周期回调会被反复调用，必须只读、确定，不执行 I/O 或改变注册配置。
 
 测点当前值、质量、采样时间、NVS 缓存和事务暂存必须可写。运行状态的字段顺序已调整，
 GD32E505 上每个 `stored_point` 从 32 字节缩至 24 字节；64 点容量节省 512 字节，

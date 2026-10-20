@@ -1,6 +1,6 @@
 /* Frozen pre-point-table register behavior: regression oracle, not firmware. */
 #include "legacy_registers.h"
-#include "cfg/tables/signal_ids.h"
+#include "cfg/inc/signal_ids.h"
 #include <errno.h>
 
 int idu_input_register_read(const struct idu_snapshot *s,

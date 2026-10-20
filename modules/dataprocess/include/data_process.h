@@ -39,7 +39,7 @@ typedef struct {
     FUNC_PARA_RD extra;
     uint8_t *pvalue;
 } FUNC_PARA_S;
-typedef struct {
+typedef struct func_para_all {
     uint8_t type;
     uint16_t port_id, para_num;
     FUNC_PARA_S *para_all;

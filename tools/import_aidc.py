@@ -14,13 +14,120 @@ import argparse, ast, collections, hashlib, json, operator, re
 CONFIG_DIR = Path(__file__).resolve().parents[1] / 'app/cfg'
 TABLE_FILES = {
     'points': 'tables/process.c',
+    'defaults': 'tables/defaults.c',
     'transmit': 'tables/transmit.c',
-    'models': 'tables/point_metadata.c',
-    'handlers': 'tables/point_metadata.c',
     'fields': 'tables/collect.c',
     'collect': 'tables/collect.c',
-    'devices': 'devices/device_config.c',
+    'devices': 'device.c',
 }
+
+REFERENCE_CALLBACKS = {
+    'local_equip_take_sig_effect': 'idu_serial_setting',
+    'link_inner_sn_value': 'idu_point_alias',
+    'device_name_3X_2516': 'idu_point_alias',
+    'property_prtol_3X_2500_2502': 'idu_protocol_identity',
+    'property_prtol_3X_2569_2575': 'idu_protocol_identity',
+    'property_prtol_3X_2581': 'idu_protocol_identity',
+    'property_prtol_3X_2582_2657': 'idu_firmware_version',
+}
+
+
+def signal_symbol(row):
+    name = row['sig_id']
+    return 'AIDC_' + name if re.fullmatch(r'[A-Za-z_]\w*', name) else str(row['id'])
+
+
+def render_reference_tables(metadata, value):
+    """Render the public reference layouts; no native execution descriptors."""
+    notice = ('/* Imported from user-provided AIDC source tables. Original tables: SUNGROW.\n'
+              ' * Regenerate with tools/import_aidc.py; no closed library is linked. */\n')
+    groups = {247: [], 11: []}
+    defaults = []
+    expected_size = {'DATA_TYPE_U8': 1, 'DATA_TYPE_U16': 2, 'DATA_TYPE_S16': 2,
+                     'DATA_TYPE_U32': 4, 'DATA_TYPE_S32': 4}
+    union_member = {'DATA_TYPE_U8': 'u16', 'DATA_TYPE_U16': 'u16',
+                    'DATA_TYPE_S16': 's16', 'DATA_TYPE_U32': 'u32',
+                    'DATA_TYPE_S32': 's32'}
+    for row in metadata['process_descriptors']:
+        dev, sig, flags = row['device'], signal_symbol(row), row['flags']
+        size, dtype = value(row['sig_size']), row['data_type']
+        # Preserve the existing explicit normalization of malformed source
+        # type/size pairs; they remain opaque words, never truncated integers.
+        if dtype in expected_size and size != expected_size[dtype]:
+            dtype = 'DATA_TYPE_U16ARRAY'
+        callback = (REFERENCE_CALLBACKS.get(row['pf_sig_proc'], 'idu_unsupported_service')
+                    if row['pf_sig_proc'] not in ('NULL', 'MPP_NULL_PTR')
+                    else 'idu_initialize_point' if dev == 247 and not flags & 1 else 'NULL')
+        groups[dev].append(
+            f'    {{.sig_id={sig},.sig_size={size},.sig_flag={flags},'
+            f'.data_type={dtype},.pf_sig_proc={callback}}},')
+        initial = row['initial']
+        if size > 4:
+            default = '.def_value.pst=(void *)(const uint16_t[]){' + ','.join(map(str, initial)) + '}'
+        else:
+            default = f'.def_value.u32={sum(n << (16*i) for i,n in enumerate(initial))}U'
+        member = union_member.get(dtype)
+        bounds = ''
+        if member:
+            for kind in ('min', 'max'):
+                entry = next((v for k,v in row['range'].items()
+                              if k.startswith(kind + '_value.') and not k.endswith('.pst')), None)
+                if entry is not None:
+                    bounds += f',.{kind}_value.{member}={value(entry)}'
+        restore = str(value(row['range'].get('is_recover', '0')) > 1).lower()
+        defaults.append(f'    {{.dev_id={dev},.sig_id={sig},.data={{{default}{bounds}}},'
+                        f'.restore={restore}}},')
+    for row in metadata['unresolved_mappings']:
+        groups[247].append(
+            f'    {{.sig_id={signal_symbol(row)},.sig_size={row["count"]*2},'
+            '.data_type=DATA_TYPE_U16ARRAY}, /* Missing source definition: no INIT value. */')
+    process = notice
+    for dev, name in ((247, 'imported_local'), (11, 'imported_dsp')):
+        process += f'static const DM_SIG_CFG_S {name}[] = {{\n' + '\n'.join(groups[dev]) + '\n};\n'
+
+    # Retain only the selected fields used by the existing model backend.
+    # The full original field catalog remains in the provenance report.
+    models = collections.OrderedDict()
+    for row in metadata['process_descriptors']:
+        if row['device'] != 11:
+            continue
+        field = next(r for r in metadata['all_upp_fields'] if r['id'] == row['id'])
+        models.setdefault(field['model'], []).append(field)
+    fields = notice
+    for model, rows in models.items():
+        fields += f'static const UPP_M_MOD_DATA model_{model}[] = {{\n'
+        for row in rows:
+            rw = {'UPP_MODE_R': 1, 'UPP_MODE_RW': 3}[row['rw_mode']]
+            fields += (
+                f'    {{.sig_id={signal_symbol(row)},.mod_data_offset={value(row["mod_data_offset"])},'
+                f'.mod_data_len={value(row["mod_data_len"])},'
+                f'.mod_data_type={row["mod_data_type"].replace("UPP_DATA_TYPE_", "DATA_TYPE_")},'
+                f'.data_len={value(row["data_len"])},'
+                f'.data_type={row["data_type"].replace("UPP_DATA_TYPE_", "DATA_TYPE_")},'
+                f'.rw_mode={rw},.byte_order=0,.set_pri={value(row["set_pri"])},'
+                f'.scan_pri={value(row["scan_pri"])},.rqst_cyl={value(row["rqst_cyl"])},'
+                f'.dec_p={value(row["dec_p"])}}},\n')
+        fields += '};\n'
+    collection = notice + 'static const UPP_M_MOD models[] = {\n'
+    for model in models:
+        collection += (f'    {{.p_data=model_{model},.data_num=ARRAY_SIZE(model_{model}),'
+                       f'.mod_id={model}}},\n')
+    collection += ('};\nstatic const UPP_M_MOD_REG imported_models = {\n'
+                   '    .p_model_ary=models,.model_num=ARRAY_SIZE(models),.cfg_mode=0,\n};\n')
+    return {
+        'points': process,
+        'defaults': notice + 'static const struct point_default imported_defaults[] = {\n' +
+                    '\n'.join(defaults) + '\n};\n',
+        'fields': fields,
+        'collect': collection,
+        'transmit': notice + '\n'.join(
+            f'    {{.sig_id={signal_symbol(r)},.reg_addr={r["address"]},.reg_num={r["count"]},'
+            f'.dev_id={r["device"]},.reg_type={r["function"]},.byte_order=BYTE_ORDER_DEFAULT}},'
+            for r in metadata['transmit']) + '\n',
+        'devices': notice + '\n'.join(
+            f'    {{.dev_id={dev},.coll_addr={dev-10},.port=1}},'
+            for dev in range(11, 19)) + '\n',
+    }
 
 
 def replace_imported_tables(text, tables, filename):
@@ -65,7 +172,7 @@ def write_tables(output, tables, symbols, metadata, template_dir=None, report_pa
         # Decode bytes directly so existing CRLF outside the regions is retained.
         original = source.read_bytes().decode('utf-8')
         prepared[target] = replace_imported_tables(original, regions, filename)
-    prepared[output / 'tables/imported_signals.h'] = symbols
+    prepared[output / 'inc/imported_signals.h'] = symbols
     if report_path.resolve() in {target.resolve() for target in prepared}:
         raise ValueError(f'Report path conflicts with table output: {report_path}')
     prepared[report_path] = json.dumps(metadata, ensure_ascii=False, indent=2) + '\n'
@@ -188,8 +295,8 @@ def generate(root, output, report_path=None):
                 overlaps.append({'first_line':m['line'],'second_line':mapped['line'],'first_address':m['address'],'second_address':mapped['address'],'function':m['function']})
         mapping.append(mapped)
     range_tables = {name:{val(r['sig_id']):r for r in entries(ranges,name)} for name in ['g_local_range_table','g_dsp_range_table']}
-    descriptor=[]; handler_names=set(); cfg=[]; polls=[]; type_mismatches=[]
-    writable={m['id'] for m in mapping if m['function']==3}
+    descriptor=[]; polls=[]; type_mismatches=[]
+    point_count = 0
     type_map={'DATA_TYPE_U8':('DP_U8',0,255),'DATA_TYPE_U16':('DP_U16',0,65535),
               'DATA_TYPE_S16':('DP_S16',-32768,32767),'DATA_TYPE_U32':('DP_U32',0,4294967295),
               'DATA_TYPE_S32':('DP_S32',-2147483648,2147483647),'DATA_TYPE_STRING':('DP_WORDS',0,0)}
@@ -212,21 +319,8 @@ def generate(root, output, report_path=None):
                             initial=[int.from_bytes(data[i:i+2],'big') for i in range(0,len(data),2)]
                     else:
                         n=val(v);initial=[(n>>(16*i))&65535 for i in range(width)]
-            callback=row['pf_sig_proc']; has_handler=callback not in ('NULL','MPP_NULL_PTR')
-            if has_handler:handler_names.add(callback)
-            # Local point properties are retained; original table flags do not
-            # declare access rights. External writes are limited by FC03 maps.
-            parameter=table_name=='g_arm_data_table' and (flags&1 or sid in writable)
-            param_flags=['DP_PARAM_WRITE'] if parameter else []
-            if flags&1:param_flags+=['DP_PARAM_PERSIST']
-            if parameter and val(rng.get('is_recover','0'))>1:param_flags+=['DP_PARAM_RESTORE']
-            if parameter and flags&1 and not flags&(4|16):param_flags+=['DP_PARAM_DEFER_STORE']
-            for dev in device_ids:
-                source='DP_SOURCE_PARAMETER' if parameter else 'DP_SOURCE_LOCAL' if dev==247 else 'DP_SOURCE_MODBUS'
-                cfg.append(f'    {{.key={{{dev},{sid}}},.source={source},.type={typ},.width={width},.minimum={lo}LL,.maximum={hi}LL,.initial.words={{{",".join(map(str,initial))}}}'+
-                           (f',.param_flags={" | ".join(param_flags)}' if parameter else '')+
-                           (',.handler=idu_aidc_process' if has_handler else '')+
-                           (',.read_callback=true' if flags&8 else '')+'},')
+            parameter = table_name == 'g_arm_data_table' and bool(flags & 1)
+            point_count += len(device_ids)
             descriptor.append(dict(row,device=247 if table_name=='g_arm_data_table' else 11,width=width,
                                    flags=flags,initial=initial,parameter=parameter,range=rng))
             if table_name=='g_dsp_data_table':
@@ -239,24 +333,20 @@ def generate(root, output, report_path=None):
     for m in mapping:
         if m['id'] not in tables['g_arm_data_table']:
             unresolved.append(m)
-            cfg.append(f'    {{.key={{247,{m["id"]}}},.source=DP_SOURCE_LOCAL,.type=DP_WORDS,.width={m["count"]}}}, /* missing original process definition: unavailable until explicitly supplied */')
-    notice='/* Generated from user-provided AIDC source tables. Original tables: SUNGROW.\n * Regenerate with tools/import_aidc.py; no closed library is linked. */\n'
-    generated = {
-        'points': notice+'\n'.join(cfg)+'\n',
-        'transmit': notice+'\n'.join(f'    {{.function={m["function"]},.address={m["address"]},.count={m["count"]},.key={{{m["device"]},{m["id"]}}},.order=DP_LOW_WORD_FIRST}},' for m in mapping)+'\n',
-        'models': notice+'\n'.join(f'    {{.sig={r["sig"]},.model={r["model"]},.offset={r["offset"]},.width={r["width"]},.legacy_cycle={r["original_cycle"]},.initial.words={{{",".join(map(str,r["initial"]))}}}}},' for r in polls)+'\n',
-        'handlers': notice+'\n'.join(f'    {{.sig={r["id"]},.name="{r["sig_id"]}",.callback="{r["pf_sig_proc"]}"}},' for r in descriptor if r['device']==247)+'\n',
-        'fields': notice+'\n'.join(f'static const struct co_field aidc_field_{i}[] = {{{{.sig_id={r["sig"]},.width={r["width"]},.order=DP_LOW_WORD_FIRST}}}};' for i,r in enumerate(polls))+'\n',
-        'collect': notice+'\n'.join(f'    {{.dev_id={dev},.model_protocol=true,.model_id={r["model"]},.address={r["offset"]},.count={r["width"]},.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_{i},.field_count=1}},' for dev in range(11,19) for i,r in enumerate(polls))+'\n',
-        'devices': notice+'\n'.join(f'    {{.dev_id={dev},.unit_id={dev-10},.bus_id=1}},' for dev in range(11,19))+'\n',
-    }
+            point_count += 1
+    notice = ('/* Imported from user-provided AIDC source tables. Original tables: SUNGROW.\n'
+              ' * Regenerate with tools/import_aidc.py; no closed library is linked. */\n')
     required={k:val(k) for k in symbols.expr if k.startswith('LOCAL_SIG_') or k.startswith('E_USART_') or k.startswith('PORT_WORK_MODE_')}
+    for row in descriptor + all_models + mapping:
+        if re.fullmatch(r'[A-Za-z_]\w*', row['sig_id']):
+            required[row['sig_id']] = row['id']
     generated_symbols=notice+'#pragma once\n'+'\n'.join(f'#define AIDC_{k} ({v})' for k,v in required.items())+'\n'
     metadata={'source_root':str(root),'source_sha256':{p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in sources},
               'duplicates_collapsed':duplicates,'map_duplicates_collapsed':map_duplicates,'overlapping_maps':overlaps,
               'process_descriptors':descriptor,'all_upp_fields':all_models,'transmit':mapping,
-              'unresolved_mappings':unresolved,'type_width_mismatches':type_mismatches,'point_count':len(cfg),'parameter_count':sum(r['parameter'] for r in descriptor),'model_poll_count':len(polls)*8,
+              'unresolved_mappings':unresolved,'type_width_mismatches':type_mismatches,'point_count':point_count,'parameter_count':sum(r['parameter'] for r in descriptor),'model_poll_count':len(polls)*8,
               'scope':'UPP fields retain original model offsets/cycle codes. Virtual backend timing is an explicit test setting, not a decoded legacy scheduler.'}
+    generated = render_reference_tables(metadata, val)
     write_tables(output, generated, generated_symbols, metadata, report_path=report_path)
     print({k:metadata[k] for k in ['point_count','parameter_count','model_poll_count']},'maps',len(mapping),'duplicates',len(duplicates))
 

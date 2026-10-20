@@ -18,6 +18,7 @@ static CFG_GET_INIT_REG_TBL get_initializers;
 static CFG_GET_INIT_REG_NUM get_initializer_count;
 static dp_config_provider_fn native_provider;
 static dp_collect_period_fn collect_period;
+static dp_collect_period_fn model_period;
 static bool frozen, initializing;
 static bool registry_started, registry_starting;
 
@@ -95,6 +96,16 @@ int dp_register_collect_period(dp_collect_period_fn convert)
     return err;
 }
 
+int dp_register_model_period(dp_collect_period_fn convert)
+{
+    if (k_is_in_isr()) { return -EWOULDBLOCK; }
+    k_mutex_lock(&configuration_lock, K_FOREVER);
+    int err = frozen || initializing || dp_config() ? -EBUSY : 0;
+    if (!err) { model_period = convert; }
+    k_mutex_unlock(&configuration_lock);
+    return err;
+}
+
 #if defined(CONFIG_DP_PROCESS)
 struct reference_timer {
     struct k_work_delayable work;
@@ -138,7 +149,7 @@ int dp_reference_start(void)
         bool found = init[i].dev_id == 0;
         const struct dp_equip_cfg *cfg = dp_config();
         for (size_t p = 0; p < cfg->point_count; ++p) {
-            found |= cfg->points[p].key.dev_id == init[i].dev_id;
+            found |= dp_config_key(cfg, p).dev_id == init[i].dev_id;
         }
         if (!found) { err = -ENOENT; goto out; }
     }
@@ -170,22 +181,11 @@ out:
 }
 
 #if defined(CONFIG_DP_REFERENCE_TABLES)
-static struct dp_point_cfg points[CONFIG_DP_REFERENCE_MAX_POINTS];
+/* Only transport identities and the configuration object need writable storage.
+ * All three source tables and defaults stay in application-owned flash.
+ */
 static struct dp_device_cfg devices[CONFIG_DP_MAX_DEVICES];
-static struct co_cfg polls[CONFIG_DP_REFERENCE_MAX_COLLECT];
-static struct co_field fields[CONFIG_DP_REFERENCE_MAX_COLLECT];
-static struct dp_transmit_cfg maps[CONFIG_DP_REFERENCE_MAX_TRANSMIT];
 static struct dp_equip_cfg compiled;
-
-static struct dp_point_cfg *find_point(uint16_t dev, uint16_t sig)
-{
-    for (size_t i = 0; i < compiled.point_count; ++i) {
-        if (points[i].key.dev_id == dev && points[i].key.sig_id == sig) {
-            return &points[i];
-        }
-    }
-    return NULL;
-}
 
 static int word_order(uint8_t encoded, enum dp_word_order *order)
 {
@@ -199,22 +199,19 @@ static int word_order(uint8_t encoded, enum dp_word_order *order)
     }
 }
 
-static int compile_point(uint8_t dev, const DM_SIG_CFG_S *signal)
+static int point_values(uint8_t dev, const DM_SIG_CFG_S *signal, struct dp_point_cfg *p)
 {
     if (!signal->sig_size || signal->sig_size > DP_POINT_WORDS * 2 ||
-        signal->sig_size > 144 || !signal->sig_id ||
-        find_point(dev, signal->sig_id)) { return -EINVAL; }
-    if (compiled.point_count == ARRAY_SIZE(points)) { return -ENOSPC; }
+        signal->sig_size > 144 || !signal->sig_id) { return -EINVAL; }
     /* A reference parameter that is also live telemetry needs an explicit
      * product model; importing it must not silently change persistence rules.
      */
-    if (signal->sig_flag & ~(FLAG_PERSISTENCE | FLAG_RT_STORE |
+    if (signal->sig_flag & ~(FLAG_PERSISTENCE | FLAG_COLLECT | FLAG_RT_STORE |
                             FLAG_READ_CALLBACK | FLAG_PERSISTENCE_SYNC)) {
         return -ENOTSUP;
     }
     if ((signal->sig_flag & (FLAG_RT_STORE | FLAG_PERSISTENCE_SYNC)) &&
         !(signal->sig_flag & FLAG_PERSISTENCE)) { return -EINVAL; }
-    struct dp_point_cfg *p = &points[compiled.point_count];
     *p = (struct dp_point_cfg){
         .key = {dev, signal->sig_id}, .source = DP_SOURCE_LOCAL,
         .width = (signal->sig_size + 1) / 2, .size_bytes = signal->sig_size,
@@ -290,108 +287,254 @@ static int compile_point(uint8_t dev, const DM_SIG_CFG_S *signal)
             p->param_flags |= DP_PARAM_DEFER_STORE;
         }
     }
-    ++compiled.point_count;
     return 0;
 }
 
-static int compile_poll(uint8_t dev, const MODBUS_RTU_TABLE_S *row)
+
+static const DM_SIG_CFG_S *signal_row(const DEV_TABLE_S *dev, uint16_t sig)
 {
-    struct dp_point_cfg *p = find_point(dev, row->sig_id);
-    if (!p || p->source != DP_SOURCE_LOCAL || row->reg_num != p->width ||
-        (row->reg_type != 3 && row->reg_type != 4)) { return -EINVAL; }
-    /* Segment/grouping, write commands and scan-priority policy require a
-     * dedicated adapter; one supported row becomes one exact Modbus request.
-     */
-    if (row->flag || row->data_type || row->scan_pri || !collect_period) {
-        return -ENOTSUP;
+    const DEV_TBL_CFG_S *group = &dev->ptl_tbl_cfg[0];
+    const DM_SIG_CFG_S *rows = group->pst_table;
+    for (size_t i = 0; i < group->sig_num; ++i) {
+        if (rows[i].sig_id == sig) { return &rows[i]; }
     }
-    if (compiled.collect_count == ARRAY_SIZE(polls)) { return -ENOSPC; }
-    uint32_t period = 0;
-    int err = collect_period(row->rqst_cyl, &period);
+    return NULL;
+}
+
+static int reference_point(const struct dp_equip_cfg *cfg, size_t index,
+                            struct dp_point_cfg *p)
+{
+    const DEV_TABLE_S *dev = NULL;
+    for (size_t d = 0; d < cfg->reference_device_count; ++d) {
+        dev = &cfg->reference_devices[d];
+        if (index < dev->ptl_tbl_cfg[0].sig_num) { break; }
+        index -= dev->ptl_tbl_cfg[0].sig_num;
+        dev = NULL;
+    }
+    if (!dev) { return -ENOENT; }
+    const DM_SIG_CFG_S *signal = &((const DM_SIG_CFG_S *)dev->ptl_tbl_cfg[0].pst_table)[index];
+    int err = point_values(dev->dev_id, signal, p);
     if (err) { return err; }
-    size_t n = compiled.collect_count;
-    fields[n] = (struct co_field){.sig_id = row->sig_id, .width = p->width};
-    err = word_order(row->byte_order, &fields[n].order);
-    if (err) { return err; }
-    polls[n] = (struct co_cfg){.dev_id = dev, .function = row->reg_type,
-        .address = row->reg_addr, .count = row->reg_num, .period_ms = period,
-        .fields = &fields[n], .field_count = 1, .priority = row->priority,
-        .init_only = period == 0};
-    p->source = DP_SOURCE_MODBUS;
-    ++compiled.collect_count;
+    bool acquired = false, forwarded = false;
+    for (size_t t = 1; t < MAX_PTL_TBL_NUM; ++t) {
+        const DEV_TBL_CFG_S *group = &dev->ptl_tbl_cfg[t];
+        if (group->proto_type == PRO_MB_MASTER) {
+            const MODBUS_RTU_TABLE_S *rows = group->pst_table;
+            for (size_t i = 0; i < group->sig_num; ++i) {
+                const MODBUS_RTU_TABLE_S *row = &rows[i];
+                if (row->sig_id != signal->sig_id) { continue; }
+                if (signal->sig_flag & FLAG_COLLECT) {
+                    if (forwarded || row->reg_type != 3 || row->reg_num != p->width ||
+                        (row->flag & ~7U) || row->data_type || row->scan_pri ||
+                        !(row->flag & (p->width == 1 ? 2 : 4)) ||
+                        !(signal->sig_flag & FLAG_PERSISTENCE)) {
+                        return -ENOTSUP;
+                    }
+                    p->param_flags |= DP_PARAM_FORWARD;
+                    p->write_address = row->reg_addr;
+                    err = word_order(row->byte_order, &p->write_order);
+                    if (err) { return err; }
+                    forwarded = true;
+                } else { acquired = true; }
+            }
+        } else if (group->proto_type == PRO_UPP_MASTER) {
+            const UPP_M_MOD_REG *models = group->pst_table;
+            for (size_t m = 0; m < models->model_num; ++m) {
+                const UPP_M_MOD *model = &models->p_model_ary[m];
+                for (size_t i = 0; i < model->data_num; ++i) {
+                    acquired |= model->p_data[i].sig_id == signal->sig_id;
+                }
+            }
+        }
+    }
+    if ((signal->sig_flag & FLAG_COLLECT) && !forwarded) { return -ENOTSUP; }
+    if (acquired) {
+        if (p->source == DP_SOURCE_PARAMETER || forwarded) { return -ENOTSUP; }
+        p->source = DP_SOURCE_MODBUS;
+    }
+    if (p->source == DP_SOURCE_PARAMETER &&
+        !pltcb_para_get_is_load_def(p->key.dev_id, p->key.sig_id, signal->sig_size,
+                                    (uint8_t *)p->initial.words)) {
+        p->param_flags &= ~DP_PARAM_RESTORE;
+    }
     return 0;
 }
 
-static int compile_map(const MB_TABLE_CELL_T *row)
+static int reference_collect(const struct dp_equip_cfg *cfg, size_t index,
+                              struct co_cfg *poll)
 {
-    if (compiled.transmit_count == ARRAY_SIZE(maps)) { return -ENOSPC; }
-    struct dp_transmit_cfg *m = &maps[compiled.transmit_count];
-    *m = (struct dp_transmit_cfg){.function = row->reg_type,
-        .address = row->reg_addr, .count = row->reg_num,
-        .key = {row->dev_id, row->sig_id}, .kind = DP_MAP_VALUE};
-    int err = word_order(row->byte_order, &m->order);
-    if (err) { return err; }
-    ++compiled.transmit_count;
-    return 0;
+    for (size_t d = 0; d < cfg->reference_device_count; ++d) {
+        const DEV_TABLE_S *dev = &cfg->reference_devices[d];
+        for (size_t t = 1; t < MAX_PTL_TBL_NUM; ++t) {
+            const DEV_TBL_CFG_S *group = &dev->ptl_tbl_cfg[t];
+            if (group->proto_type == PRO_MB_MASTER) {
+                const MODBUS_RTU_TABLE_S *rows = group->pst_table;
+                for (size_t i = 0; i < group->sig_num; ++i) {
+                    const MODBUS_RTU_TABLE_S *row = &rows[i];
+                    const DM_SIG_CFG_S *sig = signal_row(dev, row->sig_id);
+                    if (sig && (sig->sig_flag & FLAG_COLLECT)) { continue; }
+                    if (index) { --index; continue; }
+                    if (!sig || row->reg_num != (sig->sig_size + 1U) / 2U ||
+                        (row->reg_type != 3 && row->reg_type != 4)) { return -EINVAL; }
+                    /* Each row is an exact request, so FRAME already holds. */
+                    if ((row->flag & ~1U) || row->data_type || row->scan_pri ||
+                        !collect_period) { return -ENOTSUP; }
+                    *poll = (struct co_cfg){.dev_id = dev->dev_id,
+                        .function = row->reg_type, .address = row->reg_addr,
+                        .count = row->reg_num, .priority = row->priority,
+                        .field_count = 1};
+                    int err = collect_period(row->rqst_cyl, &poll->period_ms);
+                    if (err) { return err; }
+                    poll->init_only = poll->period_ms == 0;
+                    poll->reference_field = (struct co_field){.sig_id = row->sig_id,
+                        .width = row->reg_num};
+                    poll->fields = &poll->reference_field;
+                    return word_order(row->byte_order, &poll->reference_field.order);
+                }
+            } else if (group->proto_type == PRO_UPP_MASTER) {
+                const UPP_M_MOD_REG *models = group->pst_table;
+                for (size_t m = 0; m < models->model_num; ++m) {
+                    const UPP_M_MOD *model = &models->p_model_ary[m];
+                    if (index >= model->data_num) { index -= model->data_num; continue; }
+                    const UPP_M_MOD_DATA *row = &model->p_data[index];
+                    const DM_SIG_CFG_S *sig = row->sig_id <= UINT16_MAX ?
+                        signal_row(dev, row->sig_id) : NULL;
+                    if (!sig || row->data_len != sig->sig_size || !row->mod_data_len ||
+                        (uint32_t)row->mod_data_offset + row->mod_data_len > 65536U) {
+                        return -EINVAL;
+                    }
+                    /* The model backend provides decoded words; scale/type
+                     * conversion and UPP wire framing are deliberately absent.
+                     */
+                    if ((row->rw_mode != 1 && row->rw_mode != 3) ||
+                        row->byte_order != 0 || row->set_pri ||
+                        row->scan_pri || row->dec_p != 1 ||
+                        row->mod_data_type != row->data_type ||
+                        row->data_type != sig->data_type ||
+                        row->mod_data_len != row->data_len || !model_period) {
+                        return -ENOTSUP;
+                    }
+                    *poll = (struct co_cfg){.dev_id = dev->dev_id,
+                        .model_protocol = true, .model_id = model->mod_id,
+                        .address = row->mod_data_offset, .count = (row->data_len + 1) / 2,
+                        .field_count = 1};
+                    int err = model_period(row->rqst_cyl, &poll->period_ms);
+                    if (err) { return err; }
+                    poll->init_only = poll->period_ms == 0;
+                    poll->reference_field = (struct co_field){.sig_id = row->sig_id,
+                        .width = poll->count, .order = DP_LOW_WORD_FIRST};
+                    poll->fields = &poll->reference_field;
+                    return 0;
+                }
+            }
+        }
+    }
+    return -ENOENT;
+}
+
+static int reference_transmit(const struct dp_equip_cfg *cfg, size_t index,
+                               struct dp_transmit_cfg *map)
+{
+    for (size_t d = 0; d < cfg->reference_device_count; ++d) {
+        for (size_t t = 1; t < MAX_PTL_TBL_NUM; ++t) {
+            const DEV_TBL_CFG_S *group = &cfg->reference_devices[d].ptl_tbl_cfg[t];
+            if (group->proto_type != PRO_MB_SLAVE) { continue; }
+            if (index >= group->sig_num) { index -= group->sig_num; continue; }
+            const MB_TABLE_CELL_T *row = &((const MB_TABLE_CELL_T *)group->pst_table)[index];
+            *map = (struct dp_transmit_cfg){.function = row->reg_type,
+                .address = row->reg_addr, .count = row->reg_num,
+                .key = {row->dev_id, row->sig_id}, .kind = DP_MAP_VALUE};
+            return word_order(row->byte_order, &map->order);
+        }
+    }
+    return -ENOENT;
 }
 
 static int compile_tables(void)
 {
     const DEV_TABLE_S *table = pltcb_cfg_get_dev_tbl();
     size_t count = pltcb_cfg_get_dev_num();
-    if (!table || !count || count > CONFIG_DP_MAX_DEVICES) { return -EINVAL; }
-    compiled = (struct dp_equip_cfg){.points = points, .devices = devices,
-        .collect = polls, .transmit = maps,
-        .reference_devices = table, .reference_device_count = count};
+    if (!table || !count || count > CONFIG_DP_MAX_DEVICES + 2) { return -EINVAL; }
+    compiled = (struct dp_equip_cfg){.devices = devices,
+        .reference_devices = table, .reference_device_count = count,
+        .point_get = reference_point, .collect_get = reference_collect,
+        .transmit_get = reference_transmit,
+        /* Preserve exact complete-point reads for overlapping legacy tables. */
+        .exact_overlapping_reads = true};
+    /* Validate every catalog pointer before any cross-table lookup. */
     for (size_t d = 0; d < count; ++d) {
-        const DEV_TABLE_S *device = &table[d];
-        const DEV_TBL_CFG_S *process = &device->ptl_tbl_cfg[0];
-        if (!device->dev_id || process->proto_type != PRO_DATA_PROCESS ||
-            !process->sig_num || !process->pst_table) { return -EINVAL; }
+        const DEV_TABLE_S *dev = &table[d];
+        if (!dev->dev_id || dev->ptl_tbl_cfg[0].proto_type != PRO_DATA_PROCESS) { return -EINVAL; }
         for (size_t j = 0; j < d; ++j) {
-            if (table[j].dev_id == device->dev_id) { return -EEXIST; }
+            if (table[j].dev_id == dev->dev_id) { return -EEXIST; }
         }
-        const DM_SIG_CFG_S *signals = process->pst_table;
-        for (size_t s = 0; s < process->sig_num; ++s) {
-            int err = compile_point(device->dev_id, &signals[s]);
-            if (err) { return err; }
+        for (size_t t = 0; t < MAX_PTL_TBL_NUM; ++t) {
+            const DEV_TBL_CFG_S *group = &dev->ptl_tbl_cfg[t];
+            if (t && !group->proto_type && !group->sig_num && !group->pst_table) { continue; }
+            if (!group->sig_num || !group->pst_table) { return -EINVAL; }
+            if (!t) { compiled.point_count += group->sig_num; continue; }
+            if (group->proto_type == PRO_MB_SLAVE) { compiled.transmit_count += group->sig_num; }
+            else if (group->proto_type == PRO_MB_MASTER) { /* Count below. */ }
+            else if (group->proto_type == PRO_UPP_MASTER) {
+                const UPP_M_MOD_REG *models = group->pst_table;
+                if (!models->p_model_ary || !models->model_num || models->cfg_mode != 0 ||
+                    models->model_num > CONFIG_DP_POINTS_MAX_POLLS) { return -EINVAL; }
+                size_t signals = 0;
+                for (size_t m = 0; m < models->model_num; ++m) {
+                    const UPP_M_MOD *model = &models->p_model_ary[m];
+                    if (!model->p_data || !model->data_num) { return -EINVAL; }
+                    for (size_t n = 0; n < m; ++n) {
+                        if (models->p_model_ary[n].mod_id == model->mod_id) { return -EEXIST; }
+                    }
+                    signals += model->data_num;
+                }
+                if (signals != group->sig_num) { return -EINVAL; }
+                compiled.collect_count += signals;
+            } else { return -ENOTSUP; }
         }
     }
     for (size_t d = 0; d < count; ++d) {
-        const DEV_TABLE_S *device = &table[d];
+        const DEV_TABLE_S *dev = &table[d];
         bool has_collect = false;
         for (size_t t = 1; t < MAX_PTL_TBL_NUM; ++t) {
-            const DEV_TBL_CFG_S *group = &device->ptl_tbl_cfg[t];
-            if (group->proto_type == PRO_DEFAULT && !group->sig_num && !group->pst_table) {
-                continue;
-            }
-            if (!group->sig_num || !group->pst_table) { return -EINVAL; }
-            for (size_t s = 0; s < group->sig_num; ++s) {
-                int err;
-                switch (group->proto_type) {
-                case PRO_MB_MASTER:
-                    err = compile_poll(device->dev_id,
-                        &((const MODBUS_RTU_TABLE_S *)group->pst_table)[s]);
-                    has_collect = true; break;
-                case PRO_MB_SLAVE:
-                    err = compile_map(&((const MB_TABLE_CELL_T *)group->pst_table)[s]); break;
-                default: return -ENOTSUP;
-                }
-                if (err) { return err; }
+            const DEV_TBL_CFG_S *group = &dev->ptl_tbl_cfg[t];
+            if (group->proto_type == PRO_UPP_MASTER) { has_collect = true; }
+            if (group->proto_type != PRO_MB_MASTER) { continue; }
+            has_collect = true;
+            const MODBUS_RTU_TABLE_S *rows = group->pst_table;
+            for (size_t i = 0; i < group->sig_num; ++i) {
+                const DM_SIG_CFG_S *sig = signal_row(dev, rows[i].sig_id);
+                if (!sig) { return -ENOENT; }
+                if (!(sig->sig_flag & FLAG_COLLECT)) { ++compiled.collect_count; }
             }
         }
-        /* Native device descriptors represent acquisition endpoints only.
-         * Local/virtual device identities remain in the process point keys.
-         */
         if (has_collect) {
-            devices[compiled.device_count++] = (struct dp_device_cfg){
-                .dev_id = device->dev_id, .unit_id = device->coll_addr,
-                .bus_id = device->port, .dev_code = device->dev_code};
+            if (compiled.device_count == ARRAY_SIZE(devices)) { return -ENOSPC; }
+            devices[compiled.device_count++] = (struct dp_device_cfg){.dev_id = dev->dev_id,
+                .unit_id = dev->coll_addr, .bus_id = dev->port, .dev_code = dev->dev_code};
         }
     }
     return dp_validate(&compiled);
 }
+
 #endif
+
+int dp_reference_prepare(const struct dp_equip_cfg **cfg)
+{
+    if (!cfg || k_is_in_isr()) { return -EINVAL; }
+    *cfg = NULL;
+    k_mutex_lock(&configuration_lock, K_FOREVER);
+    int err = -ENOTSUP;
+#if defined(CONFIG_DP_REFERENCE_TABLES)
+    if (native_provider || initializing) { err = -EBUSY; }
+    else if (frozen || dp_config()) {
+        err = dp_config() == &compiled ? 0 : -EBUSY;
+    } else { err = compile_tables(); }
+    if (!err) { *cfg = &compiled; }
+#endif
+    k_mutex_unlock(&configuration_lock);
+    return err;
+}
 
 int dp_init(void)
 {
@@ -401,7 +544,7 @@ int dp_init(void)
     if (frozen || initializing || dp_config()) { err = -EALREADY; goto out; }
     initializing = true;
     if (native_provider) {
-        if (get_devices || get_device_count || get_range || collect_period) {
+        if (get_devices || get_device_count || get_range || collect_period || model_period) {
             err = -EINVAL;
         } else {
             err = dp_init_config(native_provider());

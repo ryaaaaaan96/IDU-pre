@@ -12,18 +12,17 @@
 
 | 参考工程 | 设计含义 | IDU 实现 |
 | --- | --- | --- |
-| `app/cfg/inc/` | 信号身份和项目配置契约 | 点表契约在 `app/cfg/devices/`、`app/cfg/tables/`；协议契约在 `app/communication/config/protocol_config.h` |
-| `app/cfg/equip/dev_cfg.c` 的设备列表 | 多个实例复用同型号的表 | `app/cfg/devices/device_config.c` 装配，`app/cfg/devices/instances.h` 绑定实例 |
-| `app/cfg/equip/table/*` | 采集、处理、转发分别声明 | `app/cfg/tables/{collect,process,transmit}.c`，复用型号定义在 `app/cfg/devices/mvio_model.h` |
+| `app/cfg/inc/` | 信号身份和项目配置契约 | 点表契约在 `app/cfg/inc/`、`app/cfg/tables/`；协议契约在 `app/communication/config/protocol_config.h` |
+| `app/cfg/equip/dev_cfg.c` 的设备列表 | 多个实例复用同型号的表 | `app/cfg/device.c` 装配，`app/cfg/inc/device_instances.h` 绑定实例 |
+| `app/cfg/equip/table/*` | 采集、处理、转发分别声明 | `app/cfg/tables/{collect,process,transmit}.c`，复用型号定义在 `app/cfg/inc/mvio_signals.h` |
 | `app/process/*` 的业务回调 | 配置绑定行为，执行代码独立维护 | `app/process/` |
-| `platform/inc/collect_lib.h` | 采集地址、周期、优先级和编码独立配置 | `co_cfg`、字段表、每总线采集线程 |
-| `platform/inc/data_process.h` | 共享数据池、类型/范围、旧值、回调及多输出 | `dp_point_cfg`、`dp_process_ctx`、`dp_txn_*` |
-| `platform/inc/transmit_lib.h` | 北向地址映射到设备和测点 | `dp_transmit_cfg`、`tr_*` |
+| `platform/inc/collect_lib.h` | 采集地址、周期、优先级和编码独立配置 | `MODBUS_RTU_TABLE_S` / UPP 模型表、每总线采集线程 |
+| `platform/inc/data_process.h` | 共享数据池、类型/范围、旧值、回调及多输出 | `DM_SIG_CFG_S`、`DM_SIG_DATA_S`、事务回调 |
+| `platform/inc/transmit_lib.h` | 北向地址映射到设备和测点 | `MB_TABLE_CELL_T`、`tr_*` |
 
-参考工程 DSP1…32 共用模型表。IDU 使用编译期实例展开，生成既有引擎可直接
-读取的 `const` 三表，采集字段数组在实例间共享。这样保留设备模型的源代码
-复用，也避免在 GD32E505 RAM 中复制整套点定义。实例增加仍消耗 Flash 表空间
-和对应的数据池、调度槽位，必须满足 Kconfig 上限。
+参考工程 DSP1…32 共用模型表。IDU 同样让多个 `DEV_TABLE_S` 实例关联同一份
+const 处理/采集数组，模块按需构造单条执行视图，避免整表 RAM 副本。
+设备增加仍消耗数据池和调度槽位，必须满足 Kconfig 上限。
 
 参考工程的 DSP、UPP 和逆变器业务寄存器不属于 IDU 硬件接口。这里复用其
 组织方式，默认设备仍为既有 MV-IO 虚拟采集端；已有 AIDC 可选配置保持独立。
@@ -51,13 +50,13 @@ UPP、逆变器专用命令及其日志/加密扩展不属于通用三模块接�
 
 | 位置 | 职责 |
 | --- | --- |
-| `app/cfg/devices/` | 设备实例、型号复用与三表装配 |
-| `app/cfg/tables/` | 信号、采集/处理/转发表和来源元数据 |
-| `app/process/` | 纯换算、事务业务回调、参数命令和旧参数导入 |
+| `app/cfg/device.c`、`app/cfg/inc/` | 设备实例、型号信号与三表装配；配置头文件统一放 inc |
+| `app/cfg/tables/` | 信号、采集/处理/转发表和默认值/范围 |
+| `app/process/` | 纯换算、事务业务回调和参数命令 |
 | `app/communication/config/` | 协议路由、兼容窗口、控制/诊断寄存器 |
 | `app/communication/ports/` | 虚拟或真实采集后端 |
 | `app/` | 初始化装配、本地样本映射和健康确认 |
-| `app/acquisition/` | 采集业务状态、统一原始采样入口及产品配置；调用三个通用硬件服务模块 |
+| `app/acquisition/` | 采集/发布流程；通过 io_input 采样，通过 status 记录阶段 |
 
 配置只声明数据和绑定，通用模块不引用本板 BSP 或设备专用寄存器。
 文件清单与新增设备步骤集中在[点表维护指南](../app/cfg/README.md)。

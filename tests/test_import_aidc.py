@@ -31,12 +31,11 @@ class ImportTablesTest(unittest.TestCase):
         self.templates.mkdir()
         self.output = self.root / "output"
         self.contents = {
+            "tables/defaults.c": "manual defaults\n" + region("defaults"),
             "tables/process.c": "manual points before\n" + region("points") + "manual points after\n",
             "tables/transmit.c": "manual mapping\n" + region("transmit"),
-            # Deliberately different from the generator's mapping order.
-            "tables/point_metadata.c": region("handlers") + "manual between\n" + region("models"),
             "tables/collect.c": region("fields") + "manual polls\n" + region("collect"),
-            "devices/device_config.c": "manual device\n" + region("devices"),
+            "device.c": "manual device\n" + region("devices"),
         }
         for filename, content in self.contents.items():
             target = self.templates / filename
@@ -52,13 +51,10 @@ class ImportTablesTest(unittest.TestCase):
 
     def test_empty_destination_uses_templates_and_updates_multiple_regions(self):
         self.write()
-        expected = (region("handlers", self.rows["handlers"]) + "manual between\n" +
-                    region("models", self.rows["models"]))
-        self.assertEqual((self.output / "tables/point_metadata.c").read_text(), expected)
         expected = (region("fields", self.rows["fields"]) + "manual polls\n" +
                     region("collect", self.rows["collect"]))
         self.assertEqual((self.output / "tables/collect.c").read_text(), expected)
-        self.assertEqual((self.output / "tables/imported_signals.h").read_text(), self.symbols)
+        self.assertEqual((self.output / "inc/imported_signals.h").read_text(), self.symbols)
         self.assertEqual(json.loads((self.output / "migration.json").read_text()),
                          self.metadata)
         self.assertFalse((self.output / "generated").exists())
@@ -80,11 +76,11 @@ class ImportTablesTest(unittest.TestCase):
 
     def test_missing_marker_in_last_destination_does_not_write_any_files(self):
         self.write()
-        target = self.output / "devices/device_config.c"
+        target = self.output / "device.c"
         target.write_text(target.read_text().replace("/* END IMPORTED TABLE: devices */", ""))
         before = snapshot(self.output)
         self.rows = {name: "changed rows\n" for name in importer.TABLE_FILES}
-        with self.assertRaisesRegex(ValueError, "device_config.c.*devices"):
+        with self.assertRaisesRegex(ValueError, "device.c.*devices"):
             self.write()
         self.assertEqual(snapshot(self.output), before)
 
@@ -97,7 +93,7 @@ class ImportTablesTest(unittest.TestCase):
         ]
         for content in invalid:
             with self.subTest(content=content):
-                (self.templates / "devices/device_config.c").write_text(content)
+                (self.templates / "device.c").write_text(content)
                 with self.assertRaises(ValueError):
                     self.write()
                 self.assertFalse(self.output.exists())
@@ -113,7 +109,7 @@ class ImportTablesTest(unittest.TestCase):
                 self.assertFalse(self.output.exists())
 
     def test_missing_template_does_not_create_partial_destination(self):
-        (self.templates / "devices/device_config.c").unlink()
+        (self.templates / "device.c").unlink()
         with self.assertRaises(FileNotFoundError):
             self.write()
         self.assertFalse(self.output.exists())
@@ -141,23 +137,44 @@ class ImportTablesTest(unittest.TestCase):
     def test_invalid_marker_preserves_existing_custom_report(self):
         report = self.root / "custom/report.json"
         self.write(report_path=report)
-        target = self.output / "devices/device_config.c"
+        target = self.output / "device.c"
         target.write_text(target.read_text().replace("/* END IMPORTED TABLE: devices */", ""))
         before = snapshot(self.root)
         self.metadata = {"point_count": 99}
-        with self.assertRaisesRegex(ValueError, "device_config.c.*devices"):
+        with self.assertRaisesRegex(ValueError, "device.c.*devices"):
             self.write(report_path=report)
         self.assertEqual(snapshot(self.root), before)
 
     def test_report_cannot_replace_a_generated_table_or_symbol_header(self):
         before = snapshot(self.root)
         for relative in ("tables/process.c", "tables/../tables/process.c",
-                         "tables/imported_signals.h"):
+                         "inc/imported_signals.h"):
             with self.subTest(relative=relative):
                 with self.assertRaisesRegex(ValueError, "Report path conflicts with table output"):
                     self.write(report_path=self.output / relative)
                 self.assertEqual(snapshot(self.root), before)
                 self.assertFalse(self.output.exists())
+
+
+class ReferenceSnapshotTest(unittest.TestCase):
+    def test_snapshot_renders_current_tables_with_direct_callbacks(self):
+        project = Path(__file__).resolve().parents[1]
+        metadata = json.loads((project / 'docs/point-table-import.json').read_text())
+        symbols = importer.Symbols()
+        symbols.read((project / 'app/cfg/inc/imported_signals.h').read_text())
+        symbols.expr.update({k[5:]: v for k, v in list(symbols.expr.items())
+                             if k.startswith('AIDC_')})
+        rows = importer.render_reference_tables(metadata, symbols.value)
+        self.assertEqual(set(rows), set(importer.TABLE_FILES))
+        for name, content in rows.items():
+            path = project / 'app/cfg' / importer.TABLE_FILES[name]
+            text = path.read_text()
+            self.assertEqual(importer.replace_imported_tables(text, {name: content}, path), text)
+        self.assertIn('.pf_sig_proc=idu_serial_setting', rows['points'])
+        self.assertIn('.pf_sig_proc=idu_firmware_version', rows['points'])
+        self.assertIn('.pf_sig_proc=idu_unsupported_service', rows['points'])
+        self.assertNotIn('idu_aidc_process', rows['points'])
+        self.assertNotIn('point_metadata.c', importer.TABLE_FILES.values())
 
 
 if __name__ == "__main__":

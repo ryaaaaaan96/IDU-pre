@@ -115,6 +115,8 @@ struct co_cfg {
     bool init_only;
     bool model_protocol;
     uint16_t model_id; /* UPP model identity; address is the original model offset. */
+    /* Scratch field for a view of one immutable reference table row. */
+    struct co_field reference_field;
 };
 
 enum dp_map_kind { DP_MAP_VALUE, DP_MAP_QUALITY, DP_MAP_ZERO };
@@ -145,7 +147,24 @@ struct dp_equip_cfg {
      * Zero rejects unknown schemas as before. Pending intents never migrate.
      */
     uint32_t previous_parameter_schema;
+    /* Optional readers expose const reference tables without allocating copies
+     * of every native descriptor. A reader fills caller-owned scratch storage.
+     * Configuration and default/range providers must remain immutable.
+     */
+    int (*point_get)(const struct dp_equip_cfg *, size_t, struct dp_point_cfg *);
+    int (*collect_get)(const struct dp_equip_cfg *, size_t, struct co_cfg *);
+    int (*transmit_get)(const struct dp_equip_cfg *, size_t, struct dp_transmit_cfg *);
 };
+
+const struct dp_point_cfg *dp_config_point(const struct dp_equip_cfg *cfg,
+                                          size_t index, struct dp_point_cfg *scratch);
+const struct co_cfg *dp_config_collect(const struct dp_equip_cfg *cfg,
+                                       size_t index, struct co_cfg *scratch);
+const struct dp_transmit_cfg *dp_config_transmit(const struct dp_equip_cfg *cfg,
+                                                size_t index, struct dp_transmit_cfg *scratch);
+const struct dp_point_cfg *dp_config_find(const struct dp_equip_cfg *cfg,
+                                         struct dp_key key, struct dp_point_cfg *scratch);
+struct dp_key dp_config_key(const struct dp_equip_cfg *cfg, size_t index);
 
 struct dp_point_update {
     struct dp_key key;
@@ -200,7 +219,8 @@ int dp_read(struct dp_key key, struct dp_point_state *state);
 bool dp_healthy(uint32_t max_idle_ms);
 /* Immutable configuration and definitions are available without DP_PROCESS. */
 const struct dp_equip_cfg *dp_config(void);
-const struct dp_point_cfg *dp_find(struct dp_key key);
+/* The returned view may use scratch; never retain it after scratch expires. */
+const struct dp_point_cfg *dp_find(struct dp_key key, struct dp_point_cfg *scratch);
 /* Use normal subscribers/listeners for this coalescible notification channel.
  * Acquisition channel and its message subscriber are internal; publish through
  * dp_publish() so queue capacity is reserved before zbus allocation.

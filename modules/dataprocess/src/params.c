@@ -24,7 +24,9 @@ LOG_MODULE_REGISTER(dp_params, LOG_LEVEL_INF);
 #define INTENT_MAX (INTENT_HEADER + 4 * DP_TRANSFER_WORDS + SNAP_MAX)
 
 static const struct dp_equip_cfg *equipment;
-static const struct dp_point_cfg *defs[CONFIG_DP_PARAMS_MAX_COUNT];
+static uint16_t defs[CONFIG_DP_PARAMS_MAX_COUNT];
+/* The compound literal lives in the caller's block; no descriptor is retained. */
+#define PARAM_DEF(i) dp_config_point(equipment, defs[i], &(struct dp_point_cfg){0})
 static struct dp_point_state cache[CONFIG_DP_PARAMS_MAX_COUNT];
 static size_t param_count;
 static struct dp_value staged[CONFIG_DP_PARAMS_MAX_COUNT];
@@ -106,7 +108,8 @@ int dp_params_validate(const struct dp_equip_cfg *cfg)
 {
     size_t count = 0, bytes = SNAP_HEADER;
     for (size_t i = 0; i < cfg->point_count; ++i) {
-        const struct dp_point_cfg *p = &cfg->points[i];
+        struct dp_point_cfg p_scratch;
+        const struct dp_point_cfg *p = dp_config_point(cfg, i, &p_scratch);
         if (p->source != DP_SOURCE_PARAMETER) {
             if (p->param_flags || p->prepare_write || p->param_added || p->seed_missing) {
                 return -EINVAL;
@@ -133,7 +136,8 @@ int dp_params_validate(const struct dp_equip_cfg *cfg)
                 return -EINVAL;
             }
             for (size_t j = 0; j < i; ++j) {
-                const struct dp_point_cfg *q = &cfg->points[j];
+                struct dp_point_cfg q_scratch;
+                const struct dp_point_cfg *q = dp_config_point(cfg, j, &q_scratch);
                 if (q->source == DP_SOURCE_PARAMETER &&
                     (q->param_flags & DP_PARAM_FORWARD) && q->key.dev_id == p->key.dev_id &&
                     q->write_address < (uint32_t)p->write_address + p->width &&
@@ -149,7 +153,8 @@ int dp_params_validate(const struct dp_equip_cfg *cfg)
 static int index_of(struct dp_key key)
 {
     for (size_t i = 0; i < param_count; ++i) {
-        if (defs[i]->key.dev_id == key.dev_id && defs[i]->key.sig_id == key.sig_id) {
+        struct dp_key candidate = dp_config_key(equipment, defs[i]);
+        if (candidate.dev_id == key.dev_id && candidate.sig_id == key.sig_id) {
             return i;
         }
     }
@@ -211,10 +216,10 @@ static void commit_cache(uint32_t sequence)
     k_mutex_lock(&cache_lock, K_FOREVER);
     for (size_t i = 0; i < param_count; ++i) {
         if (status.flags & DP_PARAM_STORAGE_READY) {
-            dp_reference_notify(defs[i], &cache[i].value, &staged[i]);
+            dp_reference_notify(PARAM_DEF(i), &cache[i].value, &staged[i]);
         }
         cache[i].value = staged[i];
-        cache[i].quality = ((defs[i]->param_flags & DP_PARAM_FORWARD) && simulated_device(defs[i]->key.dev_id)) ?
+        cache[i].quality = ((PARAM_DEF(i)->param_flags & DP_PARAM_FORWARD) && simulated_device(PARAM_DEF(i)->key.dev_id)) ?
                             DP_QUALITY_SIMULATED : DP_QUALITY_GOOD;
         cache[i].sampled_at = k_uptime_get();
         cache[i].generation = sequence;
@@ -233,7 +238,7 @@ static size_t encode_snapshot(uint8_t *buf, uint32_t sequence)
     sys_put_le32(schema, buf + 8);
     sys_put_le32(sequence, buf + 12);
     for (size_t i = 0; i < param_count; ++i) {
-        const struct dp_point_cfg *p = defs[i];
+        const struct dp_point_cfg *p = PARAM_DEF(i);
         if (!(p->param_flags & DP_PARAM_PERSIST)) {
             continue;
         }
@@ -267,7 +272,7 @@ static int decode_snapshot(const uint8_t *buf, size_t len, uint32_t *sequence, b
     size_t offset = SNAP_HEADER;
     uint16_t count = 0;
     for (size_t i = 0; i < param_count; ++i) {
-        const struct dp_point_cfg *p = defs[i];
+        const struct dp_point_cfg *p = PARAM_DEF(i);
         if (!(p->param_flags & DP_PARAM_PERSIST) || (previous && p->param_added)) {
             continue;
         }
@@ -357,9 +362,9 @@ static void invalidate_pending(int error)
     uint16_t address = sys_get_le16(intent + 8);
     k_mutex_lock(&cache_lock, K_FOREVER);
     for (size_t i = 0; i < param_count; ++i) {
-        if ((defs[i]->param_flags & DP_PARAM_FORWARD) && defs[i]->key.dev_id == dev_id &&
-            defs[i]->write_address >= address &&
-            defs[i]->write_address < (uint32_t)address + intent[7]) {
+        if ((PARAM_DEF(i)->param_flags & DP_PARAM_FORWARD) && PARAM_DEF(i)->key.dev_id == dev_id &&
+            PARAM_DEF(i)->write_address >= address &&
+            PARAM_DEF(i)->write_address < (uint32_t)address + intent[7]) {
             cache[i].quality = DP_QUALITY_COMM_ERROR |
                                (simulated_device(dev_id) ? DP_QUALITY_SIMULATED : 0);
             cache[i].error = error;
@@ -404,7 +409,7 @@ static int recover_locked(void)
         uint8_t flags = sys_get_le16(intent + 10);
         uint16_t dev = sys_get_le16(intent + 18), begin = sys_get_le16(intent + 8);
         for (size_t i = 0; i < param_count; ++i) {
-            const struct dp_point_cfg *p = defs[i];
+            const struct dp_point_cfg *p = PARAM_DEF(i);
             if (!(p->param_flags & DP_PARAM_FORWARD) || p->key.dev_id != dev ||
                 p->write_address < begin || (uint32_t)p->write_address + p->width > begin + count) {
                 continue;
@@ -471,7 +476,7 @@ static int mount_locked(void)
         return err;
     }
     for (size_t i = 0; i < param_count; ++i) {
-        err = dp_reference_default(defs[i], &durable_stage[i], false);
+        err = dp_reference_default(PARAM_DEF(i), &durable_stage[i], false);
         if (err) { return err; }
         staged[i] = durable_stage[i];
     }
@@ -501,7 +506,7 @@ static int mount_locked(void)
         break;
     }
     for (size_t i = 0; i < param_count; ++i) {
-        const struct dp_point_cfg *p = defs[i];
+        const struct dp_point_cfg *p = PARAM_DEF(i);
         if (empty || (migrate && p->param_added)) {
             err = p->seed_missing ? p->seed_missing(p, &durable_stage[i]) :
                                    dp_reference_default(p, &durable_stage[i], true);
@@ -558,11 +563,10 @@ int dp_params_init(const struct dp_equip_cfg *cfg, uint8_t area_id)
     partition_id = area_id;
     zbus_chan_set_msg_sub_pool(&dp_param_events, &param_event_pool);
     for (size_t i = 0; i < cfg->point_count; ++i) {
-        if (cfg->points[i].source != DP_SOURCE_PARAMETER) {
-            continue;
-        }
-        const struct dp_point_cfg *p = &cfg->points[i];
-        defs[param_count++] = p;
+        struct dp_point_cfg p_scratch;
+        const struct dp_point_cfg *p = dp_config_point(cfg, i, &p_scratch);
+        if (p->source != DP_SOURCE_PARAMETER) { continue; }
+        defs[param_count++] = i;
         uint8_t signature[12] = {0};
         sys_put_le16(p->key.dev_id, signature);
         sys_put_le16(p->key.sig_id, signature + 2);
@@ -576,7 +580,7 @@ int dp_params_init(const struct dp_equip_cfg *cfg, uint8_t area_id)
         else { previous_schema = crc32_ieee_update(previous_schema, signature, sizeof(signature)); }
     }
     for (size_t i = 0; i < param_count; ++i) {
-        staged[i] = defs[i]->initial;
+        staged[i] = PARAM_DEF(i)->initial;
     }
     commit_cache(0);
     err = mount_locked();
@@ -629,7 +633,7 @@ static int apply_staged(const bool selected[CONFIG_DP_PARAMS_MAX_COUNT])
         if (!selected[i]) {
             continue;
         }
-        const struct dp_point_cfg *p = defs[i];
+        const struct dp_point_cfg *p = PARAM_DEF(i);
         if (!(p->param_flags & DP_PARAM_WRITE)) {
             return -EACCES;
         }
@@ -677,10 +681,10 @@ static int apply_staged(const bool selected[CONFIG_DP_PARAMS_MAX_COUNT])
         for (size_t i = 0; i < param_count; ++i) {
             if (!selected[i]) { continue; }
             if (operation_flags & DP_OP_NO_DM) { staged[i] = cache[i].value; }
-            if ((defs[i]->param_flags & DP_PARAM_PERSIST) &&
+            if ((PARAM_DEF(i)->param_flags & DP_PARAM_PERSIST) &&
                 !(operation_flags & (DP_OP_NO_DM | DP_OP_NO_STORE))) {
                 bool defer = (operation_flags & DP_OP_DEFER) ||
-                             (defs[i]->param_flags & DP_PARAM_DEFER_STORE);
+                             (PARAM_DEF(i)->param_flags & DP_PARAM_DEFER_STORE);
                 dirty[i] = defer;
                 if (defer) { deferred[i] = staged[i]; flush_at = k_uptime_get() + 1000; }
             }
@@ -697,7 +701,7 @@ static int apply_staged(const bool selected[CONFIG_DP_PARAMS_MAX_COUNT])
         if (!selected[i]) {
             continue;
         }
-        const struct dp_point_cfg *p = defs[i];
+        const struct dp_point_cfg *p = PARAM_DEF(i);
         for (size_t w = 0; w < p->width; ++w) {
             size_t n = p->write_address - begin + w;
             covered[n] = true;
@@ -764,7 +768,7 @@ int dp_params_apply(const struct dp_point_update *values, size_t count, uint8_t 
         if (index < 0) {
             return end_transaction(index);
         }
-        if (selected[index] || values[i].error || values[i].width != defs[index]->width) {
+        if (selected[index] || values[i].error || values[i].width != PARAM_DEF(index)->width) {
             return end_transaction(-EINVAL);
         }
         staged[index] = values[i].value;
@@ -791,8 +795,9 @@ int dp_params_write_registers(uint16_t address, const uint16_t *words, size_t co
     size_t offset = 0;
     while (offset < count) {
         const struct dp_transmit_cfg *map = NULL;
+        struct dp_transmit_cfg t_scratch;
         for (size_t i = 0; i < equipment->transmit_count; ++i) {
-            const struct dp_transmit_cfg *t = &equipment->transmit[i];
+            const struct dp_transmit_cfg *t = dp_config_transmit(equipment, i, &t_scratch);
             if (t->function == 3 && t->address == address + offset && t->kind == DP_MAP_VALUE) {
                 map = t;
                 break;
@@ -802,7 +807,7 @@ int dp_params_write_registers(uint16_t address, const uint16_t *words, size_t co
         if (index < 0) {
             return end_transaction(-ENOENT);
         }
-        if (map->count != defs[index]->width || offset + map->count > count || selected[index]) {
+        if (map->count != PARAM_DEF(index)->width || offset + map->count > count || selected[index]) {
             return end_transaction(-EINVAL); /* No partial multiword/duplicate alias writes. */
         }
         selected[index] = true;
@@ -823,8 +828,8 @@ int dp_params_restore(uint16_t dev_id)
     bool selected[CONFIG_DP_PARAMS_MAX_COUNT] = {0};
     bool found = false;
     for (size_t i = 0; i < param_count; ++i) {
-        if (defs[i]->key.dev_id == dev_id && (defs[i]->param_flags & DP_PARAM_RESTORE)) {
-            err = dp_reference_default(defs[i], &staged[i], true);
+        if (PARAM_DEF(i)->key.dev_id == dev_id && (PARAM_DEF(i)->param_flags & DP_PARAM_RESTORE)) {
+            err = dp_reference_default(PARAM_DEF(i), &staged[i], true);
             if (err) { return end_transaction(err); }
             selected[i] = true;
             found = true;
@@ -901,11 +906,12 @@ int dp_params_sync_device(uint16_t dev_id)
     if (!equipment) { return -EACCES; }
     /* Explicit initialization operation, never automatic crash recovery replay. */
     for (size_t i = 0; i < param_count; ++i) {
-        if (defs[i]->key.dev_id != dev_id || !(defs[i]->param_flags & DP_PARAM_FORWARD)) { continue; }
+        if (PARAM_DEF(i)->key.dev_id != dev_id || !(PARAM_DEF(i)->param_flags & DP_PARAM_FORWARD)) { continue; }
         struct dp_point_state state;
-        int err = dp_params_read(defs[i]->key, &state);
+        int err = dp_params_read(PARAM_DEF(i)->key, &state);
         if (err) { return err; }
-        struct dp_point_update value = {.key = defs[i]->key, .width = defs[i]->width,
+        const struct dp_point_cfg *p = PARAM_DEF(i);
+        struct dp_point_update value = {.key = p->key, .width = p->width,
                                          .value = state.value};
         err = dp_params_apply(&value, 1, DP_OP_NO_DM | DP_OP_NO_STORE);
         if (err) { return err; }

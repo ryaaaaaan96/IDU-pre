@@ -44,7 +44,7 @@ static const DEV_TABLE_S *catalog(size_t *count)
     if (!catalog_ready) {
         native_count = 0;
         for (size_t i = 0; i < cfg->point_count + cfg->device_count; ++i) {
-            uint16_t dev = i < cfg->point_count ? cfg->points[i].key.dev_id :
+            uint16_t dev = i < cfg->point_count ? dp_config_key(cfg, i).dev_id :
                            cfg->devices[i - cfg->point_count].dev_id;
             bool found = false;
             for (size_t n = 0; n < native_count; ++n) { found |= native_devices[n].dev_id == dev; }
@@ -174,7 +174,7 @@ void pltcb_para_write_log(DP_PARA_LOG_DATA *data) { if (data && log_callback) { 
 void pltcb_para_recover_fininsh(void) { if (recovered_callback) { recovered_callback(); } }
 
 struct override {
-    const struct dp_point_cfg *point;
+    struct dp_key key;
     struct dp_value initial;
     int64_t minimum, maximum;
 };
@@ -183,11 +183,11 @@ static struct k_spinlock overrides_lock;
 
 static struct override effective(const struct dp_point_cfg *point)
 {
-    struct override result = {.point = point, .initial = point->initial,
+    struct override result = {.key = point->key, .initial = point->initial,
                               .minimum = point->minimum, .maximum = point->maximum};
     k_spinlock_key_t key = k_spin_lock(&overrides_lock);
     for (size_t i = 0; i < ARRAY_SIZE(overrides); ++i) {
-        if (overrides[i].point == point) { result = overrides[i]; break; }
+        if (overrides[i].key.dev_id == point->key.dev_id && overrides[i].key.sig_id == point->key.sig_id) { result = overrides[i]; break; }
     }
     k_spin_unlock(&overrides_lock, key);
     return result;
@@ -237,7 +237,8 @@ int dp_reference_default(const struct dp_point_cfg *p, struct dp_value *value, b
 int32_t dp_get_para_def_range(uint16_t dev, uint16_t sig, DM_SIG_DATA_S *data)
 {
     if (!data || k_is_in_isr()) { return -EINVAL; }
-    const struct dp_point_cfg *p = dp_find((struct dp_key){dev, sig});
+    struct dp_point_cfg p_scratch;
+    const struct dp_point_cfg *p = dp_find((struct dp_key){dev, sig}, &p_scratch);
     if (!p) { return -ENOENT; }
     size_t size = dp_reference_size(p);
     void *buffer = size > 4 ? data->def_value.pst : NULL;
@@ -258,12 +259,13 @@ int32_t dp_get_para_def_range(uint16_t dev, uint16_t sig, DM_SIG_DATA_S *data)
 int32_t dp_set_para_def_range(uint16_t dev, uint16_t sig, DM_SIG_DATA_S *data)
 {
     if (!data || k_is_in_isr()) { return -EINVAL; }
-    const struct dp_point_cfg *p = dp_find((struct dp_key){dev, sig});
+    struct dp_point_cfg p_scratch;
+    const struct dp_point_cfg *p = dp_find((struct dp_key){dev, sig}, &p_scratch);
     if (!p) { return -ENOENT; }
     size_t size = dp_reference_size(p);
     const uint8_t *bytes = size > 4 ? data->def_value.pst : data->def_value.str;
     if (!bytes) { return -EINVAL; }
-    struct override v = {.point = p};
+    struct override v = {.key = p->key};
     dp_reference_unpack(&v.initial, bytes, size);
     switch (p->type) {
     case DP_U8: case DP_U16:
@@ -286,8 +288,8 @@ int32_t dp_set_para_def_range(uint16_t dev, uint16_t sig, DM_SIG_DATA_S *data)
     k_spinlock_key_t key = k_spin_lock(&overrides_lock);
     int slot = -ENOSPC;
     for (size_t i = 0; i < ARRAY_SIZE(overrides); ++i) {
-        if (overrides[i].point == p) { slot = i; break; }
-        if (!overrides[i].point && slot < 0) { slot = i; }
+        if (overrides[i].key.dev_id == p->key.dev_id && overrides[i].key.sig_id == p->key.sig_id) { slot = i; break; }
+        if (!overrides[i].key.dev_id && slot < 0) { slot = i; }
     }
     if (slot >= 0) { overrides[slot] = v; }
     k_spin_unlock(&overrides_lock, key);
@@ -320,7 +322,7 @@ int32_t dp_dm_reset_dev_data(uint8_t dev) { return dp_store_reset_device(dev); }
 
 #if defined(CONFIG_DP_PROCESS)
 struct change_event {
-    const struct dp_point_cfg *point;
+    struct dp_key key;
     struct dp_value value;
     uint8_t old[4];
     uint16_t port, address;
@@ -351,7 +353,7 @@ void dp_reference_notify(const struct dp_point_cfg *p, const struct dp_value *ol
     bool interested = observers[0] || (log_callback && size <= 4);
     k_spin_unlock(&callbacks_lock, lock);
     if (!interested) { return; }
-    struct change_event event = {.point = p, .value = *value};
+    struct change_event event = {.key = p->key, .value = *value};
     dp_reference_pack(event.old, old, MIN(size, sizeof(event.old)));
     const struct dp_process_request *request = dp_process_current_request();
     if (request) {
@@ -372,7 +374,9 @@ void dp_reference_drain_events(void)
 {
     struct change_event event;
     for (size_t n = 0; n < CONFIG_DP_REFERENCE_EVENTS && !k_msgq_get(&change_events, &event, K_NO_WAIT); ++n) {
-        const struct dp_point_cfg *p = event.point;
+        struct dp_point_cfg scratch;
+        const struct dp_point_cfg *p = dp_find(event.key, &scratch);
+        if (!p) { continue; }
         uint16_t type, size;
         if (dp_get_sig_data_type(p->key.dev_id, p->key.sig_id, &type, &size)) { continue; }
         uint8_t bytes[DP_POINT_WORDS * 2];
@@ -409,11 +413,13 @@ int dp_reference_restore(bool factory)
     const struct dp_equip_cfg *cfg = dp_config();
     if (!cfg || k_is_in_isr()) { return -EINVAL; }
     for (size_t i = 0; i < cfg->point_count; ++i) {
-        const struct dp_point_cfg *p = &cfg->points[i];
+        struct dp_point_cfg p_scratch;
+        const struct dp_point_cfg *p = dp_config_point(cfg, i, &p_scratch);
         if (p->source != DP_SOURCE_PARAMETER || !(p->param_flags & DP_PARAM_RESTORE)) { continue; }
         bool seen = false;
         for (size_t j = 0; j < i; ++j) {
-            const struct dp_point_cfg *q = &cfg->points[j];
+            struct dp_point_cfg q_scratch;
+            const struct dp_point_cfg *q = dp_config_point(cfg, j, &q_scratch);
             seen |= q->key.dev_id == p->key.dev_id && q->source == DP_SOURCE_PARAMETER &&
                     (q->param_flags & DP_PARAM_RESTORE);
         }

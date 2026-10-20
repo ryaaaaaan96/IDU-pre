@@ -132,7 +132,7 @@ int err = dp_process_start(&plan);
 
 ## 参考服务与 const 配置
 
-设备及三表具有静态生命周期，可以放在 Flash。查询返回 `const` 指针；
+设备及三表具有静态生命周期，可以放在 Flash。原表查询返回 `const` 指针；
 没有原协议表的 native 配置不会被强转成参考结构。运行值、质量、时间戳、
 事务和存储缓冲保存在 RAM。
 
@@ -147,3 +147,10 @@ NVS transport 分开；超时后保留已接受请求的副本直到完成，防
 
 `tests/reference_services` 分别验证有/无参数存储的服务配置；
 测试方法与历史 RAM 数值统一见[验证说明](../../docs/testing.md)。
+
+启用 `CONFIG_DP_REFERENCE_TABLES` 时，原格式三表按需转换为单条执行视图，
+不会复制整张表到 RAM。`dp_config_point()`、`dp_config_collect()`、
+`dp_config_transmit()` 和 `dp_find(key, &scratch)` 的结果可能指向调用者的
+scratch，不能跨其生命周期保存。采集视图的 `fields` 也指向该 scratch 内部，
+不能浅拷贝后保留。原生静态配置仍直接返回其 const 行。
+注册的默认/范围、恢复默认策略和周期转换函数须保持只读和确定性，可能在运行期被反复调用。

@@ -1,403 +1,122 @@
+#include "imported_signals.h"
+#include "device.h"
+#include "mvio_signals.h"
 #include "signal_ids.h"
-#include "device_config.h"
-#include "mvio_model.h"
-#include "instances.h"
+#include <zephyr/sys/util.h>
 
-IDU_MVIO_COLLECT_FIELDS(mvio);
+#define SAMPLE(sig, addr) \
+    {.sig_id = sig, .reg_addr = addr, .reg_num = 1, .reg_type = 4, \
+     .rqst_cyl = IDU_COLLECT_SAMPLE, .byte_order = BYTE_ORDER_DEFAULT}
+#define CURRENT(n) SAMPLE(IDU_MVIO_CURRENT_1 + n, 8163 + n)
 
-#define MVIO_COLLECT(dev, bus, unit, north, address_reg, period, identity, stale, identity_stale) \
-    IDU_MVIO_COLLECT(mvio, dev, period, identity),
-
-/* Placeholder downstream device uses the known MV-IO map. Replace these
- * blocks with the actual downstream equipment's register specification.
- */
-#if defined(CONFIG_IDU_AIDC_PROFILE)
-/* BEGIN IMPORTED TABLE: fields */
-/* Generated from user-provided AIDC source tables. Original tables: SUNGROW.
- * Regenerate with tools/import_aidc.py; no closed library is linked. */
-static const struct co_field aidc_field_0[] = {{.sig_id=2582,.width=15,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_1[] = {{.sig_id=2516,.width=8,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_2[] = {{.sig_id=2524,.width=10,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_3[] = {{.sig_id=2515,.width=1,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_4[] = {{.sig_id=1481,.width=1,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_5[] = {{.sig_id=14,.width=10,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_6[] = {{.sig_id=1007,.width=1,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_7[] = {{.sig_id=1008,.width=1,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_8[] = {{.sig_id=1009,.width=1,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_9[] = {{.sig_id=1010,.width=1,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_10[] = {{.sig_id=1011,.width=1,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_11[] = {{.sig_id=1012,.width=1,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_12[] = {{.sig_id=1013,.width=1,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_13[] = {{.sig_id=1014,.width=1,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_14[] = {{.sig_id=1039,.width=1,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_15[] = {{.sig_id=1040,.width=1,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_16[] = {{.sig_id=1041,.width=1,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_17[] = {{.sig_id=1021,.width=2,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_18[] = {{.sig_id=1022,.width=2,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_19[] = {{.sig_id=1023,.width=2,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_20[] = {{.sig_id=1024,.width=2,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_21[] = {{.sig_id=1025,.width=2,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_22[] = {{.sig_id=1026,.width=2,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_23[] = {{.sig_id=1027,.width=2,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_24[] = {{.sig_id=1028,.width=2,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_25[] = {{.sig_id=1029,.width=2,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_26[] = {{.sig_id=1030,.width=2,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_27[] = {{.sig_id=1031,.width=1,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_28[] = {{.sig_id=1032,.width=1,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_29[] = {{.sig_id=1033,.width=1,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_30[] = {{.sig_id=1034,.width=1,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_31[] = {{.sig_id=1015,.width=1,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_32[] = {{.sig_id=1016,.width=2,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_33[] = {{.sig_id=1017,.width=2,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_34[] = {{.sig_id=1018,.width=2,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_35[] = {{.sig_id=1019,.width=2,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_36[] = {{.sig_id=1020,.width=1,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_37[] = {{.sig_id=1035,.width=2,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_38[] = {{.sig_id=1036,.width=2,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_39[] = {{.sig_id=1038,.width=2,.order=DP_LOW_WORD_FIRST}};
-static const struct co_field aidc_field_40[] = {{.sig_id=1037,.width=2,.order=DP_LOW_WORD_FIRST}};
-/* END IMPORTED TABLE: fields */
-#endif
-static const struct co_cfg table[] = {
-    IDU_MVIO_INSTANCES(MVIO_COLLECT)
-#if defined(CONFIG_IDU_AIDC_PROFILE)
-/* BEGIN IMPORTED TABLE: collect */
-/* Generated from user-provided AIDC source tables. Original tables: SUNGROW.
- * Regenerate with tools/import_aidc.py; no closed library is linked. */
-    {.dev_id=11,.model_protocol=true,.model_id=1,.address=48,.count=15,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_0,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=2,.address=8,.count=8,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_1,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=2,.address=24,.count=10,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_2,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=2,.address=94,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_3,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=2,.address=96,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_4,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=2,.address=62,.count=10,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_5,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=99,.address=6,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_6,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=99,.address=8,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_7,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=99,.address=10,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_8,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=99,.address=12,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_9,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=99,.address=14,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_10,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=99,.address=16,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_11,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=99,.address=18,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_12,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=99,.address=20,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_13,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=100,.address=6,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_14,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=100,.address=8,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_15,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=100,.address=10,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_16,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=100,.address=12,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_17,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=100,.address=16,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_18,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=100,.address=20,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_19,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=100,.address=24,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_20,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=100,.address=28,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_21,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=100,.address=32,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_22,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=100,.address=36,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_23,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=100,.address=40,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_24,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=100,.address=44,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_25,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=100,.address=48,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_26,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=100,.address=52,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_27,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=100,.address=54,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_28,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=100,.address=56,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_29,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=100,.address=58,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_30,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=102,.address=6,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_31,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=102,.address=8,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_32,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=102,.address=12,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_33,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=102,.address=16,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_34,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=102,.address=20,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_35,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=102,.address=28,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_36,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=103,.address=6,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_37,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=103,.address=10,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_38,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=103,.address=14,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_39,.field_count=1},
-    {.dev_id=11,.model_protocol=true,.model_id=103,.address=18,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_40,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=1,.address=48,.count=15,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_0,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=2,.address=8,.count=8,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_1,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=2,.address=24,.count=10,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_2,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=2,.address=94,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_3,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=2,.address=96,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_4,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=2,.address=62,.count=10,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_5,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=99,.address=6,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_6,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=99,.address=8,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_7,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=99,.address=10,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_8,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=99,.address=12,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_9,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=99,.address=14,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_10,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=99,.address=16,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_11,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=99,.address=18,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_12,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=99,.address=20,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_13,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=100,.address=6,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_14,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=100,.address=8,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_15,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=100,.address=10,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_16,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=100,.address=12,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_17,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=100,.address=16,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_18,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=100,.address=20,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_19,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=100,.address=24,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_20,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=100,.address=28,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_21,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=100,.address=32,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_22,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=100,.address=36,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_23,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=100,.address=40,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_24,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=100,.address=44,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_25,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=100,.address=48,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_26,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=100,.address=52,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_27,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=100,.address=54,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_28,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=100,.address=56,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_29,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=100,.address=58,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_30,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=102,.address=6,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_31,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=102,.address=8,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_32,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=102,.address=12,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_33,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=102,.address=16,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_34,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=102,.address=20,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_35,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=102,.address=28,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_36,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=103,.address=6,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_37,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=103,.address=10,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_38,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=103,.address=14,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_39,.field_count=1},
-    {.dev_id=12,.model_protocol=true,.model_id=103,.address=18,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_40,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=1,.address=48,.count=15,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_0,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=2,.address=8,.count=8,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_1,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=2,.address=24,.count=10,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_2,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=2,.address=94,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_3,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=2,.address=96,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_4,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=2,.address=62,.count=10,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_5,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=99,.address=6,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_6,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=99,.address=8,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_7,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=99,.address=10,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_8,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=99,.address=12,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_9,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=99,.address=14,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_10,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=99,.address=16,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_11,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=99,.address=18,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_12,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=99,.address=20,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_13,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=100,.address=6,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_14,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=100,.address=8,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_15,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=100,.address=10,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_16,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=100,.address=12,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_17,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=100,.address=16,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_18,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=100,.address=20,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_19,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=100,.address=24,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_20,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=100,.address=28,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_21,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=100,.address=32,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_22,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=100,.address=36,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_23,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=100,.address=40,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_24,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=100,.address=44,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_25,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=100,.address=48,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_26,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=100,.address=52,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_27,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=100,.address=54,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_28,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=100,.address=56,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_29,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=100,.address=58,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_30,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=102,.address=6,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_31,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=102,.address=8,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_32,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=102,.address=12,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_33,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=102,.address=16,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_34,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=102,.address=20,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_35,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=102,.address=28,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_36,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=103,.address=6,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_37,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=103,.address=10,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_38,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=103,.address=14,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_39,.field_count=1},
-    {.dev_id=13,.model_protocol=true,.model_id=103,.address=18,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_40,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=1,.address=48,.count=15,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_0,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=2,.address=8,.count=8,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_1,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=2,.address=24,.count=10,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_2,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=2,.address=94,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_3,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=2,.address=96,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_4,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=2,.address=62,.count=10,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_5,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=99,.address=6,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_6,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=99,.address=8,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_7,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=99,.address=10,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_8,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=99,.address=12,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_9,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=99,.address=14,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_10,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=99,.address=16,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_11,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=99,.address=18,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_12,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=99,.address=20,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_13,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=100,.address=6,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_14,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=100,.address=8,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_15,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=100,.address=10,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_16,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=100,.address=12,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_17,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=100,.address=16,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_18,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=100,.address=20,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_19,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=100,.address=24,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_20,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=100,.address=28,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_21,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=100,.address=32,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_22,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=100,.address=36,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_23,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=100,.address=40,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_24,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=100,.address=44,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_25,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=100,.address=48,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_26,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=100,.address=52,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_27,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=100,.address=54,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_28,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=100,.address=56,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_29,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=100,.address=58,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_30,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=102,.address=6,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_31,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=102,.address=8,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_32,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=102,.address=12,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_33,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=102,.address=16,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_34,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=102,.address=20,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_35,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=102,.address=28,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_36,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=103,.address=6,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_37,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=103,.address=10,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_38,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=103,.address=14,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_39,.field_count=1},
-    {.dev_id=14,.model_protocol=true,.model_id=103,.address=18,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_40,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=1,.address=48,.count=15,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_0,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=2,.address=8,.count=8,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_1,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=2,.address=24,.count=10,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_2,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=2,.address=94,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_3,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=2,.address=96,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_4,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=2,.address=62,.count=10,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_5,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=99,.address=6,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_6,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=99,.address=8,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_7,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=99,.address=10,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_8,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=99,.address=12,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_9,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=99,.address=14,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_10,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=99,.address=16,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_11,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=99,.address=18,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_12,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=99,.address=20,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_13,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=100,.address=6,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_14,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=100,.address=8,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_15,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=100,.address=10,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_16,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=100,.address=12,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_17,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=100,.address=16,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_18,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=100,.address=20,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_19,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=100,.address=24,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_20,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=100,.address=28,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_21,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=100,.address=32,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_22,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=100,.address=36,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_23,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=100,.address=40,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_24,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=100,.address=44,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_25,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=100,.address=48,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_26,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=100,.address=52,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_27,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=100,.address=54,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_28,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=100,.address=56,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_29,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=100,.address=58,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_30,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=102,.address=6,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_31,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=102,.address=8,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_32,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=102,.address=12,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_33,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=102,.address=16,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_34,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=102,.address=20,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_35,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=102,.address=28,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_36,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=103,.address=6,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_37,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=103,.address=10,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_38,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=103,.address=14,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_39,.field_count=1},
-    {.dev_id=15,.model_protocol=true,.model_id=103,.address=18,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_40,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=1,.address=48,.count=15,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_0,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=2,.address=8,.count=8,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_1,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=2,.address=24,.count=10,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_2,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=2,.address=94,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_3,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=2,.address=96,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_4,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=2,.address=62,.count=10,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_5,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=99,.address=6,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_6,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=99,.address=8,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_7,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=99,.address=10,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_8,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=99,.address=12,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_9,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=99,.address=14,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_10,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=99,.address=16,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_11,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=99,.address=18,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_12,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=99,.address=20,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_13,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=100,.address=6,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_14,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=100,.address=8,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_15,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=100,.address=10,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_16,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=100,.address=12,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_17,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=100,.address=16,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_18,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=100,.address=20,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_19,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=100,.address=24,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_20,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=100,.address=28,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_21,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=100,.address=32,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_22,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=100,.address=36,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_23,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=100,.address=40,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_24,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=100,.address=44,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_25,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=100,.address=48,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_26,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=100,.address=52,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_27,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=100,.address=54,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_28,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=100,.address=56,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_29,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=100,.address=58,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_30,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=102,.address=6,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_31,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=102,.address=8,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_32,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=102,.address=12,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_33,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=102,.address=16,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_34,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=102,.address=20,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_35,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=102,.address=28,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_36,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=103,.address=6,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_37,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=103,.address=10,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_38,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=103,.address=14,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_39,.field_count=1},
-    {.dev_id=16,.model_protocol=true,.model_id=103,.address=18,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_40,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=1,.address=48,.count=15,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_0,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=2,.address=8,.count=8,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_1,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=2,.address=24,.count=10,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_2,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=2,.address=94,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_3,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=2,.address=96,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_4,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=2,.address=62,.count=10,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_5,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=99,.address=6,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_6,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=99,.address=8,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_7,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=99,.address=10,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_8,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=99,.address=12,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_9,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=99,.address=14,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_10,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=99,.address=16,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_11,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=99,.address=18,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_12,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=99,.address=20,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_13,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=100,.address=6,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_14,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=100,.address=8,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_15,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=100,.address=10,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_16,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=100,.address=12,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_17,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=100,.address=16,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_18,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=100,.address=20,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_19,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=100,.address=24,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_20,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=100,.address=28,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_21,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=100,.address=32,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_22,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=100,.address=36,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_23,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=100,.address=40,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_24,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=100,.address=44,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_25,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=100,.address=48,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_26,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=100,.address=52,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_27,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=100,.address=54,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_28,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=100,.address=56,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_29,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=100,.address=58,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_30,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=102,.address=6,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_31,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=102,.address=8,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_32,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=102,.address=12,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_33,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=102,.address=16,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_34,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=102,.address=20,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_35,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=102,.address=28,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_36,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=103,.address=6,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_37,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=103,.address=10,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_38,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=103,.address=14,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_39,.field_count=1},
-    {.dev_id=17,.model_protocol=true,.model_id=103,.address=18,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_40,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=1,.address=48,.count=15,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_0,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=2,.address=8,.count=8,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_1,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=2,.address=24,.count=10,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_2,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=2,.address=94,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_3,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=2,.address=96,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_4,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=2,.address=62,.count=10,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_5,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=99,.address=6,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_6,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=99,.address=8,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_7,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=99,.address=10,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_8,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=99,.address=12,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_9,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=99,.address=14,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_10,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=99,.address=16,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_11,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=99,.address=18,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_12,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=99,.address=20,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_13,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=100,.address=6,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_14,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=100,.address=8,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_15,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=100,.address=10,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_16,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=100,.address=12,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_17,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=100,.address=16,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_18,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=100,.address=20,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_19,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=100,.address=24,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_20,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=100,.address=28,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_21,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=100,.address=32,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_22,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=100,.address=36,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_23,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=100,.address=40,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_24,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=100,.address=44,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_25,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=100,.address=48,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_26,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=100,.address=52,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_27,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=100,.address=54,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_28,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=100,.address=56,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_29,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=100,.address=58,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_30,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=102,.address=6,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_31,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=102,.address=8,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_32,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=102,.address=12,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_33,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=102,.address=16,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_34,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=102,.address=20,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_35,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=102,.address=28,.count=1,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_36,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=103,.address=6,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_37,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=103,.address=10,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_38,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=103,.address=14,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_39,.field_count=1},
-    {.dev_id=18,.model_protocol=true,.model_id=103,.address=18,.count=2,.period_ms=CONFIG_IDU_AIDC_VIRTUAL_PERIOD_MS,.fields=aidc_field_40,.field_count=1},
-/* END IMPORTED TABLE: collect */
+static const MODBUS_RTU_TABLE_S mvio[] = {
+    SAMPLE(IDU_MVIO_DI, 8152),
+    CURRENT(0), CURRENT(1), CURRENT(2), CURRENT(3),
+    CURRENT(4), CURRENT(5), CURRENT(6), CURRENT(7),
+    {.sig_id = IDU_MVIO_PROTOCOL, .reg_addr = 8150, .reg_num = 2, .reg_type = 4,
+     .rqst_cyl = IDU_COLLECT_IDENTITY, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_MVIO_ADDRESS, .reg_addr = 30459, .reg_num = 1, .reg_type = 3,
+     .rqst_cyl = IDU_COLLECT_IDENTITY, .byte_order = BYTE_ORDER_DEFAULT},
+#if defined(CONFIG_IDU_COLLECT_VIRTUAL)
+    /* FLAG_COLLECT process signals use these as explicit write destinations. */
+    {.sig_id = IDU_SIG_REMOTE_SETPOINT, .reg_addr = 40000, .reg_num = 1,
+     .reg_type = 3, .flag = FLAG_0x03_W_0x06 | FLAG_0x03_w_0x10},
+    {.sig_id = IDU_SIG_REMOTE_OFFSET, .reg_addr = 40001, .reg_num = 2,
+     .reg_type = 3, .flag = FLAG_0x03_w_0x10},
 #endif
 };
 
-const struct co_cfg *idu_collect_table(size_t *count)
+#if defined(CONFIG_IDU_AIDC_PROFILE)
+/* BEGIN IMPORTED TABLE: fields */
+/* Imported from user-provided AIDC source tables. Original tables: SUNGROW.
+ * Regenerate with tools/import_aidc.py; no closed library is linked. */
+static const UPP_M_MOD_DATA model_1[] = {
+    {.sig_id=AIDC_PARAM_PRODUCT_TYPE,.mod_data_offset=48,.mod_data_len=30,.mod_data_type=DATA_TYPE_STRING,.data_len=30,.data_type=DATA_TYPE_STRING,.rw_mode=1,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=205,.dec_p=1},
+};
+static const UPP_M_MOD_DATA model_2[] = {
+    {.sig_id=AIDC_PARAM_PRODUCT_CODE,.mod_data_offset=8,.mod_data_len=16,.mod_data_type=DATA_TYPE_STRING,.data_len=16,.data_type=DATA_TYPE_STRING,.rw_mode=1,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=205,.dec_p=1},
+    {.sig_id=AIDC_PARAM_CLIENT_CODE,.mod_data_offset=24,.mod_data_len=20,.mod_data_type=DATA_TYPE_STRING,.data_len=20,.data_type=DATA_TYPE_STRING,.rw_mode=1,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=205,.dec_p=1},
+    {.sig_id=AIDC_PARAM_TYPE,.mod_data_offset=94,.mod_data_len=2,.mod_data_type=DATA_TYPE_U16,.data_len=2,.data_type=DATA_TYPE_U16,.rw_mode=1,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=205,.dec_p=1},
+    {.sig_id=AIDC_PARAM_MATRIL_CODE,.mod_data_offset=96,.mod_data_len=2,.mod_data_type=DATA_TYPE_U16,.data_len=2,.data_type=DATA_TYPE_U16,.rw_mode=1,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=205,.dec_p=1},
+    {.sig_id=AIDC_PARAM_VEHICLE_TYPE,.mod_data_offset=62,.mod_data_len=20,.mod_data_type=DATA_TYPE_STRING,.data_len=20,.data_type=DATA_TYPE_STRING,.rw_mode=3,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=205,.dec_p=1},
+};
+static const UPP_M_MOD_DATA model_99[] = {
+    {.sig_id=AIDC_DCDC_TSK_FW_FLT_FLG1,.mod_data_offset=6,.mod_data_len=2,.mod_data_type=DATA_TYPE_U16,.data_len=2,.data_type=DATA_TYPE_U16,.rw_mode=1,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=3,.dec_p=1},
+    {.sig_id=AIDC_DCDC_TSK_FW_FLT_FLG2,.mod_data_offset=8,.mod_data_len=2,.mod_data_type=DATA_TYPE_U16,.data_len=2,.data_type=DATA_TYPE_U16,.rw_mode=1,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=3,.dec_p=1},
+    {.sig_id=AIDC_DCDC_TSK_FW_FLT_FLG3,.mod_data_offset=10,.mod_data_len=2,.mod_data_type=DATA_TYPE_U16,.data_len=2,.data_type=DATA_TYPE_U16,.rw_mode=1,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=3,.dec_p=1},
+    {.sig_id=AIDC_DCDC_TSK_FW_FLT_FLG4,.mod_data_offset=12,.mod_data_len=2,.mod_data_type=DATA_TYPE_U16,.data_len=2,.data_type=DATA_TYPE_U16,.rw_mode=1,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=3,.dec_p=1},
+    {.sig_id=AIDC_DCDC_TSK_WARN_FLT_FLG1,.mod_data_offset=14,.mod_data_len=2,.mod_data_type=DATA_TYPE_U16,.data_len=2,.data_type=DATA_TYPE_U16,.rw_mode=1,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=3,.dec_p=1},
+    {.sig_id=AIDC_DCDC_TSK_WARN_FLT_FLG2,.mod_data_offset=16,.mod_data_len=2,.mod_data_type=DATA_TYPE_U16,.data_len=2,.data_type=DATA_TYPE_U16,.rw_mode=1,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=3,.dec_p=1},
+    {.sig_id=AIDC_DCDC_TSK_WARN_FLT_FLG3,.mod_data_offset=18,.mod_data_len=2,.mod_data_type=DATA_TYPE_U16,.data_len=2,.data_type=DATA_TYPE_U16,.rw_mode=1,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=3,.dec_p=1},
+    {.sig_id=AIDC_MAIN_WRK_MODE,.mod_data_offset=20,.mod_data_len=2,.mod_data_type=DATA_TYPE_U16,.data_len=2,.data_type=DATA_TYPE_U16,.rw_mode=1,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=3,.dec_p=1},
+};
+static const UPP_M_MOD_DATA model_100[] = {
+    {.sig_id=AIDC_U16_FAN_SPEED1,.mod_data_offset=6,.mod_data_len=2,.mod_data_type=DATA_TYPE_U16,.data_len=2,.data_type=DATA_TYPE_U16,.rw_mode=1,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=3,.dec_p=1},
+    {.sig_id=AIDC_U16_FAN_SPEED2,.mod_data_offset=8,.mod_data_len=2,.mod_data_type=DATA_TYPE_U16,.data_len=2,.data_type=DATA_TYPE_U16,.rw_mode=1,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=3,.dec_p=1},
+    {.sig_id=AIDC_U16_FAN_SPEED3,.mod_data_offset=10,.mod_data_len=2,.mod_data_type=DATA_TYPE_U16,.data_len=2,.data_type=DATA_TYPE_U16,.rw_mode=1,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=3,.dec_p=1},
+    {.sig_id=AIDC_F32_RECT1_VOL,.mod_data_offset=12,.mod_data_len=4,.mod_data_type=DATA_TYPE_S32,.data_len=4,.data_type=DATA_TYPE_S32,.rw_mode=1,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=3,.dec_p=1},
+    {.sig_id=AIDC_F32_LINE_VOL_RTO_S,.mod_data_offset=16,.mod_data_len=4,.mod_data_type=DATA_TYPE_S32,.data_len=4,.data_type=DATA_TYPE_S32,.rw_mode=1,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=3,.dec_p=1},
+    {.sig_id=AIDC_F32_LINE_VOL_STO_T,.mod_data_offset=20,.mod_data_len=4,.mod_data_type=DATA_TYPE_S32,.data_len=4,.data_type=DATA_TYPE_S32,.rw_mode=1,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=3,.dec_p=1},
+    {.sig_id=AIDC_F32_PHASE_VOL_R,.mod_data_offset=24,.mod_data_len=4,.mod_data_type=DATA_TYPE_S32,.data_len=4,.data_type=DATA_TYPE_S32,.rw_mode=1,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=3,.dec_p=1},
+    {.sig_id=AIDC_F32_PHASE_VOL_S,.mod_data_offset=28,.mod_data_len=4,.mod_data_type=DATA_TYPE_S32,.data_len=4,.data_type=DATA_TYPE_S32,.rw_mode=1,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=3,.dec_p=1},
+    {.sig_id=AIDC_F32_PHASE_VOL_T,.mod_data_offset=32,.mod_data_len=4,.mod_data_type=DATA_TYPE_S32,.data_len=4,.data_type=DATA_TYPE_S32,.rw_mode=1,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=3,.dec_p=1},
+    {.sig_id=AIDC_F32_BOOST_BUS_VOL,.mod_data_offset=36,.mod_data_len=4,.mod_data_type=DATA_TYPE_S32,.data_len=4,.data_type=DATA_TYPE_S32,.rw_mode=1,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=3,.dec_p=1},
+    {.sig_id=AIDC_F32_OUTPUT_VOL,.mod_data_offset=40,.mod_data_len=4,.mod_data_type=DATA_TYPE_S32,.data_len=4,.data_type=DATA_TYPE_S32,.rw_mode=1,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=3,.dec_p=1},
+    {.sig_id=AIDC_F32_BAT_VOL,.mod_data_offset=44,.mod_data_len=4,.mod_data_type=DATA_TYPE_S32,.data_len=4,.data_type=DATA_TYPE_S32,.rw_mode=1,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=3,.dec_p=1},
+    {.sig_id=AIDC_F32_OUTPUT_CURR,.mod_data_offset=48,.mod_data_len=4,.mod_data_type=DATA_TYPE_S32,.data_len=4,.data_type=DATA_TYPE_S32,.rw_mode=1,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=3,.dec_p=1},
+    {.sig_id=AIDC_U16_INT_FAULT_WORD1,.mod_data_offset=52,.mod_data_len=2,.mod_data_type=DATA_TYPE_U16,.data_len=2,.data_type=DATA_TYPE_U16,.rw_mode=1,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=3,.dec_p=1},
+    {.sig_id=AIDC_U16_INT_FAULT_WORD2,.mod_data_offset=54,.mod_data_len=2,.mod_data_type=DATA_TYPE_U16,.data_len=2,.data_type=DATA_TYPE_U16,.rw_mode=1,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=3,.dec_p=1},
+    {.sig_id=AIDC_U16_INT_WARN_WORD1,.mod_data_offset=56,.mod_data_len=2,.mod_data_type=DATA_TYPE_U16,.data_len=2,.data_type=DATA_TYPE_U16,.rw_mode=1,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=3,.dec_p=1},
+    {.sig_id=AIDC_U16_INT_WARN_WORD2,.mod_data_offset=58,.mod_data_len=2,.mod_data_type=DATA_TYPE_U16,.data_len=2,.data_type=DATA_TYPE_U16,.rw_mode=1,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=3,.dec_p=1},
+};
+static const UPP_M_MOD_DATA model_102[] = {
+    {.sig_id=AIDC_ARM_COM_CELL_WORK_CMD,.mod_data_offset=6,.mod_data_len=2,.mod_data_type=DATA_TYPE_U16,.data_len=2,.data_type=DATA_TYPE_U16,.rw_mode=3,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=3,.dec_p=1},
+    {.sig_id=AIDC_ARM_COMT_BUCK_VOL_CMD,.mod_data_offset=8,.mod_data_len=4,.mod_data_type=DATA_TYPE_S32,.data_len=4,.data_type=DATA_TYPE_S32,.rw_mode=3,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=3,.dec_p=1},
+    {.sig_id=AIDC_ARM_COM_BOOST_VOL_CMD,.mod_data_offset=12,.mod_data_len=4,.mod_data_type=DATA_TYPE_S32,.data_len=4,.data_type=DATA_TYPE_S32,.rw_mode=3,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=3,.dec_p=1},
+    {.sig_id=AIDC_ARM_COM_CURR_LMT,.mod_data_offset=16,.mod_data_len=4,.mod_data_type=DATA_TYPE_S32,.data_len=4,.data_type=DATA_TYPE_S32,.rw_mode=3,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=3,.dec_p=1},
+    {.sig_id=AIDC_ARM_AVERAGE_CURR,.mod_data_offset=20,.mod_data_len=4,.mod_data_type=DATA_TYPE_S32,.data_len=4,.data_type=DATA_TYPE_S32,.rw_mode=3,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=3,.dec_p=1},
+    {.sig_id=AIDC_ARM_COM_FORCE_BAT_WRK_EN,.mod_data_offset=28,.mod_data_len=2,.mod_data_type=DATA_TYPE_U16,.data_len=2,.data_type=DATA_TYPE_U16,.rw_mode=3,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=3,.dec_p=1},
+};
+static const UPP_M_MOD_DATA model_103[] = {
+    {.sig_id=AIDC_AC2_BAT_LOW_THRESH,.mod_data_offset=6,.mod_data_len=4,.mod_data_type=DATA_TYPE_S32,.data_len=4,.data_type=DATA_TYPE_S32,.rw_mode=3,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=3,.dec_p=1},
+    {.sig_id=AIDC_AC2_BAT_HIGH_THRESH,.mod_data_offset=10,.mod_data_len=4,.mod_data_type=DATA_TYPE_S32,.data_len=4,.data_type=DATA_TYPE_S32,.rw_mode=3,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=3,.dec_p=1},
+    {.sig_id=AIDC_GRID_FREQUENCY,.mod_data_offset=14,.mod_data_len=4,.mod_data_type=DATA_TYPE_S32,.data_len=4,.data_type=DATA_TYPE_S32,.rw_mode=3,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=3,.dec_p=1},
+    {.sig_id=AIDC_ALTITUDE_DEFAULT,.mod_data_offset=18,.mod_data_len=4,.mod_data_type=DATA_TYPE_S32,.data_len=4,.data_type=DATA_TYPE_S32,.rw_mode=3,.byte_order=0,.set_pri=0,.scan_pri=0,.rqst_cyl=3,.dec_p=1},
+};
+/* END IMPORTED TABLE: fields */
+/* BEGIN IMPORTED TABLE: collect */
+/* Imported from user-provided AIDC source tables. Original tables: SUNGROW.
+ * Regenerate with tools/import_aidc.py; no closed library is linked. */
+static const UPP_M_MOD models[] = {
+    {.p_data=model_1,.data_num=ARRAY_SIZE(model_1),.mod_id=1},
+    {.p_data=model_2,.data_num=ARRAY_SIZE(model_2),.mod_id=2},
+    {.p_data=model_99,.data_num=ARRAY_SIZE(model_99),.mod_id=99},
+    {.p_data=model_100,.data_num=ARRAY_SIZE(model_100),.mod_id=100},
+    {.p_data=model_102,.data_num=ARRAY_SIZE(model_102),.mod_id=102},
+    {.p_data=model_103,.data_num=ARRAY_SIZE(model_103),.mod_id=103},
+};
+static const UPP_M_MOD_REG imported_models = {
+    .p_model_ary=models,.model_num=ARRAY_SIZE(models),.cfg_mode=0,
+};
+/* END IMPORTED TABLE: collect */
+#endif
+
+const MODBUS_RTU_TABLE_S *idu_collect_table(uint16_t *count)
 {
-    *count = ARRAY_SIZE(table);
-    return table;
+    *count = ARRAY_SIZE(mvio);
+    return mvio;
+}
+
+const UPP_M_MOD_REG *idu_model_table(uint16_t *count)
+{
+#if defined(CONFIG_IDU_AIDC_PROFILE)
+    *count = 0;
+    for (size_t i = 0; i < imported_models.model_num; ++i) {
+        *count += imported_models.p_model_ary[i].data_num;
+    }
+    return &imported_models;
+#else
+    *count = 0;
+    return NULL;
+#endif
 }

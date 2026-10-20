@@ -60,7 +60,8 @@ static int capture(struct dp_key key)
 {
     int i = find(key);
     if (i >= 0) { return i; }
-    const struct dp_point_cfg *p = dp_find(key);
+    struct dp_point_cfg p_scratch;
+    const struct dp_point_cfg *p = dp_find(key, &p_scratch);
     if (!p) { return -ENOENT; }
     if (entry_count == ARRAY_SIZE(entries)) { return -ENOSPC; }
     struct dp_point_state state;
@@ -185,7 +186,8 @@ int dp_process_execute(const struct dp_process_request *request,
     int err = 0;
     for (size_t n = 0; n < request->count; ++n) {
         const struct dp_process_item *item = &request->items[n];
-        const struct dp_point_cfg *p = dp_find(item->point.key);
+        struct dp_point_cfg p_scratch;
+        const struct dp_point_cfg *p = dp_find(item->point.key, &p_scratch);
         if (!p || item->flags & ~DP_OP_MASK || find(item->point.key) >= 0) {
             err = p ? -EINVAL : -ENOENT; goto out;
         }
@@ -203,7 +205,8 @@ int dp_process_execute(const struct dp_process_request *request,
     }
     /* All inputs are visible before any callback. Derived outputs never recurse. */
     for (size_t n = 0; n < request->count; ++n) {
-        const struct dp_point_cfg *p = dp_find(request->items[n].point.key);
+        struct dp_point_cfg p_scratch;
+        const struct dp_point_cfg *p = dp_find(request->items[n].point.key, &p_scratch);
         if (p->handler && (request->operation != DP_OP_READ || p->read_callback)) {
             err = p->handler(&ctx, p->key);
             if (err) { goto out; }
@@ -211,7 +214,8 @@ int dp_process_execute(const struct dp_process_request *request,
     }
     for (size_t i = 0; i < entry_count; ++i) {
         if (!entries[i].dirty) { continue; }
-        const struct dp_point_cfg *p = dp_find(entries[i].item.point.key);
+        struct dp_point_cfg p_scratch;
+        const struct dp_point_cfg *p = dp_find(entries[i].item.point.key, &p_scratch);
         if (p->source == DP_SOURCE_CONSTANT ||
             (p->source == DP_SOURCE_PARAMETER && !(p->param_flags & DP_PARAM_WRITE))) {
             err = -EACCES; goto out;
@@ -224,11 +228,13 @@ int dp_process_execute(const struct dp_process_request *request,
     bool done[CONFIG_DP_PROCESS_MAX_OUTPUTS] = {0};
     for (size_t i = 0; i < entry_count; ++i) {
         if (!entries[i].dirty || done[i]) { continue; }
-        const struct dp_point_cfg *p = dp_find(entries[i].item.point.key);
+        struct dp_point_cfg p_scratch;
+        const struct dp_point_cfg *p = dp_find(entries[i].item.point.key, &p_scratch);
         uint8_t flags = entries[i].item.flags;
         size_t count = 0;
         for (size_t j = i; j < entry_count; ++j) {
-            const struct dp_point_cfg *q = dp_find(entries[j].item.point.key);
+            struct dp_point_cfg q_scratch;
+            const struct dp_point_cfg *q = dp_find(entries[j].item.point.key, &q_scratch);
             if (!entries[j].dirty || done[j] || entries[j].item.flags != flags ||
                 (q->source == DP_SOURCE_PARAMETER) != (p->source == DP_SOURCE_PARAMETER) ||
                 (p->source == DP_SOURCE_PARAMETER && q->key.dev_id != p->key.dev_id)) { continue; }
@@ -308,7 +314,8 @@ int dp_process_sample(const struct dp_point_batch *batch)
 int dp_process_read_at(struct dp_key key, uint16_t port_id, uint8_t function,
                         uint16_t address, uint16_t count, struct dp_point_state *state)
 {
-    const struct dp_point_cfg *p = dp_find(key);
+    struct dp_point_cfg p_scratch;
+    const struct dp_point_cfg *p = dp_find(key, &p_scratch);
     if (!p || !state) { return -EINVAL; }
     if (p->reference_handler && p->read_callback) {
         return dp_reference_read_at(key, port_id, function, address, count, state);
@@ -343,7 +350,8 @@ int dp_process_init_device(uint16_t dev_id)
     const struct dp_equip_cfg *cfg = dp_config();
     if (!cfg) { return -EACCES; }
     for (size_t i = 0; i < cfg->point_count; ++i) {
-        const struct dp_point_cfg *p = &cfg->points[i];
+        struct dp_point_cfg p_scratch;
+        const struct dp_point_cfg *p = dp_config_point(cfg, i, &p_scratch);
         if ((dev_id && p->key.dev_id != dev_id) || !p->handler) { continue; }
         int err = initialize_key(p->key);
         if (err) { return err; }
@@ -384,7 +392,8 @@ int dp_process_start(const struct dp_process_plan *plan)
     }
     uint32_t delays[CONFIG_DP_PROCESS_TIMERS], periods[CONFIG_DP_PROCESS_TIMERS];
     for (size_t i = 0; i < plan->init_count; ++i) {
-        const struct dp_point_cfg *p = dp_find(plan->init_keys[i]);
+        struct dp_point_cfg p_scratch;
+        const struct dp_point_cfg *p = dp_find(plan->init_keys[i], &p_scratch);
         if (!p || !p->handler) {
             return -EINVAL;
         }
@@ -396,7 +405,8 @@ int dp_process_start(const struct dp_process_plan *plan)
     }
     for (size_t i = 0; i < plan->timer_count; ++i) {
         const struct dp_timer_spec *spec = &plan->timers[i];
-        const struct dp_point_cfg *p = dp_find(spec->key);
+        struct dp_point_cfg p_scratch;
+        const struct dp_point_cfg *p = dp_find(spec->key, &p_scratch);
         if (!p || !p->handler) {
             return -EINVAL;
         }
@@ -464,7 +474,8 @@ int dp_process_start(const struct dp_process_plan *plan)
 
 int dp_process_timer_start(struct dp_key key, uint32_t delay_ms, uint32_t period_ms)
 {
-    const struct dp_point_cfg *p = dp_find(key);
+    struct dp_point_cfg p_scratch;
+    const struct dp_point_cfg *p = dp_find(key, &p_scratch);
     if (!p || !p->handler) { return -EINVAL; }
     k_mutex_lock(&timer_lock, K_FOREVER);
     int slot = -ENOSPC;

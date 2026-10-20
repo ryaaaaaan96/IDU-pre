@@ -203,8 +203,10 @@ int co_init_bus(const struct dp_equip_cfg *cfg, const struct co_bus_cfg *config)
     int err = dp_validate(cfg);
     if (err) { return err; }
     for (size_t i = 0; i < cfg->collect_count; ++i) {
-        if (!cfg->collect[i].model_protocol &&
-            cfg->collect[i].count * 2 + 1 > sizeof(((struct modbus_adu *)0)->data)) {
+        struct co_cfg scratch;
+        const struct co_cfg *poll = dp_config_collect(cfg, i, &scratch);
+        if (!poll->model_protocol &&
+            poll->count * 2 + 1 > sizeof(((struct modbus_adu *)0)->data)) {
             return -EMSGSIZE;
         }
     }
@@ -240,7 +242,8 @@ int co_init(const struct dp_equip_cfg *cfg, int iface, bool simulated)
 static int collect_poll(size_t block, bool sync)
 {
     if (!equipment || block >= equipment->collect_count) { return -EINVAL; }
-    const struct co_cfg *cfg = &equipment->collect[block];
+    struct co_cfg cfg_scratch;
+    const struct co_cfg *cfg = dp_config_collect(equipment, block, &cfg_scratch);
     struct bus_state *bus = bus_for(cfg->dev_id);
     if (!bus) { return -ENODEV; }
     uint16_t registers[CO_MAX_REGS];
@@ -358,7 +361,8 @@ int co_set_scan_pkg_flag(uint8_t dev_id, uint16_t address_model,
     /* Resolve protocol before touching any schedule state. Otherwise an RTU
      * function could accidentally match an unrelated model offset. */
     for (size_t i = 0; i < equipment->collect_count; ++i) {
-        const struct co_cfg *p = &equipment->collect[i];
+        struct co_cfg p_scratch;
+        const struct co_cfg *p = dp_config_collect(equipment, i, &p_scratch);
         if (p->dev_id != dev_id) { continue; }
         if (found && model != p->model_protocol) { return -EPROTOTYPE; }
         found = true; model = p->model_protocol;
@@ -369,7 +373,8 @@ int co_set_scan_pkg_flag(uint8_t dev_id, uint16_t address_model,
     if (!bus) { return -ENODEV; }
     k_mutex_lock(&schedule_lock, K_FOREVER);
     for (size_t i = 0; i < equipment->collect_count; ++i) {
-        const struct co_cfg *p = &equipment->collect[i];
+        struct co_cfg p_scratch;
+        const struct co_cfg *p = dp_config_collect(equipment, i, &p_scratch);
         if (p->dev_id != dev_id ||
             (model ? p->model_id != address_model || p->address != function_offset :
                      p->address != address_model || p->function != function_offset)) { continue; }
@@ -388,7 +393,9 @@ int co_enable_poll(size_t block, bool enabled)
     k_mutex_lock(&schedule_lock, K_FOREVER);
     disabled[block] = !enabled; next_poll[block] = k_uptime_get();
     k_mutex_unlock(&schedule_lock);
-    struct bus_state *bus = bus_for(equipment->collect[block].dev_id);
+    struct co_cfg scratch;
+    const struct co_cfg *poll = dp_config_collect(equipment, block, &scratch);
+    struct bus_state *bus = bus_for(poll->dev_id);
     if (bus) { k_sem_give(&bus->wake); }
     return 0;
 }
@@ -421,7 +428,9 @@ int co_initialize_device(uint16_t dev_id)
     int err = initialize ? initialize(bus->cfg.id) : 0;
     if (!err && bus->cfg.initialize) { err = bus->cfg.initialize(bus->cfg.user, dev_id); }
     for (size_t i = 0; !err && i < equipment->collect_count; ++i) {
-        if (equipment->collect[i].dev_id == dev_id && equipment->collect[i].init_only) { err = collect_poll(i, true); }
+        struct co_cfg scratch;
+        const struct co_cfg *poll = dp_config_collect(equipment, i, &scratch);
+        if (poll->dev_id == dev_id && poll->init_only) { err = collect_poll(i, true); }
     }
 #if defined(CONFIG_DP_PROCESS)
     if (!err) { err = dp_process_init_device(dev_id); }
@@ -503,7 +512,8 @@ static void collect_thread(void *arg, void *b, void *c)
         }
         if (bus->mode == CO_PORT_POLL && !bus->init_owner) {
             for (size_t i = 0; i < equipment->collect_count; ++i) {
-                const struct co_cfg *p = &equipment->collect[i];
+                struct co_cfg p_scratch;
+                const struct co_cfg *p = dp_config_collect(equipment, i, &p_scratch);
                 if (disabled[i] || p->init_only || bus_for(p->dev_id) != bus) { continue; }
                 if (now < next_poll[i]) {
                     deadline = MIN(deadline, next_poll[i]);
@@ -523,7 +533,9 @@ static void collect_thread(void *arg, void *b, void *c)
             if (bus->mode == CO_PORT_POLL) { co_poll(poll); }
             k_mutex_unlock(&bus->lock);
             k_mutex_lock(&schedule_lock, K_FOREVER);
-            next_poll[poll] = k_uptime_get() + equipment->collect[poll].period_ms;
+            struct co_cfg scratch;
+            const struct co_cfg *cfg = dp_config_collect(equipment, poll, &scratch);
+            next_poll[poll] = k_uptime_get() + cfg->period_ms;
             k_mutex_unlock(&schedule_lock);
         } else {
             /* Updates give a latched semaphore after changing the schedule.
@@ -593,7 +605,8 @@ int co_dp_fast_set(PARA_DATA_S *data, PARA_SET_STATUS status)
     int err = 0;
     for (size_t i = 0; i < data->set_num; ++i) {
         DATA_SET_S *item = &data->p_set_data[i];
-        const struct dp_point_cfg *p = dp_find((struct dp_key){item->dev_id, item->sig_id});
+        struct dp_point_cfg p_scratch;
+        const struct dp_point_cfg *p = dp_find((struct dp_key){item->dev_id, item->sig_id}, &p_scratch);
         const uint8_t *bytes = item->sig_size > 4 ? item->p_value.pst : item->p_value.str;
         if (!p || !bytes || item->sig_size != dp_reference_size(p) || p->width > CO_MAX_REGS ||
             item->extra.addr_type != FUNC_PARA_REG_TYPE_MB || !bus_for(item->dev_id)) {
@@ -606,7 +619,8 @@ int co_dp_fast_set(PARA_DATA_S *data, PARA_SET_STATUS status)
         bool mapped = p->source == DP_SOURCE_PARAMETER && (p->param_flags & DP_PARAM_FORWARD);
         if (!mapped) {
             for (size_t b = 0; b < equipment->collect_count && !mapped; ++b) {
-                const struct co_cfg *poll = &equipment->collect[b];
+                struct co_cfg poll_scratch;
+                const struct co_cfg *poll = dp_config_collect(equipment, b, &poll_scratch);
                 if (poll->dev_id != item->dev_id || poll->model_protocol || poll->function != 3) { continue; }
                 for (size_t f = 0; f < poll->field_count; ++f) {
                     if (poll->fields[f].sig_id == item->sig_id && poll->fields[f].width == p->width) {
@@ -664,7 +678,8 @@ int co_anlysis_mb_pkg(uint8_t dev, uint16_t address, uint8_t *frame, uint16_t le
     struct dp_point_batch batch = {.source = DP_SOURCE_MODBUS,
         .flags = bus->cfg.simulated ? DP_QUALITY_SIMULATED : 0};
     for (size_t b = 0; b < equipment->collect_count; ++b) {
-        const struct co_cfg *poll = &equipment->collect[b];
+        struct co_cfg poll_scratch;
+        const struct co_cfg *poll = dp_config_collect(equipment, b, &poll_scratch);
         if (poll->dev_id != dev || poll->model_protocol || poll->function != frame[1]) { continue; }
         for (size_t f = 0; f < poll->field_count; ++f) {
             const struct co_field *field = &poll->fields[f];

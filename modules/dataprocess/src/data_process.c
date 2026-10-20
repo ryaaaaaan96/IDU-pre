@@ -35,10 +35,10 @@ static void pack(uint8_t *bytes, const struct dp_value *value, size_t count)
 }
 
 static int lookup(uint16_t dev, uint16_t sig, size_t size, bool exact,
-                  const struct dp_point_cfg **point)
+                  const struct dp_point_cfg **point, struct dp_point_cfg *scratch)
 {
     if (!dev || !sig || !size) { return -EINVAL; }
-    *point = dp_find((struct dp_key){dev, sig});
+    *point = dp_find((struct dp_key){dev, sig}, scratch);
     if (!*point) { return -ENOENT; }
     size_t needed = byte_count(*point);
     return (exact ? size != needed : size < needed) ? -EMSGSIZE : 0;
@@ -49,7 +49,8 @@ int32_t dp_get_sig_data_type(uint16_t dev, uint16_t sig,
 {
     if (k_is_in_isr()) { return -EWOULDBLOCK; }
     if (!type || !size) { return -EINVAL; }
-    const struct dp_point_cfg *point = dp_find((struct dp_key){dev, sig});
+    struct dp_point_cfg point_scratch;
+    const struct dp_point_cfg *point = dp_find((struct dp_key){dev, sig}, &point_scratch);
     if (!point) { return -ENOENT; }
     static const uint16_t types[] = {
         DATA_TYPE_U16, DATA_TYPE_S16, DATA_TYPE_U32, DATA_TYPE_S32,
@@ -64,8 +65,9 @@ int32_t dp_get_sig_value(uint16_t dev, uint16_t sig, uint8_t size, uint8_t *byte
 {
     if (k_is_in_isr()) { return -EWOULDBLOCK; }
     if (!bytes) { return -EINVAL; }
+    struct dp_point_cfg point_scratch;
     const struct dp_point_cfg *point;
-    int err = lookup(dev, sig, size, false, &point);
+    int err = lookup(dev, sig, size, false, &point, &point_scratch);
     if (err) { return err; }
     struct dp_point_state state;
     err = dp_read(point->key, &state);
@@ -125,8 +127,9 @@ static int prepare(struct dp_process_item *item, uint16_t dev, uint16_t sig,
                    size_t size, const uint8_t *bytes)
 {
     if (!bytes) { return -EINVAL; }
+    struct dp_point_cfg point_scratch;
     const struct dp_point_cfg *point;
-    int err = lookup(dev, sig, size, true, &point);
+    int err = lookup(dev, sig, size, true, &point, &point_scratch);
     if (err) { return err; }
     if (point->source == DP_SOURCE_CONSTANT ||
         (point->source == DP_SOURCE_PARAMETER && !(point->param_flags & DP_PARAM_WRITE))) {
@@ -225,8 +228,9 @@ int32_t dp_fast_para_get(PARA_DATA_S *data)
     uint8_t *bytes = data_bytes(item);
     if (!bytes) { return -EINVAL; }
     if (item->extra.addr_type != FUNC_PARA_REG_TYPE_MB) { return -ENOTSUP; }
+    struct dp_point_cfg point_scratch;
     const struct dp_point_cfg *point;
-    int err = lookup(item->dev_id, item->sig_id, item->sig_size, true, &point);
+    int err = lookup(item->dev_id, item->sig_id, item->sig_size, true, &point, &point_scratch);
     if (err) { return err; }
     struct dp_point_state state;
     bool response = false;
@@ -246,8 +250,9 @@ static int helper_get(FUNC_PARA_S *para, bool old)
     struct dp_process_ctx *ctx = callback_context();
     if (!ctx) { return -EPERM; }
     if (!para || !para->pvalue) { return -EINVAL; }
+    struct dp_point_cfg point_scratch;
     const struct dp_point_cfg *point;
-    int err = lookup(para->dev_id, para->sig_id, para->sig_size, false, &point);
+    int err = lookup(para->dev_id, para->sig_id, para->sig_size, false, &point, &point_scratch);
     if (err) { return err; }
     struct dp_value value;
     err = dp_txn_get(ctx, point->key, old, &value);
@@ -263,8 +268,9 @@ int32_t dp_check_para_set(FUNC_PARA_S *para)
     struct dp_process_ctx *ctx = callback_context();
     if (!ctx) { return -EPERM; }
     if (!para) { return -EINVAL; }
+    struct dp_point_cfg point_scratch;
     const struct dp_point_cfg *point;
-    int err = lookup(para->dev_id, para->sig_id, para->sig_size, true, &point);
+    int err = lookup(para->dev_id, para->sig_id, para->sig_size, true, &point, &point_scratch);
     if (err) { return err; }
     uint8_t flags;
     err = dp_txn_get_flags(ctx, point->key, &flags);
@@ -369,7 +375,8 @@ int dp_reference_submit(DM_PF_SIG_PROC callback, bool timer)
 
 int dp_reference_process(struct dp_process_ctx *ctx, struct dp_key key)
 {
-    const struct dp_point_cfg *point = dp_find(key);
+    struct dp_point_cfg point_scratch;
+    const struct dp_point_cfg *point = dp_find(key, &point_scratch);
     if (!ctx || !point || !point->reference_handler) { return -EINVAL; }
     uint8_t bytes[DP_POINT_WORDS * 2], original[DP_POINT_WORDS * 2];
     struct dp_value value;
@@ -551,8 +558,9 @@ int32_t dp_para_value_reg(uint16_t type, DATA_SET_S *data)
     struct dp_process_ctx *ctx = callback_context();
     if (!ctx) { return -EPERM; }
     if (!data || (type != PARA_VALUE_REG_OLD && type != PARA_VALUE_REG_NEW)) { return -EINVAL; }
+    struct dp_point_cfg point_scratch;
     const struct dp_point_cfg *point;
-    int err = lookup(data->dev_id, data->sig_id, data->sig_size, true, &point);
+    int err = lookup(data->dev_id, data->sig_id, data->sig_size, true, &point, &point_scratch);
     uint8_t *bytes = data_bytes(data);
     if (err || !bytes) { return err ? err : -EINVAL; }
     struct dp_value value;
