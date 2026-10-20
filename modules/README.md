@@ -23,7 +23,7 @@ compatibility.
 | `collect` | `collect_lib.h`, `collect/collect.h` | `co_*` acquisition, bus scheduling and parameter transport backend |
 | `transmit` | `transmit_lib.h`, `transmit/{transmit,modbus_adapter}.h` | `tr_*` register mappings, port modes and Modbus workqueues |
 | `quicklz` | `quicklz/quicklz.h` | `qlz_decode_level3()` bounded QuickLZ level 3 decoding in plain C |
-| [`gd32e505`](gd32e505/README.md) | Zephyr `soc_root` | E505 SoC registration and the supported 20 MHz bypass / 180 MHz startup |
+| [`gd32e505`](gd32e505/README.md) | Zephyr `soc_root`, `dts_root`, `adc_*` | E505 SoC, devicetree clock startup and synchronous ADC0 driver |
 
 Product point-table configuration lives in [`app/cfg/`](../app/cfg/README.md),
 outside these modules. `devices/` binds device instances and reusable models;
@@ -230,6 +230,13 @@ Parameter and device events are notifications; state/result APIs are authoritati
 4.4.2 sources for whole-PDU routing, isolated RX scheduling and one-byte RAW
 exceptions. The west checkout is unchanged. Strict source hashes intentionally
 stop builds after a Zephyr upgrade until this adapter has been reviewed and tested.
+
+The Zephyr 4.4.2 `modbus_register_user_fc()` API is dispatched only for function
+codes not already handled by its server switch. It cannot replace FC03/04/06/16,
+change unit/broadcast filtering, or move receive work to a dedicated workqueue.
+The compatibility hooks remain necessary for those contracts; they are explicitly
+version-bound rather than a portable public extension API. See the
+[official custom function-code contract](https://docs.zephyrproject.org/latest/doxygen/html/group__modbus.html).
 
 Per-interface `tr_modbus_set_policy()` optionally replaces the unit filter after
 CRC/RAW validation and permits legacy broadcast routing/replies. A route returns

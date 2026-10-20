@@ -10,7 +10,6 @@ rsource "app/Kconfig"
 config IDU_PRE
     bool
     default y
-    select USE_GD32_ADC
     select COLLECT if DATAPROCESS
     select TRANSMIT if DATAPROCESS
     select DP_PROCESS if DATAPROCESS

@@ -1,0 +1,8 @@
+/* Compile-only alternate board: 8 MHz crystal, PLL /2 *30, 120 MHz CPU. */
+&hxtal { clock-frequency = <8000000>; };
+&pll {
+    /delete-property/ hxtal-bypass;
+    prediv = <2>;
+    mul = <30>;
+};
+&cpu0 { clock-frequency = <120000000>; };

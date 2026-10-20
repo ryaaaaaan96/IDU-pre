@@ -1,0 +1,2 @@
+/* Must be rejected: PLL still produces 180 MHz. */
+&cpu0 { clock-frequency = <120000000>; };

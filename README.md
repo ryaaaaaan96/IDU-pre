@@ -82,8 +82,9 @@ IDU-pre/
 MCUboot 源码仍使用 West 工作区中的独立仓库；`app/boot.c` 的应用健康确认和
 `app/iap/` 的升级接收/解包继续由主应用编译。根 `sysbuild/` 仅保留 Zephyr 约定入口。
 
-[`modules/gd32e505/`](modules/gd32e505/README.md) 通过 Zephyr 的 `soc_root` 提供
-E505 登记与时钟初始化，主应用和 MCUboot 共用；根目录不再单独设置 `soc/`。
+[`modules/gd32e505/`](modules/gd32e505/README.md) 通过 Zephyr 的 `soc_root` / `dts_root` 提供
+E505 登记、设备树时钟配置和标准 ADC 驱动；芯片启动由主应用和 MCUboot 共用，
+ADC 按配置启用。根目录不再单独设置 `soc/`。
 IDU 的引脚、外部看门狗和分区属于板级及产品配置，分别留在 `boards/` 和 `bootloader/`。
 
 ## 实现与验证范围

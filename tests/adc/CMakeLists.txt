@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.20.0)
+find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
+project(idu_adc_tests)
+target_include_directories(app BEFORE PRIVATE fakes ../../app)
+target_compile_definitions(app PRIVATE CONFIG_IDU_ADC_AVERAGE_COUNT=10)
+target_sources(app PRIVATE src/driver.c src/application.c ../../app/hardware/analog.c)

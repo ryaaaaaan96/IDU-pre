@@ -1,0 +1,29 @@
+description: |
+  GD32E50x ADC0, external channels 0 to 15. Polling conversions use bounded
+  waits and support the Zephyr synchronous ADC API. The prescaler is shared
+  across the ADC block; additional ADC instances are not supported yet.
+compatible: "gd,gd32e50x-adc"
+include: [adc-controller.yaml, reset-device.yaml, pinctrl-device.yaml]
+properties:
+  reg:
+    required: true
+  clocks:
+    required: true
+  resets:
+    required: true
+  clock-prescaler:
+    type: int
+    required: true
+    enum: [2, 4, 6, 8, 12, 16]
+  vdda-millivolts:
+    type: int
+    required: true
+    description: Analog supply used to validate the ADC clock limit.
+  "#io-channel-cells":
+    const: 1
+  pinctrl-0:
+    required: true
+  pinctrl-names:
+    required: true
+io-channel-cells:
+  - input

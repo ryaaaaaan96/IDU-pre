@@ -1,0 +1,30 @@
+description: |
+  GD32E505 HXTAL PLL startup configuration. AHB runs at the PLL output rate.
+  The board supplies its oscillator, bypass mode, PLL factors and APB divisors.
+compatible: "gd,gd32e505-pll"
+include: base.yaml
+properties:
+  clocks:
+    required: true
+  "#clock-cells":
+    type: int
+    const: 0
+  hxtal-bypass:
+    type: boolean
+    description: Use an external active clock instead of a crystal.
+  prediv:
+    type: int
+    required: true
+    enum: [1, 2]
+  mul:
+    type: int
+    required: true
+    description: Integer PLL multiplier from 2 to 63.
+  apb1-prescaler:
+    type: int
+    required: true
+    enum: [1, 2, 4, 8, 16]
+  apb2-prescaler:
+    type: int
+    required: true
+    enum: [1, 2, 4, 8, 16]

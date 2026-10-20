@@ -1,0 +1,12 @@
+config ADC_GD32E50X
+    bool "GD32E50x synchronous ADC driver"
+    default y
+    depends on ADC && SOC_GD32E505
+    depends on DT_HAS_GD_GD32E50X_ADC_ENABLED
+    select PINCTRL
+    select RESET
+    select USE_GD32_ADC
+    help
+      Bounded polling driver for ADC0 external channels. Supports single-channel
+      synchronous reads, 6/8/10/12-bit resolution and explicit calibration.
+      DMA, asynchronous reads, sequence options and oversampling are unsupported.

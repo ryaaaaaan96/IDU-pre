@@ -1,0 +1,16 @@
+#include <arm/gd/gd32e50x/gd32e50x.dtsi>
+
+/ {
+    soc {
+        adc0: adc@40012400 {
+            compatible = "gd,gd32e50x-adc";
+            reg = <0x40012400 0x400>;
+            clocks = <&cctl GD32_CLOCK_ADC0>;
+            resets = <&rctl GD32_RESET_ADC0>;
+            #io-channel-cells = <1>;
+            #address-cells = <1>;
+            #size-cells = <0>;
+            status = "disabled";
+        };
+    };
+};

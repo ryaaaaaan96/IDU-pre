@@ -1,4 +1,7 @@
 name: gd32e505
 build:
+  cmake: .
+  kconfig: Kconfig
   settings:
     soc_root: .
+    dts_root: .

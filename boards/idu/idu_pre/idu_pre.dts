@@ -1,7 +1,8 @@
 /dts-v1/;
 
 #include <mem.h>
-#include <arm/gd/gd32e50x/gd32e50x.dtsi>
+#include <arm/gd/gd32e505.dtsi>
+#include <zephyr/dt-bindings/adc/adc.h>
 #include "idu_pre-pinctrl.dtsi"
 
 / {
@@ -12,6 +13,17 @@
         compatible = "fixed-clock";
         #clock-cells = <0>;
         clock-frequency = <20000000>; /* Active oscillator into OSC_IN; bypass required. */
+    };
+
+    pll: pll {
+        compatible = "gd,gd32e505-pll";
+        #clock-cells = <0>;
+        clocks = <&hxtal>;
+        hxtal-bypass;
+        prediv = <2>;
+        mul = <18>;
+        apb1-prescaler = <2>;
+        apb2-prescaler = <1>;
     };
 
     chosen {
@@ -41,6 +53,8 @@
 
     idu_io: idu-io {
         compatible = "idu,pre-io";
+        io-channels = <&adc0 13>, <&adc0 0>, <&adc0 1>, <&adc0 2>,
+                      <&adc0 3>, <&adc0 4>, <&adc0 11>, <&adc0 12>;
         di-gpios = <&gpioc 6 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,
                    <&gpioc 7 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,
                    <&gpioc 8 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,
@@ -86,15 +100,6 @@
     };
 
     soc {
-        idu_analog: adc@40012400 {
-            compatible = "idu,gd32e50x-analog";
-            reg = <0x40012400 0x400>;
-            channel-order = <13 0 1 2 3 4 11 12>;
-            vref-mv = <3300>;
-            pinctrl-0 = <&analog_default>;
-            pinctrl-names = "default";
-            status = "okay";
-        };
         spi1: spi@40003800 {
             compatible = "gd,gd32-spi";
             reg = <0x40003800 0x400>;
@@ -194,5 +199,77 @@
         compatible = "zephyr,modbus-serial";
         de-gpios = <&gpioa 15 GPIO_ACTIVE_HIGH>;
         status = "okay";
+    };
+};
+
+&adc0 {
+    status = "okay";
+    clock-prescaler = <6>;
+    vdda-millivolts = <3300>;
+    pinctrl-0 = <&analog_default>;
+    pinctrl-names = "default";
+    channel@0 {
+        reg = <0>;
+        zephyr,gain = "ADC_GAIN_1";
+        zephyr,reference = "ADC_REF_VDD_1";
+        zephyr,vref-mv = <3300>;
+        zephyr,acquisition-time = <ADC_ACQ_TIME(ADC_ACQ_TIME_TICKS, 72)>;
+        zephyr,resolution = <12>;
+    };
+    channel@1 {
+        reg = <1>;
+        zephyr,gain = "ADC_GAIN_1";
+        zephyr,reference = "ADC_REF_VDD_1";
+        zephyr,vref-mv = <3300>;
+        zephyr,acquisition-time = <ADC_ACQ_TIME(ADC_ACQ_TIME_TICKS, 72)>;
+        zephyr,resolution = <12>;
+    };
+    channel@2 {
+        reg = <2>;
+        zephyr,gain = "ADC_GAIN_1";
+        zephyr,reference = "ADC_REF_VDD_1";
+        zephyr,vref-mv = <3300>;
+        zephyr,acquisition-time = <ADC_ACQ_TIME(ADC_ACQ_TIME_TICKS, 72)>;
+        zephyr,resolution = <12>;
+    };
+    channel@3 {
+        reg = <3>;
+        zephyr,gain = "ADC_GAIN_1";
+        zephyr,reference = "ADC_REF_VDD_1";
+        zephyr,vref-mv = <3300>;
+        zephyr,acquisition-time = <ADC_ACQ_TIME(ADC_ACQ_TIME_TICKS, 72)>;
+        zephyr,resolution = <12>;
+    };
+    channel@4 {
+        reg = <4>;
+        zephyr,gain = "ADC_GAIN_1";
+        zephyr,reference = "ADC_REF_VDD_1";
+        zephyr,vref-mv = <3300>;
+        zephyr,acquisition-time = <ADC_ACQ_TIME(ADC_ACQ_TIME_TICKS, 72)>;
+        zephyr,resolution = <12>;
+    };
+    channel@b {
+        reg = <11>;
+        zephyr,gain = "ADC_GAIN_1";
+        zephyr,reference = "ADC_REF_VDD_1";
+        zephyr,vref-mv = <3300>;
+        zephyr,acquisition-time = <ADC_ACQ_TIME(ADC_ACQ_TIME_TICKS, 72)>;
+        zephyr,resolution = <12>;
+    };
+    channel@c {
+        reg = <12>;
+        zephyr,gain = "ADC_GAIN_1";
+        zephyr,reference = "ADC_REF_VDD_1";
+        zephyr,vref-mv = <3300>;
+        zephyr,acquisition-time = <ADC_ACQ_TIME(ADC_ACQ_TIME_TICKS, 72)>;
+        zephyr,resolution = <12>;
+    };
+    channel@d {
+        reg = <13>;
+        zephyr,gain = "ADC_GAIN_1";
+        zephyr,reference = "ADC_REF_VDD_1";
+        zephyr,vref-mv = <3300>;
+        zephyr,acquisition-time = <ADC_ACQ_TIME(ADC_ACQ_TIME_TICKS, 72)>;
+        zephyr,resolution = <12>;
     };
 };

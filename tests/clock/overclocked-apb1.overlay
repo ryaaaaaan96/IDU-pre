@@ -1,0 +1,2 @@
+/* Must be rejected: APB1 is limited to 90 MHz. */
+&pll { apb1-prescaler = <1>; };

@@ -39,6 +39,7 @@ build/IDU-pre/tests/reference_services/zephyr/zephyr.exe -flash_in_ram
 | `dataprocess`、`collector`、`transmit` | 核心模块独立配置、采集调度、转发模式和恢复 |
 | `reference_config`、`reference_dp`、`reference_ports`、`reference_services` | 原表注册、同步字节接口、CO/TR 适配、策略回调和迁移 |
 | `boot`、`iap`、`test_iap_codec.py` | 健康确认、IAP 收包/签名拒绝、SGZ/QuickLZ 边界 |
+| `adc`、`test_build_configuration.py` | 标准 ADC API、采样平均、硬件超时恢复、并发隔离与 Sysbuild 配置覆盖 |
 
 `tests/run.sh` 同时验证 Process 关闭、参数/后端可选配置，并用独立 Flash 临时文件
 在新进程中执行参数、MV-IO 和 IAP 恢复阶段。普通运行跳过的 reboot probe 会在
@@ -148,3 +149,38 @@ PC13 看门狗浮空操作从 SoC 函数移到 MCUboot 专用的板级早期钩�
 `soc-module-startup.txt`。工作区构建包含原有 runtime 暂存改动，独立 Sysbuild 构建不包含。
 时钟、Flash 参数及 PC13 浮空方式保留原值；PC13 操作从 SoC 初始化中途移动到其后，
 尚未实测启动时间及外部看门狗行为。仍需验证冷启动、旧 Boot 跳转、MCUboot 交换和回退。
+
+## ADC 与时钟配置修正验证（2026-10-20）
+
+ADC HAL 访问已归入芯片模块驱动，应用通过标准 ADC API 读取并平均。
+PLL、bypass 和 APB 分频由设备树提供；Sysbuild 保留显式指定的 MCUboot overlay。
+Modbus 兼容补丁保留：4.4.2 的公开自定义功能码接口不能替代已有标准功能码、
+地址过滤和接收工作队列扩展点。
+
+```bash
+CCACHE_DISABLE=1 ASAN_OPTIONS=detect_leaks=0 bash applications/IDU-pre/tests/run.sh
+CCACHE_DISABLE=1 bash applications/IDU-pre/tests/clock/run.sh
+CCACHE_DISABLE=1 ./applications/IDU-pre/build.sh
+CCACHE_DISABLE=1 ./applications/IDU-pre/build.sh --mcuboot --iapv3
+CCACHE_DISABLE=1 ./applications/IDU-pre/build.sh --mcuboot --aidc
+CCACHE_DISABLE=1 ./applications/IDU-pre/build.sh --mcuboot --smp-uart
+```
+
+- 完整回归通过：34 次模拟器运行、199 项 Ztest 通过（含恢复阶段等重复执行），
+  Python 共 26 项，其中 3 项因未提供外部 QuickLZ/SGZ 输入而跳过。
+- 新增 [ADC 回归](../tests/adc/README.md) 10 项，覆盖缓冲区与参数边界、
+  校准/转换超时、失败恢复、并发读取隔离、通道顺序和 10 次整数平均。
+  新增 Sysbuild 配置测试 5 项，覆盖默认值、自定义列表、显式空值、旧路径迁移及模块保留。
+- [时钟构建检查](../tests/clock/README.md) 中 8 MHz 晶振 / 120 MHz 配置通过，
+  CPU/PLL 不一致与 APB1 超频分别因预期的断言被拒绝。
+- 默认及三种 MCUboot 固件构建、导出和镜像检查通过；签名验证通过。
+- 独立导出本次修改范围，在全新目录进行 Sysbuild 构建并验签。
+  MCUboot 设备树中的自定义 `model` 标记确认传入 overlay 生效，启动分区仍由其
+  包含的产品布局提供。该构建不包含工作区原有 runtime 暂存改动。
+- 文档链接、锚点与 shell 语法检查通过。
+
+日志在 `build/IDU-pre/tests/zephyr-fix-*.log` 和 `clock-*.log`。
+工作区回归包含原有 runtime 暂存内容。默认静态 RAM 为 81,768 B，比本轮前增加 40 B。
+硬件替身及 ADC emulator 不验证实际校准、转换精度、采样时序或供电电压；
+ADC 校准已提前到 `POST_KERNEL` 设备初始化，需在实板确认启动和看门狗行为。
+本板时钟数值、通道顺序及采样次数保持不变，本轮没有进行烧录或实板测量。

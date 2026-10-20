@@ -13,7 +13,8 @@
   补充 SoC 定义，复用上游 E50x CPU、GPIO、串口和 SPI 支持。
   E505 使用 HAL 的 `GD32E50X_XD`，不再沿用旧工程的 `GD32E50X_CL`。
 - [GD32E505 模块](../modules/gd32e505/README.md) 通过 `soc_root` 向应用和 MCUboot
-  提供芯片接入；IDU 引脚与 Flash 分区仍由板及产品配置决定。
+  提供芯片接入；PLL 来源、bypass、倍频与 APB 分频由板级 DTS 指定，
+  HAL 输入频率由同一设备树生成。IDU 引脚与 Flash 分区仍由板及产品配置决定。
   MCUboot 的 PC13 浮空操作在 [板级早期钩子](../boards/idu/idu_pre/board.c) 中，
   于 SoC 时钟初始化后、设备初始化和镜像交换前执行；应用仍由 `idu_health_init()` 启用喂狗。
 - 根据旧链接脚本暂按 512 KB Flash、128 KB SRAM 设置。
@@ -57,7 +58,9 @@ PD8 为最高位。寄存器 DI bit0 对应 DI1，bit15 对应 DI16。
 
 - 每 500 ms 获取 16 路 DI 和拨码地址，采集 8 路模拟量。
 - 每个模拟通道连续采集 10 次并取整数平均，分辨率 12 bit。
-  本版使用逐通道轮询和转换超时，不沿用 FreeRTOS 的连续 DMA 缓冲区。
+  模块中的 ADC0 驱动通过标准 `adc_*` API 提供逐通道轮询和转换超时，
+  `analog.c` 保留通道顺序及平均。设备初始化时校准，读取超时后下次读取重置并重新校准；
+  不沿用 FreeRTOS 的连续 DMA 缓冲区。
   平均数和周期由 `CONFIG_IDU_ADC_AVERAGE_COUNT`、
   `CONFIG_IDU_SAMPLE_PERIOD_MS` 调整初始配置；31000 可设置并保存运行周期。
 - 保留当前旧代码的电流换算：

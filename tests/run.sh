@@ -46,6 +46,7 @@ for phase in import verify; do
 done
 python3 applications/IDU-pre/tests/test_boot_image.py
 python3 applications/IDU-pre/tests/test_import_aidc.py
+python3 applications/IDU-pre/tests/test_build_configuration.py
 
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/boot -d "$test_dir/boot"
@@ -53,8 +54,8 @@ timeout 30s "$test_dir/boot/zephyr/zephyr.exe"
 
 bash applications/IDU-pre/tests/iap/run.sh
 
-# Modular telemetry pipeline, reusable device models and event-driven polling.
-for suite in pipeline models collector transmit dataprocess reference_dp reference_ports reference_config reference_services; do
+# ADC contracts, modular telemetry, reusable models and event-driven polling.
+for suite in adc pipeline models collector transmit dataprocess reference_dp reference_ports reference_config reference_services; do
     env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
         "applications/IDU-pre/tests/$suite" -d "$test_dir/$suite"
     timeout 30s "$test_dir/$suite/zephyr/zephyr.exe"

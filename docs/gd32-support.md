@@ -7,7 +7,8 @@
 **结论：官方确实提供 GD32 固件库，也提供 Zephyr 下游仓库；当前 IDU-pre 已经复用 Zephyr 的 `hal_gigadevice`。但核查时上游和官方下游均未登记 GD32E505 SoC，且默认启动程序不适配本板的 20 MHz 有源时钟。因此不能通过添加一个官方模块就删除本地 E505 接入代码。** 合理方向是继续复用官方 HAL 和现有 Zephyr 驱动，仅保留 E505、本板时钟和尚未覆盖的 ADC 适配。
 
 目录更新（2026-10-20）：本地 SoC 已移入 [`modules/gd32e505`](../modules/gd32e505/README.md)，
-通过模块元数据提供 `soc_root`；PC13 外部看门狗操作已归入 IDU 板级早期初始化。
+通过模块元数据提供 `soc_root` / `dts_root`；PC13 操作归入板级早期初始化，
+时钟参数由设备树提供，ADC0 后端已接入标准 Zephyr ADC API。
 以下上游支持情况仍以原核查日期为准。
 
 **官方资源分为三层。** 兆易创新在 [官方 GitHub 介绍](https://www.gigadevice.com/about/blog/gd32-mcu-official-github) 中确认 `GigaDevice-GD32-MCU` 和 `GD32-MCU-IOT` 两个组织；[官方 Zephyr/IAR 指南](https://www.gigadevice.com/about/blog/zephyr-gd32-iar-guide) 也直接使用后者的 `gd32_zephyr`。
@@ -35,7 +36,7 @@
 
 **为什么目前仍需要自己的 `soc.c`。** 本地 [SoC 启动](../modules/gd32e505/soc/gd/gd32e505/soc.c)、[构建配置](../modules/gd32e505/soc/gd/gd32e505/CMakeLists.txt) 和 [板级 DTS](../boards/idu/idu_pre/idu_pre.dts) 已复用官方类型、HAL 函数、上游 E50x DTS 与 GD32 公共目录，补充以下硬件条件：
 
-- `GD32E50X_XD` 类型选择、`HXTAL_VALUE=20000000`，并断言 CPU 为 180 MHz。
+- `GD32E50X_XD` 类型选择；`HXTAL_VALUE` 来自设备树，编译断言校验 PLL、CPU 与总线频率。
 - OSC_IN 输入是 20 MHz 有源时钟，需要 HXTAL bypass；PLL 为 `20 / 2 × 18 = 180 MHz`。
 - 兼容旧引导程序已经开启 PLL 的情况，先切换并确认 IRC8M，再复位时钟配置。
 - Flash 等待周期、APB 分频、高驱动模式和时钟稳定等待。
@@ -58,7 +59,7 @@
 | UART / Modbus RTU | Zephyr GD32 UART 与 Modbus 子系统 | 通过 DTS、端口配置和 Modbus 接口使用；不需重写串口 HAL |
 | SPI / SPI NOR | GD32 SPI 与通用 SPI NOR 驱动 | 本板补充 SPI1 DTS 节点，使用 `gd,gd32-spi`；外部 Flash 由现有存储驱动承接 |
 | 内部 Flash / 分区 / 升级 | GD32 FMC v1、Flash Map、NVS、`flash_img` | 应继续使用现有接口；E505 写入对齐、本板分区和 Boot 兼容需要保留 |
-| ADC | E50x 官方 ADC HAL 已有；通用 `adc_gd32.c` 也存在 | E50x 的 DTS 和驱动初始化分支尚不完整，当前 `analog.c` 以 HAL 完成适配 |
+| ADC | E50x 官方 ADC HAL 已有；通用 `adc_gd32.c` 也存在 | E50x 的 DTS 和驱动初始化分支尚不完整，本地模块以 HAL 实现标准 ADC 驱动，`analog.c` 使用 `adc_*` API |
 | 系统时钟 | 官方 RCU/PMU/FMC HAL；Zephyr GD32 公共时钟接口 | 20 MHz bypass 和启动顺序尚需本地 SoC 早期初始化 |
 
 Flash 还有一处具体兼容原因：当前 [上游 `flash_gd32_v1.c`](https://github.com/zephyrproject-rtos/zephyr/blob/a915b2f12675b48b16d56653ea145dcd8f20cbbf/drivers/flash/flash_gd32_v1.c) 定义 `GD32_FMC_V1_WORK_ALIGNED`，后续分支判断却是 `FLASH_GD32_FMC_WORK_ALIGNED`。本地 CMake 显式定义后者以选择 E505 所需的字写入路径，不能在没有替代修复和 Flash 验证时顺手删除。
@@ -72,7 +73,12 @@ Flash 还有一处具体兼容原因：当前 [上游 `flash_gd32_v1.c`](https:/
 
 证据：[上游 ADC 驱动](https://github.com/zephyrproject-rtos/zephyr/blob/a915b2f12675b48b16d56653ea145dcd8f20cbbf/drivers/adc/adc_gd32.c)、[厂商 ADC 驱动](https://github.com/GD32-MCU-IOT/gd32_zephyr/blob/9a6008dfafc339fedd3a47611adc2fbc58c19027/drivers/adc/adc_gd32.c)、[上游 E50x DTS](https://github.com/zephyrproject-rtos/zephyr/blob/a915b2f12675b48b16d56653ea145dcd8f20cbbf/dts/arm/gd/gd32e50x/gd32e50x.dtsi)、[厂商 E50x DTS](https://github.com/GD32-MCU-IOT/gd32_zephyr/blob/9a6008dfafc339fedd3a47611adc2fbc58c19027/dts/arm/gd/gd32e50x/gd32e50x.dtsi)。
 
-本地 [analog.c](../app/hardware/analog.c) 已调用 `gd32_adc.h` 的官方函数配置 APB2/6、12 位、单通道软件触发，按板级通道顺序采样并平均，校准和转换分别设置等待期限。这是对现有 HAL 的适配。后续若要求业务统一调用 `adc_channel_setup()` / `adc_read()`，可以在应用自有驱动目录封装 E505 HAL，或补齐并向上游提交通用驱动支持；均需验证分频、触发、校准、通道顺序、错误恢复及实际电流换算。
+本地 [ADC 驱动](../modules/gd32e505/drivers/adc/adc_gd32e50x.c) 封装官方 HAL，
+通过 Zephyr 设备模型提供同步单通道读取、校准和超时恢复；
+[analog.c](../app/hardware/analog.c) 使用标准 API 保留通道顺序与平均策略。
+板级 DTS 仍配置 APB2/6、12 位、71.5 周期采样。该实现不修改上游驱动，
+多通道序列、异步/DMA 和内部通道暂不支持，范围见[模块说明](../modules/gd32e505/README.md)。
+分频、触发、校准、错误恢复及实际电流换算仍需实板验证。
 
 **本次依赖选择建议。** 保持 `v4.4.2` 及现有固定 HAL 提交。本次所需的 GPIO/UART/SPI/Flash 接口已经存在；厂商下游尚不能消除 E505 时钟和 ADC 缺口，切换整个 Zephyr 分支没有与之对应的直接收益。后续需要某项厂商修复时，先比较具体提交、锁定依赖、单独构建验证；不直接复制整个固件库，也不让生产清单追踪浮动 `main`。本研究没有修改 West 清单或任何上游文件。
 
@@ -92,7 +98,7 @@ Flash 还有一处具体兼容原因：当前 [上游 `flash_gd32_v1.c`](https:/
 | 厂商 Zephyr 下游 | 完整 Zephyr 分支及其依赖清单 | [gd32_zephyr](https://github.com/GD32-MCU-IOT/gd32_zephyr)、[west.yml](https://github.com/GD32-MCU-IOT/gd32_zephyr/blob/9a6008dfafc339fedd3a47611adc2fbc58c19027/west.yml) |
 | 厂商下游 HAL | 与上述分支配套的 HAL，不保证可独立替换本地固定版本 | [hal_gigadevice_zephyr](https://github.com/GD32-MCU-IOT/hal_gigadevice_zephyr) |
 
-本地复核命令：`git -C zephyr describe --tags --always`、`git -C modules/hal/gigadevice rev-parse HEAD`，并检查 `manifest/west.yml`、`zephyr/west.yml`、`zephyr/soc/gd/gd32/gd32e50x/`。本报告仅新增文档；没有进行依赖升级、修改 SoC/ADC，或声称新的实板验证已经完成。
+本地复核命令：`git -C zephyr describe --tags --always`、`git -C modules/hal/gigadevice rev-parse HEAD`，并检查 `manifest/west.yml`、`zephyr/west.yml`、`zephyr/soc/gd/gd32/gd32e50x/`。原调研没有升级依赖；后续本地 SoC/ADC 改动与验证按本文的目录更新及模块文档说明，不代表新增实板验证。
 
 ## Issue、PR 与版本追踪
 
