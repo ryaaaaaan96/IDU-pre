@@ -4,15 +4,25 @@
 #include "signal_ids.h"
 #include <zephyr/sys/util.h>
 
-#define SAMPLE(sig, addr) \
-    {.sig_id = sig, .reg_addr = addr, .reg_num = 1, .reg_type = 4, \
-     .rqst_cyl = IDU_COLLECT_SAMPLE, .byte_order = BYTE_ORDER_DEFAULT}
-#define CURRENT(n) SAMPLE(IDU_MVIO_CURRENT_1 + n, 8163 + n)
-
 static const MODBUS_RTU_TABLE_S mvio[] = {
-    SAMPLE(IDU_MVIO_DI, 8152),
-    CURRENT(0), CURRENT(1), CURRENT(2), CURRENT(3),
-    CURRENT(4), CURRENT(5), CURRENT(6), CURRENT(7),
+    {.sig_id = IDU_MVIO_DI, .reg_addr = 8152, .reg_num = 1, .reg_type = 4,
+     .rqst_cyl = IDU_COLLECT_SAMPLE, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_MVIO_CURRENT_1 + 0, .reg_addr = 8163, .reg_num = 1, .reg_type = 4,
+     .rqst_cyl = IDU_COLLECT_SAMPLE, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_MVIO_CURRENT_1 + 1, .reg_addr = 8164, .reg_num = 1, .reg_type = 4,
+     .rqst_cyl = IDU_COLLECT_SAMPLE, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_MVIO_CURRENT_1 + 2, .reg_addr = 8165, .reg_num = 1, .reg_type = 4,
+     .rqst_cyl = IDU_COLLECT_SAMPLE, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_MVIO_CURRENT_1 + 3, .reg_addr = 8166, .reg_num = 1, .reg_type = 4,
+     .rqst_cyl = IDU_COLLECT_SAMPLE, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_MVIO_CURRENT_1 + 4, .reg_addr = 8167, .reg_num = 1, .reg_type = 4,
+     .rqst_cyl = IDU_COLLECT_SAMPLE, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_MVIO_CURRENT_1 + 5, .reg_addr = 8168, .reg_num = 1, .reg_type = 4,
+     .rqst_cyl = IDU_COLLECT_SAMPLE, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_MVIO_CURRENT_1 + 6, .reg_addr = 8169, .reg_num = 1, .reg_type = 4,
+     .rqst_cyl = IDU_COLLECT_SAMPLE, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_MVIO_CURRENT_1 + 7, .reg_addr = 8170, .reg_num = 1, .reg_type = 4,
+     .rqst_cyl = IDU_COLLECT_SAMPLE, .byte_order = BYTE_ORDER_DEFAULT},
     {.sig_id = IDU_MVIO_PROTOCOL, .reg_addr = 8150, .reg_num = 2, .reg_type = 4,
      .rqst_cyl = IDU_COLLECT_IDENTITY, .byte_order = BYTE_ORDER_DEFAULT},
     {.sig_id = IDU_MVIO_ADDRESS, .reg_addr = 30459, .reg_num = 1, .reg_type = 3,

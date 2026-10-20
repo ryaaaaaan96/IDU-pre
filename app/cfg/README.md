@@ -37,10 +37,29 @@ cfg/
 `process.c` 直接绑定 `app/process/` 的回调，不再维护 `point_metadata`、回调名称
 字符串或另一套 UPP 模型/初值副本。虚拟模型后端直接读取 `collect.c` 和 `process.c`。
 默认值和范围通过原接口 `DM_SIG_DATA_S` 返回，不改变参考结构。
+处理、采集和转发表的行直接使用结构体字段初始化，信号 ID、标志和字序保留命名常量。
+`transmit.c` 逐项列出实际寄存器地址，北向窗口不再通过设备实例宏自动生成。
 
 初始化由 `app/process/points.c` 调用 `idu_register_point_tables()`、`dp_init()`、总线初始化、参数恢复和
 处理/采集启动。原始采样到信号的映射及工程量换算留在业务层，硬件模块只返回样本。
 参考结构与接口边界见[参考平台对照](../../docs/reference-platform.md)。
+
+## 设备如何关联点表
+
+`device.c` 中的 `devices[]` 初始化器只填写设备号、总线端口和采集地址。
+第一次调用 `idu_device_table()` 时，它为各设备补齐 `ptl_tbl_cfg[]`：
+`proto_type` 标识表类型，`pst_table` 指向 const 表，`sig_num` 保存条目数。
+
+| 设备 | `ptl_tbl_cfg[0]`：处理表 | `ptl_tbl_cfg[1]`：协议表 |
+| --- | --- | --- |
+| 本地设备 1 | `process.c` 的 `local[]` | `PRO_MB_SLAVE` → `transmit.c` 的 `table[]` |
+| MV-IO 设备 10 | `process.c` 的 `mvio[]` | `PRO_MB_MASTER` → `collect.c` 的 `mvio[]` |
+| 可选本地业务设备 247 | `process.c` 的 `imported_local[]` | 不单独挂协议表；寄存器映射由设备 1 的转发表引用 |
+| 可选 DSP 设备 11–18 | 共用 `process.c` 的 `imported_dsp[]` | `PRO_UPP_MASTER` → `collect.c` 的 `imported_models` |
+
+处理表类型统一为 `PRO_DATA_PROCESS`。`idu_register_point_tables()` 注册设备表 getter，
+`dp_init()` 通过它取得完整关联并校验。设备描述仅启动时装配一次，点表本身仍在 Flash，
+不将整张点表复制到设备结构中。
 
 ## 修改设备或测点
 
@@ -52,7 +71,8 @@ cfg/
    不跨未定义空洞合帧；`rqst_cyl` 经设备配置中的转换函数解释，不直接当毫秒。
 4. 在 `transmit.c` 增加北向映射。新窗口也需加入
    `app/communication/config/mvio_config.c` 的 `extensions[]`，控制命令留在通信配置。
-5. 同型号 MV-IO 实例加入 `device_instances.h`，复用处理/采集表；新总线仍须注册通信后端。
+5. 同型号 MV-IO 实例加入 `device_instances.h`，复用处理/采集表，并在 `transmit.c`
+   显式补充该设备的北向映射；新总线仍须注册通信后端。
    检查 Kconfig 的测点、值池、采集任务和参数容量。持久点改变会影响 NVS schema。
 
 质量寄存器映射、按样本年龄过期、旧参数导入及 NVS schema 自动迁移暂不接入应用。

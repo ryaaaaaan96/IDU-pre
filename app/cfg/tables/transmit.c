@@ -2,24 +2,6 @@
 #include "signal_ids.h"
 #include "device.h"
 #include "mvio_signals.h"
-#include "device_instances.h"
-
-#define MAP(fc, reg, words, dev, sig) \
-    {.sig_id = sig, .reg_addr = reg, .reg_num = words, .dev_id = dev, .reg_type = fc, \
-     .byte_order = BYTE_ORDER_DEFAULT}
-#define ZERO(reg, words) \
-    MAP(4, reg, words, IDU_DEV_LOCAL, IDU_SIG_RESERVED_ZERO)
-#define CURRENT(n) MAP(4, 8163 + n, 1, IDU_DEV_LOCAL, IDU_SIG_CURRENT_1 + n)
-
-#define REMOTE_CURRENT(dev, base, n) MAP(4, base + 1 + n, 1, dev, IDU_MVIO_CURRENT_1 + n)
-#define MVIO_TRANSMIT(dev, bus, unit, north, address_reg) \
-    MAP(4, north, 1, dev, IDU_MVIO_DI), \
-    REMOTE_CURRENT(dev, north, 0), REMOTE_CURRENT(dev, north, 1), \
-    REMOTE_CURRENT(dev, north, 2), REMOTE_CURRENT(dev, north, 3), \
-    REMOTE_CURRENT(dev, north, 4), REMOTE_CURRENT(dev, north, 5), \
-    REMOTE_CURRENT(dev, north, 6), REMOTE_CURRENT(dev, north, 7), \
-    MAP(4, north + 10, 2, dev, IDU_MVIO_PROTOCOL), \
-    MAP(3, address_reg, 1, dev, IDU_MVIO_ADDRESS),
 
 static const MB_TABLE_CELL_T table[] = {
 #if defined(CONFIG_IDU_AIDC_PROFILE)
@@ -134,36 +116,102 @@ static const MB_TABLE_CELL_T table[] = {
     {.sig_id=AIDC_LOCAL_SIG_BAT_DEFAULT_VOL,.reg_addr=43018,.reg_num=2,.dev_id=247,.reg_type=3,.byte_order=BYTE_ORDER_DEFAULT},
     {.sig_id=AIDC_LOCAL_SIG_SOFT_START,.reg_addr=43019,.reg_num=2,.dev_id=247,.reg_type=3,.byte_order=BYTE_ORDER_DEFAULT},
 /* END IMPORTED TABLE: transmit */
-    MAP(4, 10012, 1, IDU_DEV_LOCAL, IDU_SIG_VIRTUAL_MODE),
+    {.sig_id = IDU_SIG_VIRTUAL_MODE, .reg_addr = 10012, .reg_num = 1,
+     .dev_id = IDU_DEV_LOCAL, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
 #else
 /* Local MV-IO protocol windows and demo parameter mappings, in lookup order. */
-    MAP(3, 31000, 1, IDU_DEV_LOCAL, IDU_SIG_SAMPLE_PERIOD),
-    MAP(3, 31001, 8, IDU_DEV_LOCAL, IDU_SIG_LABEL),
+    {.sig_id = IDU_SIG_SAMPLE_PERIOD, .reg_addr = 31000, .reg_num = 1,
+     .dev_id = IDU_DEV_LOCAL, .reg_type = 3, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_SIG_LABEL, .reg_addr = 31001, .reg_num = 8,
+     .dev_id = IDU_DEV_LOCAL, .reg_type = 3, .byte_order = BYTE_ORDER_DEFAULT},
 #if defined(CONFIG_IDU_COLLECT_VIRTUAL)
-    MAP(3, 31500, 1, IDU_DEV_REMOTE_IO, IDU_SIG_REMOTE_SETPOINT),
-    MAP(3, 31501, 2, IDU_DEV_REMOTE_IO, IDU_SIG_REMOTE_OFFSET),
+    {.sig_id = IDU_SIG_REMOTE_SETPOINT, .reg_addr = 31500, .reg_num = 1,
+     .dev_id = IDU_DEV_REMOTE_IO, .reg_type = 3, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_SIG_REMOTE_OFFSET, .reg_addr = 31501, .reg_num = 2,
+     .dev_id = IDU_DEV_REMOTE_IO, .reg_type = 3, .byte_order = BYTE_ORDER_DEFAULT},
 #endif
-    MAP(4, 2503, 1, IDU_DEV_LOCAL, 2503),
-    MAP(4, 2504, 10, IDU_DEV_LOCAL, 2504),
-    MAP(4, 4989, 10, IDU_DEV_LOCAL, 2504),
-    MAP(4, 4805, 8, IDU_DEV_LOCAL, 2504),
-    MAP(4, 2581, 15, IDU_DEV_LOCAL, 2581),
-    MAP(4, 2568, 4, IDU_DEV_LOCAL, 2568),
-    MAP(4, 8149, 1, IDU_DEV_LOCAL, 8149),
-    MAP(4, 4813, 1, IDU_DEV_LOCAL, 8149),
-    MAP(4, 4814, 1, IDU_DEV_LOCAL, IDU_SIG_SAVED_ADDRESS),
-    MAP(4, 8150, 2, IDU_DEV_LOCAL, IDU_SIG_PROTOCOL),
-    MAP(4, 8152, 1, IDU_DEV_LOCAL, IDU_SIG_DI),
-    CURRENT(0), CURRENT(1), CURRENT(2), CURRENT(3),
-    CURRENT(4), CURRENT(5), CURRENT(6), CURRENT(7),
-    MAP(4, 5486, 1, IDU_DEV_LOCAL, 5486),
-    ZERO(2514, 16), ZERO(2530, 3), ZERO(4999, 16), ZERO(5487, 1),
-    ZERO(8153, 10), ZERO(8171, 16), ZERO(8187, 13),
-    MAP(3, 30459, 1, IDU_DEV_LOCAL, IDU_SIG_SAVED_ADDRESS),
+    {.sig_id = 2503, .reg_addr = 2503, .reg_num = 1,
+     .dev_id = IDU_DEV_LOCAL, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = 2504, .reg_addr = 2504, .reg_num = 10,
+     .dev_id = IDU_DEV_LOCAL, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = 2504, .reg_addr = 4989, .reg_num = 10,
+     .dev_id = IDU_DEV_LOCAL, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = 2504, .reg_addr = 4805, .reg_num = 8,
+     .dev_id = IDU_DEV_LOCAL, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = 2581, .reg_addr = 2581, .reg_num = 15,
+     .dev_id = IDU_DEV_LOCAL, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = 2568, .reg_addr = 2568, .reg_num = 4,
+     .dev_id = IDU_DEV_LOCAL, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = 8149, .reg_addr = 8149, .reg_num = 1,
+     .dev_id = IDU_DEV_LOCAL, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = 8149, .reg_addr = 4813, .reg_num = 1,
+     .dev_id = IDU_DEV_LOCAL, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_SIG_SAVED_ADDRESS, .reg_addr = 4814, .reg_num = 1,
+     .dev_id = IDU_DEV_LOCAL, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_SIG_PROTOCOL, .reg_addr = 8150, .reg_num = 2,
+     .dev_id = IDU_DEV_LOCAL, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_SIG_DI, .reg_addr = 8152, .reg_num = 1,
+     .dev_id = IDU_DEV_LOCAL, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_SIG_CURRENT_1 + 0, .reg_addr = 8163, .reg_num = 1,
+     .dev_id = IDU_DEV_LOCAL, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_SIG_CURRENT_1 + 1, .reg_addr = 8164, .reg_num = 1,
+     .dev_id = IDU_DEV_LOCAL, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_SIG_CURRENT_1 + 2, .reg_addr = 8165, .reg_num = 1,
+     .dev_id = IDU_DEV_LOCAL, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_SIG_CURRENT_1 + 3, .reg_addr = 8166, .reg_num = 1,
+     .dev_id = IDU_DEV_LOCAL, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_SIG_CURRENT_1 + 4, .reg_addr = 8167, .reg_num = 1,
+     .dev_id = IDU_DEV_LOCAL, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_SIG_CURRENT_1 + 5, .reg_addr = 8168, .reg_num = 1,
+     .dev_id = IDU_DEV_LOCAL, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_SIG_CURRENT_1 + 6, .reg_addr = 8169, .reg_num = 1,
+     .dev_id = IDU_DEV_LOCAL, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_SIG_CURRENT_1 + 7, .reg_addr = 8170, .reg_num = 1,
+     .dev_id = IDU_DEV_LOCAL, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = 5486, .reg_addr = 5486, .reg_num = 1,
+     .dev_id = IDU_DEV_LOCAL, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_SIG_RESERVED_ZERO, .reg_addr = 2514, .reg_num = 16,
+     .dev_id = IDU_DEV_LOCAL, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_SIG_RESERVED_ZERO, .reg_addr = 2530, .reg_num = 3,
+     .dev_id = IDU_DEV_LOCAL, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_SIG_RESERVED_ZERO, .reg_addr = 4999, .reg_num = 16,
+     .dev_id = IDU_DEV_LOCAL, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_SIG_RESERVED_ZERO, .reg_addr = 5487, .reg_num = 1,
+     .dev_id = IDU_DEV_LOCAL, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_SIG_RESERVED_ZERO, .reg_addr = 8153, .reg_num = 10,
+     .dev_id = IDU_DEV_LOCAL, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_SIG_RESERVED_ZERO, .reg_addr = 8171, .reg_num = 16,
+     .dev_id = IDU_DEV_LOCAL, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_SIG_RESERVED_ZERO, .reg_addr = 8187, .reg_num = 13,
+     .dev_id = IDU_DEV_LOCAL, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_SIG_SAVED_ADDRESS, .reg_addr = 30459, .reg_num = 1,
+     .dev_id = IDU_DEV_LOCAL, .reg_type = 3, .byte_order = BYTE_ORDER_DEFAULT},
 
     /* IDU extension: separate remote data from physical local inputs. */
-    IDU_MVIO_INSTANCES(MVIO_TRANSMIT)
-    MAP(4, 10012, 1, IDU_DEV_LOCAL, IDU_SIG_VIRTUAL_MODE),
+    {.sig_id = IDU_MVIO_DI, .reg_addr = 10000, .reg_num = 1,
+     .dev_id = IDU_DEV_REMOTE_IO, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_MVIO_CURRENT_1 + 0, .reg_addr = 10001, .reg_num = 1,
+     .dev_id = IDU_DEV_REMOTE_IO, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_MVIO_CURRENT_1 + 1, .reg_addr = 10002, .reg_num = 1,
+     .dev_id = IDU_DEV_REMOTE_IO, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_MVIO_CURRENT_1 + 2, .reg_addr = 10003, .reg_num = 1,
+     .dev_id = IDU_DEV_REMOTE_IO, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_MVIO_CURRENT_1 + 3, .reg_addr = 10004, .reg_num = 1,
+     .dev_id = IDU_DEV_REMOTE_IO, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_MVIO_CURRENT_1 + 4, .reg_addr = 10005, .reg_num = 1,
+     .dev_id = IDU_DEV_REMOTE_IO, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_MVIO_CURRENT_1 + 5, .reg_addr = 10006, .reg_num = 1,
+     .dev_id = IDU_DEV_REMOTE_IO, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_MVIO_CURRENT_1 + 6, .reg_addr = 10007, .reg_num = 1,
+     .dev_id = IDU_DEV_REMOTE_IO, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_MVIO_CURRENT_1 + 7, .reg_addr = 10008, .reg_num = 1,
+     .dev_id = IDU_DEV_REMOTE_IO, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_MVIO_PROTOCOL, .reg_addr = 10010, .reg_num = 2,
+     .dev_id = IDU_DEV_REMOTE_IO, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_MVIO_ADDRESS, .reg_addr = 30460, .reg_num = 1,
+     .dev_id = IDU_DEV_REMOTE_IO, .reg_type = 3, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_SIG_VIRTUAL_MODE, .reg_addr = 10012, .reg_num = 1,
+     .dev_id = IDU_DEV_LOCAL, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
 #endif
 };
 
