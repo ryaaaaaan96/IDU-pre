@@ -8,6 +8,11 @@
 事件调度。运行时只依赖本应用及 West 清单固定的 Zephyr，不依赖参考工程目录。
 这三个模块负责点表数据链；独立的 `modules/quicklz` 提供纯 C 解码能力。
 
+独立的 [`modules/vport`](../modules/vport/README.md) 已提供逻辑端口核心，
+以注册后端连接传输链路，支持 CAN ID 分流、多链路汇入及来源保持。
+它不依赖三张点表或 Modbus，默认关闭；下文描述的现有 CO/TR 通信链路
+尚未迁移，真实 CAN/UART/RS485/socket 后端与协议解耦需后续接入。
+
 ## 参考设计与 IDU 对应关系
 
 | 参考工程 | 设计含义 | IDU 实现 |

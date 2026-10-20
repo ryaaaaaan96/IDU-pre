@@ -1,0 +1,5 @@
+zephyr_include_directories(include)
+if(CONFIG_VPORT)
+  zephyr_library()
+  zephyr_library_sources(src/vport.c)
+endif()

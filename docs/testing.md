@@ -363,3 +363,26 @@ getter 只返回表，删除按设备号补挂表的装配逻辑。三表由 `de
 
 日志位于 `build/IDU-pre/table-linkage-checks/`。导入验证使用仓库已有来源快照，
 未重新读取不可用的外部 AIDC 源码；本轮未做实板验证。
+
+## 虚拟端口核心验证（2026-10-20）
+
+新增独立 `modules/vport`，采用启动期注册链路、逻辑端口与路由的方式。
+核心仅依赖 Zephyr 内核，CAN/UART/RS485/socket 实物后端及原 CO/TR 迁移尚未接入。
+
+- `tests/vport` 仅通过 `ZEPHYR_EXTRA_MODULES` 加载该模块，13 项 Ztest 通过，
+  覆盖 CAN 标准/扩展 ID 分流、FD 长度校验、多链路汇入与原路回复、
+  peer/方向限制、流来源隔离、ISR 入队、接收副本、背压与丢失序号、
+  物理发送锁/事务锁共享、后端错误不重试，以及配置冲突拒绝。
+- `CCACHE_DISABLE=1 ASAN_OPTIONS=detect_leaks=0 bash tests/run.sh` 通过：
+  37 次模拟器执行、245 项 Ztest PASS；Python 30 项中 27 项通过，
+  3 项因缺少外部 QuickLZ/SGZ 输入跳过。主机 C 保留 ASan/UBSan，禁用 LeakSanitizer。
+- `CCACHE_DISABLE=1 ./build.sh` 通过，默认镜像布局检查通过。
+  vport 默认关闭，固件 Flash/RAM 仍为 94,060 / 81,960 B，
+  二进制 SHA256 与增加模块前一致。
+- 单独目录 `build/IDU-pre/vport-enabled` 使用
+  `west build -b idu_pre applications/IDU-pre -d build/IDU-pre/vport-enabled -- -DCONFIG_VPORT=y` 完成 ARM 构建，
+  确认核心源码可交叉编译；应用尚未注册配置，不代表已启动或实测虚拟端口。
+- 文档链接与 `git diff --check` 通过。
+
+日志位于 `build/IDU-pre/vport-validation/`。未烧录验证，模拟 CAN 元数据路由
+不能证明 GD32E505 的 CAN 驱动、收发器或实际总线时序已经可用。

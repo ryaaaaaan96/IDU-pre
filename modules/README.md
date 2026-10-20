@@ -24,6 +24,7 @@ compatibility.
 | `io_input` | `digital_io/digital_io.h`, `io_input/idu_inputs.h` | Generic GPIO groups and optional IDU GPIO/ADC sampling profile |
 | `led_indicator` | `led_indicator/led_indicator.h` | Standard LED output, toggle and per-instance software blink timing |
 | `health_monitor` | `health_monitor/health_monitor.h` | Per-instance progress-gated GPIO feeding for external watchdogs |
+| [`vport`](vport/README.md) | `vport/vport.h` | Registered transport backends, logical routing, CAN ID filters, bounded RX and per-link TX ownership |
 | `dataprocess` | `data_process.h`, `platform_callback.h`, `dataprocess/{points,process,params}.h` | Shared data contracts/store, `dp_*` processing, optional NVS |
 | `collect` | `collect_lib.h`, `collect/collect.h` | `co_*` acquisition, bus scheduling and parameter transport backend |
 | `transmit` | `transmit_lib.h`, `transmit/{transmit,modbus_adapter}.h` | `tr_*` register mappings, port modes and Modbus workqueues |
@@ -122,6 +123,12 @@ Fast sampling/publication phases only update state and do not restart a pattern.
 LED failures stop healthy progress and cannot override the original fault.
 
 ## Integration
+
+`VPORT` independently enables the [logical port core](vport/README.md). Register
+immutable link, port and route tables with `vport_init()`, then let backends
+submit received data. It has no DP, Modbus or hardware driver dependency. Real
+transport adapters and migration of the existing CO/TR paths are not included;
+the module is disabled by default.
 
 Include `modules.cmake` before `find_package(Zephyr ...)` to register these modules,
 or append individual module directories to `ZEPHYR_EXTRA_MODULES`.

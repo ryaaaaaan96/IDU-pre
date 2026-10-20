@@ -2,8 +2,10 @@
 
 面向 GD32E505 / MV-IO 硬件的 Zephyr 4.4.2 应用，提供本地采样、通讯点表、
 Modbus 采集与转发、NVS 参数持久化及可选 MCUboot 升级。
-通用能力由 `dataprocess`、`collect`、`transmit` 和 `quicklz` 四个模块提供。
+点表链路由 `dataprocess`、`collect`、`transmit` 提供，其他通用能力见[模块列表](modules/README.md)。
 默认使用虚拟南向采集口，现有 USART2 / RS485 用于北向转发。
+独立的 [`vport`](modules/vport/README.md) 提供可注册后端的逻辑端口与路由；
+当前默认关闭，现有 Modbus 链路尚未迁移。
 
 ## 快速开始
 
