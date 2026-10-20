@@ -11,6 +11,3 @@ target_sources(app PRIVATE
 )
 
 target_sources_ifdef(CONFIG_IDU_COLLECT_VIRTUAL app PRIVATE simulation.c)
-if(NOT CONFIG_IDU_AIDC_PROFILE)
-  target_sources(app PRIVATE mvio.c)
-endif()

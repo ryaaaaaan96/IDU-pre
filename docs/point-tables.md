@@ -5,7 +5,7 @@
 本页描述 IDU 的点值/质量、北向寄存器、参数持久化及采集后端配置。
 文件职责和新增点步骤集中在[点表维护指南](../app/cfg/README.md)，
 原平台接口覆盖集中在[参考平台对照](reference-platform.md)。
-MV-IO 的 247、广播、有序旧表和保存地址规则见[兼容说明](mvio-compatibility.md)。
+普通转发只使用连续地址点表；IAPv3 通过独立的完整 ADU 扩展接入。
 历史迁移和旧库分析见[迁移记录](migration-history.md)。
 
 ## 运行链路
@@ -84,11 +84,27 @@ Zephyr 4.4.2 的标准输入/保持寄存器读回调把应用读错误统一转
 `sig_id`，不会覆盖；远程从机地址在 `app/cfg/device.c` 的设备条目中配置，当前为 1。
 上位机访问 IDU 的地址仍由板上拨码决定（1–16）。
 
-原有 8149–8199 等本地寄存器和 SN/版本别名保留。电流换算从主循环
-移入处理回调，原始 ADC 值大于 4095 时拒绝，转换后仍按 16 位饱和。
-`tests/legacy_registers.c` 冻结的是本项目早期 Zephyr 映射，仅验证点表
-重构前后的一致性；它没有执行旧 MV-IO 代码，不能证明与旧真机协议
-等价，也不参与固件链接。普通映射在三表中，命令/状态及兼容入口另有显式配置。
+有效测点保留已有地址，删除旧窗口门控、跨空洞跳读、补零保留区及重复别名。
+未映射地址返回 Modbus 异常；无效参数写不再成功应答。普通请求仅接受拨码地址，
+没有 247 特殊入口；普通参数广播忽略且不应答。IAP 广播由升级模块单独处理。
+电流换算使用 0.01 A，原始 ADC 超过 4095 时拒绝，转换后按 16 位饱和。
+
+以下均为报文原始地址，不减 1：
+
+| 功能码 | 地址 | 内容 |
+| --- | --- | --- |
+| 04 | 8149 | 设备类型 0x2221 |
+| 04 | 8150–8151 | 协议号 0x01000101，低字在前 |
+| 04 | 8152 | 本地 DI 位图 |
+| 04 | 8163–8170 | 本地八路电流，0.01 A |
+| 04 | 2503、2568–2571、5486 | 点表中的协议标识字段 |
+| 04 | 2504–2513 | SN 默认值 `SG-FACTORY`，尚非唯一出厂 SN |
+| 04 | 2581–2595 | 应用版本字符串，可按寄存器连续读取 |
+| 03/06/16 | 30459 | 保存地址 1–246，独立于拨码决定的通信 unit |
+| 03/04 | 20003、31996–31997 | 启用 IAP 后由升级模块提供能力和版本 |
+
+4805–4814、4989–4998 别名及原补零保留区已移除。查询跨过空洞返回异常，
+不会自动跳到下一段地址。`tests/points` 和 `tests/forwarding` 直接验证现用模块。
 
 以下是新增的 **原始报文地址**，不减 1：
 
@@ -132,16 +148,16 @@ Zephyr 4.4.2 的标准输入/保持寄存器读回调把应用读错误统一转
 4. 在工作区根目录构建：
 
 ```bash
-./applications/IDU-pre/build.sh -- \
-  -DEXTRA_CONF_FILE=conf/collect-rtu.conf \
-  -DDTC_OVERLAY_FILE=/absolute/path/to/actual-hardware.overlay
+./applications/IDU-pre/build.sh \
+  --extra-conf applications/IDU-pre/conf/collect-rtu.conf \
+  --extra-overlay /absolute/path/to/actual-hardware.overlay
 ```
 
 未补充 alias/硬件定义时真实后端会编译失败，不会自动抢用某个空闲串口。
 切换回来应显式清理配置：
 
 ```bash
-./applications/IDU-pre/build.sh -p always
+./applications/IDU-pre/build.sh --pristine always
 ```
 
 点表引擎、zbus 消息和上位机映射都不需要因为串口替换而重写。
@@ -209,7 +225,7 @@ AIDC DSP 或真实 MV-IO 协议。切换真实采集后自动移除演示参数�
 状态已验证；需要实时反馈时另建采集点。
 
 30459 为独立保存地址、30460 为只读远程地址。控制地址不能混在普通多参数事务内。
-扩展参数广播写被忽略且不应答；旧 MV-IO 广播见[兼容说明](mvio-compatibility.md)。扩展地址的非法地址/只读写返回 02，范围/长度错误
+参数广播写被忽略且不应答。扩展地址的非法地址/只读写返回 02，范围/长度错误
 返回 03，存储/确认失败返回 04，事务占用或有待恢复事务返回 06，
 下游回读超时返回 0B；具体原因和状态可读 32000–32003。
 
@@ -292,7 +308,7 @@ Zephyr 4.4.2 的 FC16 服务按寄存器调用回调，且接收工作默认放�
 ## 原文档入口
 
 <a id="mvio-migration"></a>
-[MV-IO 兼容迁移](mvio-compatibility.md) · [2026-10-15 验证记录](migration-history.md#mvio-migration)
+[2026-10-15 验证记录](migration-history.md#mvio-migration)
 
 <a id="module-extension"></a>
 [当前模块接口](../modules/README.md) · [2026-10-14 扩展记录](migration-history.md#module-extension)

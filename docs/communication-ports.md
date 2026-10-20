@@ -7,7 +7,7 @@
 
 | 逻辑端口 | 链路 | Zephyr 接口 | 用途 |
 | --- | --- | --- | --- |
-| `IDU_PORT_FORWARD`（1） | `IDU_LINK_RS485`（1） | `idu-forward` 指定的 Modbus 串口 | 现有 USART2 / RS485 转发从站，含 MV-IO 和可选 IAPv3 |
+| `IDU_PORT_FORWARD`（1） | `IDU_LINK_RS485`（1） | `idu-forward` 指定的 Modbus 串口 | 现有 USART2 / RS485 转发从站，使用通用点表及可选 IAPv3 |
 | `IDU_PORT_ACQUISITION`（2） | `IDU_LINK_ACQUISITION`（2） | 默认 `RAW_0` | 虚拟采集主站 |
 | `IDU_PORT_VIRTUAL_DEVICE`（3） | `IDU_LINK_VIRTUAL_DEVICE`（3） | 默认 `RAW_1` | 模拟下挂设备 |
 
@@ -24,12 +24,12 @@
 | --- | --- |
 | `modules/transmit/src/server.c` | 多端口生命周期与配置更新 |
 | `modules/transmit/src/registers.c` | 状态读取、命令匹配及普通参数写入入口 |
-| `modules/transmit/src/mvio.c` | MV-IO 旧协议解析；通过回调接入 IAP |
+| `modules/iap/src/receiver.c` | IAP 完整报文及能力/版本查询，由寄存器服务扩展回调接入 |
 | `modules/collect/src/port.c` | 采集客户端初始化 |
 | `modules/collect/src/simulator.c` | 配置驱动的模拟设备及故障注入 |
 | `modules/collect/src/model_simulator.c` | 模型默认值后端 |
 | `app/cfg/ports.c`、`forwarding.c` | 传输绑定、协议选择及转发设置 |
-| `app/cfg/parameters.c`、`mvio.c`、`simulation.c` | 命令/状态地址、兼容窗口、模拟初值 |
+| `app/cfg/parameters.c`、`simulation.c` | 命令/状态地址、IAP 扩展和模拟初值 |
 | `app/process/serial_settings.c` | 产品参数编码到串口设置的业务转换 |
 
 网络和协议配置保存在 Flash，转发状态由 transmit 管理，模拟寄存器值由
@@ -40,7 +40,7 @@ collect 的实例保存。新增产品提供自己的配置与业务回调，不
 ```text
 RS485 RX → Zephyr 帧间隔 / CRC → 完整 ADU → vport RX 队列和路由
                                               ↓
-                         原接口工作队列 → transmit / MV-IO / IAP
+                         原接口工作队列 → transmit 寄存器服务 / IAP
                                               ↓
 RS485 TX ← Zephyr RTU 编码及 DE 控制 ← vport TX 锁和后端 ← 应答 ADU
 
@@ -109,6 +109,6 @@ IAPv3 配置使用 1100 字节 Modbus 缓冲及 1108 字节 vport 载荷。
 
 `tests/communication/` 使用 Zephyr UART/GPIO emulator 和真实 Modbus
 客户端/服务端，验证 RTU 往返、CRC、RAW 双向路由、完整载荷、并发拒绝、
-交接超时、TX 错误、DE 释放及配置恢复。`tests/mvio/` 还校验应用采集路径
+交接超时、TX 错误、DE 释放及配置恢复。`tests/forwarding/` 还校验应用采集路径
 确实增加 vport 收发计数。这些是模拟器验证，RS485 电气时序和 CAN
 仍需实板验证。

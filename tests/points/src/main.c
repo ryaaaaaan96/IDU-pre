@@ -9,7 +9,6 @@
 #include "cfg/inc/signal_ids.h"
 #include <gpio/idu_inputs.h>
 #include "process/engineering.h"
-#include "legacy_registers.h"
 #include <collect/collect.h>
 #include <dataprocess/params.h>
 #include <dataprocess/points.h>
@@ -204,26 +203,27 @@ static void before(void *fixture)
     wait_after(local_di, old);
 }
 
-ZTEST(points, test_legacy_registers_preserved)
+ZTEST(points, test_local_point_registers)
 {
-    const uint16_t windows[][2] = {
-        {2503, 2532}, {2568, 2571}, {2581, 2595}, {4805, 4814},
-        {4989, 5014}, {5486, 5487}, {8149, 8199},
-    };
-    uint16_t wire[51];
-    for (size_t i = 0; i < ARRAY_SIZE(windows); ++i) {
-        uint16_t count = windows[i][1] - windows[i][0] + 1;
-        zassert_ok(modbus_read_input_regs(north_client, 16, windows[i][0], wire, count));
-        for (uint16_t n = 0; n < count; ++n) {
-            uint16_t expected;
-            zassert_ok(idu_input_register_read(&local_sample, windows[i][0] + n, &expected));
-            /* 4814 now exposes the saved address, independently of the DIP. */
-            if (windows[i][0] + n == 4814) { expected = 1; }
-            zassert_equal(wire[n], expected, "address %u", windows[i][0] + n);
-        }
-    }
+    uint16_t wire[15];
+    zassert_ok(modbus_read_input_regs(north_client, 16, 8149, wire, 4));
+    zassert_equal(wire[0], IDU_DEVICE_TYPE);
+    zassert_equal(wire[1], IDU_PROTOCOL_VERSION & 0xffff);
+    zassert_equal(wire[2], IDU_PROTOCOL_VERSION >> 16);
+    zassert_equal(wire[3], local_sample.di);
+    zassert_ok(modbus_read_input_regs(north_client, 16, 8163, wire, 8));
+    for (size_t i = 0; i < 8; ++i) { zassert_equal(wire[i], local_sample.current[i]); }
+    zassert_ok(modbus_read_input_regs(north_client, 16, 2504, wire, 1));
+    zassert_equal(wire[0], 0x5347);
+    zassert_ok(modbus_read_input_regs(north_client, 16, 2581, wire, 15));
+    zassert_equal(wire[0], 0x4944);
     zassert_ok(modbus_read_holding_regs(north_client, 16, 30459, wire, 1));
     zassert_equal(wire[0], 1);
+    const uint16_t unmapped[] = {2514, 4805, 4813, 4814, 4989, 5487, 8153, 8171};
+    for (size_t i = 0; i < ARRAY_SIZE(unmapped); ++i) {
+        assert_exception(modbus_read_input_regs(north_client, 16, unmapped[i], wire, 1),
+                         4, MODBUS_EXC_ILLEGAL_DATA_ADDR);
+    }
 }
 
 ZTEST(points, test_end_to_end_remote_forwarding)

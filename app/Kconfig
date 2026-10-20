@@ -27,9 +27,6 @@ config TR_SERVER_SERVICE
 config TR_REGISTER_SERVICE
     default y
 
-config TR_MVIO
-    default y if !IDU_AIDC_PROFILE
-
 config CO_SIMULATOR
     default y if IDU_COLLECT_VIRTUAL
 

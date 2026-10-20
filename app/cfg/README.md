@@ -16,8 +16,7 @@ cfg/
 ├── device.c              # 设备关联及配置回调注册
 ├── ports.c               # 传输链路、虚拟端口和采集口配置
 ├── forwarding.c          # 转发协议和串口配置
-├── parameters.c          # 参数状态/命令寄存器绑定
-├── mvio.c                # MV-IO 兼容范围和升级回调
+├── parameters.c          # 参数状态/命令寄存器和 IAP 扩展绑定
 ├── simulation.c          # 可选模拟设备/模型配置
 ├── inc/                  # 本目录全部配置头文件
 │   ├── ports.h            # 各模块产品配置声明
@@ -87,8 +86,8 @@ UPP 的 `sig_num` 使用 `IDU_IMPORTED_MODEL_FIELD_COUNT`，由工具统计所�
    本地恒定标识使用 `idu_default_point` 初始化；采集点等待首次样本。
 3. 在 `collect.c` 定义协议地址、长度、字序和周期编码。当前每个 Modbus 行独立请求，
    不跨未定义空洞合帧；`rqst_cyl` 经设备配置中的转换函数解释，不直接当毫秒。
-4. 在 `transmit.c` 增加北向映射。新窗口也需加入
-   `app/cfg/mvio.c` 的 `extensions[]`，控制命令在 `parameters.c` 声明。
+4. 在 `transmit.c` 增加北向映射即可，不另设协议窗口白名单。
+   控制命令在 `parameters.c` 声明，IAP 通过寄存器服务的 `extension` 回调接入。
    手写三表增删行后，同步修改 `inc/tables.h` 中相应数量；虚拟采集和大点表配置
    的条件分支也须匹配，数量不一致时构建报错。
 5. 同型号 MV-IO 实例直接加入 `device.c` 的 `devices[]`，指定端口、从机地址，

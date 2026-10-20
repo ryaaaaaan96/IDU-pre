@@ -8,7 +8,6 @@ struct co_port_config;
 struct co_bus_cfg;
 struct co_simulator;
 struct tr_register_service;
-struct tr_mvio_config;
 
 extern const struct tr_modbus_network idu_port_network;
 extern const struct co_port_config idu_collect_port;
@@ -19,8 +18,6 @@ extern struct co_simulator idu_collect_simulator;
 #endif
 #if defined(CONFIG_IDU_AIDC_PROFILE)
 extern const struct co_bus_cfg idu_model_bus;
-#else
-extern const struct tr_mvio_config idu_mvio_protocol;
 #endif
 
 enum idu_communication_port {

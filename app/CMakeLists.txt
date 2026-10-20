@@ -1,6 +1,7 @@
 # Fail during configuration if a required application service was disabled.
 # Modules remain independently optional for their other consumers and tests.
 set(idu_required
+  BOOTLOADER_MCUBOOT
   DATAPROCESS DP_PROCESS DP_REFERENCE_TABLES DP_PARAMS COLLECT TRANSMIT
   TR_MODBUS_ADAPTER TR_MODBUS_TRANSPORT TR_SERVER_SERVICE TR_REGISTER_SERVICE
   GPIO ADC ANALOG_INPUT DIGITAL_IO IDU_INPUTS LED WATCHDOG_MONITOR)
@@ -12,8 +13,6 @@ if(CONFIG_IDU_AIDC_PROFILE)
   if(CONFIG_CO_MAX_BUSES LESS 2)
     message(FATAL_ERROR "IDU AIDC requires CONFIG_CO_MAX_BUSES >= 2")
   endif()
-else()
-  list(APPEND idu_required TR_MVIO)
 endif()
 foreach(feature IN LISTS idu_required)
   if(NOT CONFIG_${feature})

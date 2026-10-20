@@ -31,13 +31,11 @@
         zephyr,flash = &flash0;
         zephyr,flash-controller = &fmc;
         zephyr,console = &usart0;
-        zephyr,code-partition = &app_partition;
+        zephyr,code-partition = &slot0_partition;
     };
 
     aliases {
         idu-settings = &idu_settings;
-        idu-legacy-primary = &params_primary;
-        idu-legacy-backup = &params_backup;
         idu-aidc-settings = &idu_aidc_settings;
         led0 = &run_led;
         idu-forward = &modbus0;
@@ -83,25 +81,6 @@
         watchdog-health-ms = <1500>;
     };
 
-    /* Old source contains TCA9535 helpers, but current MV-IO reads direct DI.
-     * Leave this bus disabled until its presence on this PCB is confirmed.
-     */
-    expansion_i2c: expansion-i2c {
-        compatible = "i2c-gpio";
-        status = "disabled";
-        #address-cells = <1>;
-        #size-cells = <0>;
-        scl-gpios = <&gpioc 14 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
-        sda-gpios = <&gpioc 15 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
-        clock-frequency = <100000>;
-        expander: gpio@24 {
-            compatible = "ti,tca9535";
-            reg = <0x24>; /* Legacy 0x48 is the eight-bit write address. */
-            gpio-controller;
-            #gpio-cells = <2>;
-        };
-    };
-
     soc {
         spi1: spi@40003800 {
             compatible = "gd,gd32-spi";
@@ -126,17 +105,6 @@
                     compatible = "fixed-partitions";
                     #address-cells = <1>;
                     #size-cells = <1>;
-                    params_primary: partition@0 {
-                        label = "legacy-params-primary";
-                        reg = <0x0 0x1000>;
-                        read-only;
-                    };
-                    params_backup: partition@1000 {
-                        label = "legacy-params-backup";
-                        reg = <0x1000 0x1000>;
-                        read-only;
-                    };
-                    /* Independent Zephyr NVS; preserve both legacy parameter blocks. */
                     idu_settings: partition@10000 {
                         label = "idu-settings";
                         reg = <0x10000 0x4000>;
@@ -145,16 +113,6 @@
                     idu_aidc_settings: partition@14000 {
                         label = "idu-aidc-settings";
                         reg = <0x14000 0x4000>;
-                    };
-                    upgrade_config: partition@200000 {
-                        label = "legacy-upgrade-config";
-                        reg = <0x200000 0x100000>;
-                        read-only;
-                    };
-                    upgrade_image: partition@300000 {
-                        label = "legacy-upgrade-image";
-                        reg = <0x300000 0x100000>;
-                        read-only;
                     };
                 };
             };
@@ -166,20 +124,6 @@
     reg = <0x08000000 DT_SIZE_K(512)>;
     write-block-size = <4>; /* E505 FMC supports word programming. */
     erase-block-size = <8192>; /* GD32E50x user manual, section 2.3.1. */
-    partitions {
-        compatible = "fixed-partitions";
-        #address-cells = <1>;
-        #size-cells = <1>;
-        boot_partition: partition@0 {
-            label = "legacy-boot";
-            reg = <0x0 0x4000>;
-            read-only;
-        };
-        app_partition: partition@4000 {
-            label = "application";
-            reg = <0x4000 0x7c000>;
-        };
-    };
 };
 &sram0 { reg = <0x20000000 DT_SIZE_K(128)>; };
 &gpioa { status = "okay"; };
@@ -276,3 +220,6 @@
         zephyr,resolution = <12>;
     };
 };
+
+/* Product image layout, shared by the application and MCUboot. */
+#include "../../../bootloader/partitions.dtsi"

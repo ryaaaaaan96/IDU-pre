@@ -1,3 +1,0 @@
-mainmenu "MV-IO compatibility tests"
-source "Kconfig.zephyr"
-rsource "../../app/Kconfig"

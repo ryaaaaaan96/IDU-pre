@@ -2,15 +2,15 @@
 
 [文档导航](README.md) · [验证说明](testing.md) · [硬件说明](hardware.md)
 
-以下命令均从 West 工作区根目录执行。默认配置、SMP、IAPv3 和 AIDC 使用各自的
-构建/导出目录；默认固件对应旧 BOOT 布局，MCUboot 对应新的启动分区。
+以下命令均从 West 工作区根目录执行。全部固件使用 MCUboot；默认启用 IAPv3，
+SMP、无上传入口及 AIDC 使用各自的构建/导出目录。旧 BOOT 构建和旧路径迁移代码已删除。
 
 ## 配置选择
 
 | 需求 | 命令 |
 | --- | --- |
-| 默认 MV-IO，旧 BOOT 布局 | `./applications/IDU-pre/build.sh` |
-| MCUboot，保留普通转发 | `./applications/IDU-pre/build.sh --mcuboot` |
+| 默认 MCUboot + IAPv3 | `./applications/IDU-pre/build.sh` |
+| MCUboot，无上传入口 | `./applications/IDU-pre/build.sh --no-upload` |
 | MCUboot + SMP UART | `./applications/IDU-pre/build.sh --mcuboot --smp-uart` |
 | MCUboot + IAPv3 | `./applications/IDU-pre/build.sh --mcuboot --iapv3` |
 | MCUboot + AIDC 虚拟点表 | `./applications/IDU-pre/build.sh --mcuboot --aidc` |
@@ -50,84 +50,55 @@ IAPv3 通过 `./applications/IDU-pre/build.sh --mcuboot --iapv3` 构建，
 
 ## Flash 与启动布局
 
-内部 Flash：
+产品镜像布局集中在 `bootloader/partitions.dtsi`，由板级 DTS 引用。
+MCUboot 和应用分别通过 overlay 选择 boot 和 slot0；所有构建使用下节的同一布局。
+旧参数主备区、旧升级配置及 BIN 暂存区的设备树声明已移除，不再参与运行。
+有效存储偏移保持不变：
 
-| 区域 | 相对 Flash 起始偏移 | 大小 |
+| 外部 Flash 内容 | 偏移 | 大小 |
 | --- | --- | --- |
-| 旧启动程序 | 0x0000 | 16 KB |
-| Zephyr 应用 | 0x4000 | 496 KB |
+| IDU NVS 参数/事务 | 0x010000 | 16 KiB |
+| 可选 AIDC NVS 参数/事务 | 0x014000 | 16 KiB |
+| IAP 日志（启用 IAP 时） | 0x018000 | 16 KiB |
+| IAP SGZ 暂存（启用 IAP 时） | 0x201000 | 960 KiB |
+| MCUboot slot1 | 0x300000 | 448 KiB |
+| MCUboot scratch | 0x370000 | 8 KiB |
 
-应用 HEX 链接到 `0x08004000`，BIN 对应的烧录地址也是
-`0x08004000`。BIN 不自带地址。本工程不生成旧 BOOT + APP 合并固件。
-旧链接脚本从 `0x08004000` 起仍声明 512 KB，这是越过芯片总容量的
-布局；新分区从总计 512 KB 中扣除了启动区。
-
-外部 4 MB SPI Flash 保留原偏移：
-
-| 区域 | 偏移 | 大小 |
-| --- | --- | --- |
-| 参数主区 | 0x000000 | 4 KB |
-| 参数备份 | 0x001000 | 4 KB |
-| Zephyr NVS 参数/事务 | 0x010000 | 16 KB（4 × 4 KB） |
-| 可选 AIDC NVS 参数/事务 | 0x014000 | 16 KB（4 × 4 KB） |
-| 升级配置区 | 0x200000 | 1 MB，预留范围 |
-| 升级镜像区 | 0x300000 | 1 MB |
-
-旧参数和升级分区标为只读。参数模块只把独立 NVS 分区交给存储后端，
-不写旧区，也不直接保存 C 结构体。SPI NOR 页布局按 4 KB 扇区配置。
-
-参数保留与升级边界：
-
-1. 旧参数导入已实现：首次空 NVS 或已知上一版参数格式升级时，只读
-   校验主/备区的长度和 Modbus CRC16，解析 8 字节 `G_FLASH_T` 保存地址。
-   新 NVS 成功提交后不再导入；已有其他参数和待恢复事务保留。
-   CRC 正确但长度未知时拒写并保留现场。仍需实际 Flash 样本/掉电验证。
-2. IAP 迁移已增加独立配置：保留 SGZ 接收偏移，解包后写入 MCUboot
-   slot1，并校验 CRC、向量、SHA256、密钥哈希及 ECDSA 签名。
-3. MCUboot 首次安装需要更新启动程序和应用；旧 BOOT 的 16 KiB 分区
-   不适用于新的 64 KiB 启动程序。旧裸 BIN 需要重新构建和签名。
+删除分区声明不擦除实物 Flash。NVS 只接受当前 schema；不匹配时拒写，
+不自动导入、迁移或格式化；空 NVS 使用点表默认参数。
 
 ## 默认固件构建
 
-从工作区根目录执行：
-
 ```bash
 ./applications/IDU-pre/build.sh
+# 与显式 --mcuboot --iapv3 等价
 ```
 
-也可通过环境变量指定已安装的 GNU Arm 工具链，例如：
+应用构建位于 `build/IDU-pre/mcuboot-iapv3/IDU-pre/zephyr/`，
+导出位于 `build/hex/IDU-pre-mcuboot-iapv3/`。`tools/build_mcuboot.py` 调用
+imgtool 验签，并检查 MCUboot 头、向量、镜像边界和 HEX/BIN 一致性，
+生成 `IDU-pre-validation.json`。不再导出旧 `build/hex/IDU-pre.hex`。
 
-```bash
-env ZEPHYR_TOOLCHAIN_VARIANT=gnuarmemb \
-    GNUARMEMB_TOOLCHAIN_PATH=/path/to/arm-none-eabi-toolchain \
-    ./applications/IDU-pre/build.sh
-```
-
-`CONFIG_KERNEL_BIN_NAME="IDU-pre"` 设置固件名称。
-输出在 `build/IDU-pre/idu_pre/zephyr/`，包含 `IDU-pre.hex`、
-`IDU-pre.bin` 和 `IDU-pre.elf`。构建脚本在成功后自动复制 HEX 到
-`build/hex/IDU-pre.hex`，覆盖该项目上次导出的 HEX；不同板卡使用
-同一项目名时，这里保留最后一次成功导出的版本。原构建目录保留全部
-产物。构建失败时不会执行复制。当前未配置具体芯片后缀对应的烧录
-runner。导出前自动执行 `tools/check_boot_image.py`，
-检查应用边界、SP/Thumb 复位向量及 HEX/BIN 一致性，报告为构建目录的
-`IDU-pre-boot-check.json`。这是静态检查，不能代替旧 BOOT 真机跳转验证。
+工具链仍可通过 `ZEPHYR_TOOLCHAIN_VARIANT` / `GNUARMEMB_TOOLCHAIN_PATH` 等环境变量选择。
+产品自定义配置使用可重复的 `--extra-conf /path/custom.conf` 和
+`--extra-overlay /path/custom.overlay`；相对路径以工作区根为准。
+清理构建缓存使用 `--pristine always`，不会删除 `build/keys/` 中的签名密钥。
 
 测试命令、覆盖范围与已记录结果见[验证说明](testing.md)。
 
 ## MCUboot
 
-MCUboot 可替代旧 BOOT 的启动校验、镜像安装和升级状态管理。本配置选择
+MCUboot 负责启动校验、镜像安装和升级状态管理。本配置选择
 ECDSA P-256 签名、`swap-scratch` 交换、试运行后确认；未确认的试运行镜像
 在下次复位时回退。MCUboot 是独立启动程序，不是链接进主应用的一个任务。
 官方说明：[Zephyr + MCUboot](https://docs.mcuboot.com/readme-zephyr.html)、
 [升级与回退设计](https://docs.mcuboot.com/design.html)、
 [Zephyr MCUmgr](https://docs.zephyrproject.org/latest/services/device_mgmt/mcumgr.html)。
 
-标准 SMP 和[旧 IAPv3](#iapv3) 使用独立的应用配置，共用同一 MCUboot
+标准 SMP 和[IAPv3](#iapv3) 使用独立的应用配置，共用同一 MCUboot
 签名和交换布局。SMP 接收签名 BIN；IAPv3 接收封装该 BIN 的 AES/SGZ 包。
 包内必须是针对新地址构建并签名的 MCUboot 镜像。旧 `IAPV3_INFO` 不再作为新
-启动程序的升级命令；旧参数导入和 NVS 仍按原流程工作。
+启动程序的升级命令；参数只使用独立 NVS。
 
 内部 Flash 和外部 NOR 的地址空间分别计算：
 
@@ -138,18 +109,18 @@ ECDSA P-256 签名、`swap-scratch` 交换、试运行后确认；未确认的�
 | 外部 W25Q32 | `0x300000` | 448 KiB | slot1，接收新镜像/保存回退镜像 |
 | 外部 W25Q32 | `0x370000` | 8 KiB | scratch，交换暂存 |
 
-外部参数区和原 NVS 保留。IAP 配置会使用原 SGZ 暂存区，详见下节。
+NVS 和 IAP 暂存地址保持固定，详见下节。
 内部擦除页依据 GD32E50x 用户手册
 为 8 KiB，写粒度设置为 4 字节；外部驱动使用 4 KiB 页布局。导出工具保守预留
 完整 8 KiB 尾部，不接受超过 440 KiB 的签名升级文件。
-MCUboot 在板级早期初始化中沿用旧 `wdog_close()`，将 PC13 设为浮空输入；
+MCUboot 在板级早期初始化中将 PC13 设为浮空输入；
 应用 `idu_status_start()` 恢复 GPIO 输出和喂狗。实物上仍需验证这一交接及擦写时序。
 
 保留当前工具链设置，在工作区根目录执行：
 
 ```bash
-# MCUboot + MV-IO 应用，独立目录输出
-./applications/IDU-pre/build.sh --mcuboot
+# MCUboot + IAPv3，独立目录输出
+./applications/IDU-pre/build.sh
 
 # 增加标准 SMP 升级入口：USART0，115200 8N1；USART2 继续转发 Modbus
 ./applications/IDU-pre/build.sh --mcuboot --smp-uart
@@ -177,9 +148,9 @@ MCUboot 在板级早期初始化中沿用旧 `wdog_close()`，将 PC13 设为浮
 | `IDU-pre-public.pem` | 对应公钥 |
 | `IDU-pre-validation.json` | 签名、向量、边界检查及产物摘要；明确记录未做硬件验证 |
 
-不加 `--smp-uart` 的输出目录为 `build/hex/IDU-pre-mcuboot/`；AIDC + SMP 为
-`build/hex/IDU-pre-mcuboot-aidc-smp/`。原 `build/hex/IDU-pre.hex` 始终属于旧 BOOT
-布局。HEX 与升级 BIN 从同一次签名结果生成，避免两次 ECDSA 签名造成内容差异。
+`--no-upload` 的输出目录为 `build/hex/IDU-pre-mcuboot/`；默认 IAPv3 为
+`build/hex/IDU-pre-mcuboot-iapv3/`；AIDC + SMP 为
+`build/hex/IDU-pre-mcuboot-aidc-smp/`。HEX 与升级 BIN 从同一次签名结果生成，避免两次 ECDSA 签名造成内容差异。
 
 首次切换需要通过调试器安装新 BOOT 和新应用，**不能仅把新应用发给旧 BOOT**。
 首次安装还应清空外部 `0x300000..0x371fff` 的新 slot1/scratch 区，保留参数和
@@ -263,7 +234,7 @@ python applications/IDU-pre/tools/pack_sgz.py \
 
 FC03/04 读取、FC06/16 写入；FC16 按完整寄存器数判断长度，兼容旧 1 KiB
 非标准长帧的 8 位 byte-count 字段。仅 IAP 地址段接受这种帧，普通 Modbus
-边界仍由原路由校验。IAP 广播 FC16 执行但静默，广播 FC04 保留旧应答，247
+边界由通用寄存器服务校验。IAP 广播 FC16 执行但静默，广播 FC04 保留旧应答，247
 不进入 IAP。未知起点、截断帧、非法包号/长度等静默拒绝，整帧验证后才改变会话。
 旧包地址字段仅保存/回读；写入位置与旧实现一致，由 `(包号 - 1) × 每包长度` 确定。
 20093 仅决定最后一包的长度；非末包使用 20088 的每包长度，兼容该字段填 0 的发送端。
@@ -273,8 +244,8 @@ FC03/04 读取、FC06/16 写入；FC16 按完整寄存器数判断长度，兼�
 内容一致；乱序包和跨扇区包均支持。Flash 按需擦除，解包线程独立于转发线程。
 
 IAP 配置额外划分两个外部 NOR 区域：`0x18000–0x1BFFF` 为独立 NVS
-升级日志，`0x201000–0x2F0FFF` 为 960 KiB SGZ 暂存。旧升级配置
-`0x200000–0x200FFF` 只读；slot1 位于 `0x300000`，不会从应用直接写当前镜像或 BOOT。
+升级日志，`0x201000–0x2F0FFF` 为 960 KiB SGZ 暂存。
+slot1 位于 `0x300000`，不会从应用直接写当前镜像或 BOOT。
 日志使用固定 48 字节小端布局和自身 CRC；当前 IDU 的 DP 参数模块还启用全局
 `NVS_DATA_CRC`。IAP 模块不切换该选项，迁移已有 NVS 数据时须保持此配置一致。
 

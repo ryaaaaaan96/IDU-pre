@@ -32,8 +32,6 @@ const DM_SIG_CFG_S idu_local_process[] = {
      .data_type = DATA_TYPE_U16, .pf_sig_proc = idu_default_point},
     {.sig_id = IDU_SIG_VIRTUAL_MODE, .sig_size = 2, .sig_flag = 0,
      .data_type = DATA_TYPE_U16, .pf_sig_proc = idu_default_point},
-    {.sig_id = IDU_SIG_RESERVED_ZERO, .sig_size = 32, .sig_flag = 0,
-     .data_type = DATA_TYPE_U16ARRAY, .pf_sig_proc = idu_default_point},
     {.sig_id = IDU_SIG_ADDRESS, .sig_size = 2, .sig_flag = 0,
      .data_type = DATA_TYPE_U16, .pf_sig_proc = NULL},
     {.sig_id = IDU_SIG_DI, .sig_size = 2, .sig_flag = 0,

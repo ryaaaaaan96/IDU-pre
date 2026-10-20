@@ -36,8 +36,8 @@ build/IDU-pre/tests/reference_services/zephyr/zephyr.exe -flash_in_ram
 
 | 测试 | 主要内容 |
 | --- | --- |
-| `test_registers.c`、`test_boot_image.py`、`test_import_aidc.py` | 转换/寄存器回归、镜像边界、导入标记保护及离线快照复现 |
-| `points`、`aidc`、`mvio` | 原格式产品点表、NVS/事务、MV-IO 报文及旧 schema 拒写 |
+| `test_engineering.c`、`test_mcuboot_image.py`、`test_import_aidc.py` | 工程换算、签名镜像导出边界、导入标记保护及离线快照复现 |
+| `points`、`aidc`、`forwarding` | 产品点表、标准转发、NVS/事务、扩展报文及 schema 拒写 |
 | `pipeline`、`models` | 无存储数据流、模型复用、多设备及多总线隔离 |
 | `dataprocess`、`collector`、`transmit` | 核心模块独立配置、采集调度、转发模式和恢复 |
 | `reference_config`、`reference_dp`、`reference_ports`、`reference_services` | 原表注册、同步字节接口、CO/TR 适配、策略回调和迁移 |
@@ -50,10 +50,10 @@ build/IDU-pre/tests/reference_services/zephyr/zephyr.exe -flash_in_ram
 | `acquisition` | main 启动顺序与失败短路、存储降级、采样发布、故障锁定及试运行确认条件 |
 
 `tests/run.sh` 同时验证 Process 关闭、参数/后端可选配置，并用独立 Flash 临时文件
-在新进程中执行参数、MV-IO 和 IAP 恢复阶段。普通运行跳过的 reboot probe 会在
+在新进程中执行参数、转发服务和 IAP 恢复阶段。普通运行跳过的 reboot probe 会在
 相应阶段单独运行；按用例筛选运行时的其他 SKIP 不表示它们缺少全量覆盖。
 
-`tests/legacy_registers.c` 是早期 Zephyr 映射回归依据，没有执行旧固件。
+本地测点直接通过现用点表验证；工程换算由 `tests/test_engineering.c` 验证。
 RAW 回环和 native Flash 不能替代真实串口电气时序、NOR 掉电或 MCUboot 实际交换。
 
 ## 可选互操作与镜像检查
@@ -114,7 +114,7 @@ ASan/UBSan 保留，当前执行环境禁用 LeakSanitizer。新增服务的 11 
 
 ## 实板待验证项
 
-核对 20 MHz 有源时钟及 PLL/总线分频、旧 BOOT/MCUboot 跳转、PC13 看门狗交接、
+核对 20 MHz 有源时钟及 PLL/总线分频、MCUboot 跳转、PC13 看门狗交接、
 DI/ADC 顺序与标定、UART 最后一个停止位之后释放 DE、SPI NOR 上电/擦写/掉电，
 并验证升级中断、交换和回退。桌面结果不能作为这些项目的实物证据。
 早期验证数量与容量见[迁移历史](migration-history.md)。
@@ -535,3 +535,29 @@ UART/GPIO emulator 验证不代表实际 RS485 电气时序、栈余量或 CAN �
 
 日志及 ELF 栈尺寸记录位于工作区 `build/IDU-pre/stack-config/`，
 最终 IAPv3 配置记录为 `iap-final-resources.json`。本轮未进行实板栈余量测量。
+
+## 2026-10-20 清理停用协议与启动路径
+
+移除 MV-IO 特殊路由、窗口白名单、补零点、重复别名、旧 BOOT 构建与检查器、
+旧 Flash 区域声明及旧路径自动迁移。现用 dp_/co_/tr_ 接口和三表结构继续使用；
+持久化参数的键、类型、顺序及存储地址未改动。
+IAPv3 通过 `tr_register_service.extension` 接入，能力和版本寄存器归 IAP；
+普通转发按连续地址处理，不再提供 247 特殊入口、跳空洞读或无效写 ACK。
+
+- `tests/run.sh` 通过：40 次 native_sim 执行、275 项 Ztest PASS；
+  Python 34 项中 31 项通过，3 项外部 QuickLZ/SGZ 互操作测试缺少样本而跳过。
+  主机 C 使用 ASan/UBSan；受执行环境限制，设置 `ASAN_OPTIONS=detect_leaks=0`。
+  编译缓存放在工作区 `build/.ccache/`。
+- `tests/forwarding` 替代旧协议套件，覆盖未映射地址、连续字段读取、保存失败异常、
+  广播无副作用、重启恢复、状态快照和故障恢复；验证完整 1 KiB 扩展报文先于
+  标准 Modbus 长度检查进入回调，取消扩展后恢复普通校验。
+- IAP 原生测试覆盖能力/版本查询，以及现有分包、重启日志和配置变体。
+  AIDC 删除一条未使用补零点后共 552 个处理点，原业务表回归通过。
+- `./build.sh` 默认 MCUboot + IAPv3 和 `./build.sh --no-upload` 均构建、验签成功。
+  IAPv3 应用 Flash 121,908 B、RAM 108,744 B；无上传应用 Flash 100,900 B、
+  RAM 76,032 B；MCUboot Flash 36,584 B、RAM 18,096 B。
+- `test_mcuboot_artifacts.py` 对两套实际产物检查签名、HEX/BIN、工厂镜像范围，
+  每套的 5 个损坏／错误密钥拒绝用例均通过。文档本地链接和 `git diff --check` 通过。
+
+日志位于工作区 `build/IDU-pre/cleanup/`。没有执行实板烧录；RS485 时序、
+上位机 IAP 互操作、掉电交换和看门狗交接仍需实物验证。

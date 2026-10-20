@@ -1,0 +1,1 @@
+/ { aliases { idu-settings = &storage_partition; }; };

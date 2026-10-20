@@ -1,7 +1,7 @@
 # IDU-pre
 
 面向 GD32E505 / MV-IO 硬件的 Zephyr 4.4.2 应用，提供本地采样、通讯点表、
-Modbus 采集与转发、NVS 参数持久化及可选 MCUboot 升级。
+Modbus 采集与转发、NVS 参数持久化及 MCUboot 升级。
 点表链路由 `dataprocess`、`collect`、`transmit` 提供，其他通用能力见[模块列表](modules/README.md)。
 默认使用虚拟南向采集口，现有 USART2 / RS485 用于北向转发。
 [`vport`](modules/vport/README.md) 已用于现有 RS485 转发和虚拟采集收发；
@@ -25,7 +25,7 @@ bash applications/IDU-pre/tests/run.sh
 首次恢复工作区或有意同步依赖时运行 `west update`。构建/测试脚本在未激活
 虚拟环境时自动使用工作区 `.venv`。也可在本仓库中执行
 `./build.sh --mcuboot --iapv3`，产物位于 `build/hex/IDU-pre-mcuboot-iapv3/`。
-不带升级选项的 `./build.sh` 仍构建旧 BOOT 布局，导出 `build/hex/IDU-pre.hex`。
+`./build.sh` 默认构建同一套 MCUboot + IAPv3 固件；旧 BOOT 构建入口已删除。
 配置选项、签名密钥、分区和首次安装步骤见[构建与升级](docs/build-and-upgrade.md)。
 
 ## 阅读文档
@@ -39,7 +39,6 @@ bash applications/IDU-pre/tests/run.sh
 | 查询寄存器、质量和参数事务规则 | [点表与寄存器](docs/point-tables.md) |
 | 使用通用模块/API | [模块接口](modules/README.md)、[DP 使用说明](modules/dataprocess/README.md) |
 | 迁移参考平台调用 | [接口覆盖、差异与 Flash/RAM 分工](docs/reference-platform.md) |
-| 核对 MV-IO 旧报文行为 | [MV-IO 兼容规则](docs/mvio-compatibility.md) |
 | 构建、签名、使用 SMP 或 IAPv3 | [构建与升级](docs/build-and-upgrade.md) |
 | 核对引脚、时钟与移植条件 | [硬件说明](docs/hardware.md)、[GD32 支持调研](docs/gd32-support.md) |
 | 运行测试、查看已记录结果 | [验证说明](docs/testing.md) |
@@ -133,7 +132,7 @@ IDU-pre/
 | `process/idu_process.h` | 采样发布、周期参数及测点业务回调 |
 | `cfg/inc/ports.h` | 产品常驻端口、协议和仿真配置声明 |
 | `<transmit/server.h>` | 每端口启动、配置更新及健康维护 |
-| `<transmit/registers.h>`、`<transmit/mvio.h>` | 参数寄存器服务及 MV-IO 协议 |
+| `<transmit/registers.h>` | 参数寄存器服务及完整 ADU 扩展 |
 | `<collect/port.h>`、`<collect/simulator.h>` | 采集端口初始化及可选模拟设备 |
 
 应用不再设置 `communication/`。`cfg/` 以 const 表提供接口名、路由、协议范围、
@@ -196,7 +195,7 @@ Zephyr 版的实际启动、UART/DE 时序、Flash 掉电和升级回退仍需�
 [硬件基准、引脚与板级行为](docs/hardware.md) 已移至硬件文档。
 
 <a id="基础寄存器接口"></a>
-[基础寄存器接口](docs/mvio-compatibility.md#基础寄存器接口) 已移至 MV-IO 文档。
+[基础寄存器接口](docs/point-tables.md#idu-pre-配置和寄存器) 见点表文档。
 
 <a id="flash-与启动布局"></a>
 <a id="构建与验证"></a>

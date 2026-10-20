@@ -13,9 +13,8 @@
 #define IDU_SIG_CURRENT_1 8163
 #define IDU_SIG_PROTOCOL 8150
 #define IDU_SIG_ADDRESS 30459
-#define IDU_SIG_SAVED_ADDRESS 30461 /* Internal key; legacy wire address is 30459. */
+#define IDU_SIG_SAVED_ADDRESS 30461 /* Internal key; wire address is 30459. */
 #define IDU_SIG_VIRTUAL_MODE 10012
-#define IDU_SIG_RESERVED_ZERO 31010
 #define IDU_SIG_SAMPLE_PERIOD 31000
 #define IDU_SIG_LABEL 31001
 #define IDU_SIG_REMOTE_SETPOINT 31500

@@ -5,7 +5,7 @@ set(DTC_OVERLAY_FILE ${CMAKE_CURRENT_SOURCE_DIR}/app.overlay)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(idu_points_tests)
 target_include_directories(app PRIVATE ${IDU_APP}/app ${IDU_APP}/tests)
-target_sources(app PRIVATE src/main.c ${IDU_APP}/tests/legacy_registers.c)
+target_sources(app PRIVATE src/main.c)
 add_subdirectory(${IDU_APP}/app/cfg app_cfg)
 add_subdirectory(${IDU_APP}/app/process point_process)
 

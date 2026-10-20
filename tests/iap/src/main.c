@@ -163,6 +163,16 @@ ZTEST(iap, test_a_metadata_and_validation)
     zassert_equal(iap_route(-1, &rx, &tx), -EINVAL);
     zassert_equal(iap_route(0, NULL, &tx), -EINVAL);
     zassert_equal(iap_route(0, &rx, NULL), -EINVAL);
+    zassert_ok(read_regs(20003, 1));
+    zassert_equal(sys_get_be16(tx.data + 1), 4);
+    zassert_ok(read_regs(31996, 2));
+    zassert_equal(sys_get_be16(tx.data + 1), 0x1200);
+    zassert_equal(sys_get_be16(tx.data + 3), 0);
+    zassert_ok(read_regs(31997, 1));
+    zassert_equal(sys_get_be16(tx.data + 1), 0);
+    zassert_equal(read_regs(31996, 3), IAP_ROUTE_SILENT);
+    zassert_equal(command(20003, 1), IAP_ROUTE_SILENT);
+    zassert_equal(read_regs(31000, 1), -ENOENT);
     zassert_ok(read_regs(20049, 2));
     zassert_equal(sys_get_be16(tx.data + 1), 0); zassert_equal(sys_get_be16(tx.data + 3), 0x0300);
     confirmed = false; zassert_equal(command(20083, 0xaa), IAP_ROUTE_SILENT); confirmed = true;

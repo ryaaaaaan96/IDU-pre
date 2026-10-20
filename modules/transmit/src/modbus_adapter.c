@@ -317,7 +317,7 @@ int tr_modbus_set_router(int iface, tr_modbus_route_fn route, void *user)
 
 int tr_modbus_set_policy(int iface, const struct tr_modbus_policy *policy)
 {
-    if (iface < 0 || iface >= IFACE_LIMIT || (policy && !policy->accept)) { return -EINVAL; }
+    if (iface < 0 || iface >= IFACE_LIMIT) { return -EINVAL; }
     policies[iface] = policy ? *policy : (struct tr_modbus_policy){0};
     return 0;
 }
@@ -343,7 +343,7 @@ bool tr_modbus_suppress_broadcast(struct modbus_context *ctx)
 {
     int iface = modbus_iface_get_by_ctx(ctx);
     return ctx->rx_adu.unit_id == 0 && (iface < 0 || iface >= IFACE_LIMIT ||
-                                       !policies[iface].legacy_broadcast);
+                                       !policies[iface].route_broadcast);
 }
 
 int tr_modbus_request_iface(void)
@@ -532,7 +532,7 @@ bool tr_modbus_write_request(struct modbus_context *ctx, bool *reply)
     if (control.mode == TR_MODE_SLEEP) { ++controls[iface].stats.sleep_drops; }
     k_spin_unlock(&control_lock, key);
     if (control.mode == TR_MODE_SLEEP) { return callback_reply(ctx, TR_MODBUS_SILENT, reply); }
-    if (rx->unit_id != 0 || policies[iface].legacy_broadcast) {
+    if (rx->unit_id != 0 || policies[iface].route_broadcast) {
         if (control.filter_enabled && (control.filter.handler || control.filter.reference)) {
             int routed = call_handler(iface, ctx, control.filter, true);
             if (routed != -ENOENT) {

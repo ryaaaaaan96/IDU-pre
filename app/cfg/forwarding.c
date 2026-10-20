@@ -2,7 +2,6 @@
 #include "process/idu_process.h"
 #include <transmit/server.h>
 #include <transmit/registers.h>
-#include <transmit/mvio.h>
 #include <zephyr/device.h>
 
 /* native_sim 测试显式选择 RAW 接口；实际产品由设备树选择转发串口。 */
@@ -18,11 +17,9 @@ const struct tr_server_config idu_forwarding = {
     },
 #endif
     .write = tr_register_write,
-#if defined(CONFIG_IDU_AIDC_PROFILE)
     .attach = tr_register_attach, .protocol = &idu_parameter_registers,
+#if defined(CONFIG_IDU_AIDC_PROFILE)
     .configure = idu_forwarding_settings,
-#else
-    .attach = tr_mvio_attach, .protocol = &idu_mvio_protocol,
 #endif
     .recovery_timeout_ms = 20000,
 };

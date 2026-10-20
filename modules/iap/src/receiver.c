@@ -399,9 +399,26 @@ static int write_regs(int iface, uint16_t address, const uint8_t *data, size_t b
 int iap_route(int iface, const struct modbus_adu *rx, struct modbus_adu *tx)
 {
     if (!rx || !tx || iface < 0) { return -EINVAL; }
-    if (rx->length < 4 || rx->length > sizeof(rx->data)) { return IAP_ROUTE_SILENT; }
-    uint16_t address = sys_get_be16(rx->data), count = sys_get_be16(rx->data + 2);
+    if (rx->length < 2 || rx->length > sizeof(rx->data)) { return -ENOENT; }
+    uint16_t address = sys_get_be16(rx->data);
+    /* 协议能力和版本归升级模块，转发模块无需了解 IAP 寄存器。 */
+    if (address == 20003 || address == 31996 || address == 31997) {
+        if (rx->length != 4 || (rx->fc != 3 && rx->fc != 4) ||
+            rx->unit_id == 247 || (!rx->unit_id && rx->fc != 4)) {
+            return IAP_ROUTE_SILENT;
+        }
+        uint16_t count = sys_get_be16(rx->data + 2);
+        if (!count || count > (address == 31996 ? 2 : 1)) { return IAP_ROUTE_SILENT; }
+        tx->data[0] = count * 2;
+        sys_put_be16(!receiver.ready ? 0 : address == 20003 ? 4 :
+                     address == 31996 ? 0x1200 : 0, tx->data + 1);
+        if (count == 2) { sys_put_be16(0, tx->data + 3); }
+        tx->length = 1 + count * 2;
+        return 0;
+    }
     if (address < 20049 || address > 20104) { return -ENOENT; }
+    if (rx->length < 4) { return IAP_ROUTE_SILENT; }
+    uint16_t count = sys_get_be16(rx->data + 2);
     if (!receiver.ready || rx->unit_id == 247 ||
         (rx->unit_id == 0 && rx->fc != 4 && rx->fc != 16)) { return IAP_ROUTE_SILENT; }
     k_mutex_lock(&lock, K_FOREVER);

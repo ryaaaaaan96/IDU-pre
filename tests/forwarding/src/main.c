@@ -4,7 +4,6 @@
 #include <transmit/modbus_transport.h>
 #include <transmit/server.h>
 #include <transmit/registers.h>
-#include <transmit/mvio.h>
 #include "process/idu_process.h"
 #include "cfg/inc/device.h"
 #include "cfg/inc/signal_ids.h"
@@ -28,12 +27,13 @@
 
 static int server, client, fail_init;
 static struct modbus_context *emulated_tx_context;
-static const struct flash_area *storage, *primary, *backup;
+static const struct flash_area *storage;
 static struct modbus_iface_param server_param;
 static int fail_after = -1;
 static K_SEM_DEFINE(config_done, 0, 1);
 static int config_error;
 static bool capture_only;
+static struct modbus_adu captured_adu;
 static K_SEM_DEFINE(captured, 0, 1);
 static atomic_t inject_status, status_reads;
 
@@ -82,7 +82,7 @@ static int request(int iface, const struct modbus_adu *adu, void *user)
 static int response(int iface, const struct modbus_adu *adu, void *user)
 {
     ARG_UNUSED(iface); ARG_UNUSED(user);
-    if (capture_only) { k_sem_give(&captured); return 0; }
+    if (capture_only) { captured_adu = *adu; k_sem_give(&captured); return 0; }
     return modbus_raw_submit_rx(client, adu);
 }
 static void completed(int iface, int err, void *user)
@@ -91,18 +91,6 @@ static void completed(int iface, int err, void *user)
     config_error = err; k_sem_give(&config_done);
 }
 
-static void legacy_record(const struct flash_area *area, uint8_t address, bool corrupt, size_t len)
-{
-    uint8_t record[9] = {address, 0, 0x21, 0x22, 1, 1, 0, 1, 0};
-    uint8_t metadata[4];
-    zassert_true(len <= sizeof(record));
-    sys_put_le16(len, metadata);
-    sys_put_le16(crc16_ansi(record, len) ^ (corrupt ? 1 : 0), metadata + 2);
-    if (address == 37 && len == 8 && !corrupt) { zassert_equal(sys_get_le16(metadata + 2), 0x66ed); }
-    zassert_ok(flash_area_erase(area, 0, area->fa_size));
-    zassert_ok(flash_area_write(area, 0, record, len));
-    zassert_ok(flash_area_write(area, 4092, metadata, sizeof(metadata)));
-}
 static uint32_t checksum(const struct flash_area *area)
 {
     uint32_t crc = 0;
@@ -134,27 +122,27 @@ static void mount_fixture(struct nvs_fs *fs)
 
 /* Frozen pre-migration default-profile image: schema fa1be938, four parameters,
  * period 750, label ABC, remote setpoint 700, offset -12, sequence 42. */
-static const uint8_t old_snapshot[] = {
+static const uint8_t incompatible_snapshot[] = {
     0x49,0x44,0x55,0x50,0x01,0x00,0x04,0x00,0x38,0xe9,0x1b,0xfa,0x2a,0x00,0x00,0x00,
     0x01,0x00,0x18,0x79,0x00,0x01,0xee,0x02,0x01,0x00,0x19,0x79,0x04,0x08,0x42,0x41,
     0x00,0x43,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x0a,0x00,
     0x0c,0x7b,0x00,0x01,0xbc,0x02,0x0a,0x00,0x0d,0x7b,0x03,0x02,0xf4,0xff,0xff,0xff,
 };
-BUILD_ASSERT(sizeof(old_snapshot) == 64);
+BUILD_ASSERT(sizeof(incompatible_snapshot) == 64);
 
-static void write_old_fixture(bool intent)
+static void write_incompatible_fixture(bool intent)
 {
     fresh_nvs();
     struct nvs_fs fs;
     mount_fixture(&fs);
-    zassert_equal(nvs_write(&fs, 1, old_snapshot, sizeof(old_snapshot)), sizeof(old_snapshot));
+    zassert_equal(nvs_write(&fs, 1, incompatible_snapshot, sizeof(incompatible_snapshot)), sizeof(incompatible_snapshot));
     if (intent) {
         uint8_t pending[88] = {0};
         sys_put_le32(0x4a554449, pending); sys_put_le16(1, pending + 4);
         pending[6] = 1; pending[7] = 1; sys_put_le16(40000, pending + 8);
         sys_put_le32(43, pending + 12); sys_put_le16(64, pending + 16); sys_put_le16(10, pending + 18);
         sys_put_le16(700, pending + 20); sys_put_le16(888, pending + 22);
-        memcpy(pending + 24, old_snapshot, sizeof(old_snapshot));
+        memcpy(pending + 24, incompatible_snapshot, sizeof(incompatible_snapshot));
         sys_put_le32(43, pending + 24 + 12); sys_put_le16(888, pending + 24 + 52);
         zassert_equal(nvs_write(&fs, 2, pending, sizeof(pending)), sizeof(pending));
     }
@@ -168,13 +156,7 @@ static int attach_profile(void)
 static void *setup(void)
 {
     zassert_ok(flash_area_open(DT_FIXED_PARTITION_ID(DT_ALIAS(idu_settings)), &storage));
-    zassert_ok(flash_area_open(DT_FIXED_PARTITION_ID(DT_ALIAS(idu_legacy_primary)), &primary));
-    zassert_ok(flash_area_open(DT_FIXED_PARTITION_ID(DT_ALIAS(idu_legacy_backup)), &backup));
     flash_simulator_set_callbacks(flash_area_get_device(storage), &flash_cb);
-    if (!getenv("IDU_MVIO_PHASE") || !strcmp(getenv("IDU_MVIO_PHASE"), "import")) {
-        legacy_record(primary, 37, false, 8);
-        legacy_record(backup, 41, false, 8);
-    }
     zassert_ok(idu_register_point_tables());
     zassert_ok(dp_init());
     const struct dp_equip_cfg *cfg = dp_config();
@@ -198,8 +180,7 @@ static void *setup(void)
 static void before(void *fixture)
 {
     ARG_UNUSED(fixture); fail_after = -1; fail_init = 0;
-    if (getenv("IDU_MVIO_PHASE")) { return; }
-    legacy_record(primary, 37, false, 8); legacy_record(backup, 41, false, 8);
+    if (getenv("IDU_FORWARDING_PHASE")) { return; }
     fresh_nvs(); zassert_ok(dp_params_reload());
     zassert_ok(attach_profile());
     zassert_ok(co_simulator_set_register(&idu_collect_simulator, 3, 40000, 100));
@@ -210,24 +191,22 @@ static void before(void *fixture)
     zassert_ok(dp_wait_processed(batch.ticket, K_MSEC(200)));
 }
 
-ZTEST(mvio, test_saved_address_and_247)
+ZTEST(forwarding, test_address_filter_and_parameter_validation)
 {
     uint16_t word;
     zassert_equal(saved(), 1);
-    zassert_ok(modbus_read_holding_regs(client, 247, 30459, &word, 1)); zassert_equal(word, 1);
-    zassert_ok(modbus_write_holding_reg(client, 247, 30459, 246));
+    zassert_equal(modbus_read_holding_regs(client, 247, 30459, &word, 1), -ETIMEDOUT);
+    zassert_equal(modbus_write_holding_reg(client, 247, 30459, 37), -ETIMEDOUT);
+    zassert_equal(saved(), 1);
+    zassert_ok(modbus_write_holding_reg(client, 16, 30459, 246));
     zassert_ok(dp_params_reload()); zassert_equal(saved(), 246);
     zassert_ok(modbus_read_input_regs(client, 16, 8152, &word, 1)); zassert_equal(word, 0xa55a);
-    zassert_equal(modbus_read_holding_regs(client, 246, 30459, &word, 1), -ETIMEDOUT);
-    zassert_equal(modbus_read_input_regs(client, 247, 8152, &word, 1), -ETIMEDOUT);
-    zassert_equal(modbus_read_input_regs(client, 247, 30459, &word, 1), -ETIMEDOUT);
-    zassert_equal(modbus_write_holding_reg(client, 247, 31000, 800), -ETIMEDOUT);
-    /* Legacy invalid values ACK without applying; they do not set the DIP. */
-    zassert_ok(modbus_write_holding_reg(client, 16, 30459, 0));
-    zassert_ok(modbus_write_holding_reg(client, 16, 30459, 247)); zassert_equal(saved(), 246);
+    zassert_equal(modbus_write_holding_reg(client, 16, 30459, 0), MODBUS_EXC_ILLEGAL_DATA_VAL);
+    zassert_equal(modbus_write_holding_reg(client, 16, 30459, 247), MODBUS_EXC_ILLEGAL_DATA_VAL);
+    zassert_equal(saved(), 246);
 }
 
-ZTEST(mvio, test_application_collection_uses_virtual_ports)
+ZTEST(forwarding, test_application_collection_uses_virtual_ports)
 {
     struct vport_stats before, after;
     zassert_ok(vport_get_stats(IDU_LINK_ACQUISITION, &before));
@@ -238,44 +217,34 @@ ZTEST(mvio, test_application_collection_uses_virtual_ports)
     zassert_true(after.rx_delivered > before.rx_delivered);
 }
 
-ZTEST(mvio, test_reserved_reads_noop_writes_and_table_walk)
+ZTEST(forwarding, test_unmapped_registers_and_contiguous_reads)
 {
-    uint16_t words[12];
-    zassert_ok(modbus_read_holding_regs(client, 16, 8149, words, 12));
-    for (int i = 0; i < 12; ++i) { zassert_equal(words[i], 0); }
-    /* 8158 advances across the gap to 8178, rather than reading 8159. */
-    zassert_ok(modbus_read_holding_regs(client, 16, 8158, words, 2));
-    zassert_equal(modbus_read_holding_regs(client, 16, 8159, words, 1), -ETIMEDOUT);
-    zassert_ok(modbus_read_holding_regs(client, 16, 39278, words, 8));
-    for (int i = 0; i < 8; ++i) { zassert_equal(words[i], 0); }
-    zassert_ok(modbus_write_holding_reg(client, 16, 8159, 0xffff));
-    zassert_ok(modbus_write_holding_reg(client, 16, 39281, 0));
-    for (int i = 0; i < 12; ++i) { words[i] = 0x8000 + i; }
-    zassert_ok(modbus_write_holding_regs(client, 16, 8178, words, 12));
-    zassert_equal(saved(), 1);
-    zassert_ok(modbus_read_input_regs(client, 16, 2532, words, 2));
-    zassert_equal(words[0], 0); zassert_equal(words[1], 0x3031); /* next entry 2568 */
-    zassert_equal(modbus_read_input_regs(client, 16, 8151, words, 1), -ETIMEDOUT);
-    zassert_equal(modbus_read_input_regs(client, 16, 4814, words, 1), -ETIMEDOUT);
-    zassert_equal(modbus_read_input_regs(client, 16, 2581, words, 1), -ETIMEDOUT);
+    uint16_t words[15];
+    zassert_equal(modbus_read_holding_regs(client, 16, 8149, words, 1), MODBUS_EXC_ILLEGAL_DATA_ADDR);
+    zassert_equal(modbus_write_holding_reg(client, 16, 8159, 1), MODBUS_EXC_ILLEGAL_DATA_ADDR);
+    zassert_equal(modbus_write_holding_reg(client, 16, 39281, 0), MODBUS_EXC_ILLEGAL_DATA_ADDR);
+    zassert_equal(modbus_read_input_regs(client, 16, 2513, words, 2), MODBUS_EXC_ILLEGAL_DATA_ADDR);
+    zassert_ok(modbus_read_input_regs(client, 16, 8151, words, 2));
+    zassert_equal(words[0], IDU_PROTOCOL_VERSION >> 16); zassert_equal(words[1], 0xa55a);
+    zassert_ok(modbus_read_input_regs(client, 16, 2581, words, 1)); zassert_equal(words[0], 0x4944);
+    zassert_ok(modbus_read_input_regs(client, 16, 2581, words, 15));
 }
 
-ZTEST(mvio, test_broadcast_contract_and_extension_isolation)
+ZTEST(forwarding, test_parameter_broadcasts_have_no_reply_or_side_effect)
 {
     uint16_t word, value = 42;
-    zassert_ok(modbus_read_input_regs(client, 0, 8149, &word, 1)); zassert_equal(word, 0x2221);
-    zassert_ok(modbus_write_holding_regs(client, 0, 30459, &value, 1)); zassert_equal(saved(), 42);
+    zassert_equal(modbus_read_input_regs(client, 0, 8149, &word, 1), -ETIMEDOUT);
+    zassert_equal(modbus_write_holding_regs(client, 0, 30459, &value, 1), -ETIMEDOUT);
     zassert_equal(modbus_write_holding_reg(client, 0, 30459, 43), -ETIMEDOUT);
-    zassert_equal(modbus_read_holding_regs(client, 0, 30459, &word, 1), -ETIMEDOUT);
+    zassert_equal(saved(), 1);
     value = 800;
     zassert_equal(modbus_write_holding_regs(client, 0, 31000, &value, 1), -ETIMEDOUT);
-    zassert_equal(idu_sample_period_ms(), 500); zassert_equal(saved(), 42);
+    zassert_equal(idu_sample_period_ms(), 500);
     zassert_ok(modbus_write_holding_reg(client, 16, 31000, 800));
     zassert_equal(idu_sample_period_ms(), 800);
-    zassert_equal(modbus_write_holding_reg(client, 16, 31000, 0), MODBUS_EXC_ILLEGAL_DATA_VAL);
 }
 
-ZTEST(mvio, test_malformed_and_unsupported_requests_are_silent)
+ZTEST(forwarding, test_malformed_and_unsupported_requests_return_exceptions)
 {
     const struct modbus_adu malformed[] = {
         {.unit_id=16,.fc=16,.length=7,.data={0x76,0xfb,0,2,2,0,55}},
@@ -289,59 +258,47 @@ ZTEST(mvio, test_malformed_and_unsupported_requests_are_silent)
     for (size_t i = 0; i < ARRAY_SIZE(malformed); ++i) {
         struct modbus_adu adu = malformed[i];
         zassert_ok(modbus_raw_submit_rx(server, &adu));
-        zassert_equal(k_sem_take(&captured, K_MSEC(50)), -EAGAIN);
+        zassert_ok(k_sem_take(&captured, K_MSEC(100)));
+        zassert_equal(captured_adu.fc, adu.fc | 0x80);
+        zassert_equal(captured_adu.length, 1);
         zassert_equal(saved(), 1);
     }
     capture_only = false;
 }
 
-ZTEST(mvio, test_legacy_partitions_are_not_imported_or_modified)
+ZTEST(forwarding, test_parameter_save_and_reload)
 {
-    uint32_t p = checksum(primary), b = checksum(backup);
     zassert_equal(saved(), 1);
     zassert_ok(modbus_write_holding_reg(client, 16, 30459, 88));
     zassert_ok(dp_params_reload()); zassert_equal(saved(), 88);
-    zassert_equal(checksum(primary), p); zassert_equal(checksum(backup), b);
     fresh_nvs();
     zassert_ok(dp_params_reload()); zassert_equal(saved(), 1);
-    zassert_equal(checksum(primary), p); zassert_equal(checksum(backup), b);
 }
 
-ZTEST(mvio, test_legacy_layout_does_not_block_parameter_storage)
-{
-    legacy_record(primary, 37, false, 9); fresh_nvs();
-    zassert_ok(dp_params_reload()); zassert_equal(saved(), 1);
-    zassert_ok(modbus_write_holding_reg(client, 16, 30459, 39));
-    legacy_record(primary, 99, false, 8);
-    zassert_ok(dp_params_reload()); zassert_equal(saved(), 39);
-}
-
-ZTEST(mvio, test_failed_address_save_has_no_success_ack)
+ZTEST(forwarding, test_failed_address_save_has_no_success_ack)
 {
     fail_after = 0;
-    zassert_equal(modbus_write_holding_reg(client, 247, 30459, 83), -ETIMEDOUT);
+    zassert_equal(modbus_write_holding_reg(client, 16, 30459, 83), MODBUS_EXC_SERVER_DEVICE_FAILURE);
     fail_after = -1;
     zassert_equal(saved(), 1);
     struct dp_param_status status; dp_params_get_status(&status);
     zassert_false(status.flags & DP_PARAM_STORAGE_READY);
     zassert_ok(dp_params_reload()); zassert_equal(saved(), 1);
-    zassert_ok(modbus_write_holding_reg(client, 247, 30459, 83));
+    zassert_ok(modbus_write_holding_reg(client, 16, 30459, 83));
     zassert_ok(dp_params_reload()); zassert_equal(saved(), 83);
 }
 
-ZTEST(mvio, test_iap_is_not_advertised_or_written)
+ZTEST(forwarding, test_disabled_iap_has_no_registers)
 {
     uint16_t words[2];
-    zassert_ok(modbus_read_holding_regs(client, 16, 20003, words, 1)); zassert_equal(words[0], 0);
-    zassert_ok(modbus_read_holding_regs(client, 16, 31996, words, 2));
-    zassert_equal(words[0], 0); zassert_equal(words[1], 0);
-    zassert_equal(modbus_write_holding_reg(client, 16, 20049, 3), -ETIMEDOUT);
-    zassert_equal(modbus_read_holding_regs(client, 16, 20049, words, 1), -ETIMEDOUT);
+    zassert_equal(modbus_read_holding_regs(client, 16, 20003, words, 1), MODBUS_EXC_ILLEGAL_DATA_ADDR);
+    zassert_equal(modbus_read_holding_regs(client, 16, 31996, words, 2), MODBUS_EXC_ILLEGAL_DATA_ADDR);
+    zassert_equal(modbus_write_holding_reg(client, 16, 20049, 3), MODBUS_EXC_ILLEGAL_DATA_ADDR);
 }
 
-ZTEST(mvio, test_previous_schema_is_rejected_without_migration)
+ZTEST(forwarding, test_previous_schema_is_rejected_without_migration)
 {
-    write_old_fixture(false);
+    write_incompatible_fixture(false);
     uint32_t previous = checksum(storage);
     zassert_equal(dp_params_reload(), -EPROTO);
     struct dp_param_status status; dp_params_get_status(&status);
@@ -351,9 +308,9 @@ ZTEST(mvio, test_previous_schema_is_rejected_without_migration)
     zassert_equal(checksum(storage), previous);
 }
 
-ZTEST(mvio, test_previous_schema_intent_never_replays)
+ZTEST(forwarding, test_previous_schema_intent_never_replays)
 {
-    write_old_fixture(true);
+    write_incompatible_fixture(true);
     uint32_t previous = checksum(storage);
     unsigned writes = co_simulator_write_count(&idu_collect_simulator);
     zassert_equal(dp_params_reload(), -EPROTO);
@@ -361,19 +318,17 @@ ZTEST(mvio, test_previous_schema_intent_never_replays)
     zassert_equal(checksum(storage), previous);
 }
 
-ZTEST(mvio, test_default_snapshot_torn_write_is_retryable)
+ZTEST(forwarding, test_default_snapshot_torn_write_is_retryable)
 {
-    uint32_t p = checksum(primary), b = checksum(backup);
     for (int cut = 0; cut < 110; ++cut) {
         fresh_nvs(); fail_after = cut;
         int err = dp_params_reload(); fail_after = -1;
         zassert_true(err == 0 || err == -EIO, "cut=%d err=%d", cut, err);
         zassert_ok(dp_params_reload()); zassert_equal(saved(), 1);
     }
-    zassert_equal(checksum(primary), p); zassert_equal(checksum(backup), b);
 }
 
-ZTEST(mvio, test_recovery_reinitializes_and_rolls_back)
+ZTEST(forwarding, test_recovery_reinitializes_and_rolls_back)
 {
     struct tr_modbus_health before, after;
     zassert_ok(tr_modbus_get_health(server, &before));
@@ -385,14 +340,14 @@ ZTEST(mvio, test_recovery_reinitializes_and_rolls_back)
         zassert_ok(tr_modbus_get_health(server, &after));
         zassert_equal(after.recoveries, before.recoveries + attempt + 1);
         if (attempt < 2) {
-            uint16_t word; zassert_ok(modbus_read_holding_regs(client, 247, 30459, &word, 1));
+            uint16_t word; zassert_ok(modbus_read_holding_regs(client, 16, 30459, &word, 1));
             zassert_equal(word, 1);
         } else { zassert_equal(tr_modbus_service(server, 20000), -ENOTRECOVERABLE); }
     }
     zassert_ok(tr_modbus_init_server(server, server_param, tr_register_write, true));
 }
 
-ZTEST(mvio, test_idle_service_recovers_without_resetting_parameters)
+ZTEST(forwarding, test_idle_service_recovers_without_resetting_parameters)
 {
     struct tr_modbus_health before, after;
     zassert_ok(tr_modbus_get_health(server, &before));
@@ -404,10 +359,10 @@ ZTEST(mvio, test_idle_service_recovers_without_resetting_parameters)
     }
     zassert_equal(after.recoveries, before.recoveries + 1); zassert_ok(after.last_error);
     zassert_equal(saved(), 1);
-    uint16_t word; zassert_ok(modbus_read_holding_regs(client, 247, 30459, &word, 1));
+    uint16_t word; zassert_ok(modbus_read_holding_regs(client, 16, 30459, &word, 1));
 }
 
-ZTEST(mvio, test_stuck_tx_state_can_be_forced_back_to_receive)
+ZTEST(forwarding, test_stuck_tx_state_can_be_forced_back_to_receive)
 {
     struct modbus_context *ctx = modbus_get_context(server);
     zassert_not_null(ctx);
@@ -419,7 +374,7 @@ ZTEST(mvio, test_stuck_tx_state_can_be_forced_back_to_receive)
     emulated_tx_context = ctx;
     zassert_ok(tr_modbus_recover(server, completed, NULL));
     zassert_ok(k_sem_take(&config_done, K_SECONDS(3))); zassert_ok(config_error);
-    uint16_t word; zassert_ok(modbus_read_holding_regs(client, 247, 30459, &word, 1));
+    uint16_t word; zassert_ok(modbus_read_holding_regs(client, 16, 30459, &word, 1));
     zassert_equal(word, 1);
 }
 
@@ -435,7 +390,7 @@ static int stalled_handler(int iface, const struct modbus_adu *rx, struct modbus
     return TR_MODBUS_SILENT;
 }
 
-ZTEST(mvio, test_stuck_handler_has_bounded_recovery_and_watchdog_error)
+ZTEST(forwarding, test_stuck_handler_has_bounded_recovery_and_watchdog_error)
 {
     zassert_ok(tr_modbus_set_router(server, stalled_handler, NULL));
     struct modbus_adu rx = {.unit_id=16, .fc=3, .length=4, .data={0x76,0xfb,0,1}};
@@ -450,24 +405,24 @@ ZTEST(mvio, test_stuck_handler_has_bounded_recovery_and_watchdog_error)
     zassert_ok(attach_profile());
     zassert_ok(tr_modbus_recover(server, completed, NULL));
     zassert_ok(k_sem_take(&config_done, K_SECONDS(3))); zassert_ok(config_error);
-    uint16_t word; zassert_ok(modbus_read_holding_regs(client, 247, 30459, &word, 1));
+    uint16_t word; zassert_ok(modbus_read_holding_regs(client, 16, 30459, &word, 1));
 }
 
-ZTEST(mvio, test_reboot_probe)
+ZTEST(forwarding, test_reboot_probe)
 {
-    const char *phase = getenv("IDU_MVIO_PHASE");
+    const char *phase = getenv("IDU_FORWARDING_PHASE");
     if (!phase) { ztest_test_skip(); return; }
-    if (!strcmp(phase, "import")) {
+    if (!strcmp(phase, "write")) {
         zassert_equal(saved(), 1);
-        zassert_ok(modbus_write_holding_reg(client, 247, 30459, 91));
+        zassert_ok(modbus_write_holding_reg(client, 16, 30459, 91));
     } else if (!strcmp(phase, "verify")) {
         zassert_equal(saved(), 91);
-        uint16_t word; zassert_ok(modbus_read_holding_regs(client, 247, 30459, &word, 1));
+        uint16_t word; zassert_ok(modbus_read_holding_regs(client, 16, 30459, &word, 1));
         zassert_equal(word, 91);
     } else { zassert_unreachable("unknown phase"); }
 }
 
-ZTEST(mvio, test_parameter_status_through_product_router)
+ZTEST(forwarding, test_parameter_status_through_product_router)
 {
     struct dp_param_status status;
     uint16_t value;
@@ -476,17 +431,15 @@ ZTEST(mvio, test_parameter_status_through_product_router)
     zassert_equal(value, status.flags);
 }
 
-ZTEST(mvio, test_invalid_protocol_spans_preserve_registered_router)
+ZTEST(forwarding, test_invalid_configuration_preserves_registered_router)
 {
-    const struct tr_legacy_span invalid[] = {{.first = 2503, .points = 1, .width = 16}};
-    struct tr_mvio_config config = idu_mvio_protocol;
-    config.input = invalid; config.input_count = ARRAY_SIZE(invalid);
-    zassert_equal(tr_mvio_attach(server, &config), -EINVAL);
+    const struct tr_register_service invalid = {.command_count = 1};
+    zassert_equal(tr_register_attach(server, &invalid), -EINVAL);
     uint16_t value;
-    zassert_ok(modbus_read_holding_regs(client, 247, 30459, &value, 1));
+    zassert_ok(modbus_read_holding_regs(client, 16, 30459, &value, 1));
 }
 
-ZTEST(mvio, test_status_response_uses_one_transaction_snapshot)
+ZTEST(forwarding, test_status_response_uses_one_transaction_snapshot)
 {
     uint16_t words[4];
     atomic_clear(&status_reads);
@@ -501,4 +454,50 @@ ZTEST(mvio, test_status_response_uses_one_transaction_snapshot)
     zassert_equal(atomic_get(&status_reads), 1);
 }
 
-ZTEST_SUITE(mvio, NULL, setup, before, NULL, NULL);
+static atomic_t extension_calls;
+static int protocol_extension(int iface, const struct modbus_adu *rx, struct modbus_adu *tx)
+{
+    zassert_equal(iface, server);
+    if (rx->length < 2 || sys_get_be16(rx->data) != 20049) { return -ENOENT; }
+    atomic_inc(&extension_calls);
+    zassert_equal(rx->length, 1029);
+    zassert_equal(sys_get_be16(rx->data + 2), 512);
+    zassert_equal(rx->data[1028], 0xa5);
+    memcpy(tx->data, rx->data, 4);
+    tx->length = 4;
+    return rx->unit_id ? 0 : TR_MODBUS_SILENT;
+}
+
+ZTEST(forwarding, test_extension_receives_complete_adu_before_standard_validation)
+{
+    static const struct tr_register_service service = {.extension = protocol_extension};
+    static struct modbus_adu rx;
+    rx = (struct modbus_adu){.unit_id = 16, .fc = 16, .length = 1029};
+    sys_put_be16(20049, rx.data); sys_put_be16(512, rx.data + 2);
+    rx.data[1028] = 0xa5;
+    zassert_ok(tr_register_attach(server, &service));
+    atomic_clear(&extension_calls);
+    capture_only = true;
+    k_sem_reset(&captured);
+    zassert_ok(modbus_raw_submit_rx(server, &rx));
+    zassert_ok(k_sem_take(&captured, K_MSEC(100)));
+    zassert_equal(captured_adu.fc, 16); zassert_equal(captured_adu.length, 4);
+    rx.unit_id = 0;
+    zassert_ok(modbus_raw_submit_rx(server, &rx));
+    zassert_equal(k_sem_take(&captured, K_MSEC(100)), -EAGAIN);
+    zassert_equal(atomic_get(&extension_calls), 2);
+    rx.unit_id = 247;
+    zassert_ok(modbus_raw_submit_rx(server, &rx));
+    zassert_equal(k_sem_take(&captured, K_MSEC(100)), -EAGAIN);
+    zassert_equal(atomic_get(&extension_calls), 2);
+    /* Reattaching the product service removes the extension and its policy. */
+    zassert_ok(attach_profile());
+    rx.unit_id = 16;
+    zassert_ok(modbus_raw_submit_rx(server, &rx));
+    zassert_ok(k_sem_take(&captured, K_MSEC(100)));
+    zassert_equal(captured_adu.fc, 16 | 0x80);
+    zassert_equal(captured_adu.data[0], MODBUS_EXC_ILLEGAL_DATA_VAL);
+    capture_only = false;
+}
+
+ZTEST_SUITE(forwarding, NULL, setup, before, NULL, NULL);

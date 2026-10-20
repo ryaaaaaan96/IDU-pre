@@ -70,16 +70,17 @@ is const data in `app/cfg/`; module code never includes product headers.
 | Network registration | `tr_modbus_network_start()` | Endpoints and vport tables |
 | Forwarding lifecycle | `tr_server_service()` | Interface, protocol attach callback, serial settings and recovery interval |
 | Parameter registers | `tr_register_route()` / `tr_register_write()` | Command callbacks and status addresses |
-| MV-IO compatibility | `tr_mvio_attach()` | Read/write windows, ordered spans and optional upgrade callbacks |
+| Optional protocol extension | `tr_register_service.extension` | Complete-ADU callback, e.g. `iap_route()` |
 | Acquisition port | `co_port_open()` | RTU client configuration or simulator instance |
 | Simulated device | `co_simulator_*()` | Register addresses, widths, limits and initial values |
 | Simulated model | `co_model_simulator_read()` | Model registry, device range and default-value callback |
 
 Enable these independently with `TR_SERVER_SERVICE`, `TR_REGISTER_SERVICE` (requires
-DP parameters), `TR_MVIO`, `CO_SIMULATOR` and `CO_MODEL_SIMULATOR`. The product Kconfig
-selects defaults; standalone module consumers opt in. MV-IO contains actual legacy
-protocol rules; vport never interprets registers or commands. Upgrade callbacks are
-optional and do not introduce an IAP dependency into the protocol implementation.
+DP parameters), `CO_SIMULATOR` and `CO_MODEL_SIMULATOR`. The product Kconfig
+selects defaults; standalone module consumers opt in. vport never interprets registers
+or commands. The optional register-service extension runs before standard PDU
+validation so IAP can validate its own extended FC16 packets. Returning `-ENOENT`
+continues normal point-table handling. Transmit has no dependency on IAP.
 
 Each server config owns one interface. The service keeps separate active/pending
 settings, applies changes asynchronously after admitted requests finish, and services
@@ -285,7 +286,7 @@ Use `tr_port_set_mode()` / `tr_port_get_mode()` to control the mode. Register a
 CALLBACK handler before selecting that mode. `tr_port_set_filter()` installs
 a filter, and `tr_port_enable_filter()` enables or disables it. Enabled filters
 run before mode handlers on accepted complete ADUs. Standard broadcasts do not
-reach these callbacks unless a per-interface legacy broadcast policy permits it.
+reach these callbacks unless a per-interface broadcast routing policy permits it.
 Mode and filter handlers return `-ENOENT` to continue, `0` for a reply,
 `TR_MODBUS_SILENT` to consume silently, or a negative errno / positive Modbus
 exception. In CALLBACK mode, `-ENOENT` produces an unsupported-operation response
@@ -361,7 +362,7 @@ Tests with multiple buses or forwarding workers explicitly declare their fixture
 capacity in their own `.conf`; they do not supply product defaults.
 
 The AIDC example increases point width to 32 words and changes these bounds for
-its 553 configured points (560 runtime slots). `ZBUS_MSG_SUBSCRIBER_NET_BUF_STATIC_DATA_SIZE` must cover
+its 552 configured points (560 runtime slots). `ZBUS_MSG_SUBSCRIBER_NET_BUF_STATIC_DATA_SIZE` must cover
 `sizeof(dp_point_batch)` despite isolated pools in Zephyr 4.4.2. Tables are static;
 reference key lookup searches the device list and then only that device's rows,
 without reordering rows or allocating a RAM index. Native tables use a linear
@@ -390,10 +391,11 @@ version-bound rather than a portable public extension API. See the
 [official custom function-code contract](https://docs.zephyrproject.org/latest/doxygen/html/group__modbus.html).
 
 Per-interface `tr_modbus_set_policy()` optionally replaces the unit filter after
-CRC/RAW validation and permits legacy broadcast routing/replies. A route returns
-`TR_MODBUS_SILENT` to consume a frame without replying. With no policy, standard
-unit filtering and broadcast behavior remain unchanged. Only the MV-IO app
-installs its 247/broadcast rules; they are not enabled by the AIDC profile.
+CRC/RAW validation. `route_broadcast` explicitly delegates broadcast handling and
+reply policy to the router. `tr_register_attach()` enables this only when an
+extension is configured; ordinary parameter broadcasts are always ignored without
+replying. A route returns `TR_MODBUS_SILENT` to consume a frame silently. The IDU
+product has no special unit 247 filter or ordered MV-IO window handler.
 
 ## Reference service adapters
 

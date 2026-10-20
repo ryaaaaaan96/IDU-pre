@@ -9,7 +9,7 @@ void board_early_init_hook(void)
     gpio_pin_remap_config(GPIO_SWJ_SWDPENABLE_REMAP, ENABLE);
 
 #ifdef CONFIG_MCUBOOT
-    /* Match legacy BOOT's wdog_close(): PC13 floating disables the external
+    /* PC13 floating disables the external
      * watchdog before MCUboot can erase internal flash. GPIO drivers are not
      * initialized at this hook, so use the SoC HAL directly.
      * The application enables the watchdog again in idu_status_start(). */

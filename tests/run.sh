@@ -10,12 +10,11 @@ fi
 test_dir="build/IDU-pre/tests"
 mkdir -p "$test_dir"
 gcc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined \
-    -I applications/IDU-pre/app -I applications/IDU-pre/modules/gpio/include \
-    applications/IDU-pre/tests/test_registers.c \
-    applications/IDU-pre/tests/legacy_registers.c \
+    -I applications/IDU-pre/app \
+    applications/IDU-pre/tests/test_engineering.c \
     applications/IDU-pre/app/process/engineering.c \
-    -o "$test_dir/test_registers"
-"$test_dir/test_registers"
+    -o "$test_dir/test_engineering"
+"$test_dir/test_engineering"
 
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/points -d "$test_dir/points"
@@ -34,17 +33,17 @@ env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/aidc -d "$test_dir/aidc"
 timeout 30s "$test_dir/aidc/zephyr/zephyr.exe" -flash_in_ram
 
-# Active MV-IO contracts, legacy partition isolation and bounded port recovery.
+# Product register routing, persistence and bounded port recovery.
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
-    applications/IDU-pre/tests/mvio -d "$test_dir/mvio"
-timeout 30s "$test_dir/mvio/zephyr/zephyr.exe" -flash_in_ram
+    applications/IDU-pre/tests/forwarding -d "$test_dir/forwarding"
+timeout 30s "$test_dir/forwarding/zephyr/zephyr.exe" -flash_in_ram
 rm -f -- "$flash_test_file"
-flash_test_file="$(mktemp "$workspace_dir/$test_dir/mvio-reboot.XXXXXX")"
-for phase in import verify; do
-    env IDU_MVIO_PHASE="$phase" timeout 30s "$test_dir/mvio/zephyr/zephyr.exe" \
-        -flash="$flash_test_file" -test=mvio::test_reboot_probe
+flash_test_file="$(mktemp "$workspace_dir/$test_dir/forwarding-reboot.XXXXXX")"
+for phase in write verify; do
+    env IDU_FORWARDING_PHASE="$phase" timeout 30s "$test_dir/forwarding/zephyr/zephyr.exe" \
+        -flash="$flash_test_file" -test=forwarding::test_reboot_probe
 done
-python3 applications/IDU-pre/tests/test_boot_image.py
+python3 applications/IDU-pre/tests/test_mcuboot_image.py
 python3 applications/IDU-pre/tests/test_import_aidc.py
 python3 applications/IDU-pre/tests/test_build_configuration.py
 

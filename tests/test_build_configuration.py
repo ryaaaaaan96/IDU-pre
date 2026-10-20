@@ -51,19 +51,6 @@ endif()
         self.configure({'mcuboot_EXTRA_DTC_OVERLAY_FILE': ''},
                        {'mcuboot_EXTRA_DTC_OVERLAY_FILE': ''})
 
-    def test_previous_default_paths_migrate(self):
-        self.configure({
-            'mcuboot_EXTRA_DTC_OVERLAY_FILE': str(APP / 'boards/mcuboot-boot.overlay'),
-            'IDU-pre_EXTRA_DTC_OVERLAY_FILE': str(APP / 'boards/mcuboot.overlay'),
-            'mcuboot_EXTRA_CONF_FILE': str(APP / 'sysbuild/mcuboot.conf'),
-            'IDU-pre_EXTRA_CONF_FILE': str(APP / 'conf/mcuboot.conf'),
-        }, {
-            'mcuboot_EXTRA_DTC_OVERLAY_FILE': str(APP / 'bootloader/boot.overlay'),
-            'IDU-pre_EXTRA_DTC_OVERLAY_FILE': str(APP / 'bootloader/app.overlay'),
-            'mcuboot_EXTRA_CONF_FILE': str(APP / 'bootloader/mcuboot.conf'),
-            'IDU-pre_EXTRA_CONF_FILE': str(APP / 'bootloader/app.conf'),
-        })
-
     def test_user_modules_are_preserved_without_duplicate_hardware_module(self):
         modules = f'/custom/module;{APP / "modules/gd32e505"}'
         self.configure({'ZEPHYR_EXTRA_MODULES': modules}, {'ZEPHYR_EXTRA_MODULES': modules})
@@ -71,6 +58,7 @@ endif()
 
 class ApplicationRequirements(unittest.TestCase):
     required = (
+        'BOOTLOADER_MCUBOOT',
         'DATAPROCESS', 'DP_PROCESS', 'DP_REFERENCE_TABLES', 'DP_PARAMS', 'COLLECT',
         'TRANSMIT', 'TR_MODBUS_ADAPTER', 'TR_MODBUS_TRANSPORT', 'TR_SERVER_SERVICE',
         'TR_REGISTER_SERVICE', 'GPIO', 'ADC', 'ANALOG_INPUT', 'DIGITAL_IO',
@@ -79,7 +67,7 @@ class ApplicationRequirements(unittest.TestCase):
 
     def configure(self, **overrides):
         values = {name: 'y' for name in self.required}
-        values.update(IDU_COLLECT_VIRTUAL='y', CO_SIMULATOR='y', TR_MVIO='y',
+        values.update(IDU_COLLECT_VIRTUAL='y', CO_SIMULATOR='y',
                       IDU_AIDC_PROFILE='n', CO_MODEL_SIMULATOR='n', CO_MAX_BUSES='1')
         values.update(overrides)
         script = 'cmake_minimum_required(VERSION 3.20.0)\n'
@@ -107,13 +95,13 @@ class ApplicationRequirements(unittest.TestCase):
         for overrides in ({}, {'IDU_COLLECT_VIRTUAL': 'n', 'CO_SIMULATOR': 'n'}):
             result = self.configure(**overrides)
             self.assertEqual(result.returncode, 0, result.stderr)
-        for feature in ('CO_SIMULATOR', 'TR_MVIO'):
+        for feature in ('CO_SIMULATOR',):
             result = self.configure(**{feature: 'n'})
             self.assertIn(f'requires CONFIG_{feature}=y', result.stderr)
 
     def test_aidc_requires_model_backend_and_second_bus(self):
         result = self.configure(IDU_AIDC_PROFILE='y', CO_MODEL_SIMULATOR='y',
-                                TR_MVIO='n', CO_MAX_BUSES='2')
+                                CO_MAX_BUSES='2')
         self.assertEqual(result.returncode, 0, result.stderr)
         result = self.configure(IDU_AIDC_PROFILE='y', CO_MAX_BUSES='2')
         self.assertIn('requires CONFIG_CO_MODEL_SIMULATOR=y', result.stderr)

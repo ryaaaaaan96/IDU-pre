@@ -40,7 +40,7 @@ static void wait_ready(volatile uint32_t *reg, uint32_t mask, uint32_t expected)
 
 void soc_early_init_hook(void)
 {
-    /* The legacy bootloader may have left PLL enabled: switch safely to IRC8M. */
+    /* The bootloader may have left PLL enabled: switch safely to IRC8M. */
     RCU_CTL |= RCU_CTL_IRC8MEN;
     wait_ready(&RCU_CTL, RCU_CTL_IRC8MSTB, RCU_CTL_IRC8MSTB);
     rcu_system_clock_source_config(RCU_CKSYSSRC_IRC8M);

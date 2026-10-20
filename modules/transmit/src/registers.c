@@ -27,6 +27,13 @@ int tr_register_route(int iface, const struct modbus_adu *rx,
     const struct tr_register_service *service = user;
     if (service && ((service->command_count && !service->commands) ||
                     (service->status_count && !service->status))) { return -EINVAL; }
+    if (!rx || !tx) { return -EINVAL; }
+    if (service && service->extension) {
+        int err = service->extension(iface, rx, tx);
+        if (err != -ENOENT) { return err; }
+    }
+    /* 普通参数广播无副作用；扩展协议自行决定广播行为。 */
+    if (!rx->unit_id) { return TR_MODBUS_SILENT; }
     int err = tr_dispatch(iface, rx, tx, NULL);
     if (err != -ENOENT) { return err; }
     /* tr_dispatch 已校验完整请求的长度、数量和地址边界。 */
@@ -50,8 +57,6 @@ int tr_register_route(int iface, const struct modbus_adu *rx,
         return 0;
     }
     if (rx->fc != 6 && rx->fc != 16) { return -ENOENT; }
-    /* 保持普通参数广播无副作用；旧协议广播由自己的路由处理。 */
-    if (!rx->unit_id) { return TR_MODBUS_SILENT; }
     for (size_t i = 0; service && i < service->command_count; ++i) {
         const struct tr_command *command = &service->commands[i];
         if (address != command->address) { continue; }
@@ -74,7 +79,12 @@ int tr_register_attach(int iface, const void *config)
     const struct tr_register_service *service = config;
     if (service && ((service->command_count && !service->commands) ||
                     (service->status_count && !service->status))) { return -EINVAL; }
-    return tr_modbus_set_router(iface, tr_register_route, (void *)service);
+    int err = tr_modbus_set_router(iface, tr_register_route, (void *)service);
+    if (err) { return err; }
+    const struct tr_modbus_policy policy = {
+        .route_broadcast = service && service->extension,
+    };
+    return tr_modbus_set_policy(iface, &policy);
 }
 
 int tr_register_write(uint16_t address, const uint16_t *words, size_t count)

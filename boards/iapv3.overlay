@@ -1,11 +1,10 @@
-/* Same SGZ address as the deployed firmware; independent NVS result journal. */
+/* IAP staging and independent NVS result journal. */
 / {
     chosen {
         iap,staging = &iap_staging;
         iap,journal = &iap_journal;
     };
 };
-&upgrade_config { reg = <0x200000 0x1000>; };
 &{/soc/spi@40003800/flash@0/partitions} {
     iap_journal: partition@18000 {
         label = "idu-iap-journal";

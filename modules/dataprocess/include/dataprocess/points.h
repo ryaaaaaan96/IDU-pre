@@ -74,7 +74,7 @@ struct dp_point_cfg {
     dp_process_fn prepare_write;
     /* Explicit one-generation additive NVS migration. The only accepted older
      * schema is the exact signature with these entries omitted. Missing values
-     * use initial, optionally seeded from a read-only legacy store at mount.
+     * use initial, optionally seeded from a read-only seed store at mount.
      * seed_missing may perform I/O, returns 0 or -errno; never reenter params.
      */
     bool param_added;

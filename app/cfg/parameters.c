@@ -3,6 +3,9 @@
 #include <transmit/registers.h>
 #include "process/idu_process.h"
 #include <zephyr/sys/util.h>
+#if defined(CONFIG_IDU_IAPV3)
+#include <iap/iap.h>
+#endif
 
 /* Command registers bind an exact one-word request to a product action.
  * They do not create persistent parameter points or alter the NVS schema. */
@@ -23,4 +26,7 @@ static const struct tr_status_register status[] = {
 const struct tr_register_service idu_parameter_registers = {
     .commands = commands, .command_count = ARRAY_SIZE(commands),
     .status = status, .status_count = ARRAY_SIZE(status),
+#if defined(CONFIG_IDU_IAPV3)
+    .extension = iap_route,
+#endif
 };

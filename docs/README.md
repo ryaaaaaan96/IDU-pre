@@ -12,7 +12,6 @@
 | 理解框架 | [采集、处理与转发架构](collect-process-transmit.md) | 模块职责、数据流、Zephyr 调度、初始化顺序 |
 | 维护点表 | [配置指南](../app/cfg/README.md) | 文件职责、新增设备/点、导入标记区与来源报告 |
 | 查询协议和存储语义 | [点表、寄存器与参数事务](point-tables.md) | 点值/质量、扩展寄存器、NVS/下发恢复、真实采集口 |
-| 兼容旧 MV-IO | [MV-IO 兼容规则](mvio-compatibility.md) | 基础寄存器、247/广播、有序旧表、旧参数导入 |
 | 使用模块 | [模块接口](../modules/README.md)、[DP](../modules/dataprocess/README.md) | 依赖、配置、API 单位、同步/异步与事务约束 |
 | 扩展逻辑通信端口 | [vport](../modules/vport/README.md) | 后端注册、CAN ID 分流、多链路映射、收发所有权与边界 |
 | 查看现有端口接入 | [通信端口接入](communication-ports.md) | RS485 转发、虚拟采集、绑定表、完整 ADU 路由及恢复 |

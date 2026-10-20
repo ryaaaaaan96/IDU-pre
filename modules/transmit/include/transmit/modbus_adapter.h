@@ -16,15 +16,16 @@ typedef int (*tr_modbus_write_fn)(uint16_t address, const uint16_t *words, size_
 int tr_modbus_init_server(int iface, struct modbus_iface_param param,
                            tr_modbus_write_fn write_fn, bool isolated);
 /* Return -ENOENT to continue, TR_MODBUS_SILENT to consume without replying.
- * Broadcasts reach a router only with an explicit per-interface legacy policy.
+ * Broadcasts reach a router only with an explicit per-interface policy.
  */
 #define TR_MODBUS_SILENT (-ECANCELED)
 typedef int (*tr_modbus_route_fn)(int iface, const struct modbus_adu *request,
                                   struct modbus_adu *response, void *user);
 int tr_modbus_set_router(int iface, tr_modbus_route_fn route, void *user);
 struct tr_modbus_policy {
+    /* NULL keeps the standard own-unit/broadcast filter. */
     bool (*accept)(const struct modbus_adu *request, uint8_t own_unit, void *user);
-    bool legacy_broadcast;
+    bool route_broadcast; /* Router owns broadcast handling and reply policy. */
     void *user;
 };
 /* Startup only, copied. NULL restores standard unit/broadcast filtering. */

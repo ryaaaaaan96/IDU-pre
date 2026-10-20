@@ -24,7 +24,7 @@ static void *setup(void)
     zassert_ok(dp_init());
     const struct dp_equip_cfg *cfg=dp_config();
     zassert_not_null(cfg);
-    zassert_equal(cfg->point_count,553);
+    zassert_equal(cfg->point_count,552);
     zassert_equal(cfg->collect_count,339);
     zassert_equal(cfg->transmit_count,108);
     zassert_ok(dp_validate(cfg));
