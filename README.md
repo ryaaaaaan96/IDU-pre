@@ -47,7 +47,7 @@ bash applications/IDU-pre/tests/run.sh
 
 ```text
 IDU-pre/
-├── boards/、soc/、dts/   # IDU 板定义、E505 接入及设备树
+├── boards/、dts/        # IDU 板定义、早期板级初始化及设备树
 ├── app/
 │   ├── main.c          # 应用入口、采样周期与休眠
 │   ├── startup.c       # DP、采集总线、参数恢复与处理启动
@@ -58,7 +58,7 @@ IDU-pre/
 │   ├── process/         # 工程换算、业务回调、参数命令和旧参数导入
 │   ├── communication/   # 端口、协议、路由与采集后端
 │   └── iap/             # IAPv3、SGZ 及镜像校验
-├── modules/             # dataprocess、collect、transmit、quicklz
+├── modules/             # gd32e505、dataprocess、collect、transmit、quicklz
 ├── bootloader/          # MCUboot 配置、分区和联合构建
 ├── sysbuild/            # Zephyr 约定的薄入口
 ├── conf/                # 应用可选配置
@@ -81,6 +81,10 @@ IDU-pre/
 [`bootloader/`](bootloader/README.md) 保存本板 MCUboot 配置、分区和联合构建设置。
 MCUboot 源码仍使用 West 工作区中的独立仓库；`app/boot.c` 的应用健康确认和
 `app/iap/` 的升级接收/解包继续由主应用编译。根 `sysbuild/` 仅保留 Zephyr 约定入口。
+
+[`modules/gd32e505/`](modules/gd32e505/README.md) 通过 Zephyr 的 `soc_root` 提供
+E505 登记与时钟初始化，主应用和 MCUboot 共用；根目录不再单独设置 `soc/`。
+IDU 的引脚、外部看门狗和分区属于板级及产品配置，分别留在 `boards/` 和 `bootloader/`。
 
 ## 实现与验证范围
 

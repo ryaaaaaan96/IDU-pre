@@ -4,7 +4,11 @@
 
 核查日期：2026-10-19。范围为兆易创新官网、其官网确认的 GitHub 组织、Zephyr 官方仓库与本工作区；结论来自源码和文档检查，未代替实板时钟、ADC、Flash 或升级验证。
 
-**结论：官方确实提供 GD32 固件库，也提供 Zephyr 下游仓库；当前 IDU-pre 已经复用 Zephyr 的 `hal_gigadevice`。但上游和官方下游均未登记 GD32E505 SoC，且默认启动程序不适配本板的 20 MHz 有源时钟。因此不能通过添加一个官方模块就删除 `soc/idu/gd32e505/`。** 合理方向是继续复用官方 HAL 和现有 Zephyr 驱动，仅保留 E505、本板时钟和尚未覆盖的 ADC 适配。
+**结论：官方确实提供 GD32 固件库，也提供 Zephyr 下游仓库；当前 IDU-pre 已经复用 Zephyr 的 `hal_gigadevice`。但核查时上游和官方下游均未登记 GD32E505 SoC，且默认启动程序不适配本板的 20 MHz 有源时钟。因此不能通过添加一个官方模块就删除本地 E505 接入代码。** 合理方向是继续复用官方 HAL 和现有 Zephyr 驱动，仅保留 E505、本板时钟和尚未覆盖的 ADC 适配。
+
+目录更新（2026-10-20）：本地 SoC 已移入 [`modules/gd32e505`](../modules/gd32e505/README.md)，
+通过模块元数据提供 `soc_root`；PC13 外部看门狗操作已归入 IDU 板级早期初始化。
+以下上游支持情况仍以原核查日期为准。
 
 **官方资源分为三层。** 兆易创新在 [官方 GitHub 介绍](https://www.gigadevice.com/about/blog/gd32-mcu-official-github) 中确认 `GigaDevice-GD32-MCU` 和 `GD32-MCU-IOT` 两个组织；[官方 Zephyr/IAR 指南](https://www.gigadevice.com/about/blog/zephyr-gd32-iar-guide) 也直接使用后者的 `gd32_zephyr`。
 
@@ -29,18 +33,22 @@
 
 覆盖范围可直接核对 [上游 SoC 清单](https://github.com/zephyrproject-rtos/zephyr/blob/a915b2f12675b48b16d56653ea145dcd8f20cbbf/soc/gd/gd32/soc.yml)、[厂商 SoC 清单](https://github.com/GD32-MCU-IOT/gd32_zephyr/blob/9a6008dfafc339fedd3a47611adc2fbc58c19027/soc/gd/gd32/soc.yml) 和 [厂商 E50x Kconfig](https://github.com/GD32-MCU-IOT/gd32_zephyr/blob/9a6008dfafc339fedd3a47611adc2fbc58c19027/soc/gd/gd32/gd32e50x/Kconfig.soc)。上游现成开发板是 [GD32E507Z-EVAL](https://docs.zephyrproject.org/latest/boards/gd/gd32e507z_eval/doc/index.html)，不是本板的 E505。
 
-**为什么目前仍需要自己的 `soc.c`。** 本地 [SoC 启动](../soc/idu/gd32e505/soc.c)、[构建配置](../soc/idu/gd32e505/CMakeLists.txt) 和 [板级 DTS](../boards/idu/idu_pre/idu_pre.dts) 已复用官方类型、HAL 函数、上游 E50x DTS 与 GD32 公共目录，补充以下硬件条件：
+**为什么目前仍需要自己的 `soc.c`。** 本地 [SoC 启动](../modules/gd32e505/soc/gd/gd32e505/soc.c)、[构建配置](../modules/gd32e505/soc/gd/gd32e505/CMakeLists.txt) 和 [板级 DTS](../boards/idu/idu_pre/idu_pre.dts) 已复用官方类型、HAL 函数、上游 E50x DTS 与 GD32 公共目录，补充以下硬件条件：
 
 - `GD32E50X_XD` 类型选择、`HXTAL_VALUE=20000000`，并断言 CPU 为 180 MHz。
 - OSC_IN 输入是 20 MHz 有源时钟，需要 HXTAL bypass；PLL 为 `20 / 2 × 18 = 180 MHz`。
 - 兼容旧引导程序已经开启 PLL 的情况，先切换并确认 IRC8M，再复位时钟配置。
-- Flash 等待周期、APB 分频、高驱动模式、时钟稳定等待，以及 MCUboot 期间 PC13 外部看门狗的板级处理。
+- Flash 等待周期、APB 分频、高驱动模式和时钟稳定等待。
+- MCUboot 期间 PC13 外部看门狗的处理属于板级，现由
+  [板级早期钩子](../boards/idu/idu_pre/board.c) 在 SoC 时钟初始化后执行。
 
 上游和厂商下游 E50x 的 `soc_early_init_hook()` 都仅调用 `SystemInit()`。两套 HAL 的默认 `SystemInit()` 均清除 `HXTALBPS`；其 XD/HD 的 180 MHz 分支使用固定 `HXTAL / 2 × 45`，针对默认 8 MHz 输入。因此只把 `HXTAL_VALUE` 改成 20 MHz 不会重算 PLL，会尝试配置 `20 / 2 × 45 = 450 MHz`，也会丢失 bypass 设置。该结论由源码公式推导，不代表实测频率。[上游启动源码](https://github.com/zephyrproject-rtos/hal_gigadevice/blob/804f92bf5794e403fab89178dcc6d775b9269c0d/gd32e50x/cmsis/gd/gd32e50x/source/system_gd32e50x.c)、[厂商 HAL 启动源码](https://github.com/GD32-MCU-IOT/hal_gigadevice_zephyr/blob/main/gd32e50x/cmsis/gd/gd32e50x/source/system_gd32e50x.c)。
 
 上游 [HAL CMake 接入](https://github.com/zephyrproject-rtos/zephyr/blob/a915b2f12675b48b16d56653ea145dcd8f20cbbf/modules/hal_gigadevice/CMakeLists.txt) 为 E507 选择 `GD32E50X_CL`，晶振配置分支为 8/25 MHz；厂商下游增加 E508 选择，但仍未提供本板的 20 MHz bypass 配置。也不应把 E505 假报为 E507 来绕过 SoC 登记。
 
-当前适配可以继续收敛：用现有 FMC/PMU/RCU HAL API 表达可替代的寄存器操作，将 PC13 的板级策略单独归置，并保留必要等待和引导兼容顺序。但这些属于后续硬件变更，需要冷启动、旧 Boot 跳转和 MCUboot 升级验证；本次研究没有改动启动代码。
+当前已将 PC13 的板级策略单独归置；时钟、等待周期和引导兼容设置保持原值。
+后续仍可用 FMC/PMU/RCU HAL API 表达可替代的寄存器操作。模块迁移的构建验证
+见[验证记录](testing.md)，冷启动、旧 Boot 跳转和 MCUboot 升级仍需实板验证。
 
 **哪些可以直接使用 Zephyr 接口。** 判断依据应同时包括 HAL、Zephyr 驱动和 DTS 集成，不能仅凭目录里存在 `gd32e50x` 推断每个外设都已可用。
 

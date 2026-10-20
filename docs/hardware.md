@@ -9,9 +9,13 @@
 - 用户确认 MCU 为 GD32E505，外部输入为 **20 MHz 有源时钟**。
 - 启动使用 HXTAL bypass，PLL 为 `20 MHz / 2 * 18 = 180 MHz`，
   AHB/APB2 为 180 MHz，APB1 为 90 MHz，ADC 时钟为 APB2 / 6 = 30 MHz。
-- Zephyr 4.4.2 没有 GD32E505 SoC 定义。本应用在 `soc/idu/gd32e505/`
+- Zephyr 4.4.2 没有 GD32E505 SoC 定义。本应用在 `modules/gd32e505/soc/gd/gd32e505/`
   补充 SoC 定义，复用上游 E50x CPU、GPIO、串口和 SPI 支持。
   E505 使用 HAL 的 `GD32E50X_XD`，不再沿用旧工程的 `GD32E50X_CL`。
+- [GD32E505 模块](../modules/gd32e505/README.md) 通过 `soc_root` 向应用和 MCUboot
+  提供芯片接入；IDU 引脚与 Flash 分区仍由板及产品配置决定。
+  MCUboot 的 PC13 浮空操作在 [板级早期钩子](../boards/idu/idu_pre/board.c) 中，
+  于 SoC 时钟初始化后、设备初始化和镜像交换前执行；应用仍由 `idu_health_init()` 启用喂狗。
 - 根据旧链接脚本暂按 512 KB Flash、128 KB SRAM 设置。
   **仍需核对 MCU 完整型号后缀对应的容量和封装**。
 - 外部 Flash 按旧代码的 4 MB W25Q32、SPI mode 3 设置；驱动用 SFDP

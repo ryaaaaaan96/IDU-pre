@@ -124,3 +124,27 @@ MCUboot + SMP UART 构建、导出与镜像验证均通过；另外独立构建�
 核对 30 个产品 C 文件，除头文件引用路径外内容不变；导入表与来源记录保持原字节。
 15 份 Markdown 的本地链接/锚点及 shell 示例语法检查通过。日志位于工作区
 `build/IDU-pre/tests/layout-*.log`，本次未进行实板测试。
+
+## SoC 模块化验证（2026-10-20）
+
+`gd32e505` 已由应用根目录移至 `modules/gd32e505`，通过 `soc_root` 注册。
+PC13 看门狗浮空操作从 SoC 函数移到 MCUboot 专用的板级早期钩子。
+本次按构建集成和启动边界选择验证，未重跑完整回归入口：
+
+- 默认、MCUboot + IAPv3、MCUboot + AIDC、MCUboot + SMP UART 构建及导出检查通过，
+  MCUboot 镜像验签通过。
+- `tests/points` 在 `native_sim/native/64` 构建并运行通过：39 项 PASS、0 FAIL，
+  单次执行跳过 1 项需要跨进程阶段的重启探针。硬件模块注册未将 ARM 源码带入主机测试。
+- 使用上游 `samples/hello_world`，只指定 IDU 的 `BOARD_ROOT`、`DTS_ROOT` 和
+  `EXTRA_ZEPHYR_MODULES=…/modules/gd32e505`，独立构建通过；不依赖点表模块或应用装配。
+- 将本次提交范围导出为独立源码，在全新目录构建 Sysbuild，并验签应用镜像。
+  MCUboot 和主应用的 `zephyr_settings.txt` 均指向导出源码的模块根，
+  不依赖原来的 `SOC_ROOT` 缓存或已有的 runtime 暂存改动。
+- 检查 MCUboot 链接后的 `z_cstart` 反汇编：SoC 钩子之后调用板级钩子，
+  然后进入 `PRE_KERNEL_1`；主应用不启用该板级钩子。
+- 文档本地链接、锚点与 shell 示例语法检查通过。
+
+构建日志在工作区 `build/IDU-pre/tests/soc-module-*.log`，启动调用顺序在
+`soc-module-startup.txt`。工作区构建包含原有 runtime 暂存改动，独立 Sysbuild 构建不包含。
+时钟、Flash 参数及 PC13 浮空方式保留原值；PC13 操作从 SoC 初始化中途移动到其后，
+尚未实测启动时间及外部看门狗行为。仍需验证冷启动、旧 Boot 跳转、MCUboot 交换和回退。

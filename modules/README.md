@@ -3,8 +3,9 @@
 [Documentation index](../docs/README.md) · [Architecture](../docs/collect-process-transmit.md)
 
 Three reusable modules provide data processing, equipment acquisition and
-protocol forwarding; a fourth provides standalone QuickLZ decoding. All have
-Zephyr module metadata for integration with Zephyr 4.4.2. See
+protocol forwarding; a fourth provides standalone QuickLZ decoding. The
+`gd32e505` hardware module supplies the out-of-tree SoC port. All have Zephyr
+module metadata for integration with Zephyr 4.4.2. See
 [architecture and application integration](../docs/collect-process-transmit.md).
 No legacy platform library is linked.
 
@@ -22,6 +23,7 @@ compatibility.
 | `collect` | `collect_lib.h`, `collect/collect.h` | `co_*` acquisition, bus scheduling and parameter transport backend |
 | `transmit` | `transmit_lib.h`, `transmit/{transmit,modbus_adapter}.h` | `tr_*` register mappings, port modes and Modbus workqueues |
 | `quicklz` | `quicklz/quicklz.h` | `qlz_decode_level3()` bounded QuickLZ level 3 decoding in plain C |
+| [`gd32e505`](gd32e505/README.md) | Zephyr `soc_root` | E505 SoC registration and the supported 20 MHz bypass / 180 MHz startup |
 
 Product point-table configuration lives in [`app/cfg/`](../app/cfg/README.md),
 outside these modules. `devices/` binds device instances and reusable models;
@@ -51,6 +53,9 @@ stay in the application; there is no separate generic equipment module.
 
 Include `modules.cmake` before `find_package(Zephyr ...)` to register these modules,
 or append individual module directories to `ZEPHYR_EXTRA_MODULES`.
+`hardware.cmake` registers only the SoC module and is also used by Sysbuild before
+image discovery. IDU board GPIO policy and boot partitions remain outside it;
+the SoC sources are compiled only when `gd32e505` is selected.
 Enable `DATAPROCESS`; enable `COLLECT` with the Modbus client role and `TRANSMIT`
 with the server role as needed. `DP_PROCESS` enables business
 transactions, sample/read/init handlers, asynchronous jobs and timers independently

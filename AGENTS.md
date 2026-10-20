@@ -11,6 +11,7 @@
 ## 代码与构建
 
 - 产品代码、板级支持和点表模块保存在本应用内；依赖版本由工作区 `manifest/west.yml` 管理。
+- `modules/gd32e505` 通过 Zephyr `soc_root` 提供 E505 SoC 和当前 20 MHz bypass / 180 MHz 时钟接入；`modules/hardware.cmake` 供应用和 Sysbuild 共用。芯片代码不包含 IDU 专用 GPIO 策略；PC13 MCUboot 看门狗处理归 `boards/idu/idu_pre/board.c` 的早期钩子。`sysbuild/` 保留标准薄入口，产品镜像配置与分区归 `bootloader/`。
 - 通用点表模块使用 `modules/dataprocess`、`modules/collect`、`modules/transmit`，接口分别为 `dp_*`、`co_*`、`tr_*`；独立块解码算法归 `modules/quicklz`，接口为 `qlz_decode_level3()`；产品接口继续使用 `idu_*`。
 - 业务接口尽量沿用参考平台的 `data_process.h`、`collect_lib.h`、`transmit_lib.h`、`platform_callback.h` 及非 ARC 命名，直接使用标准 C/Zephyr 类型，不封装 ARC 层。同步字节接口 `dp_set_sig_value()` 与异步字接口 `dp_submit_sig_value(s)` 不混用；原生配置直接初始化用 `dp_init_config()`，注册产品配置后用 `dp_init()`。参考库的反汇编只作为行为证据，不链接旧库；支持范围及明确差异见 `docs/reference-platform.md`。
 - `app/main.c` 负责采样周期和休眠，`app/runtime.c` 编排启动、采集和故障策略；`app/startup.c` 显式装配 DP、采集总线、参数恢复与处理启动，`app/point_service.c` 将本地样本映射到 DP 信号；硬件访问归 `app/hardware/`，工程量换算归 `app/process/engineering.c`，端口和协议适配归 `app/communication/`，产品升级流程与校验规则归 `app/iap/`。

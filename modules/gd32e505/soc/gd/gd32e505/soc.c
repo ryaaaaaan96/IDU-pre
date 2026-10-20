@@ -2,7 +2,6 @@
 #include <gd32_rcu.h>
 #include <gd32e50x_fmc.h>
 #include <gd32e50x_pmu.h>
-#include <gd32_gpio.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/sys/util.h>
 
@@ -17,7 +16,7 @@ static void wait_ready(volatile uint32_t *reg, uint32_t mask, uint32_t expected)
             return;
         }
     }
-    /* Do not continue with an incorrect clock. The external watchdog resets us. */
+    /* Do not continue with an incorrect clock. Recovery is board-dependent. */
     while (true) {
     }
 }
@@ -30,15 +29,6 @@ void soc_early_init_hook(void)
     rcu_system_clock_source_config(RCU_CKSYSSRC_IRC8M);
     wait_ready(&RCU_CFG0, RCU_CFG0_SCSS, RCU_SCSS_IRC8M);
     rcu_deinit();
-
-#ifdef CONFIG_MCUBOOT
-    /* Match the proven legacy BOOT's wdog_close(): PC13 floating disables
-     * this board's external watchdog during internal-flash erase. A timer
-     * in internal flash cannot guarantee feeding while that flash is busy.
-     * The application enables it again in idu_health_init(). */
-    rcu_periph_clock_enable(RCU_GPIOC);
-    gpio_init(GPIOC, GPIO_MODE_IN_FLOATING, GPIO_OSPEED_2MHZ, GPIO_PIN_13);
-#endif
 
     FMC_WS = (FMC_WS & ~FMC_WS_WSCNT) | WS_WSCNT(4);
     rcu_periph_clock_enable(RCU_PMU);

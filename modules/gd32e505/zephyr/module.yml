@@ -1,0 +1,4 @@
+name: gd32e505
+build:
+  settings:
+    soc_root: .

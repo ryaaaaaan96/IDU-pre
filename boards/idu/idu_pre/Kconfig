@@ -1,0 +1,2 @@
+config BOARD_IDU_PRE
+    select BOARD_EARLY_INIT_HOOK if MCUBOOT

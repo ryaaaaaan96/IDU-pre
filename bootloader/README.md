@@ -7,7 +7,7 @@
 
 | 文件 | 职责 |
 | --- | --- |
-| `CMakeLists.txt` | 联合构建，选择本板根目录、镜像配置和 overlay |
+| `CMakeLists.txt` | 联合构建，注册硬件模块，选择本板根目录、镜像配置和 overlay |
 | `mcuboot.conf` | 启动程序的签名、Flash 和日志配置 |
 | `boot.overlay` | MCUboot 的代码分区选择，复用应用分区定义 |
 | `app.conf` | 主应用启用 MCUboot / 镜像管理的配置 |
@@ -19,6 +19,13 @@
 ```bash
 ./applications/IDU-pre/build.sh --mcuboot --iapv3
 ```
+
+`modules/hardware.cmake` 在 Sysbuild 发现板与镜像之前注册
+[`gd32e505`](../modules/gd32e505/README.md)，模块清单经缓存传入 MCUboot 和主应用。
+SoC 根由模块元数据提供，无需把芯片路径写入镜像配置。
+这里的镜像选择、签名配置和分区是 IDU 产品策略，继续保存在本目录。
+Zephyr 允许模块通过 `sysbuild-cmake` 提供共享构建逻辑；当前并无跨产品共享需求，
+因此保留标准薄入口，不把整个 Sysbuild 工程装进芯片模块。
 
 `app/boot.c` 负责应用试运行确认，`app/iap/` 负责 IAP 接收、SGZ 解包及镜像校验；
 这些代码运行在主应用中，和本目录的启动程序配置分开。头文件与所属功能源码同目录，
