@@ -19,7 +19,7 @@ Zephyr RTU 串口接入分开，详见[通信端口](communication-ports.md)。
 | --- | --- | --- |
 | `app/cfg/inc/` | 信号身份和项目配置契约 | 点表契约在 `app/protocol/inc/`、`app/protocol/tables/`；协议契约在 `app/protocol/inc/protocol.h` |
 | `app/cfg/equip/dev_cfg.c` 的设备列表 | 多个实例复用同型号的表 | `app/protocol/protocol.c` 声明实例与表标识，DP 装配指针关联 |
-| `app/cfg/equip/table/*` | 采集、处理、转发分别声明 | `app/protocol/tables/{collect,process,transmit}.c`，复用型号定义在 `app/protocol/mvio_signals.h` |
+| `app/cfg/equip/table/*` | 采集、处理、转发分别声明 | `app/protocol/tables/{collect,process,transmit}.c`，逻辑信号 ID 统一在 `app/protocol/inc/signal_ids.h` |
 | `app/process/*` 的业务回调 | 配置绑定行为，执行代码独立维护 | `app/process/` |
 | `platform/inc/collect_lib.h` | 采集地址、周期、优先级和编码独立配置 | `MODBUS_RTU_TABLE_S` / UPP 模型表、每总线采集线程 |
 | `platform/inc/data_process.h` | 共享数据池、类型/范围、旧值、回调及多输出 | `DM_SIG_CFG_S`、`DM_SIG_DATA_S`、事务回调 |

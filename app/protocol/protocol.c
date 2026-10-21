@@ -1,7 +1,6 @@
 #include "protocol.h"
 #include "tables.h"
 #include "signal_ids.h"
-#include "mvio_signals.h"
 #include <platform_callback.h>
 #include <errno.h>
 #include "ports.h"
@@ -51,12 +50,12 @@ const DM_SIG_CFG_S *idu_process_table(uint8_t dev, uint16_t *count)
     return NULL;
 }
 
-/* 参考表保存周期编码；其对应的实际采样周期属于产品配置。 */
+/* rqst_cyl 为 8 位周期编码：0 不周期轮询，1 使用产品配置的采集间隔。 */
 static int collect_period(uint8_t code, uint32_t *ms)
 {
     switch (code) {
     case 0: *ms = 0; return 0;
-    case IDU_COLLECT_SAMPLE: *ms = CONFIG_IDU_COLLECT_PERIOD_MS; return 0;
+    case 1: *ms = CONFIG_IDU_COLLECT_PERIOD_MS; return 0;
     default: return -ENOTSUP;
     }
 }

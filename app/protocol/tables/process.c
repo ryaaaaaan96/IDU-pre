@@ -1,7 +1,6 @@
 #include "protocol.h"
 #include "../tables.h"
 #include "signal_ids.h"
-#include "../mvio_signals.h"
 #include "process/idu_process.h"
 #include <errno.h>
 #include <zephyr/sys/util.h>
@@ -52,15 +51,15 @@ static const DM_SIG_CFG_S idu_local_process[] = {
 };
 
 static const DM_SIG_CFG_S idu_mvio_process[] = {
-    {.sig_id = IDU_MVIO_DI, .sig_size = 2, .sig_flag = 0,
+    {.sig_id = IDU_SIG_DI, .sig_size = 2, .sig_flag = 0,
      .data_type = DATA_TYPE_U16, .pf_sig_proc = NULL},
     {.sig_id = IDU_SIG_CURRENT_1 + 0, .sig_size = 2, .sig_flag = 0,
      .data_type = DATA_TYPE_U16, .pf_sig_proc = NULL},
     {.sig_id = IDU_SIG_CURRENT_1 + 1, .sig_size = 2, .sig_flag = 0,
      .data_type = DATA_TYPE_U16, .pf_sig_proc = NULL},
-    {.sig_id = IDU_MVIO_PROTOCOL, .sig_size = 4, .sig_flag = 0,
+    {.sig_id = IDU_SIG_PROTOCOL, .sig_size = 4, .sig_flag = 0,
      .data_type = DATA_TYPE_U32, .pf_sig_proc = NULL},
-    {.sig_id = IDU_MVIO_ADDRESS, .sig_size = 2, .sig_flag = 0,
+    {.sig_id = IDU_SIG_ADDRESS, .sig_size = 2, .sig_flag = 0,
      .data_type = DATA_TYPE_U16, .pf_sig_proc = NULL},
     {.sig_id = IDU_SIG_REMOTE_SETPOINT, .sig_size = 2,
      .sig_flag = FLAG_PERSISTENCE | FLAG_RT_STORE | FLAG_COLLECT,

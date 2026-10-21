@@ -1,6 +1,5 @@
 #include "signal_ids.h"
 #include "../tables.h"
-#include "../mvio_signals.h"
 
 static const MB_TABLE_CELL_T idu_transmit_table[] = {
 /* 本地点表、参数和远端映射；按连续 Modbus 地址访问。 */
@@ -48,15 +47,15 @@ static const MB_TABLE_CELL_T idu_transmit_table[] = {
      .dev_id = IDU_DEV_LOCAL, .reg_type = 3, .byte_order = BYTE_ORDER_DEFAULT},
 
     /* IDU extension: separate remote data from physical local inputs. */
-    {.sig_id = IDU_MVIO_DI, .reg_addr = 10000, .reg_num = 1,
+    {.sig_id = IDU_SIG_DI, .reg_addr = 10000, .reg_num = 1,
      .dev_id = IDU_DEV_REMOTE_IO, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
-    {.sig_id = IDU_MVIO_CURRENT_1 + 0, .reg_addr = 10001, .reg_num = 1,
+    {.sig_id = IDU_SIG_CURRENT_1 + 0, .reg_addr = 10001, .reg_num = 1,
      .dev_id = IDU_DEV_REMOTE_IO, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
-    {.sig_id = IDU_MVIO_CURRENT_1 + 1, .reg_addr = 10002, .reg_num = 1,
+    {.sig_id = IDU_SIG_CURRENT_1 + 1, .reg_addr = 10002, .reg_num = 1,
      .dev_id = IDU_DEV_REMOTE_IO, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
-    {.sig_id = IDU_MVIO_PROTOCOL, .reg_addr = 10010, .reg_num = 2,
+    {.sig_id = IDU_SIG_PROTOCOL, .reg_addr = 10010, .reg_num = 2,
      .dev_id = IDU_DEV_REMOTE_IO, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
-    {.sig_id = IDU_MVIO_ADDRESS, .reg_addr = 30460, .reg_num = 1,
+    {.sig_id = IDU_SIG_ADDRESS, .reg_addr = 30460, .reg_num = 1,
      .dev_id = IDU_DEV_REMOTE_IO, .reg_type = 3, .byte_order = BYTE_ORDER_DEFAULT},
     {.sig_id = IDU_SIG_VIRTUAL_MODE, .reg_addr = 10012, .reg_num = 1,
      .dev_id = IDU_DEV_LOCAL, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
