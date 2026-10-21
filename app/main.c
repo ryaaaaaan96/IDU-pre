@@ -60,6 +60,10 @@ static int start_points(void)
     /* INIT 和已注册定时任务就绪后才启动轮询。 */
     static const struct dp_process_plan process_plan = {
         .initialize_all = true,
+        .init_keys = DP_PROCESS_DEFAULT_INIT_KEYS,
+        .init_count = DP_PROCESS_DEFAULT_COUNT,
+        .timers = DP_PROCESS_DEFAULT_TIMERS,
+        .timer_count = DP_PROCESS_DEFAULT_COUNT,
     };
 
     err = dp_process_start(&process_plan);

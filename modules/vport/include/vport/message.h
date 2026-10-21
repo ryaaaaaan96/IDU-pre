@@ -1,6 +1,11 @@
 #ifndef VPORT_MESSAGE_H
 #define VPORT_MESSAGE_H
 #include <zephyr/kernel.h>
+
+/* 可选完成通知、调用上下文与未区分对端的默认值。 */
+#define VPORT_IO_DEFAULT_COMPLETE NULL
+#define VPORT_IO_DEFAULT_USER NULL
+#define VPORT_SOURCE_DEFAULT_PEER 0ULL
 /* 完整报文及应用自定义链路/对端标识；不解释硬件类型或协议字段。 */
 struct vport_frame { const uint8_t *data; size_t size; };
 struct vport_source { uint16_t link; uint64_t peer; };

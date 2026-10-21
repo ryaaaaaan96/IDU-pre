@@ -88,6 +88,11 @@ struct dp_timer_spec {
     k_timeout_t delay;
     k_timeout_t period;
 };
+/* 启动计划中未登记的初始化键/定时任务，不预留执行项。 */
+#define DP_PROCESS_DEFAULT_INIT_KEYS NULL
+#define DP_PROCESS_DEFAULT_TIMERS NULL
+#define DP_PROCESS_DEFAULT_COUNT 0U
+
 struct dp_process_plan {
     bool initialize_all;
     const struct dp_key *init_keys;

@@ -3,6 +3,14 @@
 
 #include <transmit/modbus_adapter.h>
 
+/* 缺少接口时服务保持禁用；有效站号和 RAW 发送回调由生命周期服务安装。 */
+#define TR_SERVER_DEFAULT_IFACE NULL
+#define TR_SERVER_DEFAULT_USER_CALLBACK NULL
+#define TR_SERVER_DEFAULT_UNIT 0U
+#define TR_SERVER_DEFAULT_RAW_TX NULL
+#define TR_SERVER_DEFAULT_RAW_USER NULL
+#define TR_SERVER_DEFAULT_CONFIGURE NULL
+
 struct tr_server_config {
     const char *iface_name;
     struct modbus_iface_param param;

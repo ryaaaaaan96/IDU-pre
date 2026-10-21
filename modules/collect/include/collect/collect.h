@@ -16,6 +16,13 @@ struct co_device_status {
     uint32_t successes, failures;
     int64_t last_success;
 };
+/* 使用应用传输回调时没有 Zephyr 接口；其他可选后端均默认关闭。 */
+#define CO_BUS_DEFAULT_IFACE (-1)
+#define CO_BUS_DEFAULT_SIMULATED false
+#define CO_BUS_DEFAULT_INITIALIZE NULL
+#define CO_BUS_DEFAULT_READ_MODEL NULL
+#define CO_BUS_DEFAULT_USER NULL
+
 struct co_bus_cfg {
     uint8_t id;
     int iface;

@@ -3,6 +3,9 @@
 
 #include <transmit_lib.h>
 
+#define TR_REGISTER_DEFAULT_ROUTES NULL
+#define TR_REGISTER_DEFAULT_BROADCAST false
+
 /* 配置由调用者持有，生命周期覆盖端口；不在模块内固定产品寄存器地址。
  * 普通状态和命令归 DP 处理点表，此处只提供协议段和标准地址段。
  */

@@ -11,16 +11,40 @@
 
 /* 点表内容常驻 Flash；启动时仅装配小型 DEV_TABLE_S 关联视图。 */
 static const struct dp_device_binding bindings[] = {
-    {.dev_id = IDU_DEV_LOCAL,
-     .tables = {{IDU_TABLE_LOCAL_PROCESS, PRO_DATA_PROCESS},
-                {IDU_TABLE_TRANSMIT, PRO_MB_SLAVE},
+    {
+        .dev_id = IDU_DEV_LOCAL,
+        .port = DP_DEVICE_DEFAULT_PORT,
+        .coll_addr = DP_DEVICE_DEFAULT_ADDRESS,
+        .dev_code = DP_DEVICE_DEFAULT_CODE,
+        .tables = {
+            {.id = IDU_TABLE_LOCAL_PROCESS, .type = PRO_DATA_PROCESS},
+            {.id = IDU_TABLE_TRANSMIT, .type = PRO_MB_SLAVE},
 #if defined(CONFIG_IDU_IAPV3)
-                {IDU_TABLE_PROTOCOL_SEGMENTS, PRO_ADDR_SLAVE},
+            {.id = IDU_TABLE_PROTOCOL_SEGMENTS, .type = PRO_ADDR_SLAVE},
+#else
+            {.id = DP_BINDING_UNUSED_ID, .type = DP_BINDING_UNUSED_TYPE},
 #endif
-               }},
-    {.dev_id = IDU_DEV_REMOTE_IO, .port = 0, .coll_addr = 1,
-     .tables = {{IDU_TABLE_REMOTE_PROCESS, PRO_DATA_PROCESS},
-                {IDU_TABLE_COLLECT, PRO_MB_MASTER}}},
+            {.id = DP_BINDING_UNUSED_ID, .type = DP_BINDING_UNUSED_TYPE},
+            {.id = DP_BINDING_UNUSED_ID, .type = DP_BINDING_UNUSED_TYPE},
+            {.id = DP_BINDING_UNUSED_ID, .type = DP_BINDING_UNUSED_TYPE},
+            {.id = DP_BINDING_UNUSED_ID, .type = DP_BINDING_UNUSED_TYPE},
+        },
+    },
+    {
+        .dev_id = IDU_DEV_REMOTE_IO,
+        .port = 0,
+        .coll_addr = 1,
+        .dev_code = DP_DEVICE_DEFAULT_CODE,
+        .tables = {
+            {.id = IDU_TABLE_REMOTE_PROCESS, .type = PRO_DATA_PROCESS},
+            {.id = IDU_TABLE_COLLECT, .type = PRO_MB_MASTER},
+            {.id = DP_BINDING_UNUSED_ID, .type = DP_BINDING_UNUSED_TYPE},
+            {.id = DP_BINDING_UNUSED_ID, .type = DP_BINDING_UNUSED_TYPE},
+            {.id = DP_BINDING_UNUSED_ID, .type = DP_BINDING_UNUSED_TYPE},
+            {.id = DP_BINDING_UNUSED_ID, .type = DP_BINDING_UNUSED_TYPE},
+            {.id = DP_BINDING_UNUSED_ID, .type = DP_BINDING_UNUSED_TYPE},
+        },
+    },
 };
 static DEV_TABLE_S devices[ARRAY_SIZE(bindings)];
 
@@ -59,9 +83,12 @@ int idu_register_point_tables(void)
 
 /* 状态和命令回调归 process 表；协议段随本地设备统一装配。 */
 static const struct tr_register_service idu_registers = {
+    .routes = TR_REGISTER_DEFAULT_ROUTES,
     .device = &devices[0],
 #if defined(CONFIG_IDU_IAPV3)
     .route_broadcast = true,
+#else
+    .route_broadcast = TR_REGISTER_DEFAULT_BROADCAST,
 #endif
 };
 
@@ -69,9 +96,23 @@ static const struct tr_register_service idu_registers = {
 const struct tr_server_config idu_forwarding = {
 #if DT_HAS_ALIAS(idu_forward)
     .iface_name = "RAW_1",
-    .param = {.mode = MODBUS_MODE_RAW},
+#else
+    .iface_name = TR_SERVER_DEFAULT_IFACE,
 #endif
+    .param = {
+        .mode = MODBUS_MODE_RAW,
+        .server = {
+            .user_cb = TR_SERVER_DEFAULT_USER_CALLBACK,
+            .unit_id = TR_SERVER_DEFAULT_UNIT,
+        },
+        .rawcb = {
+            .raw_tx_cb = TR_SERVER_DEFAULT_RAW_TX,
+            .user_data = TR_SERVER_DEFAULT_RAW_USER,
+        },
+    },
     .write = tr_register_write,
-    .attach = tr_register_attach, .protocol = &idu_registers,
+    .attach = tr_register_attach,
+    .protocol = &idu_registers,
+    .configure = TR_SERVER_DEFAULT_CONFIGURE,
     .recovery_timeout_ms = 20000,
 };

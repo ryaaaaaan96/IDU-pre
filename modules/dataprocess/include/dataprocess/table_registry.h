@@ -6,6 +6,13 @@
 #include <zephyr/sys/util.h>
 #include <stddef.h>
 
+/* 未使用的设备属性与表槽；实际采集端口和地址由应用配置。 */
+#define DP_DEVICE_DEFAULT_PORT 0U
+#define DP_DEVICE_DEFAULT_ADDRESS 0U
+#define DP_DEVICE_DEFAULT_CODE 0U
+#define DP_BINDING_UNUSED_ID 0U
+#define DP_BINDING_UNUSED_TYPE PRO_DEFAULT
+
 struct dp_registered_table {
     uint16_t id;
     uint16_t type;

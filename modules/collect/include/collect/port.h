@@ -2,6 +2,12 @@
 #define CO_PORT_H
 #include <zephyr/modbus/modbus.h>
 
+/* RAW 发送回调在打开端口时由采集适配器安装，默认不启用模拟设备。 */
+#define CO_PORT_DEFAULT_RAW_TX NULL
+#define CO_PORT_DEFAULT_RAW_USER NULL
+#define CO_PORT_DEFAULT_SIMULATOR NULL
+#define CO_PORT_DEFAULT_SIMULATION NULL
+
 struct co_simulator;
 struct co_simulator_config;
 struct co_port_config {

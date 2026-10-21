@@ -752,3 +752,25 @@ IAPv3 从全局 `extension` 改为本地设备的 `PRO_ADDR_SLAVE` / `MB_TABLE_S
   `build/IDU-pre/explicit-table-defaults/`，不提交。
 
 本轮未进行实板验证。
+
+## 2026-10-21 设备、服务和端口配置显式初始化
+
+继续将逐字段初始化规则应用到设备挂表、处理启动计划、采集总线、转发服务和
+vport 配置。缺省常量分别由 dataprocess、collect、transmit、vport 提供；
+应用明确填写实际标识、地址和时序，不新增硬件选择或未来端口预留。
+Zephyr Modbus 联合体仅初始化当前 RAW 客户端或服务端使用的成员，
+运行态锁、定时器和服务状态仍由各模块的生命周期接口初始化。
+
+- `table_registry`、`shared_rs485`、`acquisition`、`forwarding` 的 native_sim
+  回归通过，分别为 9、6、13、23 项 Ztest PASS，共 51 项，0 FAIL。
+  覆盖设备装配、启动计划、共享 RS485 和转发恢复；常规运行的独立重启探针
+  按原条件跳过，本轮未重跑完整回归或独立进程重启测试。
+- MCUboot + IDU/IAPv3 构建、两份镜像验签及 SGZ 导出通过，无编译警告或错误。
+  IDU Flash 121836 B、RAM 102120 B；MCUboot Flash 36568 B、RAM 18096 B，
+  与修改前相同。
+- 未配置北向物理端口别名时，转发服务的接口名仍为 NULL，服务保持禁用；
+  RAW 服务所需站号和发送回调由生命周期接口安装。
+- 修改文档的本地链接与 `git diff --check` 通过。日志保存在工作区
+  `build/IDU-pre/explicit-service-defaults/`，不提交。
+
+本轮未进行实板验证。

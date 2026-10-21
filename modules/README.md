@@ -63,6 +63,15 @@ to the module that interprets the table: `DP_POINT_DEFAULT_*` in
 These are compile-time field constants, not whole-row macros or runtime templates.
 Required addresses, IDs, widths and protocol choices remain explicit product values.
 
+The same convention applies to device bindings and startup plans (`DP_DEVICE_DEFAULT_*`,
+`DP_BINDING_*`, `DP_PROCESS_DEFAULT_*`), acquisition configuration (`CO_BUS_DEFAULT_*`,
+`CO_PORT_DEFAULT_*`), forwarding configuration (`TR_REGISTER_DEFAULT_*`,
+`TR_SERVER_DEFAULT_*`) and optional vport I/O fields (`VPORT_IO_DEFAULT_*`,
+`VPORT_SOURCE_DEFAULT_PEER`). Each set is declared with its owning public structure.
+These defaults do not select hardware, allocate future resources or start services.
+Only the active union members of a Zephyr Modbus configuration are initialized.
+Runtime timers, locks and service state continue to follow their module lifecycle APIs.
+
 Register-to-signal mappings belong
 to the tables. Protocol windows and command bindings
 live in [`app/protocol/`](../app/protocol); execution belongs to `transmit`, while

@@ -41,6 +41,13 @@ DP 的 `DP_POINT_DEFAULT_*`、collect 的 `CO_TABLE_DEFAULT_*`、
 transmit 的 `TR_TABLE_DEFAULT_BYTE_ORDER`。这些是编译期字段常量，不隐藏整行配置，
 不增加初始化调用或 RAM 模板。地址、设备/信号 ID、类型、长度和轮询策略仍由应用填写。
 
+设备绑定的空表槽和无采集属性使用 DP 的 `DP_BINDING_*` / `DP_DEVICE_DEFAULT_*`；
+采集总线、端口使用 `CO_BUS_DEFAULT_*` / `CO_PORT_DEFAULT_*`，
+转发注册和生命周期配置使用 `TR_REGISTER_DEFAULT_*` / `TR_SERVER_DEFAULT_*`。
+vport 的可选完成回调、上下文和对端标识由 vport 提供默认值。
+RAW 参数分别显式填写客户端超时或服务端回调/站号，再填写 `rawcb`；不同时初始化联合体的串口成员。
+未绑定北向物理接口时 `iface_name` 仍为空，服务保持禁用；有效站号和 RAW 发送回调由模块启动流程填入。
+
 `modules/dataprocess` 的可选 `DP_TABLE_REGISTRY` 提供 ROM 链接段及通用校验/装配。
 `protocol.c` 的 const `bindings[]` 声明设备号、采集总线、南向地址与表标识关联。
 `idu_register_point_tables()` 先调用 `dp_table_registry_bind()`，再注册原有 pltcb 回调。

@@ -46,8 +46,14 @@ static int send(void *user, uint16_t port, const struct vport_source *destinatio
 }
 
 static const struct vport_io io = {
-    .send = send, .mtu = CONFIG_MODBUS_BUFFER_SIZE,
-    .destination = {.link = IDU_LINK_RS485},
+    .send = send,
+    .complete = VPORT_IO_DEFAULT_COMPLETE,
+    .user = VPORT_IO_DEFAULT_USER,
+    .destination = {
+        .link = IDU_LINK_RS485,
+        .peer = VPORT_SOURCE_DEFAULT_PEER,
+    },
+    .mtu = CONFIG_MODBUS_BUFFER_SIZE,
 };
 
 static int collect_transfer(void *user, struct modbus_adu *adu)
@@ -81,18 +87,36 @@ static int collect_transfer(void *user, struct modbus_adu *adu)
 }
 
 const struct co_bus_cfg idu_collect_bus = {
-    .id = 0, .iface = -1, .transfer = collect_transfer,
+    .id = 0,
+    .iface = CO_BUS_DEFAULT_IFACE,
+    .simulated = CO_BUS_DEFAULT_SIMULATED,
+    .transfer = collect_transfer,
+    .initialize = CO_BUS_DEFAULT_INITIALIZE,
+    .read_model = CO_BUS_DEFAULT_READ_MODEL,
+    .user = CO_BUS_DEFAULT_USER,
 };
 const struct co_port_config idu_collect_port = {
     .iface_name = "RAW_0",
-    .param = {.mode = MODBUS_MODE_RAW, .rx_timeout = CONFIG_CO_TIMEOUT_MS * 1000U},
+    .param = {
+        .mode = MODBUS_MODE_RAW,
+        .rx_timeout = CONFIG_CO_TIMEOUT_MS * 1000U,
+        .rawcb = {
+            .raw_tx_cb = CO_PORT_DEFAULT_RAW_TX,
+            .user_data = CO_PORT_DEFAULT_RAW_USER,
+        },
+    },
+    .simulator = CO_PORT_DEFAULT_SIMULATOR,
+    .simulation = CO_PORT_DEFAULT_SIMULATION,
 };
 
 #if DT_HAS_ALIAS(idu_forward)
 static int receive(void *user, const uint8_t *data, size_t size)
 {
     ARG_UNUSED(user);
-    const struct vport_source source = {.link = IDU_LINK_RS485};
+    const struct vport_source source = {
+        .link = IDU_LINK_RS485,
+        .peer = VPORT_SOURCE_DEFAULT_PEER,
+    };
     const struct vport_frame frame = {.data = data, .size = size};
     k_spinlock_key_t key = k_spin_lock(&response_lock);
     bool collecting = expected.active;

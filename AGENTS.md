@@ -32,7 +32,7 @@
 
 - 不恢复旧 MV-IO 特殊协议、247 地址门控、跨空洞跳读、补零保留区、无效写 ACK 或旧 BOOT 路径迁移。当前 dp_/co_/tr_ 参考接口和实际采集设备点表继续保留；IAPv3 的线协议仍由 iap 模块维护。产品分区集中在 `bootloader/partitions.dtsi`，板级 DTS 引用，IAP 暂存/日志由 overlay 补充。
 
-- 产品点表的每个字段均显式初始化，包括 data 的三个值。缺省字段使用所属模块的 DP_POINT_DEFAULT_*、CO_TABLE_DEFAULT_* 或 TR_TABLE_DEFAULT_BYTE_ORDER；标识、地址、类型、长度和周期由应用明确配置，不使用整行初始化宏。
+- 产品点表、设备绑定、启动计划、服务和端口配置逐字段显式初始化，包括点表 data 的三个值。缺省值使用所属模块的编译期字段常量，见 modules/README.md；标识、地址、类型、长度和周期由应用明确配置。Zephyr 联合体只初始化所选模式的成员，运行态对象按模块接口初始化，不使用自定义整行宏代替配置。
 
 ## Agent skills
 
