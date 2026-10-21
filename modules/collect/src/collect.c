@@ -92,8 +92,8 @@ int co_transfer_mode(uint16_t dev_id, enum co_port_mode mode, struct modbus_adu 
     }
     adu->unit_id = equipment->devices[d].unit_id;
     uint8_t fc = adu->fc;
-    int err = bus->cfg.transfer ? bus->cfg.transfer(bus->cfg.user, adu) :
-                                  co_modbus_transfer(bus->cfg.iface, adu);
+    int err = bus->cfg.transfer ? bus->cfg.transfer(bus->cfg.user, dev_id, adu) :
+                                  co_modbus_transfer(bus->cfg.iface, dev_id, adu);
     if (!err && adu->unit_id != equipment->devices[d].unit_id) { err = -EBADMSG; }
     if (!err && adu->fc == (fc | 0x80) && adu->length == 1 && adu->data[0]) { err = adu->data[0]; }
     else if (!err && (adu->fc != fc || adu->unit_id != equipment->devices[d].unit_id ||

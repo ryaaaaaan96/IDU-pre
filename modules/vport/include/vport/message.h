@@ -6,9 +6,14 @@
 #define VPORT_IO_DEFAULT_COMPLETE NULL
 #define VPORT_IO_DEFAULT_USER NULL
 #define VPORT_SOURCE_DEFAULT_PEER 0ULL
+#define VPORT_SOURCE_DEFAULT_DEVICE 0U
 /* 完整报文及应用自定义链路/对端标识；不解释硬件类型或协议字段。 */
 struct vport_frame { const uint8_t *data; size_t size; };
-struct vport_source { uint16_t link; uint64_t peer; };
+struct vport_source {
+    uint16_t link;
+    uint16_t dev_id; /* 逻辑设备身份，0 表示未知；vport 不解释或查表。 */
+    uint64_t peer;   /* 链路对端标识，与逻辑设备 ID 独立。 */
+};
 typedef int (*vport_send_fn)(void *user, uint16_t port,
                              const struct vport_source *destination,
                              const struct vport_frame *frame, k_timeout_t timeout);

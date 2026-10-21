@@ -109,6 +109,11 @@ env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/acquisition -d "$test_dir/acquisition"
 timeout 30s "$test_dir/acquisition/zephyr/zephyr.exe"
 
+# Exact-size allocation, failure cleanup and initialization retry.
+env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
+    applications/IDU-pre/tests/point_storage -d "$test_dir/point_storage"
+timeout 30s "$test_dir/point_storage/zephyr/zephyr.exe"
+
 # Cross-file table registration, volatile commands and persistent feedback.
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/table_registry -d "$test_dir/table_registry"

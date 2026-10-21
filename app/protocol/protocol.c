@@ -9,7 +9,10 @@
 #include <transmit/server.h>
 #include <zephyr/device.h>
 
-/* 同型远端设备共用点表；LISTIFY 的序号分别生成设备 ID 和通信站号。 */
+/* 同型远端设备共用点表。
+ * index：LISTIFY 自动传入的序号，从 0 开始。
+ * port_id：采集逻辑端口；first_dev_id / first_address：设备 ID / 站号的起始值。
+ */
 #define IDU_REMOTE_DEVICE(index, port_id, first_dev_id, first_address) \
     { \
         .dev_id = (first_dev_id) + (index), \
@@ -48,8 +51,15 @@ static const struct dp_device_binding bindings[] = {
             {.id = DP_BINDING_UNUSED_ID, .type = DP_BINDING_UNUSED_TYPE},
         },
     },
-    /* 端口 0，设备 ID 10～19，站号 1～10；容量由 .conf 单独配置。 */
-    LISTIFY(10, IDU_REMOTE_DEVICE, (,), 0, IDU_DEV_REMOTE_IO, 1),
+    /* LISTIFY 参数依次为：
+     * 2：生成两项，index 分别为 0、1。
+     * IDU_REMOTE_DEVICE：逐项调用的设备初始化宏。
+     * (,)：展开项之间的逗号，括号用于将其作为一个宏参数传递。
+     * 0：传给 port_id，两台共用采集端口 0。
+     * IDU_DEV_REMOTE_IO：传给 first_dev_id，设备 ID 从 10 开始。
+     * 1：传给 first_address，通信站号从 1 开始。
+     */
+    LISTIFY(2, IDU_REMOTE_DEVICE, (,), 0, IDU_DEV_REMOTE_IO, 1),
 };
 static DEV_TABLE_S devices[ARRAY_SIZE(bindings)];
 

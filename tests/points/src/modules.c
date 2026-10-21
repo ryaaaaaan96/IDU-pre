@@ -12,7 +12,7 @@
 #include <errno.h>
 #include <string.h>
 
-static struct dp_device_cfg devices[2];
+static struct dp_device_cfg devices[CONFIG_DP_MAX_DEVICES];
 static struct co_cfg collect_blocks[CONFIG_DP_POINTS_MAX_POLLS];
 static uint16_t bus_value = 100;
 static int bus_fault;
@@ -80,8 +80,9 @@ static int linked(struct dp_process_ctx *ctx, struct dp_key key)
                                    DP_OP_NO_COLLECT | DP_OP_NO_STORE);
 }
 
-static int second_bus(void *user, struct modbus_adu *adu)
+static int second_bus(void *user, uint16_t dev_id, struct modbus_adu *adu)
 {
+    ARG_UNUSED(dev_id);
     ARG_UNUSED(user);
     if (bus_fault) { return bus_fault; }
     if (adu->fc == 3 && adu->length == 4 && sys_get_be16(adu->data + 2) == 1) {
@@ -107,9 +108,11 @@ void module_add_points(struct dp_equip_cfg *cfg, struct dp_point_cfg *points,
     cfg->collect_get = NULL;
     collect_blocks[0].init_only=true;
     cfg->collect=collect_blocks;
-    devices[0] = cfg->devices[0];
-    devices[1] = (struct dp_device_cfg){.dev_id = 20, .unit_id = 1, .bus_id = 1};
-    cfg->devices = devices; cfg->device_count = 2;
+    size_t count = cfg->device_count;
+    zassert_true(count < ARRAY_SIZE(devices));
+    memcpy(devices, cfg->devices, count * sizeof(*devices));
+    devices[count] = (struct dp_device_cfg){.dev_id = 20, .unit_id = 1, .bus_id = 1};
+    cfg->devices = devices; cfg->device_count = count + 1;
     points[cfg->point_count++] = (struct dp_point_cfg){.key = input,
         .source = DP_SOURCE_LOCAL, .type = DP_U16, .width = 1, .maximum = 1000, .handler = linked};
     points[cfg->point_count++] = (struct dp_point_cfg){.key = output,

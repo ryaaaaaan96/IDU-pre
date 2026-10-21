@@ -10,6 +10,14 @@ NVS 参数持久化。把本目录加入 `ZEPHYR_EXTRA_MODULES`，启用
 采集归属。运行时不调用采集或转发模块；寄存器编码和 Modbus 回调由
 transmit 提供。数据池数值采用主机字节序、低字在前。
 
+点值缓冲区在 `dp_init_config()` 中按实际总字数通过 Zephyr `k_malloc()` 一次申请，
+随后按偏移供各点使用；服务运行期间不重新分配或释放。初始化失败不会安装配置，
+分配失败返回 `-ENOMEM`，申请后初始化失败会释放缓冲区，允许修正条件后重试。
+`DP_POINTS_VALUE_WORDS` 是总字数上限，不再对应专用静态数组。
+`HEAP_MEM_POOL_ADD_SIZE_DATAPROCESS` 为共享系统堆提供容量预算，模块默认 1024 B，
+可在应用 `.conf` 手动调整；堆还包含管理开销，不能将申请字节数等同于固件总 RAM。
+测点状态、轮询和参数事务缓存仍有各自的静态容量，不随点值缓冲区自动扩展。
+
 ## 采样与事务
 
 业务入口 `data_process.h` 保留 `dp_set_sig_value(dev_id, sig_id, size, bytes)`

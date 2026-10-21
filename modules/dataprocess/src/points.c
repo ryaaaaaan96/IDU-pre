@@ -21,7 +21,6 @@ struct stored_point {
     uint16_t quality;
 };
 static struct stored_point states[CONFIG_DP_POINTS_MAX_POINTS];
-static uint16_t point_words[CONFIG_DP_POINTS_VALUE_WORDS];
 static uint32_t generation;
 static int64_t reset_epoch[CONFIG_DP_MAX_DEVICES];
 static atomic_t ready;
@@ -31,6 +30,7 @@ static atomic_t consumed_ticket;
 K_MUTEX_DEFINE(completion_lock);
 K_CONDVAR_DEFINE(completion_changed);
 K_MUTEX_DEFINE(store_lock);
+K_MUTEX_DEFINE(initialization_lock);
 K_MUTEX_DEFINE(publish_lock);
 K_SEM_DEFINE(sample_slots, CONFIG_DP_POINTS_QUEUE_DEPTH, CONFIG_DP_POINTS_QUEUE_DEPTH);
 static k_tid_t publisher;
@@ -123,7 +123,7 @@ int dp_validate(const struct dp_equip_cfg *cfg)
             return -EINVAL;
         }
         words_needed += p->width;
-        if (words_needed > ARRAY_SIZE(point_words)) { return -ENOSPC; }
+        if (words_needed > CONFIG_DP_POINTS_VALUE_WORDS) { return -ENOSPC; }
         if (dp_config_index(cfg, p->key) != (int)i) {
             return -EEXIST;
         }
@@ -235,29 +235,55 @@ int dp_validate(const struct dp_equip_cfg *cfg)
 
 int dp_init_config(const struct dp_equip_cfg *cfg)
 {
+    if (k_is_in_isr()) { return -EWOULDBLOCK; }
+    k_mutex_lock(&initialization_lock, K_FOREVER);
     if (atomic_get(&ready)) {
+        k_mutex_unlock(&initialization_lock);
         return -EALREADY;
     }
     int err = dp_validate(cfg);
     if (err) {
+        k_mutex_unlock(&initialization_lock);
         return err;
     }
-    equipment = cfg;
-    zbus_chan_set_msg_sub_pool(&dp_samples_chan, &sample_pool);
-    zbus_chan_set_msg_sub_pool(&dp_processed_chan, &notification_pool);
+    size_t words_needed = 0;
+    for (size_t i = 0; i < cfg->point_count; ++i) {
+        struct dp_point_cfg scratch;
+        const struct dp_point_cfg *p = dp_config_point(cfg, i, &scratch);
+        if (!p || p->width > CONFIG_DP_POINTS_VALUE_WORDS - words_needed) {
+            k_mutex_unlock(&initialization_lock);
+            return -EINVAL;
+        }
+        words_needed += p->width;
+    }
+    uint16_t *values = k_malloc(words_needed * sizeof(*values));
+    if (!values) {
+        k_mutex_unlock(&initialization_lock);
+        return -ENOMEM;
+    }
     size_t offset = 0;
     for (size_t i = 0; i < cfg->point_count; ++i) {
         struct dp_point_cfg scratch;
         const struct dp_point_cfg *p = dp_config_point(cfg, i, &scratch);
-        states[i].words = point_words + offset;
+        if (!p || p->width > words_needed - offset) {
+            k_free(values);
+            k_mutex_unlock(&initialization_lock);
+            return -EINVAL;
+        }
+        states[i].words = values + offset;
         memcpy(states[i].words, p->initial.words, p->width * 2);
         offset += p->width;
         states[i].quality = p->source == DP_SOURCE_CONSTANT ?
                             DP_QUALITY_GOOD : DP_QUALITY_UNINITIALIZED;
         states[i].error = p->source == DP_SOURCE_CONSTANT ? 0 : -ENODATA;
     }
+    /* 配置和点值在服务生命周期内保持有效，不在采样路径分配或释放。 */
+    equipment = cfg;
+    zbus_chan_set_msg_sub_pool(&dp_samples_chan, &sample_pool);
+    zbus_chan_set_msg_sub_pool(&dp_processed_chan, &notification_pool);
     atomic_set(&last_progress, k_uptime_get_32());
     atomic_set(&ready, 1);
+    k_mutex_unlock(&initialization_lock);
     return 0;
 }
 

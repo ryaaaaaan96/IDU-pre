@@ -15,7 +15,10 @@ vport 只提供端口登记及输入输出回调，不识别硬件类型、Modbu
 正数按 `-EIO` 处理。输入可以从 ISR 调用，但所注册的协议接收函数也必须
 满足 ISR 约束；注册和发送必须在线程中调用。
 
-`source.link/peer` 完全由应用解释。实际链路的多端口映射、事务仲裁和硬件
+`source.link/peer` 完全由应用解释；`source.dev_id` 明确传递逻辑设备 ID，
+0 表示未知，默认常量为 `VPORT_SOURCE_DEFAULT_DEVICE`。设备 ID 与 `peer`
+独立，不改变报文内容，也不自动转换为 Modbus 站号或 CAN ID。
+vport 原样传递这些字段，不依赖 DP、设备点表或硬件映射。实际链路的多端口映射、事务仲裁和硬件
 互斥由应用选择的接入实现负责，逻辑口的发送锁不能替代物理总线事务锁。
 
 产品接入及 RAW/RTU 边界见 [通信端口](../../docs/communication-ports.md)。

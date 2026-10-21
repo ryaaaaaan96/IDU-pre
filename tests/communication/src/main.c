@@ -25,6 +25,9 @@ static uint8_t serial_reply[CONFIG_MODBUS_BUFFER_SIZE], captured[CONFIG_MODBUS_B
 static size_t serial_size, captured_size;
 static struct vport_source captured_source;
 static uint16_t request_crc;
+static uint16_t sent_device;
+static bool wrong_device;
+static atomic_t concurrent_test, concurrent_sends[2];
 static int configure_error;
 static int read_register(uint16_t address, uint16_t *value)
 {
@@ -50,12 +53,23 @@ static int send(void *user, uint16_t port, const struct vport_source *destinatio
         int err = mb_serial_send(serial, frame->data, frame->size, timeout);
         atomic_set(&tx_error, err); return err;
     }
-    if (port == 2) { return tr_port_input(3, destination, frame); }
+    if (port == 2) {
+        sent_device = destination->dev_id;
+        if (atomic_get(&concurrent_test)) {
+            zassert_true(destination->dev_id == 100 || destination->dev_id == 101);
+            unsigned index = destination->dev_id - 100;
+            zassert_equal(sys_get_be16(frame->data + 2), 7 + index);
+            atomic_inc(&concurrent_sends[index]);
+        }
+        return tr_port_input(3, destination, frame);
+    }
     if (atomic_get(&capture)) {
         captured_source = *destination; captured_size = frame->size;
         memcpy(captured, frame->data, frame->size); return 0;
     }
-    return co_port_input(2, destination, frame);
+    struct vport_source source = *destination;
+    if (wrong_device) { ++source.dev_id; }
+    return co_port_input(2, &source, frame);
 }
 static void finished(void *user, uint16_t port, const struct vport_source *source)
 {
@@ -163,7 +177,7 @@ ZTEST(communication, test_source_preserved_and_busy_request_not_overwritten)
     uint8_t data[] = {1, 4, 0, 7, 0, 1, 0, 0};
     sys_put_le16(crc16_ansi(data, 6), data + 6);
     struct vport_frame frame = {.data = data, .size = sizeof(data)};
-    const struct vport_source source = {.link = 31, .peer = 0x123456789abcdefULL};
+    const struct vport_source source = {.link = 31, .dev_id = 42, .peer = 0x123456789abcdefULL};
     atomic_set(&capture, 1); atomic_set(&hold_handler, 1);
     int before = atomic_get(&completed);
     zassert_ok(tr_port_input(3, &source, &frame));
@@ -173,8 +187,63 @@ ZTEST(communication, test_source_preserved_and_busy_request_not_overwritten)
     zassert_equal(co_port_input(3, &source, &frame), -ENOENT);
     k_sem_give(&unblock); wait_complete(before);
     zassert_equal(captured_source.link, source.link); zassert_equal(captured_source.peer, source.peer);
+    zassert_equal(captured_source.dev_id, source.dev_id);
     zassert_equal(captured_size, 7); zassert_equal(sys_get_be16(captured + 3), 0x1233);
     atomic_clear(&capture); atomic_clear(&hold_handler);
+}
+ZTEST(communication, test_device_identity_roundtrip_and_failure_cleanup)
+{
+    struct modbus_adu adu = {.unit_id = 1, .fc = 4, .length = 4, .data = {0, 7, 0, 1}};
+    zassert_ok(co_modbus_transfer(client, 42, &adu));
+    zassert_equal(sent_device, 42);
+    zassert_equal(sys_get_be16(adu.data + 1), 0x1233);
+    wrong_device = true;
+    adu = (struct modbus_adu){.unit_id = 1, .fc = 4, .length = 4, .data = {0, 7, 0, 1}};
+    zassert_equal(co_modbus_transfer(client, 43, &adu), -ETIMEDOUT);
+    zassert_equal(sent_device, 43);
+    wrong_device = false;
+    atomic_set(&fail_tx, 1);
+    zassert_equal(co_modbus_transfer(client, 44, &adu), -EIO);
+    atomic_clear(&fail_tx);
+    zassert_ok(co_modbus_transfer(client, 45, &adu));
+    zassert_equal(sent_device, 45);
+    uint16_t word;
+    zassert_ok(modbus_read_input_regs(client, 1, 7, &word, 1));
+    zassert_equal(sent_device, 0); /* No identity leaks to direct Zephyr callers. */
+}
+
+static K_THREAD_STACK_ARRAY_DEFINE(client_stacks, 2, 2048);
+static struct k_thread clients[2];
+static K_SEM_DEFINE(client_start, 0, 2);
+static int client_results[2];
+static void client_requests(void *arg, void *b, void *c)
+{
+    ARG_UNUSED(b); ARG_UNUSED(c);
+    unsigned index = (uintptr_t)arg;
+    k_sem_take(&client_start, K_FOREVER);
+    for (unsigned i = 0; i < 8; ++i) {
+        struct modbus_adu adu = {.unit_id = 1, .fc = 4, .length = 4,
+            .data = {0, 7 + index, 0, 1}};
+        int err = co_modbus_transfer(client, 100 + index, &adu);
+        if (!err && sys_get_be16(adu.data + 1) != ((7 + index) ^ 0x1234)) { err = -EBADMSG; }
+        if (err) { client_results[index] = err; break; }
+        k_yield();
+    }
+}
+ZTEST(communication, test_concurrent_devices_keep_transaction_identity)
+{
+    atomic_set(&concurrent_test, 1);
+    for (unsigned i = 0; i < 2; ++i) {
+        k_thread_create(&clients[i], client_stacks[i], K_THREAD_STACK_SIZEOF(client_stacks[i]),
+                        client_requests, (void *)(uintptr_t)i, NULL, NULL, 5, 0, K_NO_WAIT);
+    }
+    k_sem_give(&client_start); k_sem_give(&client_start);
+    for (unsigned i = 0; i < 2; ++i) {
+        zassert_ok(k_thread_join(&clients[i], K_SECONDS(2)));
+        zassert_ok(client_results[i]);
+        zassert_equal(atomic_get(&concurrent_sends[i]), 8);
+    }
+    atomic_clear(&concurrent_test);
 }
 ZTEST(communication, test_serial_timeout_and_silent_request_recover)
 {

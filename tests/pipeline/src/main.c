@@ -95,8 +95,9 @@ static const struct dp_equip_cfg equipment = {
     .transmit = maps, .transmit_count = ARRAY_SIZE(maps),
 };
 
-static int transfer(void *user, struct modbus_adu *adu)
+static int transfer(void *user, uint16_t dev_id, struct modbus_adu *adu)
 {
+    ARG_UNUSED(dev_id);
     ARG_UNUSED(user);
     zassert_equal(adu->unit_id, 9);
     if (adu->fc != 4 || adu->length != 4 ||

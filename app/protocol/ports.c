@@ -19,6 +19,7 @@ static struct k_spinlock response_lock;
 static struct {
     bool active;
     k_tid_t owner;
+    uint16_t dev_id;
     uint8_t unit, function;
     uint16_t address, value;
 } expected;
@@ -31,7 +32,8 @@ static int send(void *user, uint16_t port, const struct vport_source *destinatio
     if (port == IDU_PORT_ACQUISITION) {
         /* collect_transfer 持有完整事务锁，不能只锁住一次 UART 发送。 */
         k_spinlock_key_t key = k_spin_lock(&response_lock);
-        bool owned = expected.active && expected.owner == k_current_get();
+        bool owned = expected.active && expected.owner == k_current_get() &&
+                     expected.dev_id == destination->dev_id;
         k_spin_unlock(&response_lock, key);
         if (!owned) { return -EACCES; }
         return mb_serial_send(serial, frame->data, frame->size, timeout);
@@ -51,15 +53,20 @@ static const struct vport_io io = {
     .user = VPORT_IO_DEFAULT_USER,
     .destination = {
         .link = IDU_LINK_RS485,
+        .dev_id = VPORT_SOURCE_DEFAULT_DEVICE,
         .peer = VPORT_SOURCE_DEFAULT_PEER,
     },
     .mtu = CONFIG_MODBUS_BUFFER_SIZE,
 };
 
-static int collect_transfer(void *user, struct modbus_adu *adu)
+static int collect_transfer(void *user, uint16_t dev_id, struct modbus_adu *adu)
 {
     ARG_UNUSED(user);
     if (!adu || adu->length < 4) { return -EINVAL; }
+    const DEV_TABLE_S *device = dp_dev_get_from_devid(dev_id);
+    if (!device || device->port != idu_collect_bus.id || device->coll_addr != adu->unit_id) {
+        return -EINVAL;
+    }
     struct dp_point_state local;
     int err = dp_read((struct dp_key){IDU_DEV_LOCAL, IDU_SIG_ADDRESS}, &local);
     if (err) { return err; }
@@ -74,10 +81,11 @@ static int collect_transfer(void *user, struct modbus_adu *adu)
     expected.address = sys_get_be16(adu->data);
     expected.value = sys_get_be16(adu->data + 2);
     expected.owner = k_current_get();
+    expected.dev_id = dev_id;
     expected.active = true;
     k_spin_unlock(&response_lock, key);
 
-    err = co_modbus_transfer(client, adu);
+    err = co_modbus_transfer(client, dev_id, adu);
 
     key = k_spin_lock(&response_lock);
     expected.active = false; /* 超时、异常和发送失败也结束事务，不遗留收包归属。 */
@@ -113,13 +121,15 @@ const struct co_port_config idu_collect_port = {
 static int receive(void *user, const uint8_t *data, size_t size)
 {
     ARG_UNUSED(user);
-    const struct vport_source source = {
+    struct vport_source source = {
         .link = IDU_LINK_RS485,
+        .dev_id = VPORT_SOURCE_DEFAULT_DEVICE,
         .peer = VPORT_SOURCE_DEFAULT_PEER,
     };
     const struct vport_frame frame = {.data = data, .size = size};
     k_spinlock_key_t key = k_spin_lock(&response_lock);
     bool collecting = expected.active;
+    if (collecting) { source.dev_id = expected.dev_id; }
     bool matches = size >= 5 && data[0] == expected.unit;
     if (matches && data[1] == (expected.function | 0x80U)) {
         matches = size == 5 && data[2] != 0;

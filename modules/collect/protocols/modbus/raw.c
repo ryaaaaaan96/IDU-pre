@@ -1,4 +1,5 @@
 #include <collect/modbus.h>
+#include "client.h"
 #include <modbus_io.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/sys/crc.h>
@@ -11,6 +12,10 @@ struct raw_port {
     struct vport_binding binding;
     struct vport_source source;
     atomic_t receiving;
+    struct k_mutex transaction_lock;
+    struct k_spinlock state_lock;
+    k_tid_t owner;
+    struct vport_source destination;
 };
 static struct raw_port ports[CONFIG_MODBUS_NUMOF_RAW_ADU];
 static K_MUTEX_DEFINE(bind_lock);
@@ -31,10 +36,18 @@ static int receive(void *user, const struct vport_source *source,
     if (crc16_ansi(frame->data, frame->size - 2) != sys_get_le16(frame->data + frame->size - 2)) {
         return -EBADMSG;
     }
-    const struct vport_source *expected = &port->binding.io->destination;
-    if (source->link != expected->link || source->peer != expected->peer) { return -EACCES; }
-    if (!atomic_cas(&port->receiving, 0, 1)) { return -EBUSY; }
+    k_spinlock_key_t key = k_spin_lock(&port->state_lock);
+    const struct vport_source *expected = port->owner ? &port->destination :
+                                                       &port->binding.io->destination;
+    if (source->link != expected->link || source->peer != expected->peer ||
+        source->dev_id != expected->dev_id) {
+        k_spin_unlock(&port->state_lock, key); return -EACCES;
+    }
+    if (!atomic_cas(&port->receiving, 0, 1)) {
+        k_spin_unlock(&port->state_lock, key); return -EBUSY;
+    }
     port->source = *source;
+    k_spin_unlock(&port->state_lock, key);
     struct modbus_adu adu = {.unit_id = frame->data[0], .fc = frame->data[1],
         .length = frame->size - 4, .crc = sys_get_le16(frame->data + frame->size - 2)};
     memcpy(adu.data, frame->data + 2, adu.length);
@@ -47,13 +60,20 @@ static int send(int iface, const struct modbus_adu *adu, void *user)
 {
     ARG_UNUSED(iface);
     struct raw_port *port = user;
+    k_spinlock_key_t key = k_spin_lock(&port->state_lock);
+    if (port->owner && port->owner != k_current_get()) {
+        k_spin_unlock(&port->state_lock, key); return -EBUSY;
+    }
+    struct vport_source destination = port->owner ? port->destination :
+                                                   port->binding.io->destination;
+    k_spin_unlock(&port->state_lock, key);
     if (adu->length > sizeof(adu->data)) { return -EMSGSIZE; }
     uint8_t data[CONFIG_MODBUS_BUFFER_SIZE];
     data[0] = adu->unit_id; data[1] = adu->fc;
     memcpy(data + 2, adu->data, adu->length);
     sys_put_le16(crc16_ansi(data, adu->length + 2), data + adu->length + 2);
     const struct vport_frame frame = {.data = data, .size = adu->length + 4};
-    return co_port_send(port->binding.port, NULL, &frame,
+    return co_port_send(port->binding.port, &destination, &frame,
                              K_MSEC(CONFIG_CO_MODBUS_TX_TIMEOUT_MS));
 }
 
@@ -80,6 +100,7 @@ int co_modbus_port_bind(uint16_t id, const char *name, const struct vport_io *io
     else if (port) {
         *port = (struct raw_port){.allocated = true, .iface = iface,
             .binding = {.port = id, .io = io, .receive = receive, .protocol = port}};
+        k_mutex_init(&port->transaction_lock);
         err = mb_raw_set_done(iface, finished, port);
         if (!err) {
             err = co_port_register(&port->binding);
@@ -89,6 +110,32 @@ int co_modbus_port_bind(uint16_t id, const char *name, const struct vport_io *io
         if (err) { port->allocated = false; }
     }
     k_mutex_unlock(&bind_lock);
+    return err;
+}
+
+int co_modbus_raw_transfer(int iface, uint16_t dev_id, struct modbus_adu *adu,
+                          int (*transfer)(int, struct modbus_adu *))
+{
+    struct raw_port *port = NULL;
+    for (size_t i = 0; i < ARRAY_SIZE(ports); ++i) {
+        if (ports[i].registered && ports[i].iface == iface) { port = &ports[i]; break; }
+    }
+    if (!port) { return transfer(iface, adu); }
+    k_mutex_lock(&port->transaction_lock, K_FOREVER);
+    k_spinlock_key_t key = k_spin_lock(&port->state_lock);
+    if (port->owner || atomic_get(&port->receiving)) {
+        k_spin_unlock(&port->state_lock, key);
+        k_mutex_unlock(&port->transaction_lock); return -EBUSY;
+    }
+    port->destination = port->binding.io->destination;
+    port->destination.dev_id = dev_id;
+    port->owner = k_current_get();
+    k_spin_unlock(&port->state_lock, key);
+    int err = transfer(iface, adu);
+    key = k_spin_lock(&port->state_lock);
+    port->owner = NULL;
+    k_spin_unlock(&port->state_lock, key);
+    k_mutex_unlock(&port->transaction_lock);
     return err;
 }
 

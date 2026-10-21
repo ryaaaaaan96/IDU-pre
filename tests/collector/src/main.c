@@ -54,8 +54,9 @@ static const struct dp_equip_cfg equipment = {
     .collect = polls, .collect_count = ARRAY_SIZE(polls),
 };
 
-static int transfer(void *user, struct modbus_adu *adu)
+static int transfer(void *user, uint16_t dev_id, struct modbus_adu *adu)
 {
+    ARG_UNUSED(dev_id);
     ARG_UNUSED(user);
     struct transfer_event event = {.address = sys_get_be16(adu->data),
                                     .time = k_uptime_get()};

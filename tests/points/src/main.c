@@ -210,6 +210,8 @@ static void before(void *fixture)
         zassert_ok(co_simulator_set_register(&idu_collect_simulator, 4, 8163 + i, (i + 1) * 100));
     }
     for (size_t i = 0; i < test_cfg.collect_count; ++i) {
+        /* 本套件只有设备 10 的模拟从机；双设备真实收发由 shared_rs485 覆盖。 */
+        if (test_cfg.collect[i].dev_id != IDU_DEV_REMOTE_IO) { continue; }
         poll_block(i, 0);
     }
     local_sample = (struct idu_snapshot){.di = 0xa55a, .address = 16, .valid = true};

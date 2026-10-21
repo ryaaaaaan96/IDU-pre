@@ -1,5 +1,6 @@
 menuconfig DATAPROCESS
     bool "Data management and processing"
+    select KERNEL_MEM_POOL
     select ZBUS
     select ZBUS_MSG_SUBSCRIBER
     select ZBUS_MSG_SUBSCRIBER_NET_BUF_POOL_ISOLATION
@@ -108,12 +109,22 @@ config DP_POINTS_MAX_POINTS
     range 16 768
 
 config DP_POINTS_VALUE_WORDS
-    int "Total words reserved for configured point values"
+    int "Maximum total words in configured point values"
     default 512
     range 64 16384
     help
-      Sum of point widths, validated at startup. Each point uses its actual
-      width; a short integer does not reserve a maximum-size string buffer.
+      Upper bound for the sum of point widths, validated at startup.
+      Initialization allocates only the actual total from the system heap.
+
+config HEAP_MEM_POOL_ADD_SIZE_DATAPROCESS
+    int "System heap budget for point values (bytes)"
+    default 1024
+    range 128 32768
+    help
+      Contribution to the shared Zephyr system heap, not a private DP arena.
+      Include the configured point widths times two and allocator overhead.
+      Other heap users need their own budget. A failed allocation leaves DP
+      uninitialized.
 
 config DP_POINTS_MAX_POLLS
     int "Maximum collection blocks"

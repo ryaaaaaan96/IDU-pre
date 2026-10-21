@@ -774,3 +774,39 @@ Zephyr Modbus 联合体仅初始化当前 RAW 客户端或服务端使用的成�
   `build/IDU-pre/explicit-service-defaults/`，不提交。
 
 本轮未进行实板验证。
+
+## 2026-10-21 Zephyr 点值分配、双设备与发送身份
+
+DP 点值改为启动时通过 `k_malloc()` 按实际字数一次申请，配置上限仍由
+`DP_POINTS_VALUE_WORDS` 校验。失败不安装配置，申请后初始化失败释放内存并允许重试；
+运行期间不分配或释放点值。产品的 DP 系统堆预算在 `prj.conf` 手动设置为 256 B。
+
+`protocol.c` 使用 `LISTIFY(2, ...)` 生成设备 10、11，端口 0，站号 1、2，
+并逐项注释宏参数。两台共用只读 process/collect 表，保留独立值与设备状态。
+CO 后端回调和 Modbus 事务接口显式接收 `dev_id`；vport 来源结构增加同名字段，
+保留独立的 64 位 `peer`。每个 RAW 接口保存同步事务身份，发送侧传入
+`destination.dev_id`，接收侧校验当前身份，TR 响应保留完整来源。
+
+- `CCACHE_DISABLE=1 ASAN_OPTIONS=detect_leaks=0 bash applications/IDU-pre/tests/run.sh`
+  最终完整执行通过：48 次 native_sim、316 项 Ztest PASS、0 FAIL。
+  Python 共 21 项，18 项通过，3 项因缺少外部 QuickLZ/SGZ 样本按原条件跳过；
+  主机工程换算 ASan/UBSan 通过，构建无编译警告或错误。
+- 新增 `point_storage` 覆盖实际字节数申请、分配失败、申请后失败释放、重试和重复初始化。
+  `communication` 共 11 项，新增两调用者共接口的身份隔离、错误设备回复拒绝、
+  超时/发送失败后身份清理及 TR 来源保留。`shared_rs485` 共 7 项，
+  覆盖两台从机的独立值、独立周期统计、同线北向缓存读取和下发。
+- 单模拟从机的旧夹具继续服务于参数和转发回归，双设备 UART 行为由 `shared_rs485`
+  的外部帧夹具验证。该套件启动时清空自己的模拟 Flash；产品没有新增自动擦除行为。
+  纯采集、关闭协议适配器、参考接口、参数重启探针和掉电故障注入回归继续通过。
+- `CCACHE_DISABLE=1 ./applications/IDU-pre/build.sh` 通过；MCUboot 与 IDU/IAPv3
+  镜像验签、SGZ 导出成功。IDU Flash 122972 B、RAM 102772 B；
+  MCUboot Flash 36568 B、RAM 18096 B。
+  当前点值需要 162 B；`nm` 确认静态 `point_words` 符号已删除，目标系统堆缓冲区
+  为 308 B（包含管理空间），堆对象等另计。相对此前 121836 B / 102120 B，
+  本轮合计 Flash 增加 1136 B、RAM 增加 652 B，不能把申请量减少等同于总 RAM 减少。
+- 当前七个持久参数包含原五项及设备 11 的两项，因此旧五参数 NVS schema 不再匹配。
+  没有增加自动迁移、自动格式化或北向设备 11 的寄存器映射。
+- 修改文档的本地链接、脚本语法及 `git diff --check` 通过。
+
+最终日志保存在工作区 `build/IDU-pre/device-memory/tests.log` 与 `build.log`。
+本轮未进行实板双从机、RS485 电气时序、性能或真实 Flash 掉电验证。

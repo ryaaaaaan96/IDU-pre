@@ -55,7 +55,7 @@ static int respond(int iface, const struct modbus_adu *request, void *user)
     memcpy(data + 2, response.data, response.length);
     sys_put_le16(crc16_ansi(data, response.length + 2), data + response.length + 2);
     const struct vport_frame frame = {.data = data, .size = response.length + 4};
-    const struct vport_source source = {.link = 8};
+    const struct vport_source source = {.link = 8, .dev_id = 1};
     return co_port_input(1, &source, &frame);
 }
 
@@ -64,6 +64,7 @@ static int send(void *user, uint16_t port, const struct vport_source *destinatio
 {
     ARG_UNUSED(timeout); ARG_UNUSED(user);
     zassert_equal(port, 1); zassert_equal(destination->link, 8);
+    zassert_equal(destination->dev_id, 1);
     zassert_equal(crc16_ansi(frame->data, frame->size - 2), sys_get_le16(frame->data + frame->size - 2));
     struct modbus_adu request = {.unit_id = frame->data[0], .fc = frame->data[1], .length = frame->size - 4};
     memcpy(request.data, frame->data + 2, request.length);

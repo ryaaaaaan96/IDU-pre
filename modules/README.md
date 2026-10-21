@@ -132,7 +132,17 @@ and both the client adapter and transmit disabled.
 There is no application communication implementation directory. Product configuration
 uses const tables in `app/protocol/`. `ports.c` also owns routing callbacks and registration:
 TX receives the virtual port ID and selects the physical adapter; RX dispatches by
-logical port and opaque source link/peer. Module code never includes product headers.
+logical port and source link/peer plus explicit dev_id (zero means unknown).
+Module code never includes product headers or interprets physical routing.
+
+The CO backend callback is `transfer(user, dev_id, adu)`; the synchronous adapter
+is `co_modbus_transfer(iface, dev_id, adu)`. Each bound RAW interface pins identity
+under its transaction lock, sends it through `destination.dev_id`, validates the
+reply source, and clears the transaction owner on success or failure. Direct
+Zephyr client calls use the binding's default identity and cannot borrow another
+thread's active device identity. TR preserves the incoming source when replying.
+Do not mix direct Zephyr client calls and CO transactions concurrently on the
+same bound interface: direct calls bypass the CO transaction lock.
 
 | Service | Module API | Product input |
 | --- | --- | --- |
@@ -410,7 +420,11 @@ Defaults: 64 points, 512 total value words, 16 polling blocks, 1 bus, 16 devices
 collection/write and 1 isolated forwarding port. Kconfig bounds all storage.
 Each bus queues at most 4 requests plus one in flight by default. The business
 thread stack is controlled by `DP_PROCESS_STACK_SIZE` (default 6144 bytes).
-The value pool allocates each point's actual width and is validated at startup.
+DP allocates one value buffer from the Zephyr system heap at startup using the
+actual sum of point widths; the 512-word setting remains a validation limit.
+`HEAP_MEM_POOL_ADD_SIZE_DATAPROCESS` supplies a shared heap budget (module default
+1024 bytes, current product 256 bytes). Allocation failure is reported before DP
+becomes ready, and sampling does not allocate memory.
 Transaction entries include captured dependencies as well as emitted outputs.
 The current IAPv3 product explicitly configures one bus and one isolated forwarding
 port in `prj.conf`. Firmware profiles do not override these capacities; changes

@@ -2,10 +2,11 @@
 #include <collect/modbus.h>
 #endif
 #include "client.h"
+#include <zephyr/kernel.h>
 #include <zephyr/sys/byteorder.h>
 
 /* Standard functions also work on Zephyr RAW loopback client interfaces. */
-int co_modbus_transfer(int iface, struct modbus_adu *adu)
+static int transfer(int iface, struct modbus_adu *adu)
 {
     if (adu->length < 4 || adu->length > sizeof(adu->data)) { return -EINVAL; }
     uint16_t address = sys_get_be16(adu->data), count = sys_get_be16(adu->data + 2);
@@ -38,6 +39,18 @@ int co_modbus_transfer(int iface, struct modbus_adu *adu)
         return -ENOTSUP;
 #endif
     }
+}
+
+int co_modbus_transfer(int iface, uint16_t dev_id, struct modbus_adu *adu)
+{
+    if (!adu) { return -EINVAL; }
+    if (k_is_in_isr()) { return -EWOULDBLOCK; }
+#ifdef CONFIG_CO_MODBUS_RAW_PORT
+    return co_modbus_raw_transfer(iface, dev_id, adu, transfer);
+#else
+    ARG_UNUSED(dev_id);
+    return transfer(iface, adu);
+#endif
 }
 
 int co_modbus_reconfigure(int iface, struct modbus_iface_param param)
