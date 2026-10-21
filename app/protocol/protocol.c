@@ -9,6 +9,24 @@
 #include <transmit/server.h>
 #include <zephyr/device.h>
 
+/* 同型远端设备共用点表；LISTIFY 的序号分别生成设备 ID 和通信站号。 */
+#define IDU_REMOTE_DEVICE(index, port_id, first_dev_id, first_address) \
+    { \
+        .dev_id = (first_dev_id) + (index), \
+        .port = (port_id), \
+        .coll_addr = (first_address) + (index), \
+        .dev_code = DP_DEVICE_DEFAULT_CODE, \
+        .tables = { \
+            {.id = IDU_TABLE_REMOTE_PROCESS, .type = PRO_DATA_PROCESS}, \
+            {.id = IDU_TABLE_COLLECT, .type = PRO_MB_MASTER}, \
+            {.id = DP_BINDING_UNUSED_ID, .type = DP_BINDING_UNUSED_TYPE}, \
+            {.id = DP_BINDING_UNUSED_ID, .type = DP_BINDING_UNUSED_TYPE}, \
+            {.id = DP_BINDING_UNUSED_ID, .type = DP_BINDING_UNUSED_TYPE}, \
+            {.id = DP_BINDING_UNUSED_ID, .type = DP_BINDING_UNUSED_TYPE}, \
+            {.id = DP_BINDING_UNUSED_ID, .type = DP_BINDING_UNUSED_TYPE}, \
+        }, \
+    }
+
 /* 点表内容常驻 Flash；启动时仅装配小型 DEV_TABLE_S 关联视图。 */
 static const struct dp_device_binding bindings[] = {
     {
@@ -30,21 +48,8 @@ static const struct dp_device_binding bindings[] = {
             {.id = DP_BINDING_UNUSED_ID, .type = DP_BINDING_UNUSED_TYPE},
         },
     },
-    {
-        .dev_id = IDU_DEV_REMOTE_IO,
-        .port = 0,
-        .coll_addr = 1,
-        .dev_code = DP_DEVICE_DEFAULT_CODE,
-        .tables = {
-            {.id = IDU_TABLE_REMOTE_PROCESS, .type = PRO_DATA_PROCESS},
-            {.id = IDU_TABLE_COLLECT, .type = PRO_MB_MASTER},
-            {.id = DP_BINDING_UNUSED_ID, .type = DP_BINDING_UNUSED_TYPE},
-            {.id = DP_BINDING_UNUSED_ID, .type = DP_BINDING_UNUSED_TYPE},
-            {.id = DP_BINDING_UNUSED_ID, .type = DP_BINDING_UNUSED_TYPE},
-            {.id = DP_BINDING_UNUSED_ID, .type = DP_BINDING_UNUSED_TYPE},
-            {.id = DP_BINDING_UNUSED_ID, .type = DP_BINDING_UNUSED_TYPE},
-        },
-    },
+    /* 端口 0，设备 ID 10～19，站号 1～10；容量由 .conf 单独配置。 */
+    LISTIFY(10, IDU_REMOTE_DEVICE, (,), 0, IDU_DEV_REMOTE_IO, 1),
 };
 static DEV_TABLE_S devices[ARRAY_SIZE(bindings)];
 
