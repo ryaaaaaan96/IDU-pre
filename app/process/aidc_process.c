@@ -1,6 +1,6 @@
 #include "process/idu_process.h"
-#include "cfg/inc/imported_signals.h"
-#include "cfg/inc/signal_ids.h"
+#include "protocol/inc/imported_signals.h"
+#include "protocol/inc/signal_ids.h"
 #include <dataprocess/process.h>
 #include <errno.h>
 #include <string.h>

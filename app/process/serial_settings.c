@@ -1,6 +1,6 @@
 #include "process/idu_process.h"
-#include "cfg/inc/ports.h"
-#include "cfg/inc/imported_signals.h"
+#include "protocol/inc/protocol.h"
+#include "protocol/inc/imported_signals.h"
 #include <dataprocess/params.h>
 #include <zephyr/modbus/modbus.h>
 #include <errno.h>

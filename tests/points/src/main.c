@@ -1,12 +1,12 @@
+#include <transmit/server.h>
 #include "simulation.h"
-#include "cfg/inc/ports.h"
+#include "protocol/inc/protocol.h"
 #include <collect/port.h>
 #include <collect/simulator.h>
 #include <transmit/registers.h>
 #include <platform_callback.h>
 #include "process/idu_process.h"
-#include "cfg/inc/device.h"
-#include "cfg/inc/signal_ids.h"
+#include "protocol/inc/signal_ids.h"
 #include <gpio/idu_inputs.h>
 #include "process/engineering.h"
 #include <collect/collect.h>
@@ -62,12 +62,25 @@ static void wait_after(struct dp_key key, uint32_t generation)
 
 static void poll_block(size_t block, int expected)
 {
+    zassert_true(block < test_cfg.collect_count);
     struct dp_key key = {
         test_cfg.collect[block].dev_id, test_cfg.collect[block].fields[0].sig_id,
     };
     uint32_t old = state_of(key).generation;
     zassert_equal(co_poll(block), expected);
     wait_after(key, old);
+}
+
+static void poll_signal(uint16_t sig, int expected)
+{
+    for (size_t i = 0; i < test_cfg.collect_count; ++i) {
+        if (test_cfg.collect[i].dev_id == IDU_DEV_REMOTE_IO &&
+            test_cfg.collect[i].fields[0].sig_id == sig) {
+            poll_block(i, expected);
+            return;
+        }
+    }
+    zassert_unreachable("Missing poll for signal %u", sig);
 }
 
 static int north_request(int iface, const struct modbus_adu *adu, void *data)
@@ -176,7 +189,7 @@ static void *setup(void)
         .mode = MODBUS_MODE_RAW, .rx_timeout = 2000000,
         .rawcb = {.raw_tx_cb = north_request},
     };
-    zassert_ok(tr_register_attach(north_server, &idu_parameter_registers));
+    zassert_ok(tr_register_attach(north_server, idu_forwarding.protocol));
     zassert_ok(tr_modbus_init_server(north_server, server, tr_register_write, true));
     zassert_ok(modbus_init_client(north_client, client));
     return NULL;
@@ -234,10 +247,10 @@ ZTEST(points, test_local_point_registers)
 
 ZTEST(points, test_end_to_end_remote_forwarding)
 {
-    uint16_t wire[9];
+    uint16_t wire[3];
     zassert_ok(modbus_read_input_regs(north_client, 16, 10000, wire, ARRAY_SIZE(wire)));
     zassert_equal(wire[0], 5);
-    for (unsigned i = 0; i < 8; ++i) {
+    for (unsigned i = 0; i < 2; ++i) {
         zassert_equal(wire[i + 1], (i + 1) * 100);
     }
     assert_exception(modbus_read_input_regs(north_client, 16, 10009, wire, 1),
@@ -301,7 +314,7 @@ ZTEST(points, test_application_conversion_and_remote_range_rejection)
     zassert_equal(value, 34375);
     /* A syntactically successful Modbus reply may still violate point range. */
     zassert_ok(co_simulator_set_register(&idu_collect_simulator, 3, 30459, 0));
-    poll_block(10, 0);
+    poll_signal(IDU_SIG_ADDRESS, 0);
     key = (struct dp_key){IDU_DEV_REMOTE_IO, IDU_SIG_ADDRESS};
     zassert_equal(state_of(key).quality, DP_QUALITY_SIMULATED | DP_QUALITY_BAD_VALUE);
 }
@@ -325,7 +338,7 @@ ZTEST(points, test_signed_values_and_word_order)
     zassert_equal(wire[2], 0x3344);
     zassert_ok(co_simulator_set_register(&idu_collect_simulator, 4, 8150, 0x3344));
     zassert_ok(co_simulator_set_register(&idu_collect_simulator, 4, 8151, 0x1122));
-    poll_block(9, 0);
+    poll_signal(IDU_SIG_PROTOCOL, 0);
     zassert_ok(modbus_read_input_regs(north_client, 16, 10010, wire, 2));
     zassert_equal(wire[0], 0x3344);
     zassert_equal(wire[1], 0x1122);
@@ -532,5 +545,5 @@ ZTEST(points,test_modules_dynamic_port_configuration_and_routes)
     zassert_ok(modbus_write_holding_reg(north_client,17,52000,16));
     zassert_ok(k_sem_take(&config_done,K_SECONDS(1))); zassert_ok(config_error);
     zassert_ok(modbus_read_holding_regs(north_client,16,31000,&word,1));
-    zassert_ok(tr_register_attach(north_server, &idu_parameter_registers));
+    zassert_ok(tr_register_attach(north_server, idu_forwarding.protocol));
 }

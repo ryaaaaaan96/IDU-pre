@@ -1,5 +1,5 @@
-#ifndef IDU_DEVICE_CONFIG_H
-#define IDU_DEVICE_CONFIG_H
+#ifndef IDU_PROTOCOL_H
+#define IDU_PROTOCOL_H
 
 #include <data_process.h>
 #include <collect_lib.h>
@@ -27,5 +27,18 @@ int idu_point_parameters_get(uint16_t country, uint16_t dev, uint16_t sig,
                              DM_SIG_DATA_S *value, bool *restore);
 int idu_point_default(uint16_t dev, uint16_t sig, DM_SIG_DATA_S *value, bool *recover);
 bool idu_point_restore(uint16_t dev, uint16_t sig, uint8_t size, uint8_t *value);
+
+struct tr_server_config;
+struct co_port_config;
+struct co_bus_cfg;
+
+/* 启动期注册路由和回调，须先于采集/转发启动；可重复调用。 */
+int idu_ports_init(void);
+struct modbus_serial_param;
+int idu_forward_serial_configure(struct modbus_serial_param param);
+extern const struct co_port_config idu_collect_port;
+extern const struct co_bus_cfg idu_collect_bus;
+extern const struct tr_server_config idu_forwarding;
+
 
 #endif

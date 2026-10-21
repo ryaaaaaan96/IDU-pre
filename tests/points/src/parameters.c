@@ -1,10 +1,9 @@
 #include "simulation.h"
-#include "cfg/inc/ports.h"
+#include "protocol/inc/protocol.h"
 #include <collect/simulator.h>
 #include <transmit/registers.h>
 #include "process/idu_process.h"
-#include "cfg/inc/device.h"
-#include "cfg/inc/signal_ids.h"
+#include "protocol/inc/signal_ids.h"
 #include <dataprocess/params.h>
 #include <dataprocess/points.h>
 #include <dataprocess/process.h>

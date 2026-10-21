@@ -19,7 +19,8 @@ struct dp_param_status {
     uint16_t flags;
 };
 
-/* Application-supplied access to readable, absolute downstream settings.
+/* Application-supplied access to downstream commands and absolute settings.
+ * Volatile commands use write only; durable settings require readback.
  * Callbacks run synchronously under the parameter transaction lock; they may
  * block on their transport, but must not reenter parameter APIs. Return zero
  * on success or a transport error. The read callback must not replay writes.
@@ -41,10 +42,13 @@ struct dp_params_transport {
 int dp_params_set_transport(const struct dp_params_transport *transport);
 
 /* Initialization mounts only the supplied partition. No erase/format fallback.
- * Failed initialization leaves readable defaults and rejects writes. Values are
+ * Failed initialization leaves readable defaults and rejects persistent writes. Values are
  * desired configuration; downstream live telemetry remains separate.
  */
 int dp_params_init(const struct dp_equip_cfg *cfg, uint8_t area_id);
+/* Collection feedback changes the live cache only; pending writes take priority. */
+int dp_params_sample(const struct dp_point_update *values, size_t count,
+                     uint16_t flags, int64_t sampled_at);
 int dp_params_validate(const struct dp_equip_cfg *cfg);
 int dp_params_read(struct dp_key key, struct dp_point_state *state);
 /* Business-side writes use keys, the same validation/durability as Modbus.

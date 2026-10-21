@@ -1,9 +1,9 @@
 #include "imported_signals.h"
 #include "signal_ids.h"
-#include "tables.h"
-#include "mvio_signals.h"
+#include "../tables.h"
+#include "../mvio_signals.h"
 
-const MB_TABLE_CELL_T idu_transmit_table[] = {
+static const MB_TABLE_CELL_T idu_transmit_table[] = {
 #if defined(CONFIG_IDU_AIDC_PROFILE)
 /* BEGIN IMPORTED TABLE: transmit */
 /* Imported from user-provided AIDC source tables. Original tables: SUNGROW.
@@ -170,18 +170,6 @@ const MB_TABLE_CELL_T idu_transmit_table[] = {
      .dev_id = IDU_DEV_REMOTE_IO, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
     {.sig_id = IDU_MVIO_CURRENT_1 + 1, .reg_addr = 10002, .reg_num = 1,
      .dev_id = IDU_DEV_REMOTE_IO, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
-    {.sig_id = IDU_MVIO_CURRENT_1 + 2, .reg_addr = 10003, .reg_num = 1,
-     .dev_id = IDU_DEV_REMOTE_IO, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
-    {.sig_id = IDU_MVIO_CURRENT_1 + 3, .reg_addr = 10004, .reg_num = 1,
-     .dev_id = IDU_DEV_REMOTE_IO, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
-    {.sig_id = IDU_MVIO_CURRENT_1 + 4, .reg_addr = 10005, .reg_num = 1,
-     .dev_id = IDU_DEV_REMOTE_IO, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
-    {.sig_id = IDU_MVIO_CURRENT_1 + 5, .reg_addr = 10006, .reg_num = 1,
-     .dev_id = IDU_DEV_REMOTE_IO, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
-    {.sig_id = IDU_MVIO_CURRENT_1 + 6, .reg_addr = 10007, .reg_num = 1,
-     .dev_id = IDU_DEV_REMOTE_IO, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
-    {.sig_id = IDU_MVIO_CURRENT_1 + 7, .reg_addr = 10008, .reg_num = 1,
-     .dev_id = IDU_DEV_REMOTE_IO, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
     {.sig_id = IDU_MVIO_PROTOCOL, .reg_addr = 10010, .reg_num = 2,
      .dev_id = IDU_DEV_REMOTE_IO, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
     {.sig_id = IDU_MVIO_ADDRESS, .reg_addr = 30460, .reg_num = 1,
@@ -191,5 +179,8 @@ const MB_TABLE_CELL_T idu_transmit_table[] = {
 #endif
 };
 
-BUILD_ASSERT(ARRAY_SIZE(idu_transmit_table) == IDU_TRANSMIT_COUNT,
-             "Update IDU_TRANSMIT_COUNT in tables.h");
+
+static const STRUCT_SECTION_ITERABLE(dp_registered_table, transmit_table) = {
+    .id = IDU_TABLE_TRANSMIT, .type = PRO_MB_SLAVE,
+    .rows = idu_transmit_table, .count = ARRAY_SIZE(idu_transmit_table),
+};

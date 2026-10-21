@@ -68,7 +68,7 @@ int dp_submit_sig_values(const struct dp_point_update *values, size_t count,
 仅改缓存使用 `NO_COLLECT | NO_STORE`。NO_STORE 暂态值不会混入后续其他参数
 快照。事务容量包含捕获的依赖及输出；所有输出先校验类型、范围和权限，
 提交按设备/标志分组，后组失败不回滚先组，未执行项报告 `-ECANCELED`。
-远端 NO_DM/NO_STORE 仍需意图日志对账，不将一次性命令当成可回读绝对设定值。
+持久远端点的 NO_DM/NO_STORE 仍需意图日志对账；非持久下发不使用日志或自动重试。
 
 `dp_process_save_reboot(delay_ms)` 在保存成功后延时重启；保存失败不重启。
 参考回调内的 `dp_flush_para_store()` / `dp_set_reboot()` 先设置标记，
@@ -122,11 +122,14 @@ int err = dp_process_start(&plan);
 若同时使用 collect 和自定义参数后端，应先完成全部 `co_init_bus()`，再注册
 自定义后端，最后调用 `dp_params_init()`，避免被采集初始化的默认注册覆盖。
 
-回调处理设备键对应的可读绝对设定值。读写可阻塞在所属传输线程上，但不能
+回调处理设备键对应的下发。非持久命令只需 write，持久设定值还需 read。读写可阻塞在所属传输线程上，但不能
 重入参数引擎。缺少后端时远端写入在建立持久化意图前返回 `-ENODEV`，
 缓存、持久值和本地参数操作不受影响。模拟来源由可选回调报告，默认 false。
 
-远端写前保存意图，丢失 ACK 或重启后只通过回读对账，不重放写入。
+持久远端写前保存意图，丢失 ACK 或重启后只通过回读对账，不重放写入。
+非持久命令直接写一次，存储故障不阻止这类写入，失败保持缓存旧值。
+FLAG_COLLECT 与 FLAG_PERSISTENCE 独立；非零周期可同时轮询，反馈只更新缓存。
+显式 dp_params_sync_device() 只同步持久目标值，不使用反馈值，也不重发一次性命令。
 本次拆分保留既有 NVS magic、版本、schema 签名和意图字节布局。
 关闭参数后端时参数点配置被拒绝，`dp_process_save_reboot()` 返回 `-ENOTSUP`。
 
@@ -162,3 +165,11 @@ scratch，不能跨其生命周期保存。采集视图的 `fields` 也指向该
 共用这一路径，不扫描其他设备的信号行，也不为索引另建 RAM 表。
 表行可以无序，返回值保留原始全局行号；点表顺序和参数存储布局不受影响。
 原生配置继续按原数组查找。
+
+## 分散点表登记
+
+可选 `DP_TABLE_REGISTRY` 使用 Zephyr Iterable Sections 汇集整张表的 const 描述符。
+应用各文件显式定义 static const 数组并登记一次，数量使用 ARRAY_SIZE；
+`dp_table_registry_bind()` 按标识及预期类型装配设备关联，检查重复、缺失和长度溢出。
+表内容不复制，调用方提供的 DEV_TABLE_S 小型指针视图在服务期间保持有效且不可修改。
+`tests/table_registry` 覆盖跨文件发现、错误绑定、非持久命令、故障和持久反馈。

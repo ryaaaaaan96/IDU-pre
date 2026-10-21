@@ -1,8 +1,6 @@
 #include <dataprocess/points.h>
 #include <dataprocess/reference_internal.h>
-#if defined(CONFIG_DP_PARAMS)
 #include <dataprocess/params.h>
-#endif
 #if defined(CONFIG_DP_PROCESS)
 #include <dataprocess/process.h>
 #endif
@@ -165,7 +163,8 @@ int dp_validate(const struct dp_equip_cfg *cfg)
                 dp_config_point(cfg, index, &point_scratch);
             if (!point || !field->width ||
                 field->width != point->width ||
-                point->source != DP_SOURCE_MODBUS ||
+                (point->source != DP_SOURCE_MODBUS &&
+                 !(point->source == DP_SOURCE_PARAMETER && (point->param_flags & DP_PARAM_FORWARD))) ||
                 field->offset + field->width > c->count ||
                 (unsigned)field->order > DP_HIGH_WORD_BYTE_SWAP) {
                 LOG_ERR("Invalid poll field %u:%u width=%u",c->dev_id,field->sig_id,field->width);
@@ -281,7 +280,9 @@ static int validate_batch(const struct dp_point_batch *batch)
         }
         struct dp_point_cfg scratch;
         const struct dp_point_cfg *p = dp_config_point(equipment, index, &scratch);
-        if (update->width != p->width || p->source != batch->source) {
+        if (update->width != p->width ||
+            (p->source != batch->source && !(batch->source == DP_SOURCE_MODBUS &&
+              p->source == DP_SOURCE_PARAMETER && (p->param_flags & DP_PARAM_FORWARD)))) {
             return -EINVAL;
         }
         for (size_t j = 0; j < i; ++j) {
@@ -466,7 +467,7 @@ static void process_thread(void *a, void *b, void *c)
                 if (u->error) { quality[i] = DP_QUALITY_BAD_VALUE; }
             }
             all_valid &= !u->error;
-            callbacks |= p->handler != NULL;
+            callbacks |= p->handler != NULL || p->source == DP_SOURCE_PARAMETER;
         }
         k_mutex_unlock(&store_lock);
 #if defined(CONFIG_DP_PROCESS)
@@ -486,6 +487,15 @@ static void process_thread(void *a, void *b, void *c)
 #else
         ARG_UNUSED(callbacks); ARG_UNUSED(all_valid);
 #endif
+#if defined(CONFIG_DP_PARAMS)
+        for (size_t i = 0; i < batch.count; ++i) {
+            struct dp_point_cfg scratch;
+            const struct dp_point_cfg *p = dp_find(batch.points[i].key, &scratch);
+            if (p->source == DP_SOURCE_PARAMETER) {
+                (void)dp_params_sample(&batch.points[i], 1, batch.flags, batch.sampled_at);
+            }
+        }
+#endif
         k_mutex_lock(&store_lock, K_FOREVER);
         if (obsolete_samples(batch.points, batch.count, batch.sampled_at)) {
             k_mutex_unlock(&store_lock);
@@ -495,6 +505,8 @@ static void process_thread(void *a, void *b, void *c)
         ++generation;
         for (size_t i = 0; i < batch.count; ++i) {
             const struct dp_point_update *u = &batch.points[i];
+            struct dp_point_cfg scratch;
+            if (dp_find(u->key, &scratch)->source == DP_SOURCE_PARAMETER) { continue; }
             struct stored_point *state = &states[dp_config_index(equipment, u->key)];
             if (!u->error) {
                 struct dp_value old = {0};

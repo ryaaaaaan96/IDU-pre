@@ -35,10 +35,10 @@ python3 applications/IDU-pre/tools/analyze_reference.py \
 | 参考工程路径 / 职责 | IDU 对应位置 |
 | --- | --- |
 | `app/main.c:101` 注册设备、默认/范围、定时表，再于 `:142` 起依次启动 DP、本地设备、CO、TR | [app/main.c](../app/main.c) 显式装配；[platform_callback.h](../modules/dataprocess/include/platform_callback.h) 保存配置注册契约 |
-| `app/cfg/equip/dev_cfg.c:43` 的 `DEV_TABLE_S` 实例组合各协议表 | [app/cfg/device.c](../app/cfg/device.c) 和 [inc](../app/cfg/inc) 的设备和型号配置 |
-| `app/cfg/equip/table/{process,collect,transmit}.c` 分别描述数据、采集和寄存器映射 | [app/cfg/tables](../app/cfg/tables)，三表内容与处理执行分开 |
+| `app/cfg/equip/dev_cfg.c:43` 的 `DEV_TABLE_S` 实例组合各协议表 | [app/protocol/protocol.c](../app/protocol/protocol.c) 和 [inc](../app/protocol/inc) 的设备和型号配置 |
+| `app/cfg/equip/table/{process,collect,transmit}.c` 分别描述数据、采集和寄存器映射 | [app/protocol/tables](../app/protocol/tables)，三表内容与处理执行分开 |
 | `app/process` 的业务回调、`app/globalfunction.c` 的回调读写辅助 | [app/process](../app/process) 的业务处理，通用事务机制位于 DP 模块 |
-| `app/port_filter`、`app/plc` 的报文处理和端口控制 | [app/cfg](../app/cfg) 提供产品配置；[transmit](../modules/transmit) 执行协议和端口管理 |
+| `app/port_filter`、`app/plc` 的报文处理和端口控制 | [app/protocol](../app/protocol) 提供产品配置；[transmit](../modules/transmit) 执行协议和端口管理 |
 | `platform/libs/plateform.lib` 的共享数据池、调度、采集、转发 | [modules/dataprocess](../modules/dataprocess)、[collect](../modules/collect)、[transmit](../modules/transmit) 的源码实现 |
 
 参考工程的 `local_equip` 还包含产品功能。IDU 的采样映射、启动顺序和工程量换算继续属于应用。当前顺序为配置注册、`dp_init()`、采集接口、各总线 `co_init()`、参数恢复、`dp_process_start()`、`dp_reference_start()`、`co_start()`；TR 在地址就绪后绑定，产品依赖由应用显式安排。
@@ -61,7 +61,7 @@ python3 applications/IDU-pre/tools/analyze_reference.py \
 
 启用 `CONFIG_DP_REFERENCE_TABLES` 后，配置适配接收 U8、U16、S16、U32、S32、STRING、U8ARRAY、U16ARRAY，以及 `PRO_DATA_PROCESS`、Modbus MASTER/SLAVE 表以及下述 UPP 模型表子集。字节长度须精确匹配类型及配置容量。持久化本地点需要 `CONFIG_DP_PARAMS`，NVS 分区及恢复仍由应用启动。`FLAG_PERSISTENCE` 决定是否存储，FC03 映射本身不隐含 NVS；无持久标志的本地点仍可通过 FC03/06/16 运行回调并更新 RAM。默认/范围来自注册回调；未注册时初值为零并使用类型范围。回调给出的最小值和最大值均为零时，表示不额外检查范围，仍保留类型的完整取值范围，不将值限制为零。持久化点要求强制恢复默认值时会拒绝配置，避免静默覆盖已有 NVS 数据。
 
-原 `rqst_cyl` 的头文件只写“查询频率”。反汇编 `co_port_mgr.o:co_porc_scan_list+0x70 / +0x112 / +0x11a` 可见计数递减和重装，不能直接当作毫秒。当前要求显式注册 `dp_register_collect_period()`，由产品将该编码转换为毫秒，零表示仅初始化读取。每个 Modbus 行独立请求，支持 `FLAG_FRAME`；不自动合帧。特殊采集数据类型、`scan_pri` 和未支持协议使初始化失败。`FLAG_COLLECT` 仅支持带明确 FC3 写目标的持久参数，由 FC06/16 下发并回读确认。
+原 `rqst_cyl` 的头文件只写“查询频率”。反汇编 `co_port_mgr.o:co_porc_scan_list+0x70 / +0x112 / +0x11a` 可见计数递减和重装，不能直接当作毫秒。当前要求显式注册 `dp_register_collect_period()`，由产品将该编码转换为毫秒，普通采集行的零周期表示仅初始化读取；带 FLAG_COLLECT 的零周期行表示仅下发。每个 Modbus 行独立请求，支持 `FLAG_FRAME`；不自动合帧。特殊采集数据类型、`scan_pri` 和未支持协议使初始化失败。`FLAG_COLLECT` 支持带明确 FC3 写目标的参数/命令；非持久命令只下发一次，持久设定值保留读回确认。非零采集周期允许同时轮询，反馈不覆盖持久目标。
 
 Modbus 字序采用 `arc_byte_order.h:60–64` 的实际宏：0 默认按 BIGSMALL、1 SMALL、2 BIGSMALL、3 SMALLBIG、4 BIG。0/2 对应 native 低字在前，4 对应高字在前，1/3 另需字节交换。UPP 的 `PUB_BYTE_ORDER_BIG=0` 是另一套编码，不能混用；无需引入该头里的 ARC 函数。
 
@@ -102,16 +102,14 @@ IDU 的三张应用点表也使用这些原结构，通过设备表及默认/范
 
 ## 点表的 Flash / RAM 分工
 
-产品的 `app/cfg/tables/{process,collect,transmit}.c` 使用 `const`，
-设备绑定所需的表通过 `inc/tables.h` 声明为 `extern const`，其余数组保持 `static const`。
+产品的 `app/protocol/tables/{process,collect,transmit}.c` 使用 `const`，
+整张点表保持 `static const`，通过 Iterable Sections 登记；内部 `tables.h` 只声明表标识。DP 根据标识装配 DEV_TABLE_S 指针视图，数量由定义文件的 ARRAY_SIZE 自动计算。
 默认值和范围集中在 `process.c` 的单一数组中，预留按国家查询及缺项回退通用参数；
 当前注册回调仍使用通用配置，未引入运行期国家切换或改变 NVS 恢复策略。
 同型号设备共享处理和采集行。`DEV_TBL_CFG_S.pst_table` 使用 `const void *`，
-设备表直接声明完整关联并保存在 Flash，getter 只返回 const 表；
-少量总线运行描述留在 RAM，点行不复制为整张 native 数组。
-三表由 CMake 独立编译，`device.c` 通过头文件引用，不包含 `.c` 文件。
-静态设备表使用数量枚举，表定义处用 `ARRAY_SIZE` 与 `BUILD_ASSERT` 校验实际行数；
-导入数量由工具同步生成，手写表增删行需同步调整对应枚举。
+设备绑定声明保存在 Flash，启动期装配的 DEV_TABLE_S 指针视图留在 RAM，getter 返回只读指针。
+三表由 CMake 独立编译，通过链接段按标识关联；条目数由各数组 ARRAY_SIZE 获取，
+无需 extern 数组、手工计数或包含其他 .c 文件。
 启用 `CONFIG_DP_REFERENCE_TABLES` 后，`dp_config_point/collect/transmit()` 在调用者
 提供的栈缓冲中构造当前条目的执行视图；指针不得保留到缓冲失效后。
 参数索引、通知和默认覆盖分别保留索引或信号键，不保存临时视图指针。

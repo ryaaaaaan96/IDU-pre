@@ -1,8 +1,7 @@
-#include "cfg/inc/ports.h"
+#include "protocol/inc/protocol.h"
 #include <transmit/server.h>
 #include "acquisition/idu_acquisition.h"
 #include "process/idu_process.h"
-#include "cfg/inc/device.h"
 #include <collect/collect.h>
 #include <collect/port.h>
 #include <dataprocess/params.h>

@@ -1,7 +1,6 @@
 #include "acquisition/idu_acquisition.h"
 #include "process/idu_process.h"
-#include "cfg/inc/device.h"
-#include "cfg/inc/ports.h"
+#include "protocol/inc/protocol.h"
 #include "status/idu_status.h"
 #include <collect/collect.h>
 #include <collect/port.h>
@@ -47,10 +46,10 @@ static int start_points(void)
     }
     const uint8_t storage_id = DT_FIXED_PARTITION_ID(DT_ALIAS(idu_settings));
 
-    /* 保留降级策略：存储不可用时可采集，但禁止参数写入和试运行确认。 */
+    /* 保留降级策略：存储不可用时可采集，但禁止持久参数写入和试运行确认。 */
     err = dp_params_init(config, storage_id);
     if (err) {
-        LOG_ERR("Parameter storage unavailable (%d); writes disabled", err);
+        LOG_ERR("Parameter storage unavailable (%d); persistent writes disabled", err);
     } else {
         err = dp_params_recover();
         if (err) {

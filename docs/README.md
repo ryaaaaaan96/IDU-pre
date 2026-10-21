@@ -10,7 +10,7 @@
 | 调整启动程序配置 | [MCUboot 配置目录](../bootloader/README.md) | 本板启动配置、分区及与应用升级代码的边界 |
 | 核对硬件 | [硬件与板级适配](hardware.md) | 时钟、引脚、Flash、看门狗和已实现行为 |
 | 理解框架 | [采集、处理与转发架构](collect-process-transmit.md) | 模块职责、数据流、Zephyr 调度、初始化顺序 |
-| 维护点表 | [配置指南](../app/cfg/README.md) | 文件职责、新增设备/点、导入标记区与来源报告 |
+| 维护点表 | [配置指南](../app/protocol/README.md) | 文件职责、新增设备/点、导入标记区与来源报告 |
 | 查询协议和存储语义 | [点表、寄存器与参数事务](point-tables.md) | 点值/质量、扩展寄存器、NVS/下发恢复、真实采集口 |
 | 使用模块 | [模块接口](../modules/README.md)、[DP](../modules/dataprocess/README.md) | 依赖、配置、API 单位、同步/异步与事务约束 |
 | 扩展逻辑通信端口 | [vport](../modules/vport/README.md) | 回调端口、CO/TR 收发入口、来源保持与缓冲区所有权 |
@@ -30,7 +30,7 @@
 
 当前行为写入对应主题；测试数量、容量和外部仓库结论须注明日期或提交。
 构建命令统一以 West 工作区为起点，使用应用自带的 `build.sh`。
-产品配置步骤集中在 `app/cfg/README.md`，原接口兼容结论集中在
+产品配置步骤集中在 `app/protocol/README.md`，原接口兼容结论集中在
 `reference-platform.md`，验证结果集中在 `testing.md`，避免各页重复维护数值。
 
 源码与桌面测试的结论须和实板证据分别记录。构建产物、日志及签名私钥保存在

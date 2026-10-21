@@ -1,7 +1,7 @@
 /* 本地样本到测点的映射，以及公共测点和参数命令回调。 */
 #include "process/idu_process.h"
 #include "process/engineering.h"
-#include "cfg/inc/signal_ids.h"
+#include "protocol/inc/signal_ids.h"
 #include <gpio/idu_inputs.h>
 #include <dataprocess/params.h>
 #include <errno.h>

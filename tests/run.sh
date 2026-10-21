@@ -105,3 +105,8 @@ timeout 30s "$test_dir/pipeline-basic/zephyr/zephyr.exe"
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/acquisition -d "$test_dir/acquisition"
 timeout 30s "$test_dir/acquisition/zephyr/zephyr.exe"
+
+# Cross-file table registration, volatile commands and persistent feedback.
+env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
+    applications/IDU-pre/tests/table_registry -d "$test_dir/table_registry"
+timeout 30s "$test_dir/table_registry/zephyr/zephyr.exe" -flash_in_ram

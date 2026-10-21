@@ -8,7 +8,7 @@
 
 | 位置 | 职责 |
 | --- | --- |
-| `app/cfg/ports.c` | 虚拟口、来源标识、实际发送接口的编排，以及物理接收回调 |
+| `app/protocol/ports.c` | 虚拟口、来源标识、实际发送接口的编排，以及物理接收回调 |
 | `collect/src/message.c`、`transmit/src/message.c` | 端口注册、输入、发送和完成通知；隔离各自拥有的端口 |
 | 各模块 `protocols/modbus/raw.c` | RAW ADU 与完整 RTU 报文的转换、CRC 校验、请求来源保持 |
 | `modules/vport` | 通用端口登记、回调调用、载荷长度检查、每个逻辑口的发送互斥 |

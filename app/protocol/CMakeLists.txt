@@ -1,9 +1,7 @@
 target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/inc)
-# 产品只提供点表和模块配置，执行代码由 process 或通用模块负责。
+# 内部头文件通过相对路径引用，不添加到公共搜索路径。
 target_sources(app PRIVATE
-  device.c
-  forwarding.c
-  parameters.c
+  protocol.c
   tables/process.c
   tables/collect.c
   tables/transmit.c

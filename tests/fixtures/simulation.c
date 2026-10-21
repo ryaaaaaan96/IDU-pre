@@ -1,4 +1,4 @@
-#include "ports.h"
+#include "protocol/ports.h"
 #include "simulation.h"
 #include "signal_ids.h"
 #include <collect/port.h>
@@ -33,16 +33,23 @@ const struct co_port_config idu_collect_port = {
 };
 
 #if defined(CONFIG_IDU_AIDC_PROFILE)
-#include "device.h"
-#include "tables.h"
+#include "protocol.h"
+
 #include <collect/model_simulator.h>
 
-static const struct co_model_simulator model = {
+static struct co_model_simulator model = {
     .first_device = IDU_DEV_DSP_FIRST, .last_device = IDU_DEV_DSP_LAST,
-    .registry = &idu_imported_models, .defaults = idu_point_default,
+    .defaults = idu_point_default,
 };
+static int read_model(void *user, uint16_t dev, uint16_t model_id,
+                      uint16_t offset, uint16_t *words, size_t count)
+{
+    uint16_t fields;
+    model.registry = idu_model_table(&fields);
+    return co_model_simulator_read(user, dev, model_id, offset, words, count);
+}
 const struct co_bus_cfg idu_model_bus = {
     .id = 1, .iface = -1, .simulated = true,
-    .read_model = co_model_simulator_read, .user = (void *)&model,
+    .read_model = read_model, .user = (void *)&model,
 };
 #endif

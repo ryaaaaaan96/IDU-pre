@@ -1,6 +1,5 @@
-#include "cfg/inc/ports.h"
-#include "cfg/inc/device.h"
-#include "cfg/inc/signal_ids.h"
+#include "protocol/inc/protocol.h"
+#include "protocol/inc/signal_ids.h"
 #include <collect/collect.h>
 #include <collect/port.h>
 #include <dataprocess/params.h>
@@ -184,7 +183,7 @@ ZTEST(shared_rs485, test_z_periodic_worker_updates_cache_on_the_shared_wire)
     /* Wait for the active poll to finish before disabling periodic traffic. */
     zassert_ok(co_set_port_mode(0, MODE_TRAN, 500));
     zassert_ok(co_device_status(IDU_DEV_REMOTE_IO, &after));
-    zassert_true(after.successes > before.successes + 11);
+    zassert_true(after.successes > before.successes + dp_config()->collect_count);
     int count = atomic_get(&requests);
     request(4, 10000, 1); zassert_equal(reply[1], 4);
     zassert_equal(atomic_get(&requests), count);

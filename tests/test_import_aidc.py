@@ -36,8 +36,7 @@ class ImportTablesTest(unittest.TestCase):
                                  "manual country overrides\n"),
             "tables/transmit.c": "manual mapping\n" + region("transmit"),
             "tables/collect.c": region("fields") + "manual polls\n" + region("collect"),
-            "inc/tables.h": "manual declarations\n" + region("counts") + "manual counts\n",
-            "device.c": "manual device\n" + region("devices"),
+            "protocol.c": "manual device\n" + region("devices"),
         }
         for filename, content in self.contents.items():
             target = self.templates / filename
@@ -61,9 +60,6 @@ class ImportTablesTest(unittest.TestCase):
                     "manual country overrides\n")
         self.assertEqual((self.output / "tables/process.c").read_text(), expected)
         self.assertFalse((self.output / "tables/defaults.c").exists())
-        self.assertEqual((self.output / "inc/tables.h").read_text(),
-                         "manual declarations\n" + region("counts", self.rows["counts"]) +
-                         "manual counts\n")
         self.assertEqual((self.output / "inc/imported_signals.h").read_text(), self.symbols)
         self.assertEqual(json.loads((self.output / "migration.json").read_text()),
                          self.metadata)
@@ -90,11 +86,11 @@ class ImportTablesTest(unittest.TestCase):
 
     def test_missing_marker_in_last_destination_does_not_write_any_files(self):
         self.write()
-        target = self.output / "device.c"
+        target = self.output / "protocol.c"
         target.write_text(target.read_text().replace("/* END IMPORTED TABLE: devices */", ""))
         before = snapshot(self.output)
         self.rows = {name: "changed rows\n" for name in importer.TABLE_FILES}
-        with self.assertRaisesRegex(ValueError, "device.c.*devices"):
+        with self.assertRaisesRegex(ValueError, "protocol.c.*devices"):
             self.write()
         self.assertEqual(snapshot(self.output), before)
 
@@ -107,7 +103,7 @@ class ImportTablesTest(unittest.TestCase):
         ]
         for content in invalid:
             with self.subTest(content=content):
-                (self.templates / "device.c").write_text(content)
+                (self.templates / "protocol.c").write_text(content)
                 with self.assertRaises(ValueError):
                     self.write()
                 self.assertFalse(self.output.exists())
@@ -123,14 +119,14 @@ class ImportTablesTest(unittest.TestCase):
                 self.assertFalse(self.output.exists())
 
     def test_missing_template_does_not_create_partial_destination(self):
-        (self.templates / "device.c").unlink()
+        (self.templates / "protocol.c").unlink()
         with self.assertRaises(FileNotFoundError):
             self.write()
         self.assertFalse(self.output.exists())
 
     def test_repository_output_writes_report_to_project_docs(self):
         project = self.root / "project"
-        self.output = project / "app/cfg"
+        self.output = project / "app/protocol"
         with mock.patch.object(importer, "CONFIG_DIR", self.output):
             self.write()
         report = project / "docs/point-table-import.json"
@@ -140,7 +136,7 @@ class ImportTablesTest(unittest.TestCase):
 
     def test_custom_report_overrides_repository_default(self):
         project = self.root / "project"
-        self.output = project / "app/cfg"
+        self.output = project / "app/protocol"
         report = self.root / "custom/report.json"
         with mock.patch.object(importer, "CONFIG_DIR", self.output):
             self.write(report_path=report)
@@ -151,18 +147,18 @@ class ImportTablesTest(unittest.TestCase):
     def test_invalid_marker_preserves_existing_custom_report(self):
         report = self.root / "custom/report.json"
         self.write(report_path=report)
-        target = self.output / "device.c"
+        target = self.output / "protocol.c"
         target.write_text(target.read_text().replace("/* END IMPORTED TABLE: devices */", ""))
         before = snapshot(self.root)
         self.metadata = {"point_count": 99}
-        with self.assertRaisesRegex(ValueError, "device.c.*devices"):
+        with self.assertRaisesRegex(ValueError, "protocol.c.*devices"):
             self.write(report_path=report)
         self.assertEqual(snapshot(self.root), before)
 
     def test_report_cannot_replace_a_generated_table_or_symbol_header(self):
         before = snapshot(self.root)
         for relative in ("tables/process.c", "tables/../tables/process.c",
-                         "inc/imported_signals.h", "inc/tables.h"):
+                         "inc/imported_signals.h", "protocol.c"):
             with self.subTest(relative=relative):
                 with self.assertRaisesRegex(ValueError, "Report path conflicts with table output"):
                     self.write(report_path=self.output / relative)
@@ -175,7 +171,7 @@ class ReferenceSnapshotTest(unittest.TestCase):
         self.project = Path(__file__).resolve().parents[1]
         self.metadata = json.loads((self.project / 'docs/point-table-import.json').read_text())
         self.symbols = importer.Symbols()
-        self.symbols.read((self.project / 'app/cfg/inc/imported_signals.h').read_text())
+        self.symbols.read((self.project / 'app/protocol/inc/imported_signals.h').read_text())
         self.symbols.expr.update({k[5:]: v for k, v in list(self.symbols.expr.items())
                                   if k.startswith('AIDC_')})
 
@@ -183,7 +179,7 @@ class ReferenceSnapshotTest(unittest.TestCase):
         rows = importer.render_reference_tables(self.metadata, self.symbols.value)
         self.assertEqual(set(rows), set(importer.TABLE_FILES))
         for name, content in rows.items():
-            path = self.project / 'app/cfg' / importer.TABLE_FILES[name]
+            path = self.project / 'app/protocol' / importer.TABLE_FILES[name]
             text = path.read_text()
             self.assertEqual(importer.replace_imported_tables(text, {name: content}, path), text)
         self.assertIn('.pf_sig_proc=idu_serial_setting', rows['points'])
@@ -200,12 +196,10 @@ class ReferenceSnapshotTest(unittest.TestCase):
         self.metadata['unresolved_mappings'].pop()
         self.metadata['transmit'].pop()
         rows = importer.render_reference_tables(self.metadata, self.symbols.value)
-        counts = importer.Symbols()
-        counts.read(rows['counts'])
-        self.assertEqual(counts.value('IDU_IMPORTED_LOCAL_PROCESS_COUNT'), 189)
-        self.assertEqual(counts.value('IDU_IMPORTED_DSP_PROCESS_COUNT'), 40)
-        self.assertEqual(counts.value('IDU_IMPORTED_MODEL_FIELD_COUNT'), 40)
-        self.assertEqual(counts.value('IDU_IMPORTED_TRANSMIT_COUNT'), 106)
+        self.assertNotIn('counts', rows)
+        self.assertIn('.count = ARRAY_SIZE(idu_imported_local_process)', rows['points'])
+        self.assertIn('.count = ARRAY_SIZE(idu_imported_dsp_process)', rows['points'])
+        self.assertIn('STRUCT_SECTION_ITERABLE', rows['collect'])
         self.assertEqual(len(importer.entries(rows['points'], 'idu_imported_local_process')), 189)
         self.assertEqual(len(importer.entries(rows['points'], 'idu_imported_dsp_process')), 40)
 

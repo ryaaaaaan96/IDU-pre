@@ -27,6 +27,13 @@ config DP_REFERENCE_TABLES
       Native Zephyr tables can use dp_register_config_provider without this
       option. No full-table RAM copies are allocated.
 
+config DP_TABLE_REGISTRY
+    bool "Discover const reference tables through iterable sections"
+    depends on DP_REFERENCE_TABLES
+    help
+      Register each complete table once. Resolve device bindings by table ID,
+      keeping rows in ROM and allocating only the caller-owned device view.
+
 config DP_PROCESS
     bool "Business transactions, sample handlers and timers"
     default y

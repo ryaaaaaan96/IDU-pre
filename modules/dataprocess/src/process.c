@@ -244,7 +244,12 @@ int dp_process_execute(const struct dp_process_request *request,
         int rc;
         if (p->source == DP_SOURCE_PARAMETER) {
 #if defined(CONFIG_DP_PARAMS)
-            rc = dp_params_apply(group, count, flags);
+            rc = request->operation == DP_OP_SAMPLE &&
+                 (flags & (DP_OP_NO_COLLECT | DP_OP_NO_STORE)) ==
+                 (DP_OP_NO_COLLECT | DP_OP_NO_STORE) &&
+                 (p->param_flags & DP_PARAM_FORWARD) ?
+                 dp_params_sample(group, count, transaction_quality, request->sampled_at) :
+                 dp_params_apply(group, count, flags);
 #else
             rc = -ENOTSUP;
 #endif

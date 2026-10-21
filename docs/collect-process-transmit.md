@@ -1,6 +1,6 @@
 # 采集、处理与转发架构
 
-[文档导航](README.md) · [点表维护](../app/cfg/README.md) · [模块接口](../modules/README.md)
+[文档导航](README.md) · [点表维护](../app/protocol/README.md) · [模块接口](../modules/README.md)
 
 架构参考 `/home/ryan/Documents/demo/MCUdemo/CODE` 的设备与三表组织方式，
 按 `dataprocess`、`collect`、`transmit` 拆成独立 Zephyr 模块，使用
@@ -10,16 +10,16 @@
 
 独立的 [`modules/vport`](../modules/vport/README.md) 提供通用完整报文端口。
 CO/TR 的 `src/message.c` 使用它，协议适配各自放在 `protocols/modbus/`。
-应用在 `app/cfg/ports.c` 注册回调并选择实际发送接口；RAW 协议处理与
+应用在 `app/protocol/ports.c` 注册回调并选择实际发送接口；RAW 协议处理与
 Zephyr RTU 串口接入分开，详见[通信端口](communication-ports.md)。
 
 ## 参考设计与 IDU 对应关系
 
 | 参考工程 | 设计含义 | IDU 实现 |
 | --- | --- | --- |
-| `app/cfg/inc/` | 信号身份和项目配置契约 | 点表契约在 `app/cfg/inc/`、`app/cfg/tables/`；协议契约在 `app/cfg/inc/ports.h` |
-| `app/cfg/equip/dev_cfg.c` 的设备列表 | 多个实例复用同型号的表 | `app/cfg/device.c` 的 const 设备表直接声明实例及点表关联 |
-| `app/cfg/equip/table/*` | 采集、处理、转发分别声明 | `app/cfg/tables/{collect,process,transmit}.c`，复用型号定义在 `app/cfg/inc/mvio_signals.h` |
+| `app/cfg/inc/` | 信号身份和项目配置契约 | 点表契约在 `app/protocol/inc/`、`app/protocol/tables/`；协议契约在 `app/protocol/inc/protocol.h` |
+| `app/cfg/equip/dev_cfg.c` 的设备列表 | 多个实例复用同型号的表 | `app/protocol/protocol.c` 声明实例与表标识，DP 装配指针关联 |
+| `app/cfg/equip/table/*` | 采集、处理、转发分别声明 | `app/protocol/tables/{collect,process,transmit}.c`，复用型号定义在 `app/protocol/mvio_signals.h` |
 | `app/process/*` 的业务回调 | 配置绑定行为，执行代码独立维护 | `app/process/` |
 | `platform/inc/collect_lib.h` | 采集地址、周期、优先级和编码独立配置 | `MODBUS_RTU_TABLE_S` / UPP 模型表、每总线采集线程 |
 | `platform/inc/data_process.h` | 共享数据池、类型/范围、旧值、回调及多输出 | `DM_SIG_CFG_S`、`DM_SIG_DATA_S`、事务回调 |
@@ -55,16 +55,16 @@ UPP、逆变器专用命令及其日志/加密扩展不属于通用三模块接�
 
 | 位置 | 职责 |
 | --- | --- |
-| `app/cfg/device.c`、`app/cfg/inc/` | 设备实例、型号信号与三表关联；配置头文件统一放 inc |
-| `app/cfg/tables/` | 信号、采集/处理/转发表和默认值/范围 |
+| `app/protocol/protocol.c`、`app/protocol/inc/` | 设备与三表关联；inc 只放对外头文件，内部头文件在目录根部 |
+| `app/protocol/tables/` | 信号、采集/处理/转发表和默认值/范围 |
 | `app/process/` | 纯换算、事务业务回调和参数命令 |
-| `app/cfg/` | 端口绑定、控制/诊断寄存器和 IAP 扩展 |
+| `app/protocol/` | 端口绑定、控制/诊断寄存器和 IAP 扩展 |
 | `modules/collect`、`modules/transmit` | 采集后端、协议解析、端口生命周期 |
 | `app/` | 初始化装配、本地样本映射和健康确认 |
 | `app/acquisition/` | 采集/发布流程；通过 gpio 采样，通过 status 记录阶段 |
 
 配置只声明数据和绑定，通用模块不引用本板 BSP 或设备专用寄存器。
-文件清单与新增设备步骤集中在[点表维护指南](../app/cfg/README.md)。
+文件清单与新增设备步骤集中在[点表维护指南](../app/protocol/README.md)。
 原表、库证据和接口限制集中在[参考平台对照](reference-platform.md)。
 
 ## 数据流与模块边界
@@ -160,7 +160,7 @@ Zephyr Modbus 接收。zbus 消息订阅者保存样本副本，避免仅通知�
 
 - [本地采样、事务与参数后端](../modules/dataprocess/README.md)
 - [CO/TR 调度、端口与协议接口](../modules/README.md#collection-and-forwarding)
-- [修改测点、型号与实例](../app/cfg/README.md#修改设备或测点)
+- [修改测点、型号与实例](../app/protocol/README.md#修改设备或测点)
 - [测试入口及已记录验证](testing.md)
 
 <a id="验证入口"></a>

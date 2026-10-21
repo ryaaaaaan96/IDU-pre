@@ -1,33 +1,21 @@
 #include "imported_signals.h"
-#include "device.h"
-#include "tables.h"
-#include "mvio_signals.h"
+#include "protocol.h"
+#include "../tables.h"
+#include "../mvio_signals.h"
 #include "signal_ids.h"
 #include <zephyr/sys/util.h>
 
-const MODBUS_RTU_TABLE_S idu_mvio_collect[] = {
+static const MODBUS_RTU_TABLE_S idu_mvio_collect[] = {
     {.sig_id = IDU_MVIO_DI, .reg_addr = 8152, .reg_num = 1, .reg_type = 4,
      .rqst_cyl = IDU_COLLECT_SAMPLE, .byte_order = BYTE_ORDER_DEFAULT},
     {.sig_id = IDU_MVIO_CURRENT_1 + 0, .reg_addr = 8163, .reg_num = 1, .reg_type = 4,
      .rqst_cyl = IDU_COLLECT_SAMPLE, .byte_order = BYTE_ORDER_DEFAULT},
     {.sig_id = IDU_MVIO_CURRENT_1 + 1, .reg_addr = 8164, .reg_num = 1, .reg_type = 4,
      .rqst_cyl = IDU_COLLECT_SAMPLE, .byte_order = BYTE_ORDER_DEFAULT},
-    {.sig_id = IDU_MVIO_CURRENT_1 + 2, .reg_addr = 8165, .reg_num = 1, .reg_type = 4,
-     .rqst_cyl = IDU_COLLECT_SAMPLE, .byte_order = BYTE_ORDER_DEFAULT},
-    {.sig_id = IDU_MVIO_CURRENT_1 + 3, .reg_addr = 8166, .reg_num = 1, .reg_type = 4,
-     .rqst_cyl = IDU_COLLECT_SAMPLE, .byte_order = BYTE_ORDER_DEFAULT},
-    {.sig_id = IDU_MVIO_CURRENT_1 + 4, .reg_addr = 8167, .reg_num = 1, .reg_type = 4,
-     .rqst_cyl = IDU_COLLECT_SAMPLE, .byte_order = BYTE_ORDER_DEFAULT},
-    {.sig_id = IDU_MVIO_CURRENT_1 + 5, .reg_addr = 8168, .reg_num = 1, .reg_type = 4,
-     .rqst_cyl = IDU_COLLECT_SAMPLE, .byte_order = BYTE_ORDER_DEFAULT},
-    {.sig_id = IDU_MVIO_CURRENT_1 + 6, .reg_addr = 8169, .reg_num = 1, .reg_type = 4,
-     .rqst_cyl = IDU_COLLECT_SAMPLE, .byte_order = BYTE_ORDER_DEFAULT},
-    {.sig_id = IDU_MVIO_CURRENT_1 + 7, .reg_addr = 8170, .reg_num = 1, .reg_type = 4,
-     .rqst_cyl = IDU_COLLECT_SAMPLE, .byte_order = BYTE_ORDER_DEFAULT},
     {.sig_id = IDU_MVIO_PROTOCOL, .reg_addr = 8150, .reg_num = 2, .reg_type = 4,
-     .rqst_cyl = IDU_COLLECT_IDENTITY, .byte_order = BYTE_ORDER_DEFAULT},
+     .rqst_cyl = 0, .byte_order = BYTE_ORDER_DEFAULT},
     {.sig_id = IDU_MVIO_ADDRESS, .reg_addr = 30459, .reg_num = 1, .reg_type = 3,
-     .rqst_cyl = IDU_COLLECT_IDENTITY, .byte_order = BYTE_ORDER_DEFAULT},
+     .rqst_cyl = 0, .byte_order = BYTE_ORDER_DEFAULT},
     /* FLAG_COLLECT process signals use these as explicit write destinations. */
     {.sig_id = IDU_SIG_REMOTE_SETPOINT, .reg_addr = 40000, .reg_num = 1,
      .reg_type = 3, .flag = FLAG_0x03_W_0x06 | FLAG_0x03_w_0x10},
@@ -35,8 +23,6 @@ const MODBUS_RTU_TABLE_S idu_mvio_collect[] = {
      .reg_type = 3, .flag = FLAG_0x03_w_0x10},
 };
 
-BUILD_ASSERT(ARRAY_SIZE(idu_mvio_collect) == IDU_MVIO_COLLECT_COUNT,
-             "Update IDU_MVIO_COLLECT_COUNT in tables.h");
 
 #if defined(CONFIG_IDU_AIDC_PROFILE)
 /* BEGIN IMPORTED TABLE: fields */
@@ -107,26 +93,29 @@ static const UPP_M_MOD models[] = {
     {.p_data=model_102,.data_num=ARRAY_SIZE(model_102),.mod_id=102},
     {.p_data=model_103,.data_num=ARRAY_SIZE(model_103),.mod_id=103},
 };
-const UPP_M_MOD_REG idu_imported_models = {
+static const UPP_M_MOD_REG idu_imported_models = {
     .p_model_ary=models,.model_num=ARRAY_SIZE(models),.cfg_mode=0,
 };
-BUILD_ASSERT(ARRAY_SIZE(model_1) +
-             ARRAY_SIZE(model_2) +
-             ARRAY_SIZE(model_99) +
-             ARRAY_SIZE(model_100) +
-             ARRAY_SIZE(model_102) +
-             ARRAY_SIZE(model_103) == IDU_IMPORTED_MODEL_FIELD_COUNT,
-             "Update IDU_IMPORTED_MODEL_FIELD_COUNT in tables.h");
+static const STRUCT_SECTION_ITERABLE(dp_registered_table, imported_model_table) = {
+    .id = IDU_TABLE_IMPORTED_MODELS, .type = PRO_UPP_MASTER,
+    .rows = &idu_imported_models, .count = ARRAY_SIZE(model_1) + ARRAY_SIZE(model_2) + ARRAY_SIZE(model_99) + ARRAY_SIZE(model_100) + ARRAY_SIZE(model_102) + ARRAY_SIZE(model_103),
+};
 /* END IMPORTED TABLE: collect */
 #endif
 
 const UPP_M_MOD_REG *idu_model_table(uint16_t *count)
 {
 #if defined(CONFIG_IDU_AIDC_PROFILE)
-    *count = IDU_IMPORTED_MODEL_FIELD_COUNT;
+    *count = 0;
+    for (size_t i = 0; i < ARRAY_SIZE(models); ++i) { *count += models[i].data_num; }
     return &idu_imported_models;
 #else
     *count = 0;
     return NULL;
 #endif
 }
+
+static const STRUCT_SECTION_ITERABLE(dp_registered_table, collect_table) = {
+    .id = IDU_TABLE_COLLECT, .type = PRO_MB_MASTER,
+    .rows = idu_mvio_collect, .count = ARRAY_SIZE(idu_mvio_collect),
+};

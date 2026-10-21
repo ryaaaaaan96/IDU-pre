@@ -1,9 +1,8 @@
 #include "simulation.h"
-#include "cfg/inc/ports.h"
+#include "protocol/inc/protocol.h"
 #include <collect/port.h>
 #include <transmit/server.h>
-#include "cfg/inc/device.h"
-#include "cfg/inc/imported_signals.h"
+#include "protocol/inc/imported_signals.h"
 #include <collect/collect.h>
 #include <dataprocess/params.h>
 #include <dataprocess/points.h>
@@ -24,8 +23,8 @@ static void *setup(void)
     zassert_ok(dp_init());
     const struct dp_equip_cfg *cfg=dp_config();
     zassert_not_null(cfg);
-    zassert_equal(cfg->point_count,552);
-    zassert_equal(cfg->collect_count,339);
+    zassert_equal(cfg->point_count,546);
+    zassert_equal(cfg->collect_count,333);
     zassert_equal(cfg->transmit_count,108);
     zassert_ok(dp_validate(cfg));
     zassert_ok(idu_ports_init());
@@ -40,7 +39,7 @@ static void *setup(void)
 ZTEST(aidc,test_original_tables_and_model_acquisition)
 {
     const struct dp_equip_cfg *cfg=dp_config();
-    for (size_t i=11;i<cfg->collect_count;++i) {
+    for (size_t i=5;i<cfg->collect_count;++i) {
         struct co_cfg poll;
         zassert_not_null(dp_config_collect(cfg, i, &poll));
         zassert_true(poll.model_protocol);

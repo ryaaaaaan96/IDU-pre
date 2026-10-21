@@ -52,6 +52,7 @@ static size_t intent_length;
 static uint16_t old_wire[DP_TRANSFER_WORDS], new_wire[DP_TRANSFER_WORDS], actual[DP_TRANSFER_WORDS];
 K_MUTEX_DEFINE(transaction_lock);
 static bool reboot_frozen;
+static bool cache_initialized;
 K_MUTEX_DEFINE(cache_lock);
 NET_BUF_POOL_FIXED_DEFINE(param_event_pool, 2, sizeof(struct dp_param_status),
                          sizeof(struct zbus_channel *), NULL);
@@ -60,7 +61,7 @@ ZBUS_CHAN_DEFINE(dp_param_events, struct dp_param_status, NULL, NULL,
 
 int dp_params_set_transport(const struct dp_params_transport *ops)
 {
-    if (k_is_in_isr() || (ops && (!ops->read || !ops->write))) {
+    if (k_is_in_isr() || (ops && !ops->write)) {
         return -EINVAL;
     }
     if (k_mutex_lock(&transaction_lock, K_NO_WAIT)) {
@@ -130,7 +131,7 @@ int dp_params_validate(const struct dp_equip_cfg *cfg)
             for (size_t d = 0; d < cfg->device_count; ++d) {
                 found |= cfg->devices[d].dev_id == p->key.dev_id;
             }
-            if (!found || !(p->param_flags & DP_PARAM_PERSIST) ||
+            if (!found || !(p->param_flags & DP_PARAM_WRITE) ||
                 p->write_order > DP_HIGH_WORD_BYTE_SWAP ||
                 (uint32_t)p->write_address + p->width > 65536) {
                 return -EINVAL;
@@ -215,7 +216,8 @@ static void commit_cache(uint32_t sequence)
 {
     k_mutex_lock(&cache_lock, K_FOREVER);
     for (size_t i = 0; i < param_count; ++i) {
-        if (status.flags & DP_PARAM_STORAGE_READY) {
+        if ((status.flags & DP_PARAM_STORAGE_READY) ||
+            (cache_initialized && !(PARAM_DEF(i)->param_flags & DP_PARAM_PERSIST))) {
             dp_reference_notify(PARAM_DEF(i), &cache[i].value, &staged[i]);
         }
         cache[i].value = staged[i];
@@ -567,6 +569,7 @@ int dp_params_init(const struct dp_equip_cfg *cfg, uint8_t area_id)
         const struct dp_point_cfg *p = dp_config_point(cfg, i, &p_scratch);
         if (p->source != DP_SOURCE_PARAMETER) { continue; }
         defs[param_count++] = i;
+        if (!(p->param_flags & DP_PARAM_PERSIST)) { continue; }
         uint8_t signature[12] = {0};
         sys_put_le16(p->key.dev_id, signature);
         sys_put_le16(p->key.sig_id, signature + 2);
@@ -583,6 +586,7 @@ int dp_params_init(const struct dp_equip_cfg *cfg, uint8_t area_id)
         staged[i] = PARAM_DEF(i)->initial;
     }
     commit_cache(0);
+    cache_initialized = true;
     err = mount_locked();
     if (err) {
         set_status(err, 0);
@@ -605,9 +609,8 @@ static int begin_transaction(bool allow_pending)
         k_mutex_unlock(&transaction_lock);
         return -EBUSY;
     }
-    if (!(status.flags & DP_PARAM_STORAGE_READY) ||
-        (!allow_pending && (status.flags & DP_PARAM_PENDING))) {
-        int err = status.flags & DP_PARAM_PENDING ? -EBUSY : -EROFS;
+    if (!allow_pending && (status.flags & DP_PARAM_PENDING)) {
+        int err = -EBUSY;
         k_mutex_unlock(&transaction_lock);
         return err;
     }
@@ -626,6 +629,7 @@ static int end_transaction(int err)
 static int apply_staged(const bool selected[CONFIG_DP_PARAMS_MAX_COUNT])
 {
     bool remote = false, local = false, persistent = false, changed = false;
+    bool durable_remote = false, volatile_remote = false;
     uint16_t dev_id = 0, begin = UINT16_MAX;
     uint32_t end = 0;
     /* Validate and prepare the entire request before touching any device/flash. */
@@ -651,6 +655,7 @@ static int apply_staged(const bool selected[CONFIG_DP_PARAMS_MAX_COUNT])
                    memcmp(&cache[i].value, &staged[i], p->width * 2) != 0;
         bool store = (p->param_flags & DP_PARAM_PERSIST) &&
                      !(operation_flags & (DP_OP_NO_DM | DP_OP_NO_STORE));
+        if (store && !(status.flags & DP_PARAM_STORAGE_READY)) { return -EROFS; }
         bool defer = (operation_flags & DP_OP_DEFER) || (p->param_flags & DP_PARAM_DEFER_STORE);
         persistent |= store && !defer;
         if (store && !defer) { durable_stage[i] = staged[i]; }
@@ -658,6 +663,8 @@ static int apply_staged(const bool selected[CONFIG_DP_PARAMS_MAX_COUNT])
             if (remote && dev_id != p->key.dev_id) {
                 return -EXDEV;
             }
+            durable_remote |= (p->param_flags & DP_PARAM_PERSIST) != 0;
+            volatile_remote |= (p->param_flags & DP_PARAM_PERSIST) == 0;
             remote = true;
             dev_id = p->key.dev_id;
             begin = MIN(begin, p->write_address);
@@ -666,7 +673,7 @@ static int apply_staged(const bool selected[CONFIG_DP_PARAMS_MAX_COUNT])
             local = true;
         }
     }
-    if (remote && local) {
+    if ((remote && local) || (durable_remote && volatile_remote)) {
         return -EXDEV;
     }
     uint32_t sequence = status.sequence + (changed ? 1U : 0U);
@@ -713,6 +720,15 @@ static int apply_staged(const bool selected[CONFIG_DP_PARAMS_MAX_COUNT])
             return -EXDEV;
         }
     }
+    if (volatile_remote) {
+        /* One command, one write. An uncertain ACK must not cause replay. */
+        int err = transport_write(dev_id, begin, new_wire, count);
+        if (err) { return err < 0 ? err : -EIO; }
+        if (operation_flags & DP_OP_NO_DM) { stage_cache(); }
+        commit_cache(sequence);
+        return 0;
+    }
+    if (!(status.flags & DP_PARAM_STORAGE_READY)) { return -EROFS; }
     uint8_t unit = unit_for(dev_id);
     int err = transport_read(dev_id, begin, old_wire, count);
     if (err) {
@@ -844,6 +860,7 @@ static int flush_for_reboot(bool freeze)
     if (err) {
         return err;
     }
+    if (!(status.flags & DP_PARAM_STORAGE_READY)) { return end_transaction(-EROFS); }
     for (size_t i = 0; i < param_count; ++i) {
         if (dirty[i]) { durable_stage[i] = deferred[i]; }
     }
@@ -870,6 +887,7 @@ int dp_params_recover(void)
     if (err) {
         return err;
     }
+    if (!(status.flags & DP_PARAM_STORAGE_READY)) { return end_transaction(-EROFS); }
     err = recover_locked();
     if (err < 0 && (status.flags & DP_PARAM_PENDING)) {
         invalidate_pending(err);
@@ -906,15 +924,60 @@ int dp_params_sync_device(uint16_t dev_id)
     if (!equipment) { return -EACCES; }
     /* Explicit initialization operation, never automatic crash recovery replay. */
     for (size_t i = 0; i < param_count; ++i) {
-        if (PARAM_DEF(i)->key.dev_id != dev_id || !(PARAM_DEF(i)->param_flags & DP_PARAM_FORWARD)) { continue; }
-        struct dp_point_state state;
-        int err = dp_params_read(PARAM_DEF(i)->key, &state);
+        if (PARAM_DEF(i)->key.dev_id != dev_id ||
+            (PARAM_DEF(i)->param_flags & (DP_PARAM_FORWARD | DP_PARAM_PERSIST)) !=
+            (DP_PARAM_FORWARD | DP_PARAM_PERSIST)) { continue; }
+        int err = begin_transaction(false);
         if (err) { return err; }
-        const struct dp_point_cfg *p = PARAM_DEF(i);
-        struct dp_point_update value = {.key = p->key, .width = p->width,
-                                         .value = state.value};
-        err = dp_params_apply(&value, 1, DP_OP_NO_DM | DP_OP_NO_STORE);
+        /* A polled live value must not replace the desired configuration. */
+        staged[i] = dirty[i] ? deferred[i] : durable[i];
+        bool selected[CONFIG_DP_PARAMS_MAX_COUNT] = {0};
+        selected[i] = true;
+        operation_flags = DP_OP_NO_DM | DP_OP_NO_STORE;
+        err = end_transaction(apply_staged(selected));
         if (err) { return err; }
     }
+    return 0;
+}
+
+/* Poll feedback only updates live values. It neither stores nor sends a command. */
+int dp_params_sample(const struct dp_point_update *values, size_t count,
+                     uint16_t flags, int64_t sampled_at)
+{
+    if (!equipment || !values || !count || count > CONFIG_DP_PARAMS_MAX_COUNT ||
+        (flags & ~DP_QUALITY_SIMULATED) || sampled_at < 0 ||
+        sampled_at > k_uptime_get() || k_is_in_isr()) { return -EINVAL; }
+    if (k_mutex_lock(&transaction_lock, K_NO_WAIT)) { return -EBUSY; }
+    if (status.flags & DP_PARAM_PENDING) {
+        k_mutex_unlock(&transaction_lock); return -EBUSY;
+    }
+    for (size_t i = 0; i < count; ++i) {
+        int n = index_of(values[i].key);
+        if (n < 0 || !(PARAM_DEF(n)->param_flags & DP_PARAM_FORWARD) ||
+            values[i].width != PARAM_DEF(n)->width) {
+            k_mutex_unlock(&transaction_lock); return -EINVAL;
+        }
+    }
+    k_mutex_lock(&cache_lock, K_FOREVER);
+    for (size_t i = 0; i < count; ++i) {
+        int n = index_of(values[i].key);
+        if (sampled_at <= cache[n].sampled_at) { continue; }
+        int err = values[i].error;
+        uint16_t quality = err ? DP_QUALITY_COMM_ERROR : DP_QUALITY_GOOD;
+        if (!err) {
+            err = range_check(PARAM_DEF(n), &values[i].value);
+            if (err) { quality = DP_QUALITY_BAD_VALUE; }
+        }
+        if (!err) {
+            dp_reference_notify(PARAM_DEF(n), &cache[n].value, &values[i].value);
+            cache[n].value = values[i].value;
+        }
+        cache[n].error = err;
+        cache[n].quality = quality | flags;
+        cache[n].sampled_at = sampled_at;
+        ++cache[n].generation;
+    }
+    k_mutex_unlock(&cache_lock);
+    k_mutex_unlock(&transaction_lock);
     return 0;
 }

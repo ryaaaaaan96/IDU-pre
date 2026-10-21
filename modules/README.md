@@ -31,8 +31,8 @@ compatibility.
 | [`iap`](iap/README.md) | `iap/{iap,sgz}.h` | IAPv3 reception, SGZ/AES, signed images, flash staging and recovery; devicetree/Kconfig product policy |
 | [`gd32e505`](gd32e505/README.md) | Zephyr `soc_root`, `dts_root`, `adc_*` | E505 SoC, devicetree clock startup and synchronous ADC0 driver |
 
-Product point-table configuration lives in [`app/cfg/`](../app/cfg/README.md),
-outside these modules. `device.c` binds device instances and reusable models; `inc/` holds configuration headers;
+Product point-table configuration lives in [`app/protocol/`](../app/protocol/README.md),
+outside these modules. `protocol.c` binds devices to registered table IDs; `inc/` holds public headers only;
 `tables/` holds collection, processing and forwarding tables, including default
 values and ranges in `process.c`. Imported data is inline in marked C sections, with symbols in
 `inc/imported_signals.h` and provenance in
@@ -46,7 +46,7 @@ Signal macros and function pointers bind business handlers directly; there is no
 runtime callback-name registry or duplicate model metadata.
 Register-to-signal mappings belong
 to the tables. Protocol windows and command bindings
-live in [`app/cfg/`](../app/cfg); execution belongs to `transmit`, while
+live in [`app/protocol/`](../app/protocol); execution belongs to `transmit`, while
 application options live in [`app/Kconfig`](../app/Kconfig). Business callbacks
 remain in `app/process/`; product input bindings are in the optional `gpio` profile
 and protocol adaptation in `transmit`. `dataprocess` has no
@@ -102,7 +102,7 @@ and both the client adapter and transmit disabled.
 ## Communication ownership
 
 There is no application communication implementation directory. Product configuration
-uses const tables in `app/cfg/`. `ports.c` also owns routing callbacks and registration:
+uses const tables in `app/protocol/`. `ports.c` also owns routing callbacks and registration:
 TX receives the virtual port ID and selects the physical adapter; RX dispatches by
 logical port and opaque source link/peer. Module code never includes product headers.
 
@@ -404,16 +404,16 @@ Tests with multiple buses or forwarding workers explicitly declare their fixture
 capacity in their own `.conf`; they do not supply product defaults.
 
 The AIDC example increases point width to 32 words and changes these bounds for
-its 552 configured points (560 runtime slots). `ZBUS_MSG_SUBSCRIBER_NET_BUF_STATIC_DATA_SIZE` must cover
+its 546 configured points (560 runtime slots). `ZBUS_MSG_SUBSCRIBER_NET_BUF_STATIC_DATA_SIZE` must cover
 `sizeof(dp_point_batch)` despite isolated pools in Zephyr 4.4.2. Tables are static;
 reference key lookup searches the device list and then only that device's rows,
 without reordering rows or allocating a RAM index. Native tables use a linear
 scan. Measure timing and stack margins on the target before release.
 
-The application's reusable MV-IO model binds device instances and table pointers
-directly in the const device table in `app/cfg/device.c`. Process and acquisition rows are shared
-const arrays; the getter returns the complete configuration and execution views use caller
-scratch storage. There is no full-table RAM copy or heap allocation. See [the model and pipeline design](../docs/collect-process-transmit.md).
+The application registers const tables through Zephyr iterable sections. Device bindings
+in `app/protocol/protocol.c` select table IDs; DP validates and assembles a small RAM
+DEV_TABLE_S pointer view. Process and acquisition rows remain shared const arrays;
+execution views use caller scratch storage. There is no full-table RAM copy or heap allocation. See [the model and pipeline design](../docs/collect-process-transmit.md).
 
 NVS requires FLASH, FLASH_MAP, FLASH_PAGE_LAYOUT and NVS_DATA_CRC. Reserve at least
 three equal erase sectors. The example uses four 4 KB sectors per profile.

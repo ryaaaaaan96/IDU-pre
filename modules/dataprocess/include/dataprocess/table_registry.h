@@ -1,0 +1,37 @@
+#ifndef DP_TABLE_REGISTRY_H
+#define DP_TABLE_REGISTRY_H
+
+#include <dataprocess/reference_tables.h>
+#include <zephyr/sys/iterable_sections.h>
+#include <zephyr/sys/util.h>
+#include <stddef.h>
+
+struct dp_registered_table {
+    uint16_t id;
+    uint16_t type;
+    const void *rows;
+    size_t count;
+};
+
+struct dp_table_binding {
+    uint16_t id;
+    uint16_t type;
+};
+
+struct dp_device_binding {
+    uint8_t dev_id;
+    uint8_t port;
+    uint8_t coll_addr;
+    uint16_t dev_code;
+    struct dp_table_binding tables[MAX_PTL_TBL_NUM];
+};
+
+/* 启动期装配；失败不修改 output。output 至少包含 count 个元素，
+ * 成功后须保持有效且不可修改，直至所有点表服务停止使用。
+ * 表内容和登记项不复制到 RAM，只生成 DEV_TABLE_S 指针关联视图。 */
+int dp_table_bind(const struct dp_device_binding *devices, size_t count,
+                  const struct dp_registered_table *tables, size_t table_count,
+                  DEV_TABLE_S *output);
+int dp_table_registry_bind(const struct dp_device_binding *devices, size_t count,
+                           DEV_TABLE_S *output);
+#endif

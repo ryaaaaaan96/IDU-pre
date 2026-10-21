@@ -7,7 +7,7 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(idu_aidc_tests)
 target_include_directories(app PRIVATE ${IDU_APP}/app)
 target_sources(app PRIVATE src/main.c)
-add_subdirectory(${IDU_APP}/app/cfg app_cfg)
+add_subdirectory(${IDU_APP}/app/protocol app_cfg)
 add_subdirectory(${IDU_APP}/app/process point_process)
 
 add_subdirectory(${IDU_APP}/tests/fixtures fixtures)

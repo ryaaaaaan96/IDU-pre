@@ -168,7 +168,7 @@ ZTEST(reference_configuration, test_original_tables_validate_before_initializati
     zassert_is_null(dp_config());
     local_signals[0].sig_size = 1;
     local_signals[0].sig_flag = FLAG_COLLECT;
-    zassert_equal(dp_init(), -1); /* No forwarding without durability policy. */
+    zassert_equal(dp_init(), -1); /* No downstream destination or enabled parameter engine. */
     local_signals[0].sig_flag = 0;
     acquisition[0].flag = 8;
     zassert_equal(dp_init(), -1); /* Unsupported FC17 policy fails closed. */

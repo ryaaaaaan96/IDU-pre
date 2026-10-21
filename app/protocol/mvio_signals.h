@@ -13,7 +13,6 @@ enum idu_mvio_signal {
 
 enum idu_collect_cycle {
     IDU_COLLECT_SAMPLE = 1,
-    IDU_COLLECT_IDENTITY = 200,
 };
 
 #endif

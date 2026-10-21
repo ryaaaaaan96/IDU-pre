@@ -11,15 +11,14 @@ from pathlib import Path
 import argparse, ast, collections, hashlib, json, operator, re
 
 
-CONFIG_DIR = Path(__file__).resolve().parents[1] / 'app/cfg'
+CONFIG_DIR = Path(__file__).resolve().parents[1] / 'app/protocol'
 TABLE_FILES = {
     'points': 'tables/process.c',
     'defaults': 'tables/process.c',
     'transmit': 'tables/transmit.c',
     'fields': 'tables/collect.c',
     'collect': 'tables/collect.c',
-    'counts': 'inc/tables.h',
-    'devices': 'device.c',
+    'devices': 'protocol.c',
 }
 
 REFERENCE_CALLBACKS = {
@@ -83,12 +82,15 @@ def render_reference_tables(metadata, value):
             f'    {{.sig_id={signal_symbol(row)},.sig_size={row["count"]*2},'
             '.data_type=DATA_TYPE_U16ARRAY}, /* Missing source definition: no INIT value. */')
     process = notice
-    for dev, name, count in (
-            (247, 'idu_imported_local_process', 'IDU_IMPORTED_LOCAL_PROCESS_COUNT'),
-            (11, 'idu_imported_dsp_process', 'IDU_IMPORTED_DSP_PROCESS_COUNT')):
-        process += f'const DM_SIG_CFG_S {name}[] = {{\n' + '\n'.join(groups[dev]) + '\n};\n'
-        process += (f'BUILD_ASSERT(ARRAY_SIZE({name}) == {count},\n'
-                    f'             "Update {count} in tables.h");\n')
+    for dev, name in (
+            (247, 'idu_imported_local_process'),
+            (11, 'idu_imported_dsp_process')):
+        process += f'static const DM_SIG_CFG_S {name}[] = {{\n' + '\n'.join(groups[dev]) + '\n};\n'
+        table_id = 'IDU_TABLE_IMPORTED_LOCAL_PROCESS' if dev == 247 else 'IDU_TABLE_IMPORTED_REMOTE_PROCESS'
+        process += (f'static const STRUCT_SECTION_ITERABLE(dp_registered_table, {name}_registration) = {{\n'
+                    f'    .id = {table_id}, .type = PRO_DATA_PROCESS,\n'
+                    f'    .rows = {name}, .count = ARRAY_SIZE({name}),\n}};\n')
+
 
     # Retain only the selected fields used by the existing model backend.
     # The full original field catalog remains in the provenance report.
@@ -117,43 +119,28 @@ def render_reference_tables(metadata, value):
     for model in models:
         collection += (f'    {{.p_data=model_{model},.data_num=ARRAY_SIZE(model_{model}),'
                        f'.mod_id={model}}},\n')
-    collection += ('};\nconst UPP_M_MOD_REG idu_imported_models = {\n'
+    collection += ('};\nstatic const UPP_M_MOD_REG idu_imported_models = {\n'
                    '    .p_model_ary=models,.model_num=ARRAY_SIZE(models),.cfg_mode=0,\n};\n')
-    collection += ('BUILD_ASSERT(' +
-                   ' +\n             '.join(f'ARRAY_SIZE(model_{model})' for model in models) +
-                   ' == IDU_IMPORTED_MODEL_FIELD_COUNT,\n'
-                   '             "Update IDU_IMPORTED_MODEL_FIELD_COUNT in tables.h");\n')
+    collection += ('static const STRUCT_SECTION_ITERABLE(dp_registered_table, imported_model_table) = {\n'
+                   '    .id = IDU_TABLE_IMPORTED_MODELS, .type = PRO_UPP_MASTER,\n'
+                   '    .rows = &idu_imported_models, .count = ' +
+                   ' + '.join(f'ARRAY_SIZE(model_{model})' for model in models) + ',\n};\n')
     return {
         'points': process,
         # Rows belong to the common-country part of process.c's single array.
         'defaults': notice + '\n'.join(defaults) + '\n',
         'fields': fields,
         'collect': collection,
-        'counts': (notice + 'enum {\n'
-                   f'    IDU_IMPORTED_LOCAL_PROCESS_COUNT = {len(groups[247])},\n'
-                   f'    IDU_IMPORTED_DSP_PROCESS_COUNT = {len(groups[11])},\n'
-                   f'    IDU_IMPORTED_MODEL_FIELD_COUNT = {sum(map(len, models.values()))},\n'
-                   f'    IDU_IMPORTED_TRANSMIT_COUNT = {len(metadata["transmit"])},\n'
-                   '};\n'),
         'transmit': notice + '\n'.join(
             f'    {{.sig_id={signal_symbol(r)},.reg_addr={r["address"]},.reg_num={r["count"]},'
             f'.dev_id={r["device"]},.reg_type={r["function"]},.byte_order=BYTE_ORDER_DEFAULT}},'
             for r in metadata['transmit']) + '\n',
         'devices': notice + '\n'.join(
-            '    {\n'
-            f'        .dev_id = {dev}, .coll_addr = {dev-10}, .port = 1,\n'
-            '        .ptl_tbl_cfg[0] = {\n'
-            '            .proto_type = PRO_DATA_PROCESS,\n'
-            '            .sig_num = IDU_IMPORTED_DSP_PROCESS_COUNT,\n'
-            '            .pst_table = idu_imported_dsp_process,\n'
-            '        },\n'
-            '        .ptl_tbl_cfg[1] = {\n'
-            '            .proto_type = PRO_UPP_MASTER,\n'
-            '            .sig_num = IDU_IMPORTED_MODEL_FIELD_COUNT,\n'
-            '            .pst_table = &idu_imported_models,\n'
-            '        },\n'
-            '    },'
+            f'    {{.dev_id = {dev}, .coll_addr = {dev-10}, .port = 1,\n'
+            '     .tables = {{IDU_TABLE_IMPORTED_REMOTE_PROCESS, PRO_DATA_PROCESS},\n'
+            '                {IDU_TABLE_IMPORTED_MODELS, PRO_UPP_MASTER}}},'
             for dev in range(11, 19)) + '\n',
+
     }
 
 
@@ -382,7 +369,7 @@ if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source',type=Path,required=True,help='Path to the reference AIDC CODE checkout; only needed to regenerate tables')
     parser.add_argument('--output',type=Path,default=CONFIG_DIR,
-                        help='Configuration directory containing marked C tables (default: app/cfg); missing files use repository templates')
+                        help='Configuration directory containing marked C tables (default: app/protocol); missing files use repository templates')
     parser.add_argument('--report',type=Path,
                         help='Import report path (default: docs/point-table-import.json for repository output, otherwise OUTPUT/migration.json)')
     args=parser.parse_args();generate(args.source,args.output,args.report)

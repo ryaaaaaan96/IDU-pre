@@ -1,5 +1,5 @@
 #include "acquisition/idu_acquisition.h"
-#include "cfg/inc/ports.h"
+#include "protocol/inc/protocol.h"
 #include "process/idu_process.h"
 #include <dataprocess/points.h>
 #include <gpio/idu_inputs.h>

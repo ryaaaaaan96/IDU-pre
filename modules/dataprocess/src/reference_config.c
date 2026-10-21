@@ -279,11 +279,15 @@ static int point_values(uint8_t dev, const DM_SIG_CFG_S *signal, struct dp_point
             }
         }
     }
-    if (signal->sig_flag & FLAG_PERSISTENCE) {
+    if (signal->sig_flag & (FLAG_PERSISTENCE | FLAG_COLLECT)) {
         if (!IS_ENABLED(CONFIG_DP_PARAMS)) { return -ENOTSUP; }
         p->source = DP_SOURCE_PARAMETER;
-        p->param_flags = DP_PARAM_WRITE | DP_PARAM_PERSIST | DP_PARAM_RESTORE;
-        if (!(signal->sig_flag & (FLAG_RT_STORE | FLAG_PERSISTENCE_SYNC))) {
+        p->param_flags = DP_PARAM_WRITE;
+        if (signal->sig_flag & FLAG_PERSISTENCE) {
+            p->param_flags |= DP_PARAM_PERSIST | DP_PARAM_RESTORE;
+        }
+        if ((signal->sig_flag & FLAG_PERSISTENCE) &&
+            !(signal->sig_flag & (FLAG_RT_STORE | FLAG_PERSISTENCE_SYNC))) {
             p->param_flags |= DP_PARAM_DEFER_STORE;
         }
     }
@@ -326,8 +330,7 @@ static int reference_point(const struct dp_equip_cfg *cfg, size_t index,
                 if (signal->sig_flag & FLAG_COLLECT) {
                     if (forwarded || row->reg_type != 3 || row->reg_num != p->width ||
                         (row->flag & ~7U) || row->data_type || row->scan_pri ||
-                        !(row->flag & (p->width == 1 ? 2 : 4)) ||
-                        !(signal->sig_flag & FLAG_PERSISTENCE)) {
+                        !(row->flag & (p->width == 1 ? 2 : 4))) {
                         return -ENOTSUP;
                     }
                     p->param_flags |= DP_PARAM_FORWARD;
@@ -335,6 +338,7 @@ static int reference_point(const struct dp_equip_cfg *cfg, size_t index,
                     err = word_order(row->byte_order, &p->write_order);
                     if (err) { return err; }
                     forwarded = true;
+                    acquired |= row->rqst_cyl != 0;
                 } else { acquired = true; }
             }
         } else if (group->proto_type == PRO_UPP_MASTER) {
@@ -349,8 +353,8 @@ static int reference_point(const struct dp_equip_cfg *cfg, size_t index,
     }
     if ((signal->sig_flag & FLAG_COLLECT) && !forwarded) { return -ENOTSUP; }
     if (acquired) {
-        if (p->source == DP_SOURCE_PARAMETER || forwarded) { return -ENOTSUP; }
-        p->source = DP_SOURCE_MODBUS;
+        if (p->source == DP_SOURCE_PARAMETER && !forwarded) { return -ENOTSUP; }
+        if (!forwarded) { p->source = DP_SOURCE_MODBUS; }
     }
     if (p->source == DP_SOURCE_PARAMETER &&
         !pltcb_para_get_is_load_def(p->key.dev_id, p->key.sig_id, signal->sig_size,
@@ -372,12 +376,13 @@ static int reference_collect(const struct dp_equip_cfg *cfg, size_t index,
                 for (size_t i = 0; i < group->sig_num; ++i) {
                     const MODBUS_RTU_TABLE_S *row = &rows[i];
                     const DM_SIG_CFG_S *sig = signal_row(dev, row->sig_id);
-                    if (sig && (sig->sig_flag & FLAG_COLLECT)) { continue; }
+                    if (sig && (sig->sig_flag & FLAG_COLLECT) && !row->rqst_cyl) { continue; }
                     if (index) { --index; continue; }
                     if (!sig || row->reg_num != (sig->sig_size + 1U) / 2U ||
                         (row->reg_type != 3 && row->reg_type != 4)) { return -EINVAL; }
                     /* Each row is an exact request, so FRAME already holds. */
-                    if ((row->flag & ~1U) || row->data_type || row->scan_pri ||
+                    if ((row->flag & ((sig->sig_flag & FLAG_COLLECT) ? ~7U : ~1U)) ||
+                        row->data_type || row->scan_pri ||
                         !collect_period) { return -ENOTSUP; }
                     *poll = (struct co_cfg){.dev_id = dev->dev_id,
                         .function = row->reg_type, .address = row->reg_addr,
@@ -505,7 +510,7 @@ static int compile_tables(void)
             for (size_t i = 0; i < group->sig_num; ++i) {
                 const DM_SIG_CFG_S *sig = signal_row(dev, rows[i].sig_id);
                 if (!sig) { return -ENOENT; }
-                if (!(sig->sig_flag & FLAG_COLLECT)) { ++compiled.collect_count; }
+                if (!(sig->sig_flag & FLAG_COLLECT) || rows[i].rqst_cyl) { ++compiled.collect_count; }
             }
         }
         if (has_collect) {

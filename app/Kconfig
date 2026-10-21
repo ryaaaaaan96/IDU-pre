@@ -1,3 +1,11 @@
+config DP_TABLE_REGISTRY
+    default y if DP_REFERENCE_TABLES
+
+config IDU_COLLECT_PERIOD_MS
+    int "Southbound sample polling period (ms)"
+    default 500
+    range 10 60000
+
 config DP_REFERENCE_TABLES
     default y
 
