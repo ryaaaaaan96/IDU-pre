@@ -50,13 +50,19 @@ python3 applications/IDU-pre/tools/analyze_reference.py \
 
 | 原类型与来源 | 需要保持的契约 |
 | --- | --- |
-| `DEV_TABLE_S`，`data_process.h:316` | 设备 ID、端口、采集地址、型号及最多 7 个协议表；第一个表必须是处理表 |
+| `DEV_TABLE_S`，`data_process.h:316` | 设备 ID、端口、采集地址、型号及最多 7 个协议表；参考工程允许无处理表的虚拟转发设备 |
 | `DEV_TBL_CFG_S`，`:307` | `proto_type` + 条目数 + 对应类型的表指针，不是任意 native 配置指针 |
 | `DM_SIG_CFG_S`，`:261` | 信号 ID、**字节数**、标志、数据类型、处理函数；自身没有默认值和范围 |
 | `DM_SIG_DATA_S`，`:272` | 默认值、最小值、最大值；超过 4 字节的默认值通过 `DATA_U.pst` 提供 |
 | `MODBUS_RTU_TABLE_S`，`collect_lib.h:64` | 信号、地址、寄存器数、功能码、查询频率编码（当前改为毫秒 period_ms）、标志、优先级和字序 |
 | `MB_TABLE_CELL_T` / `_S`，`transmit_lib.h:66` | 外部寄存器到设备/信号及字序的映射 |
 | `INIT_DATA_SET_S` / `TIME_DATA_SET_S`，`data_process.h:355–368` | 全局初始化/定时处理函数；定时周期为毫秒，调用时四个参数均为空 |
+
+参考工程并未要求所有设备都具有处理表：`app/cfg/equip/dev_cfg.c:339–360` 中，
+本地 `CFG_DEV_LOCAL=247` 只挂 process 表，虚拟 `CFG_DEV_VIR=1` 挂 Modbus 转发表、
+协议地址段和 UPP 转发表，没有 process 表。转发行的数据来源可指向本地或 DSP 设备。
+IDU 当前要求首槽为 process、将转发表挂到本地设备，是自身适配限制，不能据此声称参考平台也有该限制。
+公开源码尚不能证明原库如何把多个转发实例关联到不同端口；见[转发模型讨论](forwarding-model.md)。
 
 `platform_callback.h:37–54` 的原注册关系为设备表 getter、数量 getter，以及 `PARA_GET_RANGE_DEF(dev_id, sig_id, DM_SIG_DATA_S *, bool *recover_default)`。新版通过 `pltcb_reg_cfg_get_dev_tbl()`、`pltcb_reg_cfg_get_dev_num()`、`pltcb_reg_para_range_def_cb()` 注册，在 `dp_init(void)` 中校验并建立按需读取视图，成功初始化后冻结注册。实现见 [reference_config.c](../modules/dataprocess/src/reference_config.c)。
 
