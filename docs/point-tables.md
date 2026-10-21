@@ -280,10 +280,9 @@ Zephyr 4.4.2 的 FC16 服务按寄存器调用回调，且接收工作默认放�
 长度修正，并增加按接口配置的 unit/广播策略。没有修改 west 管理的 Zephyr 源码。RAW 异常码现已真实到达
 客户端，不再期望 `-EMSGSIZE`。
 
-`modbus_core.c` 和串口适配还为 `transmit` 内的通信适配提供完整 ADU
-交接、RAW 接收占用保护及 TX 完成钩子。现有 RS485 转发和虚拟采集
-均经过 vport 收发，串口配置和恢复仍使用原 Zephyr 接口；
-端口绑定与限制见[通信端口接入](communication-ports.md)。
+构建期适配还提供独立串口完整帧接入、RAW 接收占用保护及 TX 完成处理。
+CO/TR 的 RAW 适配通过各自 `src/message.c` 使用通用 vport，应用回调选择实际
+接口。旧的 ADU 往返交接已删除；详见[通信端口接入](communication-ports.md)。
 
 适配脚本锁定已检查的 4.4.2 源文件 SHA-256 和替换锚点。升级到 4.5
 时仍需更新 manifest / west update，另外必须复核此适配层并重新运行

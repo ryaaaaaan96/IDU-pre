@@ -1,3 +1,6 @@
+#ifdef CONFIG_CO_MODBUS_RAW_PORT
+#include <collect/modbus.h>
+#endif
 #include "client.h"
 #include <zephyr/sys/byteorder.h>
 
@@ -39,6 +42,10 @@ int co_modbus_transfer(int iface, struct modbus_adu *adu)
 
 int co_modbus_reconfigure(int iface, struct modbus_iface_param param)
 {
+#ifdef CONFIG_CO_MODBUS_RAW_PORT
+    int bound = co_modbus_port_param(iface, &param);
+    if (bound) { return bound; }
+#endif
     int err = modbus_disable(iface);
     return err ? err : modbus_init_client(iface, param);
 }

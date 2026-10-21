@@ -10,6 +10,8 @@ struct tr_register_service;
 
 /* 启动期注册路由和回调，须先于采集/转发启动；可重复调用。 */
 int idu_ports_init(void);
+struct modbus_serial_param;
+int idu_forward_serial_configure(struct modbus_serial_param param);
 extern const struct co_port_config idu_collect_port;
 extern const struct tr_server_config idu_forwarding;
 extern const struct tr_register_service idu_parameter_registers;

@@ -34,67 +34,59 @@ for name in EXPECTED_SHA256:
                               1 if name == "modbus_raw.c" else 3)
     if name == "modbus_raw.c":
         source = replace_once(source, "(MODBUS_RTU_MIN_MSG_SIZE - 2)", "1")
-        source = replace_once(source, "(CONFIG_MODBUS_BUFFER_SIZE - 2)",
-                              "sizeof(ctx->rx_adu.data)")
+        source = replace_once(source, "(CONFIG_MODBUS_BUFFER_SIZE - 2)", "sizeof(ctx->rx_adu.data)")
+        source = replace_once(source,
+            "\tctx->rawcb.raw_tx_cb(iface, &ctx->tx_adu, ctx->rawcb.user_data);\n\n\treturn 0;",
+            "\treturn ctx->rawcb.raw_tx_cb(iface, &ctx->tx_adu, ctx->rawcb.user_data);")
         source = replace_once(source, "\tctx->rx_adu.trans_id = adu->trans_id;",
-                              """\tint err = tr_modbus_transport_rx_begin(ctx);
-\tif (err) { return err; }
-\tctx->rx_adu.trans_id = adu->trans_id;""")
+            "\tif (!adu || adu->length > sizeof(ctx->rx_adu.data)) { return -EMSGSIZE; }\n"
+            "\tint err = mb_raw_rx_begin(ctx);\n\tif (err) { return err; }\n\tctx->rx_adu.trans_id = adu->trans_id;")
         source = replace_once(source, "\ttr_modbus_submit_work(&ctx->server_work);\n\n\treturn 0;",
-                              """\terr = tr_modbus_submit_work(&ctx->server_work);
-\tif (err < 0) { tr_modbus_transport_rx_end(ctx); return err; }
-\treturn 0;""")
+            "\terr = tr_modbus_submit_work(&ctx->server_work);\n"
+            "\tif (err < 0) { mb_raw_rx_end(ctx); return err; }\n\treturn 0;")
+        source = replace_once(source, "\tctx->rx_adu.fc = adu->fc;", "\tctx->rx_adu.fc = adu->fc;\n\tctx->rx_adu.crc = adu->crc;")
     if name == "modbus_core.c":
+        source = replace_once(source, "static void modbus_rx_handler", '#include "core_io.h"\n\nstatic void modbus_rx_handler')
+        source = replace_once(source, "\tif (ctx->client == true) {",
+            "\tif (mb_serial_dispatch(ctx)) { return; }\n"
+            "\tif (ctx->client == true) {\n\t\tmb_raw_rx_end(ctx);")
+        source = replace_once(source, "\n}\n\nvoid modbus_tx_adu",
+            "\n\tif (!ctx->client) { mb_raw_rx_end(ctx); }\n}\n\nvoid modbus_tx_adu")
+        source = replace_once(source,
+            '\t\tif (IS_ENABLED(CONFIG_MODBUS_RAW_ADU) &&\n\t\t    modbus_raw_tx_adu(ctx)) {\n\t\t\tLOG_ERR("Unsupported MODBUS raw mode");\n\t\t}',
+            '\t\tif (IS_ENABLED(CONFIG_MODBUS_RAW_ADU)) {\n'
+            '\t\t\tint err = modbus_raw_tx_adu(ctx);\n'
+            '\t\t\tif (err && ctx->client) { ctx->rx_adu_err = err; k_sem_give(&ctx->client_wait_sem); }\n'
+            '\t\t}')
+        source = replace_once(source, "\tk_work_cancel_sync(&ctx->server_work, &work_sync);",
+            "\tk_work_cancel_sync(&ctx->server_work, &work_sync);\n\tmb_raw_rx_end(ctx);")
+        source += "\n" + (Path(__file__).parent / "serial_open.h").read_text()
         source += """
-/* Adapter startup must reject occupied interfaces before changing callbacks. */
 int tr_modbus_check_available(int iface)
 {
-\tif (iface < 0 || iface >= ARRAY_SIZE(mb_ctx_tbl)) { return -EINVAL; }
-\treturn atomic_test_bit(&mb_ctx_tbl[iface].state, MODBUS_STATE_CONFIGURED) ?
-\t\t-EALREADY : 0;
+    if (iface < 0 || iface >= ARRAY_SIZE(mb_ctx_tbl)) { return -EINVAL; }
+    return atomic_test_bit(&mb_ctx_tbl[iface].state, MODBUS_STATE_CONFIGURED) ? -EALREADY : 0;
 }
 """
-        source = replace_once(source, "\tif (ctx->client == true) {",
-                              """\tif (!ctx->rx_adu_err) {
-\t\tctx->rx_adu_err = tr_modbus_transport_rx_route(ctx);
-\t}
-\tif (ctx->client == true) {
-\t\ttr_modbus_transport_rx_end(ctx);""")
-        source = replace_once(source, "\n}\n\nvoid modbus_tx_adu",
-                              "\n\tif (!ctx->client) { tr_modbus_transport_rx_end(ctx); }\n}\n\nvoid modbus_tx_adu")
-        source = replace_once(source, "void modbus_tx_adu(struct modbus_context *ctx)\n{",
-                              """void modbus_tx_adu(struct modbus_context *ctx)
-{
-\tint err;
-\tif (tr_modbus_transport_tx_route(ctx, &err)) {
-\t\tif (err) {
-\t\t\tLOG_ERR("Virtual-port transmission failed: %d", err);
-\t\t\tif (ctx->client) {
-\t\t\t\tctx->rx_adu_err = err;
-\t\t\t\tk_sem_give(&ctx->client_wait_sem);
-\t\t\t}
-\t\t}
-\t\treturn;
-\t}""")
     if name == "modbus_serial.c":
         source = replace_once(source,
-                              "\t\tmodbus_serial_rx_fifo_drain(ctx);\n\t\tmodbus_serial_rx_on(ctx);",
-                              "\t\tmodbus_serial_rx_fifo_drain(ctx);\n\t\tmodbus_serial_rx_on(ctx);\n"
-                              "\t\ttr_modbus_transport_tx_done(ctx);")
+            "\t\t\t/* Buffer full. Disable interrupt until timeout. */",
+            "\t\t\t/* Reject an overlong frame, including a valid CRC prefix. */\n"
+            "\t\t\tmb_serial_overflow(ctx);\n\t\t\tmodbus_serial_rx_fifo_drain(ctx);")
+        source = replace_once(source,
+            "\t\tmodbus_serial_rx_fifo_drain(ctx);\n\t\tmodbus_serial_rx_on(ctx);",
+            "\t\tmodbus_serial_rx_fifo_drain(ctx);\n\t\tmodbus_serial_rx_on(ctx);\n\t\tmb_serial_tx_done(ctx);")
         source += """
-#ifdef CONFIG_TR_MODBUS_TRANSPORT
-/* Interrupt API only: stop all use of the TX buffer before returning failure. */
-void tr_modbus_transport_serial_abort(struct modbus_context *ctx)
+void mb_serial_abort(struct modbus_context *ctx)
 {
-\tunsigned int key = irq_lock();
-\tmodbus_serial_disable(ctx);
-\tctx->cfg->uart_buf_ctr = 0;
-\tctx->cfg->uart_buf_ptr = ctx->cfg->uart_buf;
-\tmodbus_serial_rx_fifo_drain(ctx);
-\tmodbus_serial_rx_on(ctx);
-\tirq_unlock(key);
+    unsigned int key = irq_lock();
+    modbus_serial_disable(ctx);
+    ctx->cfg->uart_buf_ctr = 0;
+    ctx->cfg->uart_buf_ptr = ctx->cfg->uart_buf;
+    modbus_serial_rx_fifo_drain(ctx);
+    modbus_serial_rx_on(ctx);
+    irq_unlock(key);
 }
-#endif
 """
     if name == "modbus_server.c":
         source = replace_once(source, "if (addr != 0 && addr != ctx->unit_id)",

@@ -31,7 +31,7 @@ IAPv3 与 SMP、AIDC 互斥。真实南向串口配置见
 | `modules/transmit/Kconfig` | `CONFIG_TR_CONFIG_STACK_SIZE` | 2048 B，共享 |
 
 这些工作线程共预留 `CO_MAX_BUSES × CO_STACK_SIZE + TR_PORTS × TR_STACK_SIZE +
-TR_CONFIG_STACK_SIZE` 字节栈，另计架构对齐/保护开销；DP、vport、系统工作队列等
+TR_CONFIG_STACK_SIZE` 字节栈，另计架构对齐/保护开销；DP、系统工作队列等
 其他线程不在这个公式中。槽位数量决定预留几份栈，栈大小决定每份的容量。
 即使某个槽位没有启动线程，静态栈仍占用 RAM。后续增加设备总线或转发口时，
 由维护者手动修改 `.conf`；调整栈大小后检查目标板最深调用路径的栈余量。

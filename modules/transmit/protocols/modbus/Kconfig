@@ -47,31 +47,15 @@ config TR_REGISTER_SERVICE
     bool "Configured parameter status and command registers"
     depends on TR_MODBUS_ADAPTER && DP_PARAMS
 
-config TR_MODBUS_TRANSPORT
-    bool "Zephyr Modbus framed transport through virtual ports"
-    depends on TR_MODBUS_ADAPTER
+
+config TR_MODBUS_RAW_PORT
+    bool "Modbus RAW complete-message port adapter"
+    depends on TR_MODBUS_ADAPTER && MODBUS_RAW_ADU
     depends on !MODBUS_SERIAL_ASYNC_API
-    select VPORT
-    help
-      Route complete RTU/RAW ADUs through vport. Zephyr retains serial framing,
-      CRC, UART configuration and RS485 direction control. Requires the
-      build-local Modbus hooks supplied by transmit/protocols/modbus/compat.
+    select TR_VPORT
 
-if TR_MODBUS_TRANSPORT
-
-config TR_MODBUS_TRANSPORT_PORTS
-    int "Maximum bound Modbus interfaces"
-    default 4
-    range 1 16
-
-config TR_MODBUS_TRANSPORT_RX_TIMEOUT_MS
-    int "Maximum virtual-port receive handoff time"
-    default 50
-    range 10 1000
-
-config TR_MODBUS_TRANSPORT_TX_TIMEOUT_MS
-    int "Maximum physical transmission time"
+config TR_MODBUS_TX_TIMEOUT_MS
+    int "Complete-message send timeout (ms)"
+    depends on TR_MODBUS_RAW_PORT
     default 3000
     range 10 10000
-
-endif

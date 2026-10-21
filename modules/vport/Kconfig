@@ -1,45 +1,13 @@
 menuconfig VPORT
-    bool "Logical communication ports"
+    bool "Generic callback communication ports"
     depends on MULTITHREADING
     help
-      Route registered transport backends to protocol-independent logical
-      ports. Does not enable UART, CAN, networking or any protocol parser.
+      Shared by collect and transmit. Does not own hardware, protocol framing,
+      routing tables, receive buffers or worker threads.
 
 if VPORT
-
-config VPORT_MAX_LINKS
-    int "Maximum registered transport links"
-    default 4
-    range 1 32
-
 config VPORT_MAX_PORTS
-    int "Maximum logical ports"
+    int "Maximum registered logical ports"
     default 8
     range 1 64
-
-config VPORT_MAX_ROUTES
-    int "Maximum link-to-port bindings"
-    default 16
-    range 1 128
-
-config VPORT_MAX_PAYLOAD
-    int "Maximum copied receive payload"
-    default 256
-    range 8 2048
-
-config VPORT_RX_DEPTH
-    int "Shared receive buffer count, including the active callback"
-    default 8
-    range 2 64
-
-config VPORT_STACK_SIZE
-    int "Shared receive worker stack"
-    default 2048
-    range 1024 16384
-
-config VPORT_THREAD_PRIORITY
-    int "Receive worker priority"
-    default 7
-    range 0 15
-
 endif

@@ -4,17 +4,11 @@
 #include <transmit/registers.h>
 #include <zephyr/device.h>
 
-/* native_sim 测试显式选择 RAW 接口；实际产品由设备树选择转发串口。 */
+/* 协议始终运行在 RAW；实际串口选择与收发回调归 ports.c。 */
 const struct tr_server_config idu_forwarding = {
 #if DT_HAS_ALIAS(idu_forward)
-    .iface_name = DEVICE_DT_NAME(DT_ALIAS(idu_forward)),
-    .param = {
-        .mode = MODBUS_MODE_RTU,
-        .serial = {
-            .baud = DT_PROP(DT_PARENT(DT_ALIAS(idu_forward)), current_speed),
-            .parity = UART_CFG_PARITY_NONE, .stop_bits = UART_CFG_STOP_BITS_1,
-        },
-    },
+    .iface_name = "RAW_2",
+    .param = {.mode = MODBUS_MODE_RAW},
 #endif
     .write = tr_register_write,
     .attach = tr_register_attach, .protocol = &idu_parameter_registers,

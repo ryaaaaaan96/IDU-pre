@@ -1,4 +1,5 @@
 #include "process/idu_process.h"
+#include "cfg/inc/ports.h"
 #include "cfg/inc/imported_signals.h"
 #include <dataprocess/params.h>
 #include <zephyr/modbus/modbus.h>
@@ -27,10 +28,14 @@ int idu_forwarding_settings(struct modbus_iface_param *param)
         (stop != 161 && stop != 162)) {
         return -ERANGE;
     }
-    param->serial.baud = baud_rates[baud - 161];
-    param->serial.parity = parity == 85 ? UART_CFG_PARITY_NONE :
+    struct modbus_serial_param serial = {.baud = baud_rates[baud - 161]};
+    serial.parity = parity == 85 ? UART_CFG_PARITY_NONE :
                           parity == 161 ? UART_CFG_PARITY_ODD : UART_CFG_PARITY_EVEN;
-    param->serial.stop_bits = stop == 161 ? UART_CFG_STOP_BITS_1 : UART_CFG_STOP_BITS_2;
+    serial.stop_bits = stop == 161 ? UART_CFG_STOP_BITS_1 : UART_CFG_STOP_BITS_2;
+    if (param->mode == MODBUS_MODE_RAW) {
+        int err = idu_forward_serial_configure(serial);
+        if (err) { return err; }
+    } else { param->serial = serial; }
     param->server.unit_id = parameter(AIDC_LOCAL_SIG_TR_ADDR, 1);
     return 0;
 }

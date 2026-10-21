@@ -1,3 +1,6 @@
+#ifdef CONFIG_TR_MODBUS_RAW_PORT
+#include <transmit/modbus.h>
+#endif
 #include <transmit/modbus_adapter.h>
 #include <transmit/transmit.h>
 #include <transmit_lib.h>
@@ -245,6 +248,10 @@ int tr_modbus_init_server(int iface, struct modbus_iface_param param,
                            tr_modbus_write_fn write_fn, bool isolated)
 {
     if (iface < 0 || iface >= IFACE_LIMIT) { return -EINVAL; }
+#ifdef CONFIG_TR_MODBUS_RAW_PORT
+    int bound = tr_modbus_port_param(iface, &param);
+    if (bound) { return bound; }
+#endif
     k_mutex_lock(&config_lock, K_FOREVER);
     struct forwarding_port *port = port_for(iface);
     if (port && port->changing) { k_mutex_unlock(&config_lock); return -EBUSY; }
@@ -381,6 +388,10 @@ static int schedule_config(int iface, const struct modbus_iface_param *param,
 int tr_modbus_reconfigure(int iface, struct modbus_iface_param param,
                            tr_modbus_config_done_fn done, void *user)
 {
+#ifdef CONFIG_TR_MODBUS_RAW_PORT
+    int bound = tr_modbus_port_param(iface, &param);
+    if (bound) { return bound; }
+#endif
     if ((unsigned)param.mode > MODBUS_MODE_RAW || !param.server.user_cb ||
         !param.server.unit_id || param.server.unit_id > 247 ||
         (param.mode == MODBUS_MODE_RAW && !param.rawcb.raw_tx_cb) ||

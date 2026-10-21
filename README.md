@@ -5,8 +5,8 @@ Modbus 采集与转发、NVS 参数持久化及 MCUboot 升级。
 点表链路由 `dataprocess`、`collect`、`transmit` 提供，其他通用能力见[模块列表](modules/README.md)。
 默认使用虚拟南向采集口，现有 USART2 / RS485 用于北向转发。
 [`vport`](modules/vport/README.md) 已用于现有 RS485 转发和虚拟采集收发；
-`transmit` 内的[通信适配](docs/communication-ports.md)保留 Zephyr 的 RTU/RAW 实现，
-将完整报文接入逻辑端口。绑定、收发编排回调和注册入口集中在 `app/cfg/ports.c`。
+CO/TR 各自的[RAW 适配](docs/communication-ports.md)通过通用端口收发完整报文，
+实际串口继续复用 Zephyr 的 RTU 组帧和 DE 控制。绑定、收发编排回调和注册入口集中在 `app/cfg/ports.c`。
 
 ## 快速开始
 
@@ -138,7 +138,7 @@ IDU-pre/
 应用不再设置 `communication/`。`cfg/` 以 const 表提供接口名、路由、协议范围、
 命令及模拟寄存器初值；`cfg/ports.c` 注册应用收发回调，发送按虚拟口 ID 和链路选择
 实际接口，接收按来源交给对应协议。`collect` 管理采集端口、轮询和仿真，`transmit` 管理
-转发状态机、协议解析与命令分发，`vport` 管理链路和路由，`iap` 管理升级。
+转发状态机、协议解析与命令分发，`vport` 提供通用回调端口，`iap` 管理升级。
 AIDC 参数编码转换属于业务，保留在 `process/serial_settings.c`；各模块不引用
 IDU 配置头文件。虚拟模型后端只提供模型数据，不实现真实 UPP 链路。
 

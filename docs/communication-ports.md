@@ -1,142 +1,91 @@
-# 通信端口接入
+# 完整报文端口与 RAW 串口接入
 
-`vport` 负责通用链路和路由。`transmit/protocols/modbus/modbus_transport.c` 将 Zephyr
-已组帧的 Modbus 接口接入它，供现有 `collect` / `transmit` 使用；
-这部分属于已有协议适配层，不另建模块。IDU 默认启用，应用绑定及收发编排回调在
-[`app/cfg/ports.c`](../app/cfg/ports.c)。
+应用通过 collect/transmit 注册端口及收发回调；它们的 `src/message.c` 使用
+内部通用 `vport`。协议适配分别归 `protocols/modbus/raw.c`，不新增
+`modbus_transport` 模块，也不在 vport 中设置 UART/CAN/socket 后端。
 
-| 逻辑端口 | 链路 | Zephyr 接口 | 用途 |
-| --- | --- | --- | --- |
-| `IDU_PORT_FORWARD`（1） | `IDU_LINK_RS485`（1） | `idu-forward` 指定的 Modbus 串口 | 现有 USART2 / RS485 转发从站，使用通用点表及可选 IAPv3 |
-| `IDU_PORT_ACQUISITION`（2） | `IDU_LINK_ACQUISITION`（2） | 默认 `RAW_0` | 虚拟采集主站 |
-| `IDU_PORT_VIRTUAL_DEVICE`（3） | `IDU_LINK_VIRTUAL_DEVICE`（3） | 默认 `RAW_1` | 模拟下挂设备 |
+## 分层与报文格式
 
-选择 `IDU_COLLECT_RTU` 后，采集端口改绑 `idu-collect` 的独立物理 UART，
-不再注册模拟设备端口。当前板上 RS485 只做转发，不运行第二个 RTU 主站。
-点表 `DEV_TABLE_S.port` 仍是采集总线号：bus 0 由
-`co_port_open(&idu_collect_port)` 返回的接口交给 `co_init()`；它不是上述逻辑端口号。
-
-## 模块与产品配置
-
-`collect` 与 `transmit` 都使用 `src/` 保存核心服务、`protocols/modbus/` 保存协议适配，
-子目录分别维护 CMake 和 Kconfig；公共头文件路径不变。
-`CO_MODBUS_ADAPTER` 控制采集客户端适配，纯采集不依赖转发服务；
-`TR_MODBUS_ADAPTER` 控制转发侧完整请求适配。可选 `CO_SIMULATOR` 需要模拟一个服务端，
-当前仍显式依赖转发适配。公共传输拆分与 RAW 串口接入尚未实施。
-
-`app/communication` 已删除，执行逻辑按职责归属既有模块：
-
-| 位置 | 内容 |
+| 位置 | 职责 |
 | --- | --- |
-| `modules/transmit/protocols/modbus/server.c` | 多端口生命周期与配置更新 |
-| `modules/transmit/protocols/modbus/registers.c` | 状态读取、命令匹配及普通参数写入入口 |
-| `modules/iap/src/receiver.c` | IAP 完整报文及能力/版本查询，由寄存器服务扩展回调接入 |
-| `modules/collect/protocols/modbus/port.c` | 采集客户端初始化 |
-| `modules/collect/protocols/modbus/client.c` | Zephyr 客户端事务及重新配置，受 `CO_MODBUS_ADAPTER` 控制 |
-| `modules/collect/protocols/modbus/simulator.c` | 配置驱动的模拟设备及故障注入 |
-| `modules/collect/src/model_simulator.c` | 模型默认值后端 |
-| `app/cfg/ports.c` | 虚拟口/链路绑定、应用收发回调和 `idu_ports_init()` 注册入口 |
-| `app/cfg/forwarding.c` | 转发协议选择及串口设置 |
-| `app/cfg/parameters.c`、`simulation.c` | 命令/状态地址、IAP 扩展和模拟初值 |
-| `app/process/serial_settings.c` | 产品参数编码到串口设置的业务转换 |
+| `app/cfg/ports.c` | 虚拟口、来源标识、实际发送接口的编排，以及物理接收回调 |
+| `collect/src/message.c`、`transmit/src/message.c` | 端口注册、输入、发送和完成通知；隔离各自拥有的端口 |
+| 各模块 `protocols/modbus/raw.c` | RAW ADU 与完整 RTU 报文的转换、CRC 校验、请求来源保持 |
+| `modules/vport` | 通用端口登记、回调调用、载荷长度检查、每个逻辑口的发送互斥 |
+| Zephyr Modbus 构建期适配 | RAW 接收保护、发送错误传递、串口完整帧接入、DE 与 TX 完成 |
 
-网络和协议配置保存在 Flash，转发状态由 transmit 管理，模拟寄存器值由
-collect 的实例保存。新增产品提供自己的配置与业务回调，不修改模块源码。
-
-`cfg/ports.c` 注册的是应用自己的 `route_send()` / `route_receive()`：
-
-- 发送：`route_send(context, port, peer, frame, timeout)` 的 `port` 是虚拟口编号，
-  `context` 指向已选物理链路编号。应用用二者查找 `endpoints[]`，调用
-  `tr_modbus_transport_send()`，由它访问实际 UART/RAW 接口。
-- 接收：硬件适配器先调用 `vport_rx_submit(link, peer, frame)`；核心按路由确定
-  虚拟口，再调用 `route_receive(source, frame, user)`。应用用
-  `source->port/link` 选择协议接口，将完整来源交给 `tr_modbus_transport_receive()`。
-  RX 回调负责分发已收到的数据，不再次轮询硬件或提交同一帧。
-- `vport` 保留路由校验、共享缓冲和物理链路锁；采集/转发模块保留协议事务与业务处理。
-  应用可以增加回调分支接入新的硬件接口，不能在已经持有某条链路锁时偷偷发送到另一链路。
-  跨链路发送须从上层显式调用对应的 `vport_send(port, link, ...)`。
-
-当前 Modbus 适配仍是一对一的完整 ADU 交接，不是通用原始字节发送接口。
-发送回调必须使用当前已绑定的虚拟口；错误端口返回 `-EACCES`，不会覆盖其他事务。
-未来 CAN/UART/socket 后端可沿用相同的应用回调边界；需要实现各自硬件适配后才能使用。
-
-## 数据路径
+当前回调中的字节格式为 `地址 | 功能码 | 数据 | CRC低字节 | CRC高字节`。
+它不是 `modbus_adu` 结构体内存，也没有旧的交接代次或 MBAP 包装头。
+协议在 RAW 接口运行，物理串口仍保持 RTU 线格式；IAPv3 使用原有扩展大帧。
 
 ```text
-RS485 RX → Zephyr 帧间隔 / CRC → 完整 ADU → vport RX 队列和路由
-    → cfg.route_receive → 适配器交还原接口工作队列 → 寄存器服务 / IAP
-
-应答 ADU → vport TX 路由和链路锁 → cfg.route_send(虚拟口 ID)
-    → 适配器调用 Zephyr RTU 编码及 DE 控制 → RS485 TX
-
-collect → RAW_0 → vport TX → cfg.route_send → RAW_1
-    → vport RX → cfg.route_receive → 模拟设备（响应沿反向路径返回）
+发送：协议 RAW 回调 → CO/TR src/message → vport → cfg.send → 实际接口
+接收：串口完整帧/模拟设备 → cfg → co_port_input/tr_port_input
+      → vport 同步交付 → 协议复制 ADU → Zephyr 对应工作队列
 ```
 
-接收必须经 `vport` 回调交接成功，才会执行协议业务；发送必须经路由和后端
-完成，才计入成功统计。不是旁路监测，也没有同时保留一条直接处理路径。
-未注册的 Zephyr 接口保留原行为，便于其他模块独立使用和测试。
+vport 不建立另一套 RX 队列或工作线程。输入回调必须同步消费或复制数据，
+协议处理使用既有 Zephyr 工作队列；转发的耗时命令继续使用独立工作队列。
+所有输入/输出缓冲和来源指针只在回调期间有效。
 
-这是**完整 Modbus 报文层的适配**。UART 引脚、波特率、RTU 组帧、CRC 和
-RS485 DE 仍由 Zephyr 维护，未新增第二套 UART 驱动。`VPORT_DATAGRAM`
-表示这里已经得到完整报文，不表示 UART 是报文硬件。协议适配依赖 Modbus；
-`vport` 核心仍不依赖任何协议。未来原始 UART/CAN/socket 后端放在
-`modules/vport/backends/`，按链路类型注册；当前尚无 CAN/socket 驱动适配。
+## 当前产品绑定
 
-AIDC 的 `read_model` 是直接产生样本的内存模型，不是 UPP 通信端口，
-因此没有把它包装成假的收发链路。日志控制台、MCUboot 和 MCUmgr SMP
-继续使用各自的 Zephyr 服务，不属于应用 CO/TR 端口。
+| 虚拟口 | 协议接口 | 应用选择的实际通道 |
+| --- | --- | --- |
+| `IDU_PORT_FORWARD`（1） | `RAW_2` 服务端 | `idu-forward` 对应 USART2 / RS485 |
+| `IDU_PORT_ACQUISITION`（2） | `RAW_0` 客户端 | 默认虚拟回环；RTU 配置使用独立 `idu-collect` UART |
+| `IDU_PORT_VIRTUAL_DEVICE`（3） | `RAW_1` 模拟服务端 | 回应采集口；保留请求的来源标识 |
 
-## 配置与并发
+设备表 `DEV_TABLE_S.port` 仍表示采集总线编号，不能直接改为虚拟口编号。
+`source.link/peer` 是应用定义的不透明信息。应用在发送回调中检查映射，
+服务端响应使用原请求来源；采集侧只接受配置对端的响应。
 
-1. `app/main.c` 调用 `idu_ports_init()`；应用先校验路由，再调用
-   `tr_modbus_transport_bind()` 绑定硬件/仿真接口，最后用 `vport_init()` 注册应用回调和路由。
-   该应用入口可重复调用，注册失败可重试，成功后不更换配置。
-2. `co_port_open(&idu_collect_port)` 初始化配置中的真实客户端或可选仿真设备；接口交给 `co_init()`。
-3. 周期执行 `tr_server_service(&idu_forwarding, sample.address)`，由 transmit 管理启动、地址/串口参数变化和恢复。
+`idu_ports_init()` 用 `co_modbus_port_bind()` / `tr_modbus_port_bind()` 注册常驻
+配置，再通过 `mb_serial_open()` 准备实际串口。`co_port_open()` 和
+`tr_server_service()` 仍负责协议生命周期；RAW 发送回调由各自协议适配安装。
+重复注册同一配置允许重试，替换配置、跨模块抢占同一虚拟口均被拒绝。
 
-绑定和路由表保持到重启；串口地址、格式切换及恢复不改变绑定。
-本适配器目前一接口对应一端口、一链路，固定 `peer=0`。不要给同一 UART
-再注册第二个后端，也不能用它让多个 Modbus 接口并发接管一个 UART。
-未来 CAN 多 ID、网络多连接仍由各自适配器处理。
+`CO_VPORT` / `TR_VPORT` 分别控制通用报文入口；`CO_MODBUS_RAW_PORT` /
+`TR_MODBUS_RAW_PORT` 控制 Modbus RAW 适配。纯采集不启用 transmit 服务。
+模拟设备是服务端，因此可选 `CO_SIMULATOR` 仍依赖转发适配。
 
-RX 交接发生在原有协议工作队列：先复制完整 ADU 到 vport 有界队列，
-再等待短时交接完成。vport 回调只校验来源、复制数据、唤醒原工作队列，
-不运行参数保存、下游等待或 IAP 写 Flash。这保留了转发独立工作队列和
-既有配置/恢复排空规则；不会让慢业务堵住 vport 接收线程。
+## 串口时序与构建期兼容
 
-- `TR_MODBUS_TRANSPORT_RX_TIMEOUT_MS` 默认 50 ms。池满、无路由或超时均不执行
-  该请求；超时交接有代次校验，旧队列项不能覆盖下一次请求。
-- RAW 接收在交接和业务执行期间拒绝第二帧，返回 `-EBUSY`，避免覆盖
-  Zephyr 单个 `rx_adu`；发送错误会传回采集客户端。
-- `TR_MODBUS_TRANSPORT_TX_TIMEOUT_MS` 默认 3000 ms，包含链路锁等待。
-  串口发送等待 TX complete 和 DE 释放；失败前停 TX、清未发缓冲、恢复 RX。
-  超时不表示对端未收到字节，不能自动重试写操作。
-- 后端只接受当前 Modbus 事务线程发起的发送，不能用任意
-  `vport_send()` 覆盖正在使用的 Zephyr `tx_adu`。
-- 当前只支持 UART 中断 API，显式排除 `MODBUS_SERIAL_ASYNC_API`。
-  RAW 回调必须同步消费或复制 ADU，不能保留其指针。
+当前 Zephyr 4.4.2 没有公开独立的 RTU 收帧/发送接口，因此继续由
+`modules/transmit/protocols/modbus/compat` 生成构建目录内的适配源码。
+collect 的协议目录也会加载这套构建适配，不因此启用 transmit 的服务或线程。
+源文件 SHA-256 和替换锚点保持严格检查，West 管理的源码不修改。
 
-内部载荷为交接代次、MBAP 字段和 ADU data；不会把内部头发到 RS485。
-`TR_MODBUS_TRANSPORT_MTU = CONFIG_MODBUS_BUFFER_SIZE + 8`，默认 vport 缓冲 288
-字节可容纳标准完整 ADU（通用 vport 的默认值仍为 256，IDU 配置为 288）。
-IAPv3 配置使用 1100 字节 Modbus 缓冲及 1108 字节 vport 载荷。
-扩大 Modbus 缓冲时必须相应扩大
-`VPORT_MAX_PAYLOAD`，编译断言会检查容量。
+`modbus_io.h` 暴露串口完整帧接口及 RAW 完成通知。共享实现插入生成的
+Zephyr core，沿用原串口配置、定时器、CRC、UART IRQ 和 DE 控制，不新增
+第二套 UART 驱动。`core_io.h`、`serial_open.h` 是该构建适配的私有实现片段。
 
-`vport_get_stats(IDU_LINK_RS485, &stats)` 可查询转发链路收发统计；
-采集和模拟设备分别用对应链路号。`rx_delivered` 表示交接回调已返回，
-不等于业务已处理成功；无效 CRC 在进入 vport 前即被 Zephyr 拒绝。
+串口接收完成后交给应用回调，由应用调用 CO/TR 的输入入口。RAW 请求处理
+结束时，完成通知恢复串口接收，覆盖正常响应、静默请求和失败路径。
+发送等待真实 TX complete；超时关闭 TX/DE、清理发送状态并恢复 RX。
+物理 UART 只打开一次，串口配置/发送由该实例互斥保护。
 
-## 适配边界与验证
+通过 CO/TR 绑定的 RAW 接口一次只接收一个待处理 ADU，第二帧返回 `-EBUSY`，不覆盖请求或来源。
+超长、CRC 错误和错误端口返回错误。RAW 发送回调错误真实传给客户端；
+写入超时仍不自动重试，因为不能据此判断远端是否已执行。
 
-`transmit/protocols/modbus/compat` 对 Zephyr 4.4.2 四个 Modbus 源文件做哈希校验，在构建目录
-生成含交接/发送完成钩子的副本；不修改 West 管理的源码。升级 Zephyr
-时必须复核这些钩子。
+`CO_MODBUS_TX_TIMEOUT_MS` / `TR_MODBUS_TX_TIMEOUT_MS` 约束发送预算。
+`CONFIG_MODBUS_BUFFER_SIZE` 决定完整帧上限；IAPv3 当前为 1100 字节。
+vport 不再分配与此大小相同的共享接收池。
 
-`tests/communication/` 使用 Zephyr UART/GPIO emulator 和真实 Modbus
-客户端/服务端，验证 RTU 往返、CRC、RAW 双向路由、完整载荷、并发拒绝、
-交接超时、TX 错误、虚拟口误配拒绝、DE 释放及配置恢复。`tests/vport/` 验证共享链路
-发送和原路回复时回调收到正确的虚拟口 ID。`tests/forwarding/` 还校验应用采集路径
-确实增加 vport 收发计数。这些是模拟器验证，RS485 电气时序和 CAN
-仍需实板验证。
+## 扩展与边界
+
+应用注册常驻回调，不在运行期替换端口。多个实际通道可在应用映射到同一个
+虚拟口，但须保留来源。实际硬件共享和跨请求事务仲裁由接入实现负责；
+当前板上 RS485 只做转发，物理采集必须使用另一条 UART。
+
+采集内置 Modbus 路径继续提供 FC03/04/06/16；自定义功能码可通过已有
+`co_bus_cfg.transfer` 接入。Zephyr 4.4.2 的 `modbus_raw_backend_txn()` 本身仅支持
+RTU/ASCII 后端，不能把它视为任意功能码的 RAW 事务接口。
+
+本次不实现 CAN、TCP 或串口双主仲裁。今后接入其他传输时，在应用选择
+发送接口，并按需增加相应协议报文转换，vport 核心保持不变。
+
+验证由 `tests/vport`、`tests/communication`、`tests/collect_modbus` 和现有
+点表/参数/IAP 回归完成。UART/GPIO emulator 不代替实板的 DE、帧间隔和
+电气时序测量。

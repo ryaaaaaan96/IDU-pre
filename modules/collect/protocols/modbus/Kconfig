@@ -22,3 +22,15 @@ config CO_SIMULATOR_WORDS
     depends on CO_SIMULATOR
     default 32
     range 1 256
+
+config CO_MODBUS_RAW_PORT
+    bool "Modbus RAW complete-message port adapter"
+    depends on CO_MODBUS_ADAPTER && MODBUS_RAW_ADU
+    depends on !MODBUS_SERIAL_ASYNC_API
+    select CO_VPORT
+
+config CO_MODBUS_TX_TIMEOUT_MS
+    int "Complete-message send timeout (ms)"
+    depends on CO_MODBUS_RAW_PORT
+    default 3000
+    range 10 10000

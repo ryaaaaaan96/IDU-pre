@@ -1,3 +1,6 @@
+#ifdef CONFIG_TR_MODBUS_RAW_PORT
+#include <transmit/modbus.h>
+#endif
 #include <transmit/server.h>
 #include <transmit/transmit.h>
 #include <zephyr/kernel.h>
@@ -62,6 +65,10 @@ int tr_server_service(const struct tr_server_config *config, uint8_t unit)
     param.server.unit_id = unit;
     if (!param.server.user_cb) { param.server.user_cb = tr_callbacks(); }
     if (!err && config->configure) { err = config->configure(&param); }
+    if (err == -EBUSY) { k_mutex_unlock(&server_lock); return 0; }
+#ifdef CONFIG_TR_MODBUS_RAW_PORT
+    if (!err) { err = tr_modbus_port_param(iface, &param); }
+#endif
     if (!err && (!param.server.unit_id || param.server.unit_id > 247)) { err = -ERANGE; }
     if (!err && !server->configured) {
         err = tr_modbus_init_server(iface, param, config->write, true);

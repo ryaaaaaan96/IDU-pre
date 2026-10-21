@@ -38,4 +38,10 @@ void co_simulator_set_write_fault(struct co_simulator *sim, enum co_simulator_fa
 unsigned co_simulator_write_count(struct co_simulator *sim);
 int co_simulator_set_register(struct co_simulator *sim, uint8_t function,
                                uint16_t address, uint16_t value);
+#ifdef CONFIG_CO_MODBUS_RAW_PORT
+#include <vport/message.h>
+int co_simulator_port_send(struct co_simulator *sim, uint16_t destination,
+                           const struct vport_source *source, const struct vport_frame *frame,
+                           bool request);
+#endif
 #endif

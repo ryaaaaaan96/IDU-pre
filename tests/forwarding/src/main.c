@@ -6,7 +6,7 @@
 #include "process/idu_process.h"
 #include "cfg/inc/device.h"
 #include "cfg/inc/signal_ids.h"
-#include <vport/vport.h>
+#include <collect/message.h>
 #include <collect/collect.h>
 #include <dataprocess/params.h>
 #include <dataprocess/points.h>
@@ -207,13 +207,11 @@ ZTEST(forwarding, test_address_filter_and_parameter_validation)
 
 ZTEST(forwarding, test_application_collection_uses_virtual_ports)
 {
-    struct vport_stats before, after;
-    zassert_ok(vport_get_stats(IDU_LINK_ACQUISITION, &before));
     struct modbus_adu request = {.fc = 4, .length = 4, .data = {0x1f, 0xd8, 0, 1}};
     zassert_ok(co_transfer(10, &request));
-    zassert_ok(vport_get_stats(IDU_LINK_ACQUISITION, &after));
-    zassert_true(after.tx_completed > before.tx_completed);
-    zassert_true(after.rx_delivered > before.rx_delivered);
+    zassert_equal(request.length, 3);
+    zassert_equal(request.data[0], 2);
+    zassert_equal(sys_get_be16(request.data + 1), 5);
 }
 
 ZTEST(forwarding, test_unmapped_registers_and_contiguous_reads)

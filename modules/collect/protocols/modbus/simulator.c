@@ -1,3 +1,6 @@
+#ifdef CONFIG_CO_MODBUS_RAW_PORT
+#include <collect/modbus.h>
+#endif
 #include <collect/simulator.h>
 #include <transmit/modbus_adapter.h>
 #include <zephyr/sys/byteorder.h>
@@ -167,8 +170,32 @@ int co_simulator_start(struct co_simulator *sim, const struct co_simulator_confi
         .mode = MODBUS_MODE_RAW, .rx_timeout = config->timeout_us,
         .rawcb = {.raw_tx_cb = client_tx, .user_data = sim},
     };
+#ifdef CONFIG_CO_MODBUS_RAW_PORT
+    err = co_modbus_port_param(client, &client_param);
+    if (err) { modbus_disable(server); return err; }
+#endif
     err = modbus_init_client(client, client_param);
     if (err) { modbus_disable(server); return err; }
     sim->started = true;
     return client;
 }
+
+#ifdef CONFIG_CO_MODBUS_RAW_PORT
+#include <zephyr/sys/crc.h>
+#include <transmit/message.h>
+int co_simulator_port_send(struct co_simulator *sim, uint16_t destination,
+                           const struct vport_source *source, const struct vport_frame *frame,
+                           bool request)
+{
+    if (!sim || !sim->started) { return -EACCES; }
+    if (request) {
+        return atomic_get(&sim->online) ? tr_port_input(destination, source, frame) : 0;
+    }
+    if (frame->size >= 2 && (frame->data[1] == 6 || frame->data[1] == 16)) {
+        int fault = atomic_get(&sim->fault);
+        if (fault == CO_SIMULATOR_WRITE_DISCONNECT) { atomic_clear(&sim->online); }
+        if (fault == CO_SIMULATOR_WRITE_DISCONNECT || fault == CO_SIMULATOR_WRITE_LOSE_ACK) { return 0; }
+    }
+    return co_port_input(destination, source, frame);
+}
+#endif

@@ -23,10 +23,10 @@ compatibility.
 | `analog_input` | `analog_input/analog_input.h` | Configured ADC channel groups, software averaging and ordered raw samples |
 | `gpio` | `gpio/digital_io.h`, `gpio/idu_inputs.h` | Generic GPIO groups and optional IDU GPIO/ADC sampling profile |
 | `watchdog` | `watchdog/watchdog.h` | Per-instance progress-gated GPIO feeding for external watchdogs |
-| [`vport`](vport/README.md) | `vport/vport.h` | Registered transport backends, logical routing, CAN ID filters, bounded RX and per-link TX ownership |
+| [`vport`](vport/README.md) | `vport/vport.h` | Generic complete-message callbacks, ownership isolation and per-port send serialization |
 | `dataprocess` | `data_process.h`, `platform_callback.h`, `dataprocess/{points,process,params}.h` | Shared data contracts/store, `dp_*` processing, optional NVS |
 | `collect` | `collect_lib.h`, `collect/{collect,port,simulator,model_simulator}.h` | `co_*` acquisition, bus scheduling, client initialization and optional simulation |
-| `transmit` | `transmit_lib.h`, `transmit/{transmit,modbus_adapter,modbus_transport,server,registers}.h` | `tr_*` mappings, server lifecycle, register services, protocol handlers and optional vport adaptation |
+| `transmit` | `transmit_lib.h`, `transmit/{transmit,message,modbus,modbus_adapter,server,registers}.h` | `tr_*` mappings, server lifecycle, register services, protocol handlers and optional vport adaptation |
 | `quicklz` | `quicklz/quicklz.h` | `qlz_decode_level3()` bounded QuickLZ level 3 decoding in plain C |
 | [`iap`](iap/README.md) | `iap/{iap,sgz}.h` | IAPv3 reception, SGZ/AES, signed images, flash staging and recovery; devicetree/Kconfig product policy |
 | [`gd32e505`](gd32e505/README.md) | Zephyr `soc_root`, `dts_root`, `adc_*` | E505 SoC, devicetree clock startup and synchronous ADC0 driver |
@@ -67,12 +67,12 @@ Both acquisition and forwarding separate protocol adapters from their core:
 ```text
 collect/                              transmit/
 ├── src/                              ├── src/
-│   ├── collect.c                      │   └── transmit.c
+│   ├── collect.c / message.c          │   └── transmit.c / message.c
 │   └── model_simulator.c              └── protocols/modbus/
 └── protocols/modbus/                      ├── modbus_adapter.c
     ├── client.c / client.h                ├── server.c
     ├── port.c                            ├── registers.c
-    ├── simulator.c                       ├── modbus_transport.c
+    ├── simulator.c / raw.c               ├── raw.c
     ├── CMakeLists.txt                     ├── compat/
     └── Kconfig                           ├── CMakeLists.txt
                                           └── Kconfig
@@ -89,9 +89,10 @@ adaptation and isolated workers, with its existing service/transport sub-options
 
 `CO_SIMULATOR` deliberately models a remote server and still uses the transmit
 adapter; it is optional and is not a dependency of the acquisition client.
-The current shared complete-ADU handoff remains in transmit's Modbus subdirectory.
-Extracting a common transport backend and switching physical RTU interfaces to
-RAW are later migration steps; this layout change does not alter wire framing.
+Each protocol directory owns its RAW-to-RTU-message adapter. Generic message entry
+points live in each module's src/message.c. The old ADU handoff has been removed.
+Shared build-local Zephyr fixes remain in transmit/protocols/modbus/compat and are
+also loaded by the collector without enabling any transmit service or worker.
 
 `tests/collect_modbus` exercises real Zephyr client reads, writes, reconfiguration
 and lost acknowledgements with transmit and the Modbus server disabled.
@@ -103,11 +104,11 @@ and both the client adapter and transmit disabled.
 There is no application communication implementation directory. Product configuration
 uses const tables in `app/cfg/`. `ports.c` also owns routing callbacks and registration:
 TX receives the virtual port ID and selects the physical adapter; RX dispatches by
-source port/link/peer. Module code never includes product headers.
+logical port and opaque source link/peer. Module code never includes product headers.
 
 | Service | Module API | Product input |
 | --- | --- | --- |
-| Network registration | App `idu_ports_init()` calls `tr_modbus_transport_bind()` and `vport_init()` | Endpoints, application RX/TX callbacks and vport tables |
+| Network registration | App `idu_ports_init()` calls `co_modbus_port_bind()` / `tr_modbus_port_bind()` | Logical IDs, application callbacks and physical serial endpoints |
 | Forwarding lifecycle | `tr_server_service()` | Interface, protocol attach callback, serial settings and recovery interval |
 | Parameter registers | `tr_register_route()` / `tr_register_write()` | Command callbacks and status addresses |
 | Optional protocol extension | `tr_register_service.extension` | Complete-ADU callback, e.g. `iap_route()` |
@@ -194,13 +195,12 @@ LED failures stop healthy progress and cannot override the original fault.
 
 ## Integration
 
-`VPORT` independently enables the [logical port core](vport/README.md). Register
-immutable link, port and route tables with `vport_init()`, then let backends
-submit received data. It has no DP, Modbus or hardware driver dependency.
-IDU enables `TR_MODBUS_TRANSPORT` by default to route existing RS485 forwarding and
-virtual acquisition through this core at the complete-ADU boundary.
-Bindings live in `app/cfg/ports.c`. Raw UART, CAN and socket
-backends remain separate future work; see [the adapter contract](../docs/communication-ports.md).
+`VPORT` independently enables the [generic callback port core](vport/README.md).
+CO/TR expose message registration/input/send interfaces and use it internally.
+`CO_MODBUS_RAW_PORT` / `TR_MODBUS_RAW_PORT` enable their respective protocol adapters.
+The application selects actual hardware in callbacks, while build-local Zephyr
+serial I/O retains framing, CRC, DE and transmit completion. No vport hardware
+backends or receive workers are allocated. See [communication ports](../docs/communication-ports.md).
 
 Include `modules.cmake` before `find_package(Zephyr ...)` to register these modules,
 or append individual module directories to `ZEPHYR_EXTRA_MODULES`.

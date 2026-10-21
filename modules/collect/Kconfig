@@ -28,6 +28,10 @@ config CO_STACK_SIZE
       Total reserved stack space is CO_MAX_BUSES times this size, plus any
       architecture alignment or guard requirements.
 
+config CO_VPORT
+    bool "Complete-message ports through vport"
+    select VPORT
+
 rsource "protocols/modbus/Kconfig"
 
 config CO_MODEL_SIMULATOR

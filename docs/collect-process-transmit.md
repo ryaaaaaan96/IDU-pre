@@ -8,12 +8,10 @@
 事件调度。运行时只依赖本应用及 West 清单固定的 Zephyr，不依赖参考工程目录。
 这三个模块负责点表数据链；独立的 `modules/quicklz` 提供纯 C 解码能力。
 
-独立的 [`modules/vport`](../modules/vport/README.md) 已提供逻辑端口核心，
-以注册后端连接传输链路，支持 CAN ID 分流、多链路汇入及来源保持。
-它不依赖三张点表或 Modbus。IDU 默认通过
-`transmit` 内的[通信适配](communication-ports.md)将现有 RS485 转发和
-虚拟采集的完整 ADU 接入，绑定和应用收发回调在 `app/cfg/ports.c`，发送回调收到虚拟口 ID 后选择实际接口。
-Zephyr 保留 RTU 组帧、串口配置和方向控制；CAN/socket 后端待后续接入。
+独立的 [`modules/vport`](../modules/vport/README.md) 提供通用完整报文端口。
+CO/TR 的 `src/message.c` 使用它，协议适配各自放在 `protocols/modbus/`。
+应用在 `app/cfg/ports.c` 注册回调并选择实际发送接口；RAW 协议处理与
+Zephyr RTU 串口接入分开，详见[通信端口](communication-ports.md)。
 
 ## 参考设计与 IDU 对应关系
 

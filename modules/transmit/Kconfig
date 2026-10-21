@@ -5,6 +5,10 @@ menuconfig TRANSMIT
 
 if TRANSMIT
 
+config TR_VPORT
+    bool "Complete-message ports through vport"
+    select VPORT
+
 rsource "protocols/modbus/Kconfig"
 
 endif

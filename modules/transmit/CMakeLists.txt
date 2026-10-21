@@ -1,6 +1,7 @@
 zephyr_include_directories(include)
 if(CONFIG_TRANSMIT)
   zephyr_library()
+  zephyr_library_sources_ifdef(CONFIG_TR_VPORT src/message.c)
   zephyr_library_sources(src/transmit.c)
   add_subdirectory(protocols/modbus)
 endif()

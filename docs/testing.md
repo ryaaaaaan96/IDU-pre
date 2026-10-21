@@ -44,8 +44,8 @@ build/IDU-pre/tests/reference_services/zephyr/zephyr.exe -flash_in_ram
 | `image_confirm`、`iap`、`test_iap_codec.py` | 健康确认、独立 IAP 模块、配置驱动升级、收包/签名拒绝、SGZ/QuickLZ 边界 |
 | `adc`、`test_build_configuration.py` | 标准 ADC API、采样平均、硬件超时恢复、并发隔离与 Sysbuild 配置覆盖 |
 | `io` | GPIO 极性/位序/32 位边界、外部看门狗超时与 GPIO 故障锁定 |
-| `vport` | 后端注册、路由、CAN ID 分流、来源隔离、有界 RX、发送互斥 |
-| `communication` | UART/GPIO emulator 上的 RTU/RAW 往返、完整 ADU（含 IAPv3 大报文配置）、背压、交接超时、TX 错误及恢复 |
+| `vport` | 端口登记、所有权隔离、完整报文、来源保持和错误边界 |
+| `communication` | UART/GPIO emulator 上的 RTU/RAW 往返、完整 ADU（含 IAPv3 大报文配置）、忙时防覆盖、来源保持、TX 超时/错误及恢复 |
 | `simulator` | 独立于产品配置的双设备模拟、值/故障隔离、完整多字写入及丢失应答 |
 | `acquisition` | main 启动顺序与失败短路、存储降级、采样发布、故障锁定及试运行确认条件 |
 
@@ -561,3 +561,23 @@ IAPv3 通过 `tr_register_service.extension` 接入，能力和版本寄存器�
 
 日志位于工作区 `build/IDU-pre/cleanup/`。没有执行实板烧录；RS485 时序、
 上位机 IAP 互操作、掉电交换和看门狗交接仍需实物验证。
+
+
+## RAW 报文端口迁移验证（2026-10-21）
+
+CO/TR 的 `src/message.c` 已通过通用回调端口收发；协议各自运行 RAW，
+物理串口复用 Zephyr RTU 组帧和 DE。旧路由表、vport RX 线程及 ADU 交接路径已删除。
+
+- `tests/run.sh` 完整通过：43 次 native_sim 执行，273 项 Ztest PASS，0 FAIL，0 编译警告。
+- Python 共 34 项，31 项通过；3 项因外部旧 QuickLZ/SGZ 样本缺失而跳过。
+- `collect_modbus` 实际经过 CO 消息入口及 RAW 回调，未启用 transmit 或 Modbus 服务端；
+  `transmit_port` 实际经过 TR 消息入口，未启用 collect 或 Modbus 客户端。
+- `communication` 普通及 1100 字节配置各 9 项通过，覆盖完整 RTU 往返、CRC、
+  有效 CRC 前缀的超长帧拒绝、来源保持、忙时防覆盖、注册失败后重试、
+  TX 超时释放 DE、静默请求恢复，以及请求结束后再调整串口参数。
+- MCUboot + IAPv3 构建、签名验证及 SGZ 导出通过。应用 Flash 123,972 B、RAM 104,576 B；
+  相比上一轮协议目录整理的 RAM 108,736 B，链接报告减少 4,160 B。
+
+日志位于工作区 `build/IDU-pre/raw-migration/`。主机测试使用
+`ASAN_OPTIONS=detect_leaks=0` 规避运行环境的 LeakSanitizer 限制，ASan/UBSan 保持启用。
+未烧录或测量实板；UART/GPIO emulator 不代表实物 DE、电气边沿和帧间隔验证。
