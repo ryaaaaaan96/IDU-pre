@@ -4,8 +4,8 @@
 
 `device.c` 声明产品设备与点表的关联并注册回调；三表校验、执行视图及数据池初始化
 均由 `modules/dataprocess` 完成。
-端口、协议和仿真配置也集中在本目录；`ports.c` 还实现收发编排回调及注册入口。
-发送回调收到虚拟口 ID 后选择实际接口，接收回调按来源分发；协议解析、事务和硬件
+端口和协议配置也集中在本目录；`ports.c` 还实现收发编排回调及注册入口。
+发送回调收到虚拟口 ID 后选择实际接口，接收回调按来源分发；协议解析和硬件
 收发机制归模块。详见[通信端口接入](../../docs/communication-ports.md)。
 
 点表沿用参考工程的结构：设备表关联处理、采集和转发表，业务通过信号 ID 和
@@ -18,7 +18,6 @@ cfg/
 ├── ports.c               # 端口配置、收发编排回调及注册
 ├── forwarding.c          # 转发协议和串口配置
 ├── parameters.c          # 参数状态/命令寄存器和 IAP 扩展绑定
-├── simulation.c          # 可选模拟设备/模型配置
 ├── inc/                  # 本目录全部配置头文件
 │   ├── ports.h            # 产品端口 ID、注册入口及配置声明
 │   ├── device.h
@@ -43,7 +42,7 @@ cfg/
 | `inc/signal_ids.h`、`inc/imported_signals.h` | 设备和信号宏，分别维护应用定义和导入定义 |
 
 `process.c` 直接绑定 `app/process/` 的回调，不再维护 `point_metadata`、回调名称
-字符串或另一套 UPP 模型/初值副本。虚拟模型后端直接读取 `collect.c` 和 `process.c`。
+字符串或另一套 UPP 模型/初值副本。测试目录的虚拟模型后端直接读取 `collect.c` 和 `process.c`。
 默认值和范围通过原接口 `DM_SIG_DATA_S` 返回，不改变参考结构。
 处理、采集和转发表的行直接使用结构体字段初始化，信号 ID、标志和字序保留命名常量。
 `transmit.c` 逐项列出实际寄存器地址，北向窗口不再通过设备实例宏自动生成。
@@ -89,7 +88,7 @@ UPP 的 `sig_num` 使用 `IDU_IMPORTED_MODEL_FIELD_COUNT`，由工具统计所�
    不跨未定义空洞合帧；`rqst_cyl` 经设备配置中的转换函数解释，不直接当毫秒。
 4. 在 `transmit.c` 增加北向映射即可，不另设协议窗口白名单。
    控制命令在 `parameters.c` 声明，IAP 通过寄存器服务的 `extension` 回调接入。
-   手写三表增删行后，同步修改 `inc/tables.h` 中相应数量；虚拟采集和大点表配置
+   手写三表增删行后，同步修改 `inc/tables.h` 中相应数量；默认和大点表配置
    的条件分支也须匹配，数量不一致时构建报错。
 5. 同型号 MV-IO 实例直接加入 `device.c` 的 `devices[]`，指定端口、从机地址，
    显式引用共享处理/采集表，并在 `transmit.c`
@@ -155,3 +154,14 @@ python applications/IDU-pre/tools/import_aidc.py --source /path/to/AIDC_CODE/COD
 
 原数据中类型与字节数不一致的条目保留诊断，显式转为字数组；缺少处理定义的映射
 保持未初始化，不能把补零当成有效设备值。UPP 仅接入模型表和虚拟后端，未实现线协议。
+
+## 同线 RS485 联调
+
+产品已移除内置模拟从机，原模拟配置保存在 `tests/fixtures/`。`ports.c` 将
+CO/TR 两个 RAW 逻辑口绑定到同一个 USART2/RS485，链路锁覆盖完整南向事务。
+北向读缓存，参数下发按现有采集映射执行。南向地址当前为 1，IDU 拨码请设为
+不同地址（如 2）；外部主站应留出采集窗口。详见 [端口说明](../../docs/communication-ports.md)。
+
+`ports.c` 由 `app/CMakeLists.txt` 加入产品编译；点表回归单独使用测试端口配置，
+`tests/shared_rs485` 则编译实际 `ports.c`，通过 UART emulator 验证同线收发。
+AIDC 虚拟模型仅用于 `tests/aidc`，不再提供模拟固件构建入口。

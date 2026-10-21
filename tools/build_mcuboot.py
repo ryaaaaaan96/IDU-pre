@@ -113,13 +113,12 @@ def main():
     parser.add_argument("--pristine", choices=("auto", "always"), default="auto")
     upload = parser.add_mutually_exclusive_group()
     upload.add_argument("--smp-uart", action="store_true", help="Enable SMP over USART0")
-    parser.add_argument("--aidc", action="store_true")
     upload.add_argument("--iapv3", action="store_true", help="IAPv3 RS485 AES/SGZ transport (default)")
     upload.add_argument("--no-upload", action="store_true", help="Build without an upload receiver")
     args = parser.parse_args()
-    if args.iapv3 and (args.aidc or args.smp_uart):
+    if args.iapv3 and args.smp_uart:
         parser.error("--iapv3 is an MV-IO profile and an alternative to --smp-uart")
-    args.iapv3 = args.iapv3 or not (args.smp_uart or args.aidc or args.no_upload)
+    args.iapv3 = args.iapv3 or not (args.smp_uart or args.no_upload)
     key = args.key.expanduser().resolve() if args.key else WORKSPACE / "build/keys/IDU-pre-dev.pem"
     if args.key and not key.is_file():
         parser.error("--key must refer to an existing signing key")
@@ -132,11 +131,9 @@ def main():
             os.umask(old_mask)
     if not args.key:
         print(f"Using local development key: {key}; retain it for subsequent updates.", flush=True)
-    suffix = ("-aidc" if args.aidc else "") + ("-smp" if args.smp_uart else "") + ("-iapv3" if args.iapv3 else "")
+    suffix = ("-smp" if args.smp_uart else "") + ("-iapv3" if args.iapv3 else "")
     build = WORKSPACE / f"build/IDU-pre/mcuboot{suffix}"
     conf = [APP / "bootloader/app.conf"]
-    if args.aidc:
-        conf.append(APP / "conf/aidc-virtual.conf")
     if args.smp_uart:
         conf.append(APP / "conf/smp-uart.conf")
     overlays = [APP / "bootloader/app.overlay"]
@@ -151,7 +148,7 @@ def main():
                "-d", build, "--", f"-DSB_CONFIG_BOOT_SIGNATURE_KEY_FILE={json.dumps(str(key))}",
                f"-DIDU-pre_EXTRA_CONF_FILE={';'.join(map(str, conf))}",
                f"-DIDU-pre_EXTRA_DTC_OVERLAY_FILE={';'.join(map(str, overlays))}",
-               f"-DIDU-pre_CONFIG_IDU_AIDC_PROFILE={'y' if args.aidc else 'n'}",
+               "-DIDU-pre_CONFIG_IDU_AIDC_PROFILE=n",
                f"-DIDU-pre_CONFIG_MCUBOOT_IMGTOOL_SIGN_VERSION={json.dumps(args.version)}"]
     run(*command)
     export(build, key, WORKSPACE / f"build/hex/IDU-pre-mcuboot{suffix}", args.iapv3, args.version)

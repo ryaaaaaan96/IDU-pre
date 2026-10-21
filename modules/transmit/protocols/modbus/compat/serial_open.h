@@ -16,6 +16,7 @@ int mb_serial_open(const char *name, struct modbus_serial_param param,
     ctx = modbus_init_iface(iface);
     if (!ctx) { return -EALREADY; }
     k_mutex_init(&io->lock); k_sem_init(&io->transmitted, 0, 1);
+    io->next_tx = sys_timepoint_calc(K_NO_WAIT);
     io->user = user; io->receive = receive; io->param = param;
     ctx->client = false; /* Receive continuously; dispatch bypasses the server parser. */
     struct modbus_iface_param settings = {.mode = MODBUS_MODE_RTU, .serial = param};

@@ -10,3 +10,5 @@ add_subdirectory(${IDU_APP}/app/cfg app_cfg)
 add_subdirectory(${IDU_APP}/app/process point_process)
 zephyr_ld_options(-Wl,--wrap=modbus_init_server)
 zephyr_ld_options(-Wl,--wrap=dp_params_get_status)
+
+add_subdirectory(${IDU_APP}/tests/fixtures fixtures)

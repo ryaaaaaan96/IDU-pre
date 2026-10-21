@@ -4,3 +4,5 @@ config MODBUS_BUFFER_SIZE
 
 source "Kconfig.zephyr"
 rsource "../../app/Kconfig"
+
+rsource "../fixtures/Kconfig"

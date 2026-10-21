@@ -1,3 +1,4 @@
+#include "simulation.h"
 #include "cfg/inc/ports.h"
 #include <collect/simulator.h>
 #include "cfg/inc/signal_ids.h"

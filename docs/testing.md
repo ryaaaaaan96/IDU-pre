@@ -581,3 +581,26 @@ CO/TR 的 `src/message.c` 已通过通用回调端口收发；协议各自运行
 日志位于工作区 `build/IDU-pre/raw-migration/`。主机测试使用
 `ASAN_OPTIONS=detect_leaks=0` 规避运行环境的 LeakSanitizer 限制，ASan/UBSan 保持启用。
 未烧录或测量实板；UART/GPIO emulator 不代表实物 DE、电气边沿和帧间隔验证。
+
+
+## 移除产品模拟从机与同线 RS485 联调（2026-10-21）
+
+`app/cfg/simulation.c` 已移至 `tests/fixtures/`，产品只绑定两个 RAW 逻辑口，
+共用 USART2/RS485。AIDC 虚拟模型配置移至 `tests/aidc/tables.conf`，仅用于回归。
+
+- `ASAN_OPTIONS=detect_leaks=0 bash applications/IDU-pre/tests/run.sh` 通过：
+  44 次 native_sim 执行，279 项 Ztest PASS，0 FAIL，0 编译警告。
+- Python 共 33 项，30 项通过；3 项因缺少外部旧 QuickLZ/SGZ 样本跳过。
+- 新增 `tests/shared_rs485` 共 6 项：实际产品 cfg 编译且禁用 `CO_SIMULATOR`，
+  外部从机夹具经 UART emulator 回应；覆盖采集与缓存读、同线北向写/南向回读、
+  冲突地址拒发、南向事务期间北向帧不误判为应答、异常/坏帧/超时恢复、周期线程持续采集。
+- 既有通信普通帧和 1100 字节配置、IAP、参数持久化/重启恢复回归继续通过。
+- `./applications/IDU-pre/build.sh` 默认 MCUboot + IAPv3 构建、签名验证及 SGZ 导出通过。
+  应用 Flash 120,400 B、RAM 101,984 B；相比上一轮 RAM 104,576 B 减少 2,592 B。
+  `.config` 确认无 `CO_SIMULATOR` / `CO_MODEL_SIMULATOR`，RAW 接口和 vport 容量均为 2。
+
+日志位于工作区 `build/IDU-pre/shared-rs485/tests-final.log` 和 `build-final.log`。
+实板尚未烧录；模拟器结果不代表 DE 时序、吞吐量或外部多主碰撞率。
+同线测试中南向地址保持 1，IDU 拨码需使用不同地址，例如 2；外部主站留出采集窗口。
+既有 31500–31502 → 40000–40002 演示参数映射保留为实际下发配置，
+其持久化键不变；连接真实设备时必须按设备协议调整这些地址。

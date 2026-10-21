@@ -28,13 +28,11 @@ const MODBUS_RTU_TABLE_S idu_mvio_collect[] = {
      .rqst_cyl = IDU_COLLECT_IDENTITY, .byte_order = BYTE_ORDER_DEFAULT},
     {.sig_id = IDU_MVIO_ADDRESS, .reg_addr = 30459, .reg_num = 1, .reg_type = 3,
      .rqst_cyl = IDU_COLLECT_IDENTITY, .byte_order = BYTE_ORDER_DEFAULT},
-#if defined(CONFIG_IDU_COLLECT_VIRTUAL)
     /* FLAG_COLLECT process signals use these as explicit write destinations. */
     {.sig_id = IDU_SIG_REMOTE_SETPOINT, .reg_addr = 40000, .reg_num = 1,
      .reg_type = 3, .flag = FLAG_0x03_W_0x06 | FLAG_0x03_w_0x10},
     {.sig_id = IDU_SIG_REMOTE_OFFSET, .reg_addr = 40001, .reg_num = 2,
      .reg_type = 3, .flag = FLAG_0x03_w_0x10},
-#endif
 };
 
 BUILD_ASSERT(ARRAY_SIZE(idu_mvio_collect) == IDU_MVIO_COLLECT_COUNT,

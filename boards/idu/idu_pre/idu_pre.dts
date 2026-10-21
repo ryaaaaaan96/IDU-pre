@@ -39,9 +39,7 @@
         idu-aidc-settings = &idu_aidc_settings;
         led0 = &run_led;
         idu-forward = &modbus0;
-        /* idu-collect will reference a second physical Modbus node when fitted.
-         * The current virtual link is software-only and has no fake UART pins.
-         */
+        /* CO/TR share this RS485 link for single-bus performance testing. */
     };
 
     leds {

@@ -11,6 +11,7 @@ struct mb_io_state {
     struct k_sem transmitted;
     atomic_t transmitting, pending, overflow;
     struct modbus_serial_param param;
+    k_timepoint_t next_tx;
 #endif
 };
 static struct mb_io_state mb_io[ARRAY_SIZE(mb_ctx_tbl)];
@@ -101,15 +102,32 @@ int mb_serial_send(int iface, const uint8_t *data, size_t size, k_timeout_t time
     k_timepoint_t deadline = sys_timepoint_calc(timeout);
     int err = k_mutex_lock(&io->lock, sys_timepoint_timeout(deadline));
     if (err) { return err; }
-    if (sys_timepoint_expired(deadline)) { err = -ETIMEDOUT; goto out; }
+    /* Shared links may start a client transaction while RX is assembling a
+     * frame. Never overwrite that buffer; wait for its dispatch and TX silence.
+     * This coordinates this MCU only, not other masters on the wire.
+     */
+    for (;;) {
+        if (sys_timepoint_expired(deadline)) { err = -ETIMEDOUT; goto out; }
+        unsigned int key = irq_lock();
+        bool idle = !ctx->cfg->uart_buf_ctr && !k_work_busy_get(&ctx->server_work) &&
+                    sys_timepoint_expired(io->next_tx);
+        if (idle) {
+            atomic_set(&io->transmitting, 1);
+            modbus_serial_rx_disable(ctx);
+        }
+        irq_unlock(key);
+        if (idle) { break; }
+        k_sleep(K_TICKS(1));
+    }
     ctx->tx_adu.unit_id = data[0]; ctx->tx_adu.fc = data[1];
     ctx->tx_adu.length = size - 4;
     memcpy(ctx->tx_adu.data, data + 2, size - 4);
     k_sem_reset(&io->transmitted);
-    atomic_set(&io->transmitting, 1);
     err = modbus_serial_tx_adu(ctx);
     if (!err && k_sem_take(&io->transmitted, sys_timepoint_timeout(deadline))) { err = -ETIMEDOUT; }
     if (err) { mb_serial_abort(ctx); }
+    /* Reuse the serial backend's configured RTU inter-frame delay. */
+    io->next_tx = sys_timepoint_calc(K_USEC(ctx->cfg->rtu_timeout));
     atomic_clear(&io->transmitting);
 out:
     k_mutex_unlock(&io->lock);

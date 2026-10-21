@@ -1,9 +1,10 @@
 #include "ports.h"
+#include "simulation.h"
 #include "signal_ids.h"
 #include <collect/port.h>
 #include <collect/simulator.h>
 
-/* 产品模拟数据；收发、故障注入及整包写入校验由 collect 提供。 */
+/* 仅用于测试的模拟数据；收发、故障注入及整包写入校验由 collect 提供。 */
 static const struct co_simulator_register registers[] = {
     {.function = 3, .address = 40000, .width = 1, .initial = 100,
      .writable = true, .minimum = 0, .maximum = 1000},

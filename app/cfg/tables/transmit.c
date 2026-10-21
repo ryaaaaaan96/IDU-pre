@@ -124,12 +124,10 @@ const MB_TABLE_CELL_T idu_transmit_table[] = {
      .dev_id = IDU_DEV_LOCAL, .reg_type = 3, .byte_order = BYTE_ORDER_DEFAULT},
     {.sig_id = IDU_SIG_LABEL, .reg_addr = 31001, .reg_num = 8,
      .dev_id = IDU_DEV_LOCAL, .reg_type = 3, .byte_order = BYTE_ORDER_DEFAULT},
-#if defined(CONFIG_IDU_COLLECT_VIRTUAL)
     {.sig_id = IDU_SIG_REMOTE_SETPOINT, .reg_addr = 31500, .reg_num = 1,
      .dev_id = IDU_DEV_REMOTE_IO, .reg_type = 3, .byte_order = BYTE_ORDER_DEFAULT},
     {.sig_id = IDU_SIG_REMOTE_OFFSET, .reg_addr = 31501, .reg_num = 2,
      .dev_id = IDU_DEV_REMOTE_IO, .reg_type = 3, .byte_order = BYTE_ORDER_DEFAULT},
-#endif
     {.sig_id = 2503, .reg_addr = 2503, .reg_num = 1,
      .dev_id = IDU_DEV_LOCAL, .reg_type = 4, .byte_order = BYTE_ORDER_DEFAULT},
     {.sig_id = 2504, .reg_addr = 2504, .reg_num = 10,

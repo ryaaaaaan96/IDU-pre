@@ -1,135 +1,151 @@
 #include "ports.h"
+#include "signal_ids.h"
+#include <collect/collect.h>
 #include <collect/port.h>
 #include <collect/modbus.h>
 #include <transmit/modbus.h>
+#include <dataprocess/points.h>
 #include <modbus_io.h>
 #include <zephyr/device.h>
+#include <zephyr/sys/byteorder.h>
 #include <errno.h>
-#ifdef CONFIG_IDU_COLLECT_VIRTUAL
-#include <collect/simulator.h>
-#endif
+#include <string.h>
 
-static int forward_serial = -1;
-#ifdef CONFIG_IDU_COLLECT_RTU
-static int collect_serial = -1;
-#endif
+/* 本机采集事务与转发响应共享一条 RS485；外部主站的发送仍需联调协调。 */
+static int serial = -1, client = -1;
+static K_MUTEX_DEFINE(wire_lock);
+static K_MUTEX_DEFINE(ports_lock);
+static struct k_spinlock response_lock;
+static struct {
+    bool active;
+    k_tid_t owner;
+    uint8_t unit, function;
+    uint16_t address, value;
+} expected;
 
-/* 唯一的产品端口编排：模块只传完整报文及不透明来源标识。 */
 static int send(void *user, uint16_t port, const struct vport_source *destination,
                  const struct vport_frame *frame, k_timeout_t timeout)
 {
     ARG_UNUSED(user);
-    switch (port) {
-    case IDU_PORT_FORWARD:
-        if (destination->link != IDU_LINK_RS485 || destination->peer) { return -EACCES; }
-        return mb_serial_send(forward_serial, frame->data, frame->size, timeout);
-    case IDU_PORT_ACQUISITION:
-        if (destination->link != IDU_LINK_ACQUISITION || destination->peer) { return -EACCES; }
-#ifdef CONFIG_IDU_COLLECT_VIRTUAL
-        return co_simulator_port_send(&idu_collect_simulator, IDU_PORT_VIRTUAL_DEVICE,
-                                       destination, frame, true);
-#else
-        return mb_serial_send(collect_serial, frame->data, frame->size, timeout);
-#endif
-#ifdef CONFIG_IDU_COLLECT_VIRTUAL
-    case IDU_PORT_VIRTUAL_DEVICE:
-        if (destination->link != IDU_LINK_ACQUISITION || destination->peer) { return -EACCES; }
-        return co_simulator_port_send(&idu_collect_simulator, IDU_PORT_ACQUISITION,
-                                       destination, frame, false);
-#endif
-    default: return -ENOENT;
+    if (destination->link != IDU_LINK_RS485 || destination->peer) { return -EACCES; }
+    if (port == IDU_PORT_ACQUISITION) {
+        /* collect_transfer 持有完整事务锁，不能只锁住一次 UART 发送。 */
+        k_spinlock_key_t key = k_spin_lock(&response_lock);
+        bool owned = expected.active && expected.owner == k_current_get();
+        k_spin_unlock(&response_lock, key);
+        if (!owned) { return -EACCES; }
+        return mb_serial_send(serial, frame->data, frame->size, timeout);
     }
+    if (port != IDU_PORT_FORWARD) { return -ENOENT; }
+    k_timepoint_t deadline = sys_timepoint_calc(timeout);
+    int err = k_mutex_lock(&wire_lock, sys_timepoint_timeout(deadline));
+    if (err) { return err; }
+    err = mb_serial_send(serial, frame->data, frame->size, sys_timepoint_timeout(deadline));
+    k_mutex_unlock(&wire_lock);
+    return err;
 }
 
-static void complete(void *user, uint16_t port, const struct vport_source *source)
-{
-    ARG_UNUSED(user);
-    if (port == IDU_PORT_FORWARD && source->link == IDU_LINK_RS485) {
-        mb_serial_release(forward_serial);
-    }
-#ifdef CONFIG_IDU_COLLECT_RTU
-    if (port == IDU_PORT_ACQUISITION && source->link == IDU_LINK_ACQUISITION) {
-        mb_serial_release(collect_serial);
-    }
-#endif
-}
-
-#if DT_HAS_ALIAS(idu_forward)
-static const struct vport_io forward_io = {
-    .send = send, .complete = complete, .mtu = CONFIG_MODBUS_BUFFER_SIZE,
+static const struct vport_io io = {
+    .send = send, .mtu = CONFIG_MODBUS_BUFFER_SIZE,
     .destination = {.link = IDU_LINK_RS485},
 };
-#endif
-static const struct vport_io collect_io = {
-    .send = send, .complete = complete, .mtu = CONFIG_MODBUS_BUFFER_SIZE,
-    .destination = {.link = IDU_LINK_ACQUISITION},
-};
 
-#if DT_HAS_ALIAS(idu_forward)
-static int forward_receive(void *user, const uint8_t *data, size_t size)
+static int collect_transfer(void *user, struct modbus_adu *adu)
 {
     ARG_UNUSED(user);
-    const struct vport_source source = {.link = IDU_LINK_RS485};
-    const struct vport_frame frame = {.data = data, .size = size};
-    return tr_port_input(IDU_PORT_FORWARD, &source, &frame);
+    if (!adu || adu->length < 4) { return -EINVAL; }
+    struct dp_point_state local;
+    int err = dp_read((struct dp_key){IDU_DEV_LOCAL, IDU_SIG_ADDRESS}, &local);
+    if (err) { return err; }
+    /* 同一物理总线中，本机和下游必须使用不同地址，广播不能用于采集。 */
+    /* 首次 GPIO 发布前尚未启动北向服务，参数恢复不能把默认值当成实际拨码。 */
+    if (!adu->unit_id || ((local.quality & 0xffU) == DP_QUALITY_GOOD &&
+                         adu->unit_id == local.value.words[0])) { return -EADDRINUSE; }
+    k_mutex_lock(&wire_lock, K_FOREVER);
+    k_spinlock_key_t key = k_spin_lock(&response_lock);
+    expected.unit = adu->unit_id;
+    expected.function = adu->fc;
+    expected.address = sys_get_be16(adu->data);
+    expected.value = sys_get_be16(adu->data + 2);
+    expected.owner = k_current_get();
+    expected.active = true;
+    k_spin_unlock(&response_lock, key);
+
+    err = co_modbus_transfer(client, adu);
+
+    key = k_spin_lock(&response_lock);
+    expected.active = false; /* 超时、异常和发送失败也结束事务，不遗留收包归属。 */
+    k_spin_unlock(&response_lock, key);
+    k_mutex_unlock(&wire_lock);
+    return err;
 }
-#endif
-#ifdef CONFIG_IDU_COLLECT_RTU
-#define COLLECT_NODE DT_ALIAS(idu_collect)
-BUILD_ASSERT(DT_NODE_HAS_STATUS(COLLECT_NODE, okay), "Configure idu-collect in devicetree");
-BUILD_ASSERT(!DT_SAME_NODE(DT_PARENT(COLLECT_NODE), DT_PARENT(DT_ALIAS(idu_forward))),
-             "Acquisition and forwarding need separate physical UARTs");
-#if DT_HAS_CHOSEN(zephyr_console)
-BUILD_ASSERT(!DT_SAME_NODE(DT_PARENT(COLLECT_NODE), DT_CHOSEN(zephyr_console)),
-             "Acquisition must not take over the console UART");
-#endif
-static int collect_receive(void *user, const uint8_t *data, size_t size)
-{
-    ARG_UNUSED(user);
-    const struct vport_source source = {.link = IDU_LINK_ACQUISITION};
-    const struct vport_frame frame = {.data = data, .size = size};
-    return co_port_input(IDU_PORT_ACQUISITION, &source, &frame);
-}
+
+const struct co_bus_cfg idu_collect_bus = {
+    .id = 0, .iface = -1, .transfer = collect_transfer,
+};
 const struct co_port_config idu_collect_port = {
     .iface_name = "RAW_0",
     .param = {.mode = MODBUS_MODE_RAW, .rx_timeout = CONFIG_CO_TIMEOUT_MS * 1000U},
 };
+
+#if DT_HAS_ALIAS(idu_forward)
+static int receive(void *user, const uint8_t *data, size_t size)
+{
+    ARG_UNUSED(user);
+    const struct vport_source source = {.link = IDU_LINK_RS485};
+    const struct vport_frame frame = {.data = data, .size = size};
+    k_spinlock_key_t key = k_spin_lock(&response_lock);
+    bool collecting = expected.active;
+    bool matches = size >= 5 && data[0] == expected.unit;
+    if (matches && data[1] == (expected.function | 0x80U)) {
+        matches = size == 5 && data[2] != 0;
+    } else if (matches && data[1] == expected.function) {
+        if (data[1] == 3 || data[1] == 4) {
+            matches = size == 5U + expected.value * 2U && data[2] == expected.value * 2U;
+        } else {
+            matches = size == 8 && sys_get_be16(data + 2) == expected.address &&
+                      sys_get_be16(data + 4) == expected.value;
+        }
+    } else { matches = false; }
+    k_spin_unlock(&response_lock, key);
+    int err = collecting ? (matches ? co_port_input(IDU_PORT_ACQUISITION, &source, &frame) : -ENOMSG) :
+                           tr_port_input(IDU_PORT_FORWARD, &source, &frame);
+    /* RAW 输入已复制报文。共享口必须立即恢复 RX，允许北向写处理期间接收南向回复。 */
+    mb_serial_release(serial);
+    return err;
+}
 #endif
 
 int idu_forward_serial_configure(struct modbus_serial_param param)
 {
-    return forward_serial < 0 ? 0 : mb_serial_configure(forward_serial, param);
+    int err = k_mutex_lock(&wire_lock, K_NO_WAIT);
+    if (err) { return -EBUSY; }
+    err = serial < 0 ? -ENODEV : mb_serial_configure(serial, param);
+    k_mutex_unlock(&wire_lock);
+    return err;
 }
 
-K_MUTEX_DEFINE(ports_lock);
 int idu_ports_init(void)
 {
     if (k_is_in_isr()) { return -EWOULDBLOCK; }
     k_mutex_lock(&ports_lock, K_FOREVER);
-    int err = co_modbus_port_bind(IDU_PORT_ACQUISITION, "RAW_0", &collect_io);
-#ifdef CONFIG_IDU_COLLECT_VIRTUAL
-    if (!err) { err = tr_modbus_port_bind(IDU_PORT_VIRTUAL_DEVICE, "RAW_1", &collect_io); }
-#endif
+    int err = co_modbus_port_bind(IDU_PORT_ACQUISITION, "RAW_0", &io);
+    if (!err) {
+        client = modbus_iface_get_by_name("RAW_0");
+        if (client < 0) { err = client; }
+    }
 #if DT_HAS_ALIAS(idu_forward)
-    if (!err) { err = tr_modbus_port_bind(IDU_PORT_FORWARD, "RAW_2", &forward_io); }
-    if (!err && forward_serial < 0) {
+    if (!err) { err = tr_modbus_port_bind(IDU_PORT_FORWARD, "RAW_1", &io); }
+    if (!err && serial < 0) {
         struct modbus_serial_param param = {
             .baud = DT_PROP(DT_PARENT(DT_ALIAS(idu_forward)), current_speed),
             .parity = UART_CFG_PARITY_NONE, .stop_bits = UART_CFG_STOP_BITS_1,
         };
-        int iface = mb_serial_open(DEVICE_DT_NAME(DT_ALIAS(idu_forward)), param, forward_receive, NULL);
-        if (iface < 0) { err = iface; } else { forward_serial = iface; }
+        int iface = mb_serial_open(DEVICE_DT_NAME(DT_ALIAS(idu_forward)), param, receive, NULL);
+        if (iface < 0) { err = iface; } else { serial = iface; }
     }
-#endif
-#ifdef CONFIG_IDU_COLLECT_RTU
-    if (!err && collect_serial < 0) {
-        struct modbus_serial_param param = {
-            .baud = DT_PROP(DT_PARENT(COLLECT_NODE), current_speed),
-            .parity = UART_CFG_PARITY_NONE, .stop_bits = UART_CFG_STOP_BITS_1,
-        };
-        int iface = mb_serial_open(DEVICE_DT_NAME(COLLECT_NODE), param, collect_receive, NULL);
-        if (iface < 0) { err = iface; } else { collect_serial = iface; }
-    }
+#else
+    if (!err) { err = -ENODEV; }
 #endif
     k_mutex_unlock(&ports_lock);
     return err;

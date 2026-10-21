@@ -1,17 +1,3 @@
-choice IDU_COLLECT_BACKEND
-    prompt "Acquisition Modbus transport"
-    default IDU_COLLECT_VIRTUAL
-
-config IDU_COLLECT_VIRTUAL
-    bool "Virtual Modbus ADU loopback (demo device)"
-    select MODBUS_RAW_ADU
-
-config IDU_COLLECT_RTU
-    bool "Physical Modbus RTU via idu-collect DT alias"
-    depends on MODBUS_SERIAL
-
-endchoice
-
 config DP_REFERENCE_TABLES
     default y
 
@@ -25,7 +11,7 @@ config MODBUS_RAW_ADU
     default y
 
 config MODBUS_NUMOF_RAW_ADU
-    default 3
+    default 2
 
 config TR_SERVER_SERVICE
     default y
@@ -33,20 +19,14 @@ config TR_SERVER_SERVICE
 config TR_REGISTER_SERVICE
     default y
 
-config CO_SIMULATOR
-    default y if IDU_COLLECT_VIRTUAL
-
-config CO_MODEL_SIMULATOR
-    default y if IDU_AIDC_PROFILE
-
 config IDU_SAMPLE_PERIOD_MS
     int "Acquisition period in milliseconds"
     default 500
     range 100 1000
 
 config IDU_AIDC_PROFILE
-    bool "Imported AIDC business tables with virtual UPP acquisition"
-    depends on IDU_COLLECT_VIRTUAL
+    bool "Imported AIDC tables (test fixture only)"
+    depends on ZTEST
     help
       Preserves original IDs, point types/defaults and register addresses.
       Hardware-only product services remain explicitly unavailable.

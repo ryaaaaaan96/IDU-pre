@@ -41,20 +41,11 @@ static int start_points(void)
     if (iface < 0) {
         return iface;
     }
-    err = co_init(config, iface, IS_ENABLED(CONFIG_IDU_COLLECT_VIRTUAL));
+    err = co_init_bus(config, &idu_collect_bus);
     if (err) {
         return err;
     }
-#if defined(CONFIG_IDU_AIDC_PROFILE)
-    err = co_init_bus(config, &idu_model_bus);
-    if (err) {
-        return err;
-    }
-    LOG_WRN("AIDC profile: DSP1..8 use a VIRTUAL UPP model backend");
-    const uint8_t storage_id = DT_FIXED_PARTITION_ID(DT_ALIAS(idu_aidc_settings));
-#else
     const uint8_t storage_id = DT_FIXED_PARTITION_ID(DT_ALIAS(idu_settings));
-#endif
 
     /* 保留降级策略：存储不可用时可采集，但禁止参数写入和试运行确认。 */
     err = dp_params_init(config, storage_id);

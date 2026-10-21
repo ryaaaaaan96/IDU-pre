@@ -14,7 +14,7 @@
 | 查询协议和存储语义 | [点表、寄存器与参数事务](point-tables.md) | 点值/质量、扩展寄存器、NVS/下发恢复、真实采集口 |
 | 使用模块 | [模块接口](../modules/README.md)、[DP](../modules/dataprocess/README.md) | 依赖、配置、API 单位、同步/异步与事务约束 |
 | 扩展逻辑通信端口 | [vport](../modules/vport/README.md) | 回调端口、CO/TR 收发入口、来源保持与缓冲区所有权 |
-| 查看现有端口接入 | [通信端口接入](communication-ports.md) | RS485 转发、虚拟采集、绑定表、完整 ADU 路由及恢复 |
+| 查看现有端口接入 | [通信端口接入](communication-ports.md) | 同线 RS485 采集/转发、回调绑定、完整报文分流及恢复 |
 | 迁移参考平台接口 | [参考平台对照](reference-platform.md) | 原库证据、79/89 名称覆盖、差异、const/RAM 分工 |
 | 测试和核对容量 | [验证说明](testing.md) | 测试命令、套件、桌面结果、RAM 对比、实板边界 |
 

@@ -33,6 +33,7 @@ static struct idu_status acquisition;
 static int previous_startup_service;
 static uint16_t parameter_flags;
 static const struct dp_equip_cfg point_config;
+const struct co_bus_cfg idu_collect_bus = {0};
 const struct co_port_config idu_collect_port;
 
 static int service(enum service service)
@@ -84,11 +85,10 @@ int co_port_open(const struct co_port_config *config)
     int err = service(PORT_OPEN);
     return err ? err : 3;
 }
-int co_init(const struct dp_equip_cfg *config, int iface, bool simulated)
+int co_init_bus(const struct dp_equip_cfg *config, const struct co_bus_cfg *bus)
 {
     zassert_equal_ptr(config, &point_config);
-    zassert_equal(iface, 3);
-    zassert_true(simulated);
+    zassert_equal_ptr(bus, &idu_collect_bus);
     return service(COLLECT_INIT);
 }
 int dp_params_init(const struct dp_equip_cfg *config, uint8_t area_id)

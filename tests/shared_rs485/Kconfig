@@ -1,0 +1,5 @@
+mainmenu "Product shared RS485 tests"
+config MODBUS_BUFFER_SIZE
+    range 64 1100
+source "Kconfig.zephyr"
+rsource "../../app/Kconfig"

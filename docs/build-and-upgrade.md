@@ -3,7 +3,7 @@
 [文档导航](README.md) · [验证说明](testing.md) · [硬件说明](hardware.md)
 
 以下命令均从 West 工作区根目录执行。全部固件使用 MCUboot；默认启用 IAPv3，
-SMP、无上传入口及 AIDC 使用各自的构建/导出目录。旧 BOOT 构建和旧路径迁移代码已删除。
+SMP 和无上传入口使用各自的构建/导出目录。旧 BOOT 构建和旧路径迁移代码已删除。
 
 ## 配置选择
 
@@ -13,11 +13,9 @@ SMP、无上传入口及 AIDC 使用各自的构建/导出目录。旧 BOOT 构�
 | MCUboot，无上传入口 | `./applications/IDU-pre/build.sh --no-upload` |
 | MCUboot + SMP UART | `./applications/IDU-pre/build.sh --mcuboot --smp-uart` |
 | MCUboot + IAPv3 | `./applications/IDU-pre/build.sh --mcuboot --iapv3` |
-| MCUboot + AIDC 虚拟点表 | `./applications/IDU-pre/build.sh --mcuboot --aidc` |
-| MCUboot + AIDC + SMP | `./applications/IDU-pre/build.sh --mcuboot --aidc --smp-uart` |
 
-IAPv3 与 SMP、AIDC 互斥。真实南向串口配置见
-[替换虚拟采集口](point-tables.md#第二路串口补上后)。
+IAPv3 与 SMP 互斥。AIDC 虚拟模型仅用于 `tests/aidc`，不再构建模拟固件。
+南北向共用 RS485 的联调配置见[端口说明](communication-ports.md)。
 
 采集和转发的实例数量、栈大小由各模块的 Kconfig 定义，在 `prj.conf`
 手动填写，不随固件类型自动覆盖。当前工作配置为 MCUboot + IAPv3：
@@ -122,11 +120,8 @@ MCUboot 在板级早期初始化中将 PC13 设为浮空输入；
 # MCUboot + IAPv3，独立目录输出
 ./applications/IDU-pre/build.sh
 
-# 增加标准 SMP 升级入口：USART0，115200 8N1；USART2 继续转发 Modbus
+# 增加标准 SMP 升级入口：USART0，115200 8N1；USART2 共用采集/转发
 ./applications/IDU-pre/build.sh --mcuboot --smp-uart
-
-# 可选 AIDC 业务表 + 标准升级入口
-./applications/IDU-pre/build.sh --mcuboot --aidc --smp-uart
 
 # 后续版本：使用同一签名密钥，更新镜像版本
 ./applications/IDU-pre/build.sh --mcuboot --smp-uart --version 0.1.1+1
@@ -186,9 +181,9 @@ AES 密钥及 DP 参数保存策略。公钥文件默认跟随 MCUboot 签名配
 自动导出 SGZ 时读取本次构建的 `.config`；单独运行 `pack_sgz.py` 时也可用
 `--config <应用 .config>` 保持密钥和上限一致。
 
-适用当前 MV-IO 单 ARM 硬件。现有 USART2/RS485 保持转发用途，升级地址段
-在同一端口内路由；虚拟采集口继续工作。此配置与 `--aidc`、`--smp-uart`
-互斥：AIDC 的升级入口/多设备升级尚未移植，也不允许两个镜像上传端同时写 slot1。
+适用当前 MV-IO 单 ARM 硬件。升级地址段在 USART2/RS485 内路由。当前周期采集
+也使用同一条 RS485，上传主站必须留出总线窗口；实物上传与周期采集并行的性能仍需验证。
+此配置与 `--smp-uart` 互斥，不允许两个镜像上传端同时写 slot1。
 
 ```bash
 ./applications/IDU-pre/build.sh --mcuboot --iapv3

@@ -3,8 +3,10 @@
 面向 GD32E505 / MV-IO 硬件的 Zephyr 4.4.2 应用，提供本地采样、通讯点表、
 Modbus 采集与转发、NVS 参数持久化及 MCUboot 升级。
 点表链路由 `dataprocess`、`collect`、`transmit` 提供，其他通用能力见[模块列表](modules/README.md)。
-默认使用虚拟南向采集口，现有 USART2 / RS485 用于北向转发。
-[`vport`](modules/vport/README.md) 已用于现有 RS485 转发和虚拟采集收发；
+当前按同线性能联调配置：北向转发和南向周期采集共用 USART2 / RS485。
+内置模拟从机已移到 `tests/fixtures/`，产品固件不再编译模拟设备。
+南向从机地址仍为 1，IDU 拨码须使用不同地址（例如 2）；北向普通读仍读取 DP 缓存。
+[`vport`](modules/vport/README.md) 用于两个逻辑口的完整报文收发；
 CO/TR 各自的[RAW 适配](docs/communication-ports.md)通过通用端口收发完整报文，
 实际串口继续复用 Zephyr 的 RTU 组帧和 DE 控制。绑定、收发编排回调和注册入口集中在 `app/cfg/ports.c`。
 
@@ -133,14 +135,14 @@ IDU-pre/
 | `cfg/inc/ports.h` | 虚拟口 ID、`idu_ports_init()` 注册入口及常驻配置声明 |
 | `<transmit/server.h>` | 每端口启动、配置更新及健康维护 |
 | `<transmit/registers.h>` | 参数寄存器服务及完整 ADU 扩展 |
-| `<collect/port.h>`、`<collect/simulator.h>` | 采集端口初始化及可选模拟设备 |
+| `<collect/port.h>`、`<collect/modbus.h>` | 采集端口初始化及同步 Modbus 事务 |
 
 应用不再设置 `communication/`。`cfg/` 以 const 表提供接口名、路由、协议范围、
-命令及模拟寄存器初值；`cfg/ports.c` 注册应用收发回调，发送按虚拟口 ID 和链路选择
-实际接口，接收按来源交给对应协议。`collect` 管理采集端口、轮询和仿真，`transmit` 管理
+命令及参数默认值；`cfg/ports.c` 注册应用收发回调，发送按虚拟口 ID 和链路选择
+实际接口，接收按当前南向事务分流；共享链路锁覆盖请求到应答/超时。`collect` 管理采集端口和轮询，`transmit` 管理
 转发状态机、协议解析与命令分发，`vport` 提供通用回调端口，`iap` 管理升级。
 AIDC 参数编码转换属于业务，保留在 `process/serial_settings.c`；各模块不引用
-IDU 配置头文件。虚拟模型后端只提供模型数据，不实现真实 UPP 链路。
+IDU 配置头文件。模拟设备和虚拟 UPP 模型仅在测试中使用，不实现真实 UPP 链路。
 
 `collect` / `transmit` 的协议适配统一放在各自的 `protocols/modbus/`，核心服务留在
 `src/`。采集客户端由 `CO_MODBUS_ADAPTER` 控制，转发适配由 `TR_MODBUS_ADAPTER`
@@ -167,7 +169,7 @@ IDU 的引脚、外部看门狗和分区属于板级及产品配置，分别留�
 
 参考平台四个公开头文件的 89 个接口名称中，当前覆盖 79 个；
 [接口说明](docs/reference-platform.md) 列出限制和其余 10 个入口的原因。
-可选 AIDC 配置已迁入点表与部分业务，DSP 仍使用虚拟模型，UPP 完整协议未实现。
+AIDC 点表和部分业务保留在原目录，虚拟 DSP 仅用于 `tests/aidc`；UPP 完整协议未实现，不再提供 `--aidc` 模拟固件。
 
 已记录的桌面验证包括主机回归、native_sim、固件构建和镜像检查。
 Zephyr 版的实际启动、UART/DE 时序、Flash 掉电和升级回退仍需实板验证。

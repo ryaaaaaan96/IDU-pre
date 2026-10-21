@@ -1,3 +1,5 @@
 mainmenu "IDU point table tests"
 source "Kconfig.zephyr"
 rsource "../../app/Kconfig"
+
+rsource "../fixtures/Kconfig"

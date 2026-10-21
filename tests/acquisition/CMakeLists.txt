@@ -13,4 +13,4 @@ set_source_files_properties(../../app/main.c PROPERTIES
   COMPILE_DEFINITIONS "main=idu_application_main")
 # Exercise optional orchestration with mocked services, without a bootloader/HAL.
 target_compile_definitions(app PRIVATE CONFIG_BOOTLOADER_MCUBOOT=1 CONFIG_IDU_IAPV3=1
-  CONFIG_IDU_COLLECT_VIRTUAL=1 CONFIG_DP_POINT_WORDS=16 CONFIG_DP_PROCESS_MAX_OUTPUTS=24)
+  CONFIG_DP_POINT_WORDS=16 CONFIG_DP_PROCESS_MAX_OUTPUTS=24)

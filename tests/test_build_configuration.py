@@ -67,7 +67,7 @@ class ApplicationRequirements(unittest.TestCase):
 
     def configure(self, **overrides):
         values = {name: 'y' for name in self.required}
-        values.update(IDU_COLLECT_VIRTUAL='y', CO_SIMULATOR='y',
+        values.update(CO_SIMULATOR='n',
                       IDU_AIDC_PROFILE='n', CO_MODEL_SIMULATOR='n', CO_MAX_BUSES='1')
         values.update(overrides)
         script = 'cmake_minimum_required(VERSION 3.20.0)\n'
@@ -91,22 +91,9 @@ class ApplicationRequirements(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(f'requires CONFIG_{name}=y', result.stderr)
 
-    def test_default_and_rtu_profiles(self):
-        for overrides in ({}, {'IDU_COLLECT_VIRTUAL': 'n', 'CO_SIMULATOR': 'n'}):
-            result = self.configure(**overrides)
-            self.assertEqual(result.returncode, 0, result.stderr)
-        for feature in ('CO_SIMULATOR',):
-            result = self.configure(**{feature: 'n'})
-            self.assertIn(f'requires CONFIG_{feature}=y', result.stderr)
-
-    def test_aidc_requires_model_backend_and_second_bus(self):
-        result = self.configure(IDU_AIDC_PROFILE='y', CO_MODEL_SIMULATOR='y',
-                                CO_MAX_BUSES='2')
+    def test_product_does_not_require_simulated_devices(self):
+        result = self.configure(CO_SIMULATOR='n', CO_MODEL_SIMULATOR='n')
         self.assertEqual(result.returncode, 0, result.stderr)
-        result = self.configure(IDU_AIDC_PROFILE='y', CO_MAX_BUSES='2')
-        self.assertIn('requires CONFIG_CO_MODEL_SIMULATOR=y', result.stderr)
-        result = self.configure(IDU_AIDC_PROFILE='y', CO_MODEL_SIMULATOR='y')
-        self.assertIn('requires CONFIG_CO_MAX_BUSES >= 2', result.stderr)
 
 
 if __name__ == '__main__':

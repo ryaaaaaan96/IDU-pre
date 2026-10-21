@@ -80,14 +80,12 @@ const DM_SIG_CFG_S idu_mvio_process[] = {
      .data_type = DATA_TYPE_U32, .pf_sig_proc = NULL},
     {.sig_id = IDU_MVIO_ADDRESS, .sig_size = 2, .sig_flag = 0,
      .data_type = DATA_TYPE_U16, .pf_sig_proc = NULL},
-#if defined(CONFIG_IDU_COLLECT_VIRTUAL)
     {.sig_id = IDU_SIG_REMOTE_SETPOINT, .sig_size = 2,
      .sig_flag = FLAG_PERSISTENCE | FLAG_RT_STORE | FLAG_COLLECT,
      .data_type = DATA_TYPE_U16, .pf_sig_proc = NULL},
     {.sig_id = IDU_SIG_REMOTE_OFFSET, .sig_size = 4,
      .sig_flag = FLAG_PERSISTENCE | FLAG_RT_STORE | FLAG_COLLECT,
      .data_type = DATA_TYPE_S32, .pf_sig_proc = NULL},
-#endif
 };
 
 BUILD_ASSERT(ARRAY_SIZE(idu_mvio_process) == IDU_MVIO_PROCESS_COUNT,
@@ -376,14 +374,12 @@ static const struct point_parameter parameters[] = {
     U16(IDU_DEV_LOCAL, 8149, IDU_DEVICE_TYPE, 0, UINT16_MAX),
     U32(IDU_DEV_LOCAL, IDU_SIG_PROTOCOL, IDU_PROTOCOL_VERSION),
     U16(IDU_DEV_LOCAL, 5486, 0x1204, 0, UINT16_MAX),
-    U16(IDU_DEV_LOCAL, IDU_SIG_VIRTUAL_MODE, IS_ENABLED(CONFIG_IDU_COLLECT_VIRTUAL), 0, UINT16_MAX),
+    U16(IDU_DEV_LOCAL, IDU_SIG_VIRTUAL_MODE, IS_ENABLED(CONFIG_IDU_TEST_FIXTURES), 0, UINT16_MAX),
     U16(IDU_DEV_LOCAL, IDU_SIG_ADDRESS, 1, 1, 16),
     U16(IDU_DEV_REMOTE_IO, IDU_SIG_ADDRESS, 1, 1, 247),
-#if defined(CONFIG_IDU_COLLECT_VIRTUAL)
     U16(IDU_DEV_REMOTE_IO, IDU_SIG_REMOTE_SETPOINT, 100, 0, 1000),
     {.dev_id = IDU_DEV_REMOTE_IO, .sig_id = IDU_SIG_REMOTE_OFFSET,
      .data = {.min_value.s32 = -100000, .max_value.s32 = 100000}, .restore = true},
-#endif
 #if defined(CONFIG_IDU_AIDC_PROFILE)
 /* BEGIN IMPORTED TABLE: defaults */
 /* Imported from user-provided AIDC source tables. Original tables: SUNGROW.
