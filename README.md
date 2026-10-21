@@ -6,7 +6,7 @@ Modbus 采集与转发、NVS 参数持久化及 MCUboot 升级。
 默认使用虚拟南向采集口，现有 USART2 / RS485 用于北向转发。
 [`vport`](modules/vport/README.md) 已用于现有 RS485 转发和虚拟采集收发；
 `transmit` 内的[通信适配](docs/communication-ports.md)保留 Zephyr 的 RTU/RAW 实现，
-将完整报文接入逻辑端口。绑定集中在 `app/cfg/ports.c`。
+将完整报文接入逻辑端口。绑定、收发编排回调和注册入口集中在 `app/cfg/ports.c`。
 
 ## 快速开始
 
@@ -130,13 +130,14 @@ IDU-pre/
 | `status/idu_image_confirm.h` | MCUboot 试运行健康确认 |
 | `process/engineering.h` | 仅依赖标准 C 的工程量换算，可用于主机测试 |
 | `process/idu_process.h` | 采样发布、周期参数及测点业务回调 |
-| `cfg/inc/ports.h` | 产品常驻端口、协议和仿真配置声明 |
+| `cfg/inc/ports.h` | 虚拟口 ID、`idu_ports_init()` 注册入口及常驻配置声明 |
 | `<transmit/server.h>` | 每端口启动、配置更新及健康维护 |
 | `<transmit/registers.h>` | 参数寄存器服务及完整 ADU 扩展 |
 | `<collect/port.h>`、`<collect/simulator.h>` | 采集端口初始化及可选模拟设备 |
 
 应用不再设置 `communication/`。`cfg/` 以 const 表提供接口名、路由、协议范围、
-命令及模拟寄存器初值；`collect` 管理采集端口、轮询和仿真，`transmit` 管理
+命令及模拟寄存器初值；`cfg/ports.c` 注册应用收发回调，发送按虚拟口 ID 和链路选择
+实际接口，接收按来源交给对应协议。`collect` 管理采集端口、轮询和仿真，`transmit` 管理
 转发状态机、协议解析与命令分发，`vport` 管理链路和路由，`iap` 管理升级。
 AIDC 参数编码转换属于业务，保留在 `process/serial_settings.c`；各模块不引用
 IDU 配置头文件。虚拟模型后端只提供模型数据，不实现真实 UPP 链路。

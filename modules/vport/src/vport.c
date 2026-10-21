@@ -268,7 +268,7 @@ int vport_send(uint16_t port, uint16_t link, uint64_t peer,
     if (err) { return err; }
     err = k_mutex_lock(&links[l].tx_lock, sys_timepoint_timeout(deadline));
     if (err) { return err; }
-    err = cfg->ops->send(cfg->context, peer, frame, sys_timepoint_timeout(deadline));
+    err = cfg->ops->send(cfg->context, port, peer, frame, sys_timepoint_timeout(deadline));
     if (err > 0) { err = -EIO; }
     k_spinlock_key_t key = k_spin_lock(&state_lock);
     if (err) { ++links[l].stats.tx_errors; }

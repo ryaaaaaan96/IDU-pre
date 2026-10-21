@@ -33,6 +33,27 @@ static size_t serial_size;
 static uint16_t serial_request_crc;
 static struct k_spinlock serial_lock;
 static int configure_error;
+static atomic_t wrong_port;
+
+/* 测试应用自己注册回调，验证完整 ADU 经由应用编排后到达真实适配器。 */
+static int route_send(void *context, uint16_t port, uint64_t peer,
+                       const struct vport_frame *frame, k_timeout_t timeout)
+{
+    const struct tr_modbus_transport *endpoint = context;
+    zassert_equal(port, endpoint->port);
+    if (atomic_cas(&wrong_port, 1, 0)) { ++port; }
+    return tr_modbus_transport_send(endpoint, port, peer, frame, timeout);
+}
+
+static void route_receive(const struct vport_source *source,
+                           const struct vport_frame *frame, void *user)
+{
+    const struct tr_modbus_transport *endpoint = user;
+    zassert_equal(source->port, endpoint->port);
+    zassert_equal(source->link, endpoint->link);
+    tr_modbus_transport_receive(endpoint, source, frame);
+}
+static const struct vport_backend_ops route_ops = {.send = route_send};
 
 static void blocked_receive(const struct vport_source *source,
                              const struct vport_frame *frame, void *user)
@@ -42,28 +63,28 @@ static void blocked_receive(const struct vport_source *source,
     k_sem_take(&unblock, K_MSEC(500)); /* 故障注入：模拟 RX worker 暂时无法运行。 */
 }
 
-static int sink_send(void *context, uint64_t peer,
+static int sink_send(void *context, uint16_t port, uint64_t peer,
                       const struct vport_frame *frame, k_timeout_t timeout)
 {
-    ARG_UNUSED(context); ARG_UNUSED(peer); ARG_UNUSED(frame); ARG_UNUSED(timeout);
+    ARG_UNUSED(context); ARG_UNUSED(port); ARG_UNUSED(peer); ARG_UNUSED(frame); ARG_UNUSED(timeout);
     return 0;
 }
 static const struct vport_backend_ops sink = {.send = sink_send};
 static const struct vport_link_config links[] = {
     {.id = 1, .type = VPORT_DATAGRAM, .mtu = TR_MODBUS_TRANSPORT_MTU,
-     .ops = &tr_modbus_transport_backend, .context = (void *)&endpoints[0]},
+     .ops = &route_ops, .context = (void *)&endpoints[0]},
     {.id = 2, .type = VPORT_DATAGRAM, .mtu = TR_MODBUS_TRANSPORT_MTU,
-     .ops = &tr_modbus_transport_backend, .context = (void *)&endpoints[1]},
+     .ops = &route_ops, .context = (void *)&endpoints[1]},
     {.id = 3, .type = VPORT_DATAGRAM, .mtu = TR_MODBUS_TRANSPORT_MTU,
-     .ops = &tr_modbus_transport_backend, .context = (void *)&endpoints[2]},
+     .ops = &route_ops, .context = (void *)&endpoints[2]},
     {.id = 4, .type = VPORT_DATAGRAM, .mtu = 1, .ops = &sink},
 };
 static const struct vport_port_config ports[] = {
-    {.id = 10, .type = VPORT_DATAGRAM, .receive = tr_modbus_transport_receive,
+    {.id = 10, .type = VPORT_DATAGRAM, .receive = route_receive,
      .user = (void *)&endpoints[0]},
-    {.id = 20, .type = VPORT_DATAGRAM, .receive = tr_modbus_transport_receive,
+    {.id = 20, .type = VPORT_DATAGRAM, .receive = route_receive,
      .user = (void *)&endpoints[1]},
-    {.id = 30, .type = VPORT_DATAGRAM, .receive = tr_modbus_transport_receive,
+    {.id = 30, .type = VPORT_DATAGRAM, .receive = route_receive,
      .user = (void *)&endpoints[2]},
     {.id = 40, .type = VPORT_DATAGRAM, .receive = blocked_receive},
 };
@@ -77,10 +98,6 @@ static const struct vport_config config = {
     .links = links, .link_count = ARRAY_SIZE(links),
     .ports = ports, .port_count = ARRAY_SIZE(ports),
     .routes = routes, .route_count = ARRAY_SIZE(routes),
-};
-
-static const struct tr_modbus_network network = {
-    .endpoints = endpoints, .endpoint_count = ARRAY_SIZE(endpoints), .ports = &config,
 };
 
 static int read_register(uint16_t address, uint16_t *value)
@@ -179,7 +196,9 @@ static void check_serial_reply(void)
 
 static void *setup(void)
 {
-    zassert_ok(tr_modbus_network_start(&network));
+    zassert_ok(vport_validate(&config));
+    zassert_ok(tr_modbus_transport_bind(endpoints, ARRAY_SIZE(endpoints)));
+    zassert_ok(vport_init(&config));
     serial = modbus_iface_get_by_name(endpoints[0].iface_name);
     client = modbus_iface_get_by_name("RAW_0");
     server = modbus_iface_get_by_name("RAW_1");
@@ -251,6 +270,17 @@ ZTEST(communication, test_backend_error_is_reported_to_client)
     zassert_equal(modbus_read_input_regs(client, 1, 7, &word, 1), -EIO);
     zassert_equal(stats(2).tx_errors, before.tx_errors + 1);
     zassert_ok(modbus_read_input_regs(client, 1, 7, &word, 1));
+}
+
+ZTEST(communication, test_callback_cannot_send_as_another_virtual_port)
+{
+    struct vport_stats before = stats(2);
+    atomic_set(&wrong_port, 1);
+    uint16_t word;
+    zassert_equal(modbus_read_input_regs(client, 1, 7, &word, 1), -EACCES);
+    zassert_equal(stats(2).tx_errors, before.tx_errors + 1);
+    zassert_ok(modbus_read_input_regs(client, 1, 7, &word, 1));
+    zassert_equal(word, 0x1233);
 }
 
 ZTEST(communication, test_raw_full_payload_and_no_overwrite)
@@ -347,12 +377,10 @@ ZTEST(communication, test_unowned_virtual_send_cannot_overwrite_modbus_context)
     zassert_ok(modbus_read_input_regs(client, 1, 7, &word, 1));
 }
 
-ZTEST(communication, test_network_registration_is_idempotent)
+ZTEST(communication, test_registered_endpoints_cannot_be_replaced)
 {
-    zassert_ok(tr_modbus_network_start(&network));
-    struct tr_modbus_network other = network;
-    zassert_equal(tr_modbus_network_start(&other), -EALREADY);
-    zassert_equal(tr_modbus_network_start(NULL), -EINVAL);
+    zassert_equal(tr_modbus_transport_bind(endpoints, ARRAY_SIZE(endpoints)), -EALREADY);
+    zassert_equal(tr_modbus_transport_bind(NULL, 1), -EINVAL);
 }
 
 ZTEST_SUITE(communication, NULL, setup, NULL, NULL, NULL);

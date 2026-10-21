@@ -9,7 +9,6 @@
 #include <dataprocess/process.h>
 #include <gpio/idu_inputs.h>
 #include <platform_callback.h>
-#include <transmit/modbus_transport.h>
 #ifdef CONFIG_IDU_IAPV3
 #include <iap/iap.h>
 #endif
@@ -33,7 +32,7 @@ static int start_points(void)
     const struct dp_equip_cfg *config = dp_config();
 
     /* 参数恢复可能读取下游设备，必须先注册所有采集总线。 */
-    err = tr_modbus_network_start(&idu_port_network);
+    err = idu_ports_init();
     if (err) {
         return err;
     }

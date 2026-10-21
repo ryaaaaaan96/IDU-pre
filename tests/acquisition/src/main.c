@@ -8,7 +8,6 @@
 #include <dataprocess/params.h>
 #include <dataprocess/process.h>
 #include <platform_callback.h>
-#include <transmit/modbus_transport.h>
 #include <gpio/idu_inputs.h>
 #include <iap/iap.h>
 #include <zephyr/drivers/led.h>
@@ -34,7 +33,6 @@ static struct idu_status acquisition;
 static int previous_startup_service;
 static uint16_t parameter_flags;
 static const struct dp_equip_cfg point_config;
-const struct tr_modbus_network idu_port_network;
 const struct co_port_config idu_collect_port;
 
 static int service(enum service service)
@@ -76,9 +74,8 @@ int idu_inputs_init(void) { return service(INPUTS_INIT); }
 int idu_register_point_tables(void) { return service(TABLES_INIT); }
 int dp_init(void) { return service(DP_INIT); }
 const struct dp_equip_cfg *dp_config(void) { return &point_config; }
-int tr_modbus_network_start(const struct tr_modbus_network *config)
+int idu_ports_init(void)
 {
-    zassert_equal_ptr(config, &idu_port_network);
     return service(NETWORK_INIT);
 }
 int co_port_open(const struct co_port_config *config)

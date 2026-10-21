@@ -63,11 +63,13 @@ or legacy `idu_equipment_*` application API.
 ## Communication ownership
 
 There is no application communication implementation directory. Product configuration
-is const data in `app/cfg/`; module code never includes product headers.
+uses const tables in `app/cfg/`. `ports.c` also owns routing callbacks and registration:
+TX receives the virtual port ID and selects the physical adapter; RX dispatches by
+source port/link/peer. Module code never includes product headers.
 
 | Service | Module API | Product input |
 | --- | --- | --- |
-| Network registration | `tr_modbus_network_start()` | Endpoints and vport tables |
+| Network registration | App `idu_ports_init()` calls `tr_modbus_transport_bind()` and `vport_init()` | Endpoints, application RX/TX callbacks and vport tables |
 | Forwarding lifecycle | `tr_server_service()` | Interface, protocol attach callback, serial settings and recovery interval |
 | Parameter registers | `tr_register_route()` / `tr_register_write()` | Command callbacks and status addresses |
 | Optional protocol extension | `tr_register_service.extension` | Complete-ADU callback, e.g. `iap_route()` |

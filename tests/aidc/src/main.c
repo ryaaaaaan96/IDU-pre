@@ -1,6 +1,5 @@
 #include "cfg/inc/ports.h"
 #include <collect/port.h>
-#include <transmit/modbus_transport.h>
 #include <transmit/server.h>
 #include "cfg/inc/device.h"
 #include "cfg/inc/imported_signals.h"
@@ -28,7 +27,7 @@ static void *setup(void)
     zassert_equal(cfg->collect_count,339);
     zassert_equal(cfg->transmit_count,108);
     zassert_ok(dp_validate(cfg));
-    zassert_ok(tr_modbus_network_start(&idu_port_network));
+    zassert_ok(idu_ports_init());
     int iface=co_port_open(&idu_collect_port); zassert_true(iface>=0);
     zassert_ok(co_init(cfg,iface,true));
     zassert_ok(co_init_bus(cfg, &idu_model_bus));

@@ -42,7 +42,8 @@ static void receive(const struct vport_source *source, const struct vport_frame 
     zassert_ok(k_msgq_put(&received, &event, K_NO_WAIT));
 }
 
-static int send(void *context, uint64_t peer, const struct vport_frame *frame, k_timeout_t timeout)
+static int send(void *context, uint16_t port, uint64_t peer,
+                 const struct vport_frame *frame, k_timeout_t timeout)
 {
     ARG_UNUSED(timeout);
     struct fake_link *link = context;
@@ -53,6 +54,7 @@ static int send(void *context, uint64_t peer, const struct vport_frame *frame, k
     }
     if (link->error) { return link->error; }
     struct event event = make_event(frame);
+    event.source.port = port;
     event.source.link = link->id;
     event.source.peer = peer;
     return k_msgq_put(&sent, &event, K_NO_WAIT);
@@ -177,11 +179,25 @@ ZTEST(vport, test_multiple_links_reply_to_origin)
     reply.id = 0x580; /* 响应 CAN ID 由协议指定，不复用接收 ID。 */
     zassert_ok(vport_reply(&event.source, &reply, K_MSEC(20)));
     event = pop(&sent);
+    zassert_equal(event.source.port, 100);
     zassert_equal(event.source.link, 11);
     zassert_equal(event.source.peer, 42);
     zassert_equal(event.id, 0x580);
     zassert_equal(k_msgq_num_used_get(&sent), 0);
     zassert_equal(vport_send(100, 20, 0, &stream_frame, K_NO_WAIT), -EACCES);
+}
+
+ZTEST(vport, test_shared_link_callback_receives_each_virtual_port)
+{
+    const uint16_t ids[] = {100, 101, 102};
+    for (size_t i = 0; i < ARRAY_SIZE(ids); ++i) {
+        zassert_ok(vport_send(ids[i], 10, 0, &can_frame, K_MSEC(20)));
+        struct event event = pop(&sent);
+        zassert_equal(event.source.port, ids[i]);
+        zassert_equal(event.source.link, 10);
+        zassert_equal(event.id, can_frame.id);
+        zassert_mem_equal(event.data, payload, sizeof(payload));
+    }
 }
 
 ZTEST(vport, test_stream_sources_are_not_concatenated)
@@ -211,6 +227,7 @@ ZTEST(vport, test_datagram_peer_and_direction)
     zassert_equal(event.source.port, 301);
     zassert_ok(vport_reply(&event.source, &stream_frame, K_NO_WAIT));
     event = pop(&sent);
+    zassert_equal(event.source.port, 301);
     zassert_equal(event.source.peer, peer);
     zassert_equal(vport_send(300, 30, peer, &stream_frame, K_NO_WAIT), -EACCES);
     zassert_equal(vport_rx_submit(30, 99, &stream_frame), -ENOENT);

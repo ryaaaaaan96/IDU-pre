@@ -1,7 +1,6 @@
 #include "cfg/inc/ports.h"
 #include <collect/port.h>
 #include <collect/simulator.h>
-#include <transmit/modbus_transport.h>
 #include <transmit/registers.h>
 #include <platform_callback.h>
 #include "process/idu_process.h"
@@ -24,6 +23,12 @@
 
 /* Only to verify that bypassing the publication API is rejected. */
 ZBUS_CHAN_DECLARE(dp_samples_chan);
+
+ZTEST(points, test_product_port_registration_is_idempotent)
+{
+    zassert_ok(idu_ports_init());
+    zassert_ok(idu_ports_init());
+}
 
 static const struct dp_key remote_di = {IDU_DEV_REMOTE_IO, IDU_SIG_DI};
 static const struct dp_key local_di = {IDU_DEV_LOCAL, IDU_SIG_DI};
@@ -151,7 +156,7 @@ static void *setup(void)
     uint16_t initial;
     zassert_equal(tr_read_register(4, 10000, &initial), -EIO);
     zassert_equal(tr_read_register(4, 8149, &initial), -EIO);
-    zassert_ok(tr_modbus_network_start(&idu_port_network));
+    zassert_ok(idu_ports_init());
     south_client = co_port_open(&idu_collect_port);
     zassert_true(south_client >= 0);
     zassert_ok(co_init(&test_cfg, south_client, true));

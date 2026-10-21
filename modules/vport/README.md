@@ -11,7 +11,7 @@ Modbus、DP 或 IDU 设备号，也不封装 ARC；依赖仅为 Zephyr 内核。
 | 配置 | 作用 |
 | --- | --- |
 | `vport_link_config[]` | 已准备的物理/传输链路、数据类型、MTU、后端操作和上下文 |
-| `vport_port_config[]` | 逻辑端口号、数据类型和协议接收回调 |
+| `vport_port_config[]` | 逻辑端口号、数据类型和应用接收分发回调 |
 | `vport_route[]` | 链路与逻辑端口的收发绑定、可选对端匹配和 CAN 接收过滤 |
 
 `vport_init()` 一次验证并注册全部配置。配置与后端上下文持续有效至重启，
@@ -20,8 +20,14 @@ Modbus、DP 或 IDU 设备号，也不封装 ARC；依赖仅为 Zephyr 内核。
 不必为每次连接重新注册逻辑端口。
 
 通用端口适配器后续放入 [`backends/`](backends/README.md)，按 Kconfig 选择编译，
-调用 Zephyr 标准驱动或 socket API 后注册给核心。产品负责 DTS 引脚、
-串口参数、网络端点、CAN ID 及协议回调配置。核心不直接打开硬件。
+调用 Zephyr 标准驱动或 socket API。产品在 cfg 中编写并注册收发编排回调，
+回调按虚拟口及物理链路调用相应适配器；产品还负责 DTS 引脚、串口参数、
+网络端点及 CAN ID 配置。核心不直接打开硬件。
+
+发送回调签名是 `send(context, uint16_t port, peer, frame, timeout)`：`port` 是虚拟口 ID，
+`context` 是所选链路的上下文；接收回调的 `source->port` 同样标识虚拟口。
+共享一个物理链路的多个虚拟口仍可在回调中区分，`vport_reply()` 也传递原虚拟口。
+应用须保留来源的 `link/peer`，不能在发送回调中绕过所选链路的锁切换硬件。
 
 ```text
 Zephyr 驱动 / socket
@@ -66,8 +72,9 @@ Zephyr 驱动 / socket
 
 ## 最小注册示例
 
-下面的 `can_backend_send`、`can_context`、`telemetry_receive`、`control_receive`
-由适配器或协议层提供，不是已经实现的驱动函数。
+下面的 `can_backend_send(context, port, peer, frame, timeout)`、`telemetry_receive`、
+`control_receive` 是应用编排回调，内部调用所选硬件/协议接口；`can_context` 是
+物理链路上下文。这些是待实现的示例名称，不是已经提供的 CAN 驱动。
 
 ```c
 #include <vport/vport.h>

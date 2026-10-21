@@ -1,7 +1,6 @@
 #include "cfg/inc/ports.h"
 #include <collect/port.h>
 #include <collect/simulator.h>
-#include <transmit/modbus_transport.h>
 #include <transmit/server.h>
 #include <transmit/registers.h>
 #include "process/idu_process.h"
@@ -160,7 +159,7 @@ static void *setup(void)
     zassert_ok(idu_register_point_tables());
     zassert_ok(dp_init());
     const struct dp_equip_cfg *cfg = dp_config();
-    zassert_ok(tr_modbus_network_start(&idu_port_network));
+    zassert_ok(idu_ports_init());
     int south = co_port_open(&idu_collect_port); zassert_true(south >= 0);
     zassert_ok(co_init(cfg, south, true));
     zassert_ok(dp_params_init(cfg, storage->fa_id));

@@ -15,7 +15,9 @@
 | RS485 | UART 加 DE/RE 控制 | 复用 UART 能力，管理半双工方向及收发切换时序 |
 | 网络 | socket API | TCP 流与 UDP 报文边界、peer/连接代次、断开与重连 |
 
-各后端提供 `vport_link_config` 的操作与实例上下文，产品配置完成路由注册；
+各后端提供硬件收发接口与实例上下文，产品 cfg 编写收发编排回调并完成路由注册。
+`send(context, port, peer, frame, timeout)` 额外接收虚拟口 ID；RX 回调通过
+`source->port/link/peer` 选择协议入口并保留来源。
 适配器不直接调用 collect/transmit，也不识别点号或解析业务协议。
 为同一控制器安装的驱动 RX 入口应由适配器统一管理，不能依赖重叠硬件过滤器
 会把同一帧投递给每个回调；逻辑分流由核心完成。

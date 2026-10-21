@@ -12,7 +12,7 @@
 以注册后端连接传输链路，支持 CAN ID 分流、多链路汇入及来源保持。
 它不依赖三张点表或 Modbus。IDU 默认通过
 `transmit` 内的[通信适配](communication-ports.md)将现有 RS485 转发和
-虚拟采集的完整 ADU 接入，绑定在 `app/cfg/ports.c`。
+虚拟采集的完整 ADU 接入，绑定和应用收发回调在 `app/cfg/ports.c`，发送回调收到虚拟口 ID 后选择实际接口。
 Zephyr 保留 RTU 组帧、串口配置和方向控制；CAN/socket 后端待后续接入。
 
 ## 参考设计与 IDU 对应关系
@@ -132,7 +132,7 @@ flowchart LR
 校验时被拒绝。无参数后端时 `dp_process_save_reboot()` 返回 `-ENOTSUP`。
 
 应用在 `app/main.c` 显式组织启动：注册点表 → `dp_init()` →
-`tr_modbus_network_start()` → `co_port_open()` →
+`idu_ports_init()` → `co_port_open()` →
 `co_init()` / `co_init_bus()` 注册全部总线 → `dp_params_init()` / 恢复参数 →
 `dp_process_start()` → `dp_reference_start()` → `co_start()`。参数存储失败后的降级策略由应用决定。
 首轮采样地址就绪后，调用 `tr_server_service()` 启动并维护转发接口；不使用 `SYS_INIT` 安排这些步骤。

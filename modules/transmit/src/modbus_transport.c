@@ -24,27 +24,6 @@ struct endpoint_state {
 static struct endpoint_state states[CONFIG_TR_MODBUS_TRANSPORT_PORTS];
 static size_t endpoint_count;
 K_MUTEX_DEFINE(bind_lock);
-K_MUTEX_DEFINE(network_lock);
-static const struct tr_modbus_network *network;
-static bool network_ready;
-
-int tr_modbus_network_start(const struct tr_modbus_network *config)
-{
-    if (!config || k_is_in_isr()) { return -EINVAL; }
-    k_mutex_lock(&network_lock, K_FOREVER);
-    int err = network && network != config ? -EALREADY : 0;
-    if (!err && !network_ready) {
-        err = vport_validate(config->ports);
-        if (!err && !network) {
-            err = tr_modbus_transport_bind(config->endpoints, config->endpoint_count);
-            if (!err) { network = config; }
-        }
-        if (!err) { err = vport_init(config->ports); }
-        network_ready = !err;
-    }
-    k_mutex_unlock(&network_lock);
-    return err;
-}
 
 static struct endpoint_state *by_iface(struct modbus_context *ctx)
 {
@@ -137,11 +116,12 @@ void tr_modbus_transport_rx_end(struct modbus_context *ctx)
     if (state) { atomic_clear(&state->raw_busy); }
 }
 
-void tr_modbus_transport_receive(const struct vport_source *source,
-                          const struct vport_frame *frame, void *user)
+void tr_modbus_transport_receive(const struct tr_modbus_transport *endpoint,
+                                 const struct vport_source *source,
+                                 const struct vport_frame *frame)
 {
-    struct endpoint_state *state = by_config(user);
-    if (!state || source->port != state->config->port ||
+    struct endpoint_state *state = by_config(endpoint);
+    if (!state || !source || source->port != state->config->port ||
         source->link != state->config->link || source->peer ||
         !frame || !frame->data || frame->size < 12) { return; }
     k_spinlock_key_t key = k_spin_lock(&state->rx_lock);
@@ -184,11 +164,13 @@ void tr_modbus_transport_tx_done(struct modbus_context *ctx)
     if (state && atomic_get(&state->transmitting)) { k_sem_give(&state->transmitted); }
 }
 
-static int backend_send(void *context, uint64_t peer,
-                         const struct vport_frame *frame, k_timeout_t timeout)
+int tr_modbus_transport_send(const struct tr_modbus_transport *endpoint, uint16_t port,
+                             uint64_t peer, const struct vport_frame *frame,
+                             k_timeout_t timeout)
 {
-    struct endpoint_state *state = by_config(context);
-    if (!state || peer || state->sender != k_current_get()) { return -EACCES; }
+    struct endpoint_state *state = by_config(endpoint);
+    if (!state || port != state->config->port || peer ||
+        k_is_in_isr() || state->sender != k_current_get()) { return -EACCES; }
     struct modbus_context *ctx = modbus_get_context(state->iface);
     if (!ctx) { return -ENODEV; }
     int err = decode(frame, &ctx->tx_adu);
@@ -213,8 +195,6 @@ static int backend_send(void *context, uint64_t peer,
     return -ENOTSUP;
 #endif
 }
-
-const struct vport_backend_ops tr_modbus_transport_backend = {.send = backend_send};
 
 bool tr_modbus_transport_tx_route(struct modbus_context *ctx, int *error)
 {

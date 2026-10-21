@@ -2,7 +2,7 @@
 
 `vport` 负责通用链路和路由。`transmit/src/modbus_transport.c` 将 Zephyr
 已组帧的 Modbus 接口接入它，供现有 `collect` / `transmit` 使用；
-这部分属于已有协议适配层，不另建模块。IDU 默认启用，应用绑定在
+这部分属于已有协议适配层，不另建模块。IDU 默认启用，应用绑定及收发编排回调在
 [`app/cfg/ports.c`](../app/cfg/ports.c)。
 
 | 逻辑端口 | 链路 | Zephyr 接口 | 用途 |
@@ -28,24 +28,42 @@
 | `modules/collect/src/port.c` | 采集客户端初始化 |
 | `modules/collect/src/simulator.c` | 配置驱动的模拟设备及故障注入 |
 | `modules/collect/src/model_simulator.c` | 模型默认值后端 |
-| `app/cfg/ports.c`、`forwarding.c` | 传输绑定、协议选择及转发设置 |
+| `app/cfg/ports.c` | 虚拟口/链路绑定、应用收发回调和 `idu_ports_init()` 注册入口 |
+| `app/cfg/forwarding.c` | 转发协议选择及串口设置 |
 | `app/cfg/parameters.c`、`simulation.c` | 命令/状态地址、IAP 扩展和模拟初值 |
 | `app/process/serial_settings.c` | 产品参数编码到串口设置的业务转换 |
 
 网络和协议配置保存在 Flash，转发状态由 transmit 管理，模拟寄存器值由
 collect 的实例保存。新增产品提供自己的配置与业务回调，不修改模块源码。
 
+`cfg/ports.c` 注册的是应用自己的 `route_send()` / `route_receive()`：
+
+- 发送：`route_send(context, port, peer, frame, timeout)` 的 `port` 是虚拟口编号，
+  `context` 指向已选物理链路编号。应用用二者查找 `endpoints[]`，调用
+  `tr_modbus_transport_send()`，由它访问实际 UART/RAW 接口。
+- 接收：硬件适配器先调用 `vport_rx_submit(link, peer, frame)`；核心按路由确定
+  虚拟口，再调用 `route_receive(source, frame, user)`。应用用
+  `source->port/link` 选择协议接口，将完整来源交给 `tr_modbus_transport_receive()`。
+  RX 回调负责分发已收到的数据，不再次轮询硬件或提交同一帧。
+- `vport` 保留路由校验、共享缓冲和物理链路锁；采集/转发模块保留协议事务与业务处理。
+  应用可以增加回调分支接入新的硬件接口，不能在已经持有某条链路锁时偷偷发送到另一链路。
+  跨链路发送须从上层显式调用对应的 `vport_send(port, link, ...)`。
+
+当前 Modbus 适配仍是一对一的完整 ADU 交接，不是通用原始字节发送接口。
+发送回调必须使用当前已绑定的虚拟口；错误端口返回 `-EACCES`，不会覆盖其他事务。
+未来 CAN/UART/socket 后端可沿用相同的应用回调边界；需要实现各自硬件适配后才能使用。
+
 ## 数据路径
 
 ```text
 RS485 RX → Zephyr 帧间隔 / CRC → 完整 ADU → vport RX 队列和路由
-                                              ↓
-                         原接口工作队列 → transmit 寄存器服务 / IAP
-                                              ↓
-RS485 TX ← Zephyr RTU 编码及 DE 控制 ← vport TX 锁和后端 ← 应答 ADU
+    → cfg.route_receive → 适配器交还原接口工作队列 → 寄存器服务 / IAP
 
-collect → RAW_0 → vport TX → 模拟链路 → RAW_1 → vport RX → 模拟设备
-collect ← RAW_0 ← vport RX ← 模拟链路 ← RAW_1 ← vport TX ← 模拟应答
+应答 ADU → vport TX 路由和链路锁 → cfg.route_send(虚拟口 ID)
+    → 适配器调用 Zephyr RTU 编码及 DE 控制 → RS485 TX
+
+collect → RAW_0 → vport TX → cfg.route_send → RAW_1
+    → vport RX → cfg.route_receive → 模拟设备（响应沿反向路径返回）
 ```
 
 接收必须经 `vport` 回调交接成功，才会执行协议业务；发送必须经路由和后端
@@ -64,7 +82,9 @@ AIDC 的 `read_model` 是直接产生样本的内存模型，不是 UPP 通信�
 
 ## 配置与并发
 
-1. `tr_modbus_network_start(&idu_port_network)` 校验并注册绑定及 vport 表；同一配置可重复调用。
+1. `app/main.c` 调用 `idu_ports_init()`；应用先校验路由，再调用
+   `tr_modbus_transport_bind()` 绑定硬件/仿真接口，最后用 `vport_init()` 注册应用回调和路由。
+   该应用入口可重复调用，注册失败可重试，成功后不更换配置。
 2. `co_port_open(&idu_collect_port)` 初始化配置中的真实客户端或可选仿真设备；接口交给 `co_init()`。
 3. 周期执行 `tr_server_service(&idu_forwarding, sample.address)`，由 transmit 管理启动、地址/串口参数变化和恢复。
 
@@ -109,6 +129,7 @@ IAPv3 配置使用 1100 字节 Modbus 缓冲及 1108 字节 vport 载荷。
 
 `tests/communication/` 使用 Zephyr UART/GPIO emulator 和真实 Modbus
 客户端/服务端，验证 RTU 往返、CRC、RAW 双向路由、完整载荷、并发拒绝、
-交接超时、TX 错误、DE 释放及配置恢复。`tests/forwarding/` 还校验应用采集路径
+交接超时、TX 错误、虚拟口误配拒绝、DE 释放及配置恢复。`tests/vport/` 验证共享链路
+发送和原路回复时回调收到正确的虚拟口 ID。`tests/forwarding/` 还校验应用采集路径
 确实增加 vport 收发计数。这些是模拟器验证，RS485 电气时序和 CAN
 仍需实板验证。

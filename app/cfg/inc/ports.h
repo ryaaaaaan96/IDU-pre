@@ -1,15 +1,15 @@
 #ifndef IDU_CFG_PORTS_H
 #define IDU_CFG_PORTS_H
 
-/* 产品只提供模块配置，端口生命周期/协议解析由各模块实现。 */
-struct tr_modbus_network;
+/* 产品提供端口配置及收发编排回调，协议和硬件机制由各模块实现。 */
 struct tr_server_config;
 struct co_port_config;
 struct co_bus_cfg;
 struct co_simulator;
 struct tr_register_service;
 
-extern const struct tr_modbus_network idu_port_network;
+/* 启动期注册路由和回调，须先于采集/转发启动；可重复调用。 */
+int idu_ports_init(void);
 extern const struct co_port_config idu_collect_port;
 extern const struct tr_server_config idu_forwarding;
 extern const struct tr_register_service idu_parameter_registers;

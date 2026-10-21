@@ -38,12 +38,14 @@ typedef void (*vport_receive_fn)(const struct vport_source *source,
                                 const struct vport_frame *frame, void *user);
 
 struct vport_backend_ops {
-    /* 同步发送：0 成功，负 errno 失败；不能保留 frame/data 指针。
+    /* port 是发起发送的虚拟端口，context 标识已选中的物理链路。
+     * 应用可据此编排硬件调用；不能绕过该链路的锁发送到其他链路。
+     * 同步发送：0 成功，负 errno 失败；不能保留 frame/data 指针。
      * timeout 是取得链路锁后的剩余预算。返回前完成发送或妥善终止/隔离
      * 未完成操作；不能仅提交异步驱动后立即返回成功。
      * 超时不保证远端未收到数据。核心不会自动重试、广播或切换链路。
      */
-    int (*send)(void *context, uint64_t peer, const struct vport_frame *frame,
+    int (*send)(void *context, uint16_t port, uint64_t peer, const struct vport_frame *frame,
                 k_timeout_t timeout);
 };
 
