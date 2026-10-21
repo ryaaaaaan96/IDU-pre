@@ -110,14 +110,15 @@ logical port and opaque source link/peer. Module code never includes product hea
 | --- | --- | --- |
 | Network registration | App `idu_ports_init()` calls `co_modbus_port_bind()` / `tr_modbus_port_bind()` | Logical IDs, application callbacks and physical serial endpoints |
 | Forwarding lifecycle | `tr_server_service()` | Interface, protocol attach callback, serial settings and recovery interval |
-| Parameter registers | `tr_register_route()` / `tr_register_write()` | Command callbacks and status addresses |
+| Register dispatch | `tr_register_route()` / `tr_register_write()` | Optional `routes` address segments; ordinary values go through DP tables |
+| Point status and commands | `DM_SIG_CFG_S.pf_sig_proc` | SET callback; `FLAG_READ_CALLBACK` enables GET; `dp_defer_para_action()` for validated single-point actions |
 | Optional protocol extension | `tr_register_service.extension` | Complete-ADU callback, e.g. `iap_route()` |
 | Acquisition port | `co_port_open()` | RTU client configuration or simulator instance |
 | Simulated device | `co_simulator_*()` | Register addresses, widths, limits and initial values |
 | Simulated model | `co_model_simulator_read()` | Model registry, device range and default-value callback |
 
-Enable these independently with `TR_SERVER_SERVICE`, `TR_REGISTER_SERVICE` (requires
-DP parameters), `CO_SIMULATOR` and `CO_MODEL_SIMULATOR`. The product Kconfig
+Enable these independently with `TR_SERVER_SERVICE`, `TR_REGISTER_SERVICE` (requires the
+Modbus adapter, independently of DP parameter storage), `CO_SIMULATOR` and `CO_MODEL_SIMULATOR`. The product Kconfig
 selects defaults; standalone module consumers opt in. vport never interprets registers
 or commands. The optional register-service extension runs before standard PDU
 validation so IAP can validate its own extended FC16 packets. Returning `-ENOENT`

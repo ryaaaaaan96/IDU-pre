@@ -430,7 +430,8 @@ ZTEST(forwarding, test_parameter_status_through_product_router)
 
 ZTEST(forwarding, test_invalid_configuration_preserves_registered_router)
 {
-    const struct tr_register_service invalid = {.command_count = 1};
+    const struct tr_routes routes = {.count = 1};
+    const struct tr_register_service invalid = {.routes = &routes};
     zassert_equal(tr_register_attach(server, &invalid), -EINVAL);
     uint16_t value;
     zassert_ok(modbus_read_holding_regs(client, 16, 30459, &value, 1));
@@ -449,6 +450,55 @@ ZTEST(forwarding, test_status_response_uses_one_transaction_snapshot)
     zassert_equal(words[2], 0xffff);
     zassert_equal(words[3], 0x1234);
     zassert_equal(atomic_get(&status_reads), 1);
+}
+
+ZTEST(forwarding, test_partial_status_read_uses_one_fresh_snapshot)
+{
+    uint16_t words[3];
+    atomic_clear(&status_reads);
+    atomic_set(&inject_status, 1);
+    int err = modbus_read_holding_regs(client, 16, 32001, words, ARRAY_SIZE(words));
+    atomic_clear(&inject_status);
+    zassert_ok(err);
+    zassert_equal(words[0], 0);
+    zassert_equal(words[1], 0xffff);
+    zassert_equal(words[2], 0x1234);
+    zassert_equal(atomic_get(&status_reads), 1);
+}
+
+static int segment_reply(int iface, const struct modbus_adu *rx,
+                         struct modbus_adu *tx, void *user)
+{
+    zassert_equal(iface, server);
+    zassert_equal(sys_get_be16(rx->data), 33000);
+    zassert_equal(user, &server);
+    tx->length = 3;
+    tx->data[0] = 2;
+    sys_put_be16(0x1234, tx->data + 1);
+    return 0;
+}
+
+ZTEST(forwarding, test_register_service_retains_segment_callbacks)
+{
+    static const struct tr_segment segments[] = {
+        {.begin = 33000, .end = 33000, .function = 3,
+         .handler = segment_reply, .user = &server},
+    };
+    static const struct tr_routes routes = {segments, ARRAY_SIZE(segments)};
+    static const struct tr_register_service service = {.routes = &routes};
+    zassert_ok(tr_register_attach(server, &service));
+    uint16_t words[2];
+    zassert_ok(modbus_read_holding_regs(client, 16, 33000, words, 1));
+    zassert_equal(words[0], 0x1234);
+    zassert_equal(modbus_read_holding_regs(client, 16, 33000, words, 2),
+                  MODBUS_EXC_ILLEGAL_DATA_VAL);
+    /* Nonsegment requests continue through the process/transmit point tables. */
+    zassert_ok(modbus_read_holding_regs(client, 16, 32000, words, 1));
+    zassert_equal(words[0], DP_PARAM_STORAGE_READY);
+    zassert_ok(modbus_write_holding_reg(client, 16, 31000, 750));
+    zassert_ok(modbus_write_holding_reg(client, 16, 31090, 0xa55a));
+    zassert_ok(modbus_read_holding_regs(client, 16, 31000, words, 1));
+    zassert_equal(words[0], 500);
 }
 
 static atomic_t extension_calls;

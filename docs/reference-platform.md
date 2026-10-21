@@ -100,6 +100,26 @@ IDU 的三张应用点表也使用这些原结构，通过设备表及默认/范
 
 [transmit_lib.h](../modules/transmit/include/transmit_lib.h) 的 `TR_FUNC_CB` 有一项明确适配：接收 `const struct modbus_adu *request` 与 `struct modbus_adu *response`，不接收原始字节流。过滤器 0 继续、4 静默消费；模式处理器 -1 继续、0 使用 response 回复。原多帧过滤、CRC 前过滤、回调自行发送和 AES=2 语义没有被宣称兼容。SLEEP 不回复、不执行业务回调。原生更完整的错误和统计接口用 `tr_port_*` 命名，避免同名不同参数。旧端口控制仅 GET/CLR_RECV_MB 映射为进入分发的完整 ADU 计数，其他命令返回 `-ENOTSUP`，不拿软件统计冒充硬件 CRC/TX 计数。
 
+## 测点回调与地址段归属
+
+参考工程 `app/cfg/equip/table/process.c` 通过 `pf_sig_proc` 绑定设置处理器，
+并对需要按需读取的点设置 `FLAG_READ_CALLBACK`；`callback_fuction.c` 的
+`sys_time_handle()` 按 `DP_PARA_GET` 生成响应值。IDU 沿用此配置方式：
+状态和命令在处理表绑定，北向地址只在转发表维护，不再使用额外的
+`tr_status_register` / `tr_command` 配置结构。
+
+`idu_parameter_status()` 将 32000–32003 作为一个四字点，在读取时获取一次参数状态；
+`idu_parameter_command()` 处理 31090–31093，初始化/读取不触发业务动作。
+新增 `dp_defer_para_action()` 是 Zephyr 版本的事务扩展，不是原闭源平台的接口：
+回调登记动作，DP 完成所有回调和数值校验后执行，执行结果同步返回。
+它只支持单个本地非持久写点，不提交触发值，不支持混合或派生写入及重放。
+普通设置回调继续使用原有事务辅助函数，不应直接执行不可撤销操作。
+
+TR 保留 `tr_routes` / `tr_segment` 地址段处理与可选完整 ADU 扩展；
+`tr_register_service` 只组合这两项能力，不再依赖 `DP_PARAMS`。
+IAP 扩展仍先于标准请求长度校验。具体决策见
+[ADR 0002](adr/0002-process-point-callbacks.md)。
+
 ## 点表的 Flash / RAM 分工
 
 产品的 `app/protocol/tables/{process,collect,transmit}.c` 使用 `const`，

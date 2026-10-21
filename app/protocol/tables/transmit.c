@@ -3,6 +3,16 @@
 
 static const MB_TABLE_CELL_T idu_transmit_table[] = {
 /* 本地点表、参数和远端映射；按连续 Modbus 地址访问。 */
+    {.sig_id = IDU_SIG_RESTORE_LOCAL, .reg_addr = 31090, .reg_num = 1,
+     .dev_id = IDU_DEV_LOCAL, .reg_type = 3, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_SIG_RESTORE_REMOTE, .reg_addr = 31091, .reg_num = 1,
+     .dev_id = IDU_DEV_LOCAL, .reg_type = 3, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_SIG_FLUSH_PARAMETERS, .reg_addr = 31092, .reg_num = 1,
+     .dev_id = IDU_DEV_LOCAL, .reg_type = 3, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_SIG_RECOVER_PARAMETERS, .reg_addr = 31093, .reg_num = 1,
+     .dev_id = IDU_DEV_LOCAL, .reg_type = 3, .byte_order = BYTE_ORDER_DEFAULT},
+    {.sig_id = IDU_SIG_PARAMETER_STATUS, .reg_addr = 32000, .reg_num = 4,
+     .dev_id = IDU_DEV_LOCAL, .reg_type = 3, .byte_order = BYTE_ORDER_DEFAULT},
     {.sig_id = IDU_SIG_SAMPLE_PERIOD, .reg_addr = 31000, .reg_num = 1,
      .dev_id = IDU_DEV_LOCAL, .reg_type = 3, .byte_order = BYTE_ORDER_DEFAULT},
     {.sig_id = IDU_SIG_LABEL, .reg_addr = 31001, .reg_num = 8,

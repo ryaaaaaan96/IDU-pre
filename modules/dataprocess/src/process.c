@@ -86,6 +86,18 @@ static bool context_valid(struct dp_process_ctx *ctx)
     return ctx && ctx->transaction == entries && owner == k_current_get();
 }
 
+int dp_defer_para_action(int (*action)(uint16_t argument), uint16_t argument)
+{
+    struct dp_process_ctx *ctx = dp_reference_context();
+    if (!context_valid(ctx)) { return -EPERM; }
+    if (!action || ctx->request->operation != DP_OP_WRITE ||
+        ctx->request->count != 1 || ctx->finish_actions) { return -EINVAL; }
+    if (ctx->action) { return -EALREADY; }
+    ctx->action = action;
+    ctx->action_argument = argument;
+    return 0;
+}
+
 int dp_txn_get(struct dp_process_ctx *ctx, struct dp_key key,
                 bool old, struct dp_value *value)
 {
@@ -222,6 +234,24 @@ int dp_process_execute(const struct dp_process_request *request,
         }
         err = dp_check_value(p, &entries[i].item.point.value);
         if (err) { goto out; }
+    }
+    if (ctx.action) {
+        /* A command cannot be mixed with derived or durable writes. Nothing
+         * has been committed, and no action has run, before this check.
+         */
+        struct dp_point_cfg scratch;
+        const struct dp_point_cfg *p = dp_find(entries[0].item.point.key, &scratch);
+        if (!entries[0].dirty || p->source != DP_SOURCE_LOCAL || ctx.finish_actions) {
+            err = -EINVAL; goto out;
+        }
+        for (size_t i = 1; i < entry_count; ++i) {
+            if (entries[i].dirty) { err = -EINVAL; goto out; }
+        }
+        err = ctx.action(ctx.action_argument);
+        result->count = 1;
+        result->points[0].key = p->key;
+        result->points[0].error = err;
+        goto out;
     }
     /* Bounded groups preserve per-device parameter transactions. Explicit
      * per-output results describe effects when a later device rejects a write. */

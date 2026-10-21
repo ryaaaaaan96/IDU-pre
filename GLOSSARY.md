@@ -6,3 +6,6 @@
 | 产品点表 | `app/protocol/tables/` 中的处理、采集、转发表及默认值配置，通过设备关联与通用模块连接。 |
 | IAPv3 | 可选的升级协议与功能，由 `modules/iap` 提供；不是产品方案，不决定使用哪套业务点表。 |
 | 测试夹具 | `tests/` 下用于模拟硬件、设备或故障的配置，仅服务于回归验证，不是可选产品方案。 |
+| 设置回调 | process 表的 `pf_sig_proc` 处理 `DP_PARA_SET`，校验或调整候选值；初始化另用 `DP_PARA_INIT`，不可据此重放命令。 |
+| 读取回调（readback） | process 表设置 `FLAG_READ_CALLBACK` 后，协议读取或 fast get 以 `DP_PARA_GET` 调用回调；与持久下发后的南向回读确认不同。 |
+| 地址段回调 | transmit 根据请求寄存器范围把完整 ADU 交给段处理器，用于整段协议处理，不承担普通测点状态/命令业务。 |

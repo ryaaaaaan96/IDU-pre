@@ -112,6 +112,13 @@ int32_t dp_check_para_set(FUNC_PARA_S *para);
 int32_t dp_set_para_value(FUNC_PARA_S *para);
 int32_t dp_set_para_value_flag(FUNC_PARA_S *para, uint8_t flags);
 int32_t dp_set_para_flag(uint16_t dev_id, uint16_t sig_id, uint8_t flags);
+/* Callback-only one-shot action for a single volatile WRITE point. Executed
+ * synchronously after all callbacks and value checks succeed, instead of
+ * storing the trigger value. No INIT/READ/SAMPLE, derived outputs, parameter
+ * writes or finish actions may share this request. No automatic replay.
+ * The action returns 0 or -errno; it must not reenter the process engine.
+ */
+int dp_defer_para_action(int (*action)(uint16_t argument), uint16_t argument);
 void dp_set_para_no_collect(uint16_t dev_id, uint16_t sig_id);
 int32_t dp_set_para_only_dm(uint16_t dev_id, uint16_t sig_id,
                           uint8_t size, uint8_t *value);

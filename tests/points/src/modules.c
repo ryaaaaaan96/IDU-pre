@@ -26,6 +26,31 @@ static struct dp_key remote2 = {20, 1200};
 void dp_process_reboot(void) { ++reboot_count; }
 unsigned module_reboot_count(void) { return reboot_count; }
 
+static unsigned action_calls;
+static int action_error, action_validation_error;
+static bool action_derived;
+
+static int command_action(uint16_t argument)
+{
+    zassert_equal(argument, 17);
+    ++action_calls;
+    return action_error;
+}
+
+static int32_t command_callback(FUNC_PARA_ALL *in, FUNC_PARA_ALL *out,
+                                 void *new_value, void *old_value)
+{
+    ARG_UNUSED(out); ARG_UNUSED(new_value); ARG_UNUSED(old_value);
+    if (in->type != DP_PARA_SET) { return 0; }
+    int err = dp_defer_para_action(command_action, 17);
+    if (err) { return err; }
+    if (action_derived) {
+        uint16_t value = 10;
+        return dp_set_para_only_dm(1, 11201, sizeof(value), (uint8_t *)&value);
+    }
+    return action_validation_error;
+}
+
 static int linked(struct dp_process_ctx *ctx, struct dp_key key)
 {
     struct dp_value candidate, old;
@@ -96,6 +121,15 @@ void module_add_points(struct dp_equip_cfg *cfg, struct dp_point_cfg *points,
         .source = DP_SOURCE_PARAMETER, .type = DP_U16, .width = 1, .maximum = 1000,
         .param_flags = DP_PARAM_WRITE | DP_PARAM_PERSIST | DP_PARAM_FORWARD | DP_PARAM_RESTORE,
         .initial.words = {100}, .write_address = 40000};
+    points[cfg->point_count++] = (struct dp_point_cfg){
+        .key = {1, 11203}, .source = DP_SOURCE_LOCAL, .type = DP_U16,
+        .width = 1, .maximum = 1, .reference_data_type = DATA_TYPE_U16,
+        .size_bytes = 2, .handler = dp_reference_process,
+        .reference_handler = command_callback,
+    };
+    maps[cfg->transmit_count++] = (struct dp_transmit_cfg){
+        .function = 3, .address = 31200, .count = 1, .key = {1, 11203},
+    };
     for (unsigned order=0;order<4;++order) {
         maps[cfg->transmit_count++] = (struct dp_transmit_cfg){.function=4,.address=11300+2*order,
             .count=2,.key={1,11001},.order=order};
@@ -321,4 +355,41 @@ ZTEST(points, test_modules_mode_ownership_and_cancel)
     zassert_ok(co_cancel(1)); zassert_equal(cancelled,1);
     zassert_ok(co_transfer_mode(20,CO_PORT_UPDATE,&req.adu));
     zassert_ok(co_set_mode(1,CO_PORT_POLL));
+}
+
+ZTEST(points, test_deferred_action_validates_before_effects)
+{
+    action_calls = 0; action_error = 0; action_validation_error = -EINVAL;
+    zassert_equal(dp_defer_para_action(command_action, 17), -EPERM);
+    zassert_equal(modbus_write_holding_reg(north_client, 16, 31200, 1),
+                  MODBUS_EXC_ILLEGAL_DATA_VAL);
+    action_validation_error = 0;
+    /* The callback accepts this value; final range validation must reject it. */
+    zassert_equal(modbus_write_holding_reg(north_client, 16, 31200, 2),
+                  MODBUS_EXC_ILLEGAL_DATA_VAL);
+    action_derived = true;
+    struct dp_point_state before, after;
+    zassert_ok(dp_read(output, &before));
+    zassert_equal(modbus_write_holding_reg(north_client, 16, 31200, 1),
+                  MODBUS_EXC_ILLEGAL_DATA_VAL);
+    action_derived = false;
+    zassert_ok(dp_read(output, &after));
+    zassert_equal(after.generation, before.generation);
+    zassert_equal(action_calls, 0);
+    zassert_ok(modbus_write_holding_reg(north_client, 16, 31200, 1));
+    zassert_equal(action_calls, 1);
+}
+
+ZTEST(points, test_command_failure_is_not_treated_as_unhandled_route)
+{
+    action_calls = 0; action_validation_error = 0; action_derived = false;
+    action_error = -ENOENT;
+    zassert_equal(modbus_write_holding_reg(north_client, 16, 31200, 1),
+                  MODBUS_EXC_ILLEGAL_DATA_ADDR);
+    zassert_equal(action_calls, 1);
+    action_error = -EIO;
+    zassert_equal(modbus_write_holding_reg(north_client, 16, 31200, 1),
+                  MODBUS_EXC_SERVER_DEVICE_FAILURE);
+    zassert_equal(action_calls, 2);
+    action_error = 0;
 }

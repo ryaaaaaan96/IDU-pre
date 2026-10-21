@@ -5,6 +5,7 @@
 #include <gpio/idu_inputs.h>
 #include <dataprocess/params.h>
 #include <errno.h>
+#include <zephyr/sys/byteorder.h>
 
 int idu_snapshot_publish(const struct idu_snapshot *snapshot)
 {
@@ -64,19 +65,65 @@ uint16_t idu_sample_period_ms(void)
     return err ? CONFIG_IDU_SAMPLE_PERIOD_MS : state.value.words[0];
 }
 
-int idu_process_restore(uint16_t dev)
-{
-    return dp_params_restore(dev);
-}
-
-int idu_process_flush(uint16_t unused)
+static int flush_parameters(uint16_t unused)
 {
     ARG_UNUSED(unused);
     return dp_params_flush();
 }
 
-int idu_process_recover(uint16_t unused)
+static int recover_parameters(uint16_t unused)
 {
     ARG_UNUSED(unused);
     return dp_params_recover();
+}
+
+int32_t idu_parameter_command(FUNC_PARA_ALL *in, FUNC_PARA_ALL *out,
+                               void *new_value, void *old_value)
+{
+    ARG_UNUSED(out);
+    ARG_UNUSED(new_value);
+    ARG_UNUSED(old_value);
+    if (!in || in->para_num != 1 || !in->para_all ||
+        !in->para_all->pvalue || in->para_all->sig_size != 2 ||
+        in->para_all->dev_id != IDU_DEV_LOCAL) { return -EINVAL; }
+    /* 初始化和读取不能重放命令。是否允许多点写由 DP 延后动作接口校验。 */
+    if (in->type == DP_PARA_INIT || in->type == DP_PARA_GET) { return 0; }
+    if (in->type != DP_PARA_SET) { return -EINVAL; }
+    uint16_t expected, argument = 0;
+    int (*action)(uint16_t);
+    switch (in->para_all->sig_id) {
+    case IDU_SIG_RESTORE_LOCAL:
+        expected = 0xa55a; action = dp_params_restore; argument = IDU_DEV_LOCAL; break;
+    case IDU_SIG_RESTORE_REMOTE:
+        expected = 0xa55a; action = dp_params_restore; argument = IDU_DEV_REMOTE_IO; break;
+    case IDU_SIG_FLUSH_PARAMETERS:
+        expected = 1; action = flush_parameters; break;
+    case IDU_SIG_RECOVER_PARAMETERS:
+        expected = 1; action = recover_parameters; break;
+    default: return -ENOENT;
+    }
+    if (sys_get_le16(in->para_all->pvalue) != expected) { return -EINVAL; }
+    return dp_defer_para_action(action, argument);
+}
+
+int32_t idu_parameter_status(FUNC_PARA_ALL *in, FUNC_PARA_ALL *out,
+                              void *new_value, void *old_value)
+{
+    ARG_UNUSED(out);
+    ARG_UNUSED(new_value);
+    ARG_UNUSED(old_value);
+    if (!in || in->para_num != 1 || !in->para_all ||
+        !in->para_all->pvalue || in->para_all->sig_size != 8 ||
+        in->para_all->dev_id != IDU_DEV_LOCAL ||
+        in->para_all->sig_id != IDU_SIG_PARAMETER_STATUS) { return -EINVAL; }
+    if (in->type == DP_PARA_INIT) { return 0; }
+    if (in->type != DP_PARA_GET) { return -EACCES; }
+    struct dp_param_status status;
+    dp_params_get_status(&status);
+    uint8_t *bytes = in->para_all->pvalue;
+    sys_put_le16(status.flags, bytes);
+    sys_put_le16((uint16_t)(int16_t)status.error, bytes + 2);
+    sys_put_le16(status.sequence & 0xffff, bytes + 4);
+    sys_put_le16(status.sequence >> 16, bytes + 6);
+    return 0;
 }

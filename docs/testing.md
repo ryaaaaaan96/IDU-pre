@@ -650,3 +650,28 @@ Zephyr Iterable Sections 按整表登记，DP 按标识校验并装配设备关�
 
 日志位于工作区 `build/IDU-pre/remove-aidc/tests.log` 和 `build.log`。
 本轮未烧录实板；通用模型测试仅验证模块接口，不代表实现了 UPP 线协议。
+
+## 2026-10-21 状态与命令回归处理点表
+
+按参考工程的 `DM_SIG_CFG_S.pf_sig_proc` 组织状态和命令：
+32000–32003 为一个带 `FLAG_READ_CALLBACK` 的四字点，31090–31093 为非持久命令点。
+命令回调通过 `dp_defer_para_action()` 登记动作，DP 完整校验后同步执行，
+不提交触发值、不自动重放；TR 只保留地址映射、地址段回调和完整 ADU 扩展。
+决策见 [ADR 0002](adr/0002-process-point-callbacks.md)。
+
+- `CCACHE_DISABLE=1 ASAN_OPTIONS=detect_leaks=0 bash applications/IDU-pre/tests/run.sh`
+  通过：44 次 native_sim 执行、288 项 Ztest PASS；Python 21 项中 18 项通过，
+  3 项外部 QuickLZ/SGZ 互操作测试缺少样本而跳过。主机工程换算使用 ASan/UBSan。
+- 新增/调整覆盖：设置与 INIT/GET 的执行时机，单字 FC16 命令、批量命令拒绝，
+  回调或最终范围校验失败时不执行动作，派生写入拒绝，执行错误转换为 Modbus 异常，
+  命令不缓存触发值；状态完整/部分读取只取一次快照、实时更新和写入拒绝。
+  地址段回调、普通点表回退、IAP 大包与广播入口继续通过。
+- 参数持久化、意图恢复、重启探针及掉电注入回归通过。新状态/命令不带
+  `FLAG_PERSISTENCE`，原五个持久参数的键、类型、相对顺序及分区未改动。
+- `CCACHE_DISABLE=1 ./applications/IDU-pre/build.sh` 通过，MCUboot 与 IDU 镜像
+  验签成功，导出 IAPv3 SGZ。IDU Flash 121672 B、RAM 102112 B；
+  MCUboot Flash 36568 B、RAM 18096 B。最终配置 `CONFIG_IDU_IAPV3=y`。
+- 构建/测试无编译警告或错误；修改文档的本地链接与 `git diff --check` 通过。
+
+日志保存在工作区 `build/IDU-pre/process-callbacks/`，不纳入源码仓库。
+本轮未进行实板 Flash 掉电、RS485 性能或 DE 时序验证。

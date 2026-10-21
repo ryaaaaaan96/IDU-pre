@@ -43,6 +43,8 @@ struct dp_process_ctx {
     const struct dp_process_request *request;
     void *transaction;
     uint8_t finish_actions;
+    int (*action)(uint16_t argument);
+    uint16_t action_argument;
 };
 typedef void (*dp_process_done_fn)(const struct dp_process_result *result, void *user);
 

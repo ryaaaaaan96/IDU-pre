@@ -8,7 +8,7 @@ IAPv3 的启停只影响升级入口，不切换设备和点表。
 
 ```text
 protocol/
-├── protocol.c       # 设备关联、周期转换、服务配置、回调和 IAP 注册
+├── protocol.c       # 设备关联、周期转换、服务配置、地址段和 IAP 注册
 ├── ports.c          # 实际端口映射、共享 RS485 事务锁及收发编排
 ├── ports.h          # 内部链路标识
 ├── tables.h         # 内部表标识及登记类型引用
@@ -21,8 +21,9 @@ protocol/
     └── transmit.c   # 北向寄存器到设备/信号的映射
 ```
 
-`forwarding.c` 和 `parameters.c` 已合入 `protocol.c`。现用参数状态/命令寄存器、
-IAPv3 的 `iap_route()` 扩展和参数恢复入口保留；Flash 实现始终位于 DP 模块。
+`forwarding.c` 和 `parameters.c` 已删除。参数状态/命令由 `tables/process.c` 绑定回调，
+`tables/transmit.c` 映射北向地址；`protocol.c` 只选择服务、可选地址段和 IAPv3 的
+`iap_route()` 完整 ADU 扩展。Flash 实现始终位于 DP 模块。
 `main.c` 仍负责明确的启动顺序，不通过 SYS_INIT 隐藏业务依赖。
 
 ## 分散登记与设备关联
@@ -62,6 +63,29 @@ IAPv3 的 `iap_route()` 扩展和参数恢复入口保留；Flash 实现始终�
 `CONFIG_IDU_COLLECT_PERIOD_MS` 在 `prj.conf` 手动配置，默认 500 ms，不按固件类型覆盖。
 协议号和南向地址使用 `IDU_COLLECT_NO_POLL`，只在初始化时采集。北向普通读访问 DP 缓存。
 本地模拟量仍使用现有电流换算（0.01 A）；改为电压单位需同步业务换算和协议约定。
+
+## 设置回调、读取回调和地址段
+
+沿用参考工程的 `DM_SIG_CFG_S.pf_sig_proc`：正常设置走 `DP_PARA_SET`，
+初始化走 `DP_PARA_INIT`。仅在设置 `FLAG_READ_CALLBACK` 时，协议读和
+`dp_fast_para_get()` 才以 `DP_PARA_GET` 调用回调；`dp_get_sig_value()` 仍直接读缓存。
+该 readback 指按需读取回调，与南向持久参数写后的读回确认是两个机制。
+
+- 31090–31093：四个非持久命令点，回调 `idu_parameter_command()` 校验触发值，
+  用 `dp_defer_para_action()` 登记一次动作。只接受单点写入（FC06 或单字 FC16），
+  DP 完成回调和范围校验后同步执行，执行完成才应答；不缓存命令触发值，不在 INIT/GET
+  或重启时执行。一次请求不能包含其他命令、参数或派生写入，失败不会自动重试。
+- 32000–32003：一个 8 字节 `DATA_TYPE_U16ARRAY` 点，设置 `FLAG_READ_CALLBACK`，
+  回调 `idu_parameter_status()` 在 GET 时生成标志、错误、序号低字和高字。
+  完整读取或读取其中一部分都从同一次状态快照截取，SET 返回拒绝。
+- 普通值回调只校验、转换或输出候选值；恢复默认、保存等不可撤销动作通过 DP 延后动作
+  接口登记，不直接在校验回调中执行 I/O。接口只接受单个本地非持久写点，不允许派生写入
+  或同时登记其他完成动作；可读取其他点辅助校验。
+- `tr_register_service.routes` 保留 `tr_segment` 地址段回调；未命中段时按转发表访问 DP。
+  产品当前没有额外地址段。IAP 完整 ADU 扩展在标准 Modbus PDU 校验之前调用，
+  保留扩展大包和广播语义，不改成普通测点回调。
+
+详见[回调归属决策](../../docs/adr/0002-process-point-callbacks.md)。
 
 ## 下发、轮询与掉电保存
 

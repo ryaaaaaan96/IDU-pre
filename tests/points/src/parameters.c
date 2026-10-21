@@ -326,6 +326,51 @@ ZTEST(points, test_parameters_restore_flush_and_broadcast)
     zassert_equal(read_word(31000), 500);
 }
 
+ZTEST(points, test_process_commands_do_not_latch_or_replay)
+{
+    const struct dp_key key = {IDU_DEV_LOCAL, IDU_SIG_RESTORE_LOCAL};
+    struct dp_point_state before, after;
+    zassert_ok(dp_read(key, &before));
+    zassert_ok(modbus_write_holding_reg(north_client, 16, 31000, 750));
+    zassert_ok(dp_process_init_device(IDU_DEV_LOCAL));
+    zassert_equal(read_word(31000), 750);
+    uint16_t ignored;
+    zassert_equal(modbus_read_holding_regs(north_client, 16, 31090, &ignored, 1),
+                  MODBUS_EXC_ILLEGAL_DATA_ADDR);
+    zassert_equal(read_word(31000), 750);
+    uint16_t command = 0xa55a;
+    zassert_ok(modbus_write_holding_regs(north_client, 16, 31090, &command, 1));
+    zassert_equal(read_word(31000), 500);
+    zassert_ok(dp_read(key, &after));
+    zassert_equal(after.value.words[0], before.value.words[0]);
+    zassert_equal(after.generation, before.generation);
+    zassert_ok(modbus_write_holding_reg(north_client, 16, 31000, 750));
+    zassert_ok(dp_params_reload());
+    zassert_equal(read_word(31000), 750);
+}
+
+ZTEST(points, test_status_point_is_live_and_read_only)
+{
+    uint16_t words[4];
+    zassert_ok(modbus_write_holding_reg(north_client, 16, 31000, 750));
+    struct dp_param_status expected = param_status();
+    zassert_ok(modbus_read_holding_regs(north_client, 16, 32000, words, 4));
+    zassert_equal(words[0], expected.flags);
+    zassert_equal(words[1], (uint16_t)(int16_t)expected.error);
+    zassert_equal(words[2], expected.sequence & 0xffff);
+    zassert_equal(words[3], expected.sequence >> 16);
+    zassert_equal(modbus_write_holding_regs(north_client, 16, 32000, words, 4),
+                  MODBUS_EXC_ILLEGAL_DATA_ADDR);
+    zassert_equal(modbus_write_holding_reg(north_client, 16, 32001, 7),
+                  MODBUS_EXC_ILLEGAL_DATA_VAL);
+    zassert_equal(param_status().sequence, expected.sequence);
+    zassert_ok(modbus_write_holding_reg(north_client, 16, 31000, 600));
+    expected = param_status();
+    zassert_ok(modbus_read_holding_regs(north_client, 16, 32002, words, 2));
+    zassert_equal(words[0], expected.sequence & 0xffff);
+    zassert_equal(words[1], expected.sequence >> 16);
+}
+
 ZTEST(points, test_parameters_unknown_storage_schema_is_read_only)
 {
     struct flash_pages_info page;
@@ -460,26 +505,4 @@ ZTEST(points,test_parameters_failed_save_cannot_reboot)
     zassert_false(param_status().flags & DP_PARAM_STORAGE_READY);
     bytes_before_failure=-1;
     zassert_ok(dp_params_reload());
-}
-
-static int missing_command_target(uint16_t dev)
-{
-    ARG_UNUSED(dev);
-    return -ENOENT;
-}
-
-ZTEST(points, test_command_failure_is_not_treated_as_unhandled_route)
-{
-    static const struct tr_command commands[] = {
-        {.address = 31090, .expected_value = 0xa55a, .execute = missing_command_target},
-    };
-    static const struct tr_register_service service = {
-        .commands = commands, .command_count = ARRAY_SIZE(commands),
-    };
-    const struct modbus_adu request = {
-        .unit_id = 16, .fc = 6, .length = 4, .data = {0x79, 0x72, 0xa5, 0x5a},
-    };
-    struct modbus_adu reply;
-    zassert_equal(tr_register_route(0, &request, &reply, (void *)&service),
-                  MODBUS_EXC_ILLEGAL_DATA_ADDR);
 }

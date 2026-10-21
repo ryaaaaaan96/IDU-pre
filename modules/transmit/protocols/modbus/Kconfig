@@ -44,8 +44,8 @@ config TR_SERVER_SERVICE
     depends on TR_MODBUS_ADAPTER
 
 config TR_REGISTER_SERVICE
-    bool "Configured parameter status and command registers"
-    depends on TR_MODBUS_ADAPTER && DP_PARAMS
+    bool "Configured address segments and protocol extension"
+    depends on TR_MODBUS_ADAPTER
 
 
 config TR_MODBUS_RAW_PORT

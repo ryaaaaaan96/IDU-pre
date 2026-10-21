@@ -448,6 +448,8 @@ int32_t dp_set_para_value_flag(FUNC_PARA_S *para, uint8_t flags)
 { (void)para; (void)flags; return -ENOTSUP; }
 int32_t dp_set_para_flag(uint16_t dev, uint16_t sig, uint8_t flags)
 { (void)dev; (void)sig; (void)flags; return -ENOTSUP; }
+int dp_defer_para_action(int (*action)(uint16_t), uint16_t argument)
+{ (void)action; (void)argument; return -ENOTSUP; }
 void dp_set_para_no_collect(uint16_t dev, uint16_t sig) { (void)dev; (void)sig; }
 int32_t dp_set_para_only_dm(uint16_t dev, uint16_t sig, uint8_t size, uint8_t *bytes)
 { (void)dev; (void)sig; (void)size; (void)bytes; return -ENOTSUP; }

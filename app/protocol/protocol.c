@@ -5,7 +5,6 @@
 #include <errno.h>
 #include "ports.h"
 #include <transmit/registers.h>
-#include "process/idu_process.h"
 #include <zephyr/sys/util.h>
 #if defined(CONFIG_IDU_IAPV3)
 #include <iap/iap.h>
@@ -77,25 +76,8 @@ int idu_register_point_tables(void)
     return 0;
 }
 
-/* Command registers bind an exact one-word request to a product action.
- * They do not create persistent parameter points or alter the NVS schema. */
-static const struct tr_command commands[] = {
-    {31090, 0xa55a, IDU_DEV_LOCAL, idu_process_restore},
-    {31091, 0xa55a, IDU_DEV_REMOTE_IO, idu_process_restore},
-    {31092, 1, 0, idu_process_flush},
-    {31093, 1, 0, idu_process_recover},
-};
-
-static const struct tr_status_register status[] = {
-    {32000, TR_PARAMETER_FLAGS},
-    {32001, TR_PARAMETER_ERROR},
-    {32002, TR_PARAMETER_SEQUENCE_LOW},
-    {32003, TR_PARAMETER_SEQUENCE_HIGH},
-};
-
-static const struct tr_register_service idu_parameter_registers = {
-    .commands = commands, .command_count = ARRAY_SIZE(commands),
-    .status = status, .status_count = ARRAY_SIZE(status),
+/* 状态和命令回调归 process 表；此处只绑定协议扩展和地址段。 */
+static const struct tr_register_service idu_registers = {
 #if defined(CONFIG_IDU_IAPV3)
     .extension = iap_route,
 #endif
@@ -108,6 +90,6 @@ const struct tr_server_config idu_forwarding = {
     .param = {.mode = MODBUS_MODE_RAW},
 #endif
     .write = tr_register_write,
-    .attach = tr_register_attach, .protocol = &idu_parameter_registers,
+    .attach = tr_register_attach, .protocol = &idu_registers,
     .recovery_timeout_ms = 20000,
 };

@@ -228,7 +228,7 @@ int tr_dispatch(int iface, const struct modbus_adu *rx,
         for (size_t i = 0; i < count; ++i) { sys_put_be16(words[i], tx->data + 1 + i * 2); }
         return 0;
     }
-    return -ENOENT; /* Application command registers and FC06/16 writer. */
+    return -ENOENT; /* Ordinary FC06/16 point-table writer. */
 }
 
 int tr_attach(int iface, const struct tr_routes *routes)

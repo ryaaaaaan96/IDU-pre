@@ -6,6 +6,17 @@
 #include <zephyr/sys/util.h>
 
 static const DM_SIG_CFG_S idu_local_process[] = {
+    /* 默认只在设置/初始化时调用；读回调显式使用 FLAG_READ_CALLBACK。 */
+    {.sig_id = IDU_SIG_RESTORE_LOCAL, .sig_size = 2, .sig_flag = 0,
+     .data_type = DATA_TYPE_U16, .pf_sig_proc = idu_parameter_command},
+    {.sig_id = IDU_SIG_RESTORE_REMOTE, .sig_size = 2, .sig_flag = 0,
+     .data_type = DATA_TYPE_U16, .pf_sig_proc = idu_parameter_command},
+    {.sig_id = IDU_SIG_FLUSH_PARAMETERS, .sig_size = 2, .sig_flag = 0,
+     .data_type = DATA_TYPE_U16, .pf_sig_proc = idu_parameter_command},
+    {.sig_id = IDU_SIG_RECOVER_PARAMETERS, .sig_size = 2, .sig_flag = 0,
+     .data_type = DATA_TYPE_U16, .pf_sig_proc = idu_parameter_command},
+    {.sig_id = IDU_SIG_PARAMETER_STATUS, .sig_size = 8, .sig_flag = FLAG_READ_CALLBACK,
+     .data_type = DATA_TYPE_U16ARRAY, .pf_sig_proc = idu_parameter_status},
     {.sig_id = IDU_SIG_SAMPLE_PERIOD, .sig_size = 2, .sig_flag = FLAG_PERSISTENCE | FLAG_RT_STORE,
      .data_type = DATA_TYPE_U16, .pf_sig_proc = NULL},
     {.sig_id = IDU_SIG_LABEL, .sig_size = 16, .sig_flag = FLAG_PERSISTENCE | FLAG_RT_STORE,
