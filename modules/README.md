@@ -54,6 +54,15 @@ NVS or RAM overrides. Legacy default/range callbacks remain supported for other 
 and cannot be combined with country overrides.
 Signal macros and function pointers bind business handlers directly; there is no
 runtime callback-name registry or duplicate model metadata.
+
+Application rows initialize every member explicitly. Optional-field defaults belong
+to the module that interprets the table: `DP_POINT_DEFAULT_*` in
+[`reference_tables.h`](dataprocess/include/dataprocess/reference_tables.h),
+`CO_TABLE_DEFAULT_*` in [`collect_lib.h`](collect/include/collect_lib.h), and
+`TR_TABLE_DEFAULT_BYTE_ORDER` in [`transmit_lib.h`](transmit/include/transmit_lib.h).
+These are compile-time field constants, not whole-row macros or runtime templates.
+Required addresses, IDs, widths and protocol choices remain explicit product values.
+
 Register-to-signal mappings belong
 to the tables. Protocol windows and command bindings
 live in [`app/protocol/`](../app/protocol); execution belongs to `transmit`, while

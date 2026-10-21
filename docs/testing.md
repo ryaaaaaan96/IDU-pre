@@ -732,3 +732,23 @@ IAPv3 从全局 `extension` 改为本地设备的 `PRO_ADDR_SLAVE` / `MB_TABLE_S
 
 最终日志保存在工作区 `build/IDU-pre/process-parameters/tests.log` 和 `build.log`。
 本轮未进行实板 Flash 掉电、RS485 升级或总线时序验证。
+
+## 2026-10-21 点表字段显式初始化与模块默认值
+
+处理表逐个写出六个成员及 `data` 的三个值，采集表逐个写出全部十个成员；
+转发表和地址段表原本已完整填写。没有专用配置的字段分别使用 DP、collect、transmit
+自己的默认常量，不采用整行宏，不增加 RAM 默认模板或初始化流程。
+
+- 字段检查通过：33 条处理行、7 条采集行、32 条转发行、3 条协议段全部具备完整字段。
+- `points`、`forwarding`、`point_parameters` 的 native_sim 回归通过，分别为
+  46、23、6 项 Ztest PASS，共 75 项，0 FAIL。常规运行的两项独立重启探针按原条件跳过，
+  本轮未重跑独立进程重启测试或完整回归；上轮完整回归结果见前一节。
+- IDU MCUboot/IAPv3 构建、镜像验签及 SGZ 导出通过，无编译警告或错误。
+  Flash 121836 B、RAM 102120 B，与 `4877e70` 相同。
+- 与修改前的 ELF 对比，两个处理数组、采集数组、转发数组和 IAP 协议段数组的
+  长度及内容 SHA-256 全部相同；完整未签名 `IDU-pre.bin` 的 SHA-256 也相同。
+  证明此次只是将隐式字段和通用字序显式写为模块默认值，没有改变编译后的配置或行为。
+- 文档链接与 `git diff --check` 通过。日志及比较基线保存在工作区
+  `build/IDU-pre/explicit-table-defaults/`，不提交。
+
+本轮未进行实板验证。

@@ -6,6 +6,9 @@
 #include <transmit/transmit.h>
 #include <dataprocess/reference_tables.h>
 
+/* 转发表默认字序；寄存器地址、设备、信号、功能码及长度均由应用填写。 */
+#define TR_TABLE_DEFAULT_BYTE_ORDER BYTE_ORDER_DEFAULT
+
 /* 参考地址段表布局；地址直接使用线地址，不隐式加一。
  * 回调使用 Zephyr 完整 ADU，负责功能码、长度及广播语义。
  * 命中后不再回退；-ENOENT 也作为非法地址返回给请求方。

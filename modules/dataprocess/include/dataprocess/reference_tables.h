@@ -24,6 +24,15 @@ typedef struct dm_sig_data_s {
     DATA_U max_value;
 } DM_SIG_DATA_S;
 
+/* DP 可选字段的编译期默认值。应用逐字段填写，不用整行初始化宏。
+ * 数组默认指针由 DP 按 sig_size 解释为全零；零初值不表示已有有效采样。
+ * 信号 ID、类型、长度及业务范围仍须由应用明确配置。
+ */
+#define DP_POINT_DEFAULT_VALUE 0
+#define DP_POINT_DEFAULT_FLAGS 0U
+#define DP_POINT_DEFAULT_CALLBACK NULL
+#define DP_POINT_DEFAULT_ARRAY NULL
+
 typedef struct dm_sig_cfg_s {
     uint16_t sig_id;
     uint8_t sig_size;

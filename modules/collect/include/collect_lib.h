@@ -15,6 +15,13 @@ typedef enum {
     FLAG_FRAME = 1, FLAG_0x03_W_0x06 = 2, FLAG_0x03_w_0x10 = 4, FLAG_0x17_W_CODE = 8,
 } CO_TABLE_FLAG;
 
+/* 采集表可选字段的编译期默认值；周期和读写目标由应用明确配置。 */
+#define CO_TABLE_DEFAULT_FLAGS 0U
+#define CO_TABLE_DEFAULT_PRIORITY 0U
+#define CO_TABLE_DEFAULT_DATA_TYPE 0U
+#define CO_TABLE_DEFAULT_BYTE_ORDER BYTE_ORDER_DEFAULT
+#define CO_TABLE_DEFAULT_SCAN_PRIORITY SCAN_PRI_LOW
+
 /* Reference numeric values; MODE_OTHER is unsupported, not CO_PORT_SLEEP. */
 typedef enum {
     MODE_IDLE = 0, MODE_INIT = 1, MODE_UPDATE = 2, MODE_IV = 3,

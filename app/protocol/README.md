@@ -35,6 +35,12 @@ protocol/
 登记项保存表标识、协议类型、数组指针及 `ARRAY_SIZE` 得到的条目数。
 不使用逐行宏，不维护 extern 数组及手工数量枚举，不包含其他 `.c` 文件。
 
+应用点表逐字段显式初始化，`data` 中的默认值、最小值和最大值也分别写出；
+联合体选择与实际数据类型对应的成员。没有专用配置时使用所属模块提供的字段默认值：
+DP 的 `DP_POINT_DEFAULT_*`、collect 的 `CO_TABLE_DEFAULT_*`、
+transmit 的 `TR_TABLE_DEFAULT_BYTE_ORDER`。这些是编译期字段常量，不隐藏整行配置，
+不增加初始化调用或 RAM 模板。地址、设备/信号 ID、类型、长度和轮询策略仍由应用填写。
+
 `modules/dataprocess` 的可选 `DP_TABLE_REGISTRY` 提供 ROM 链接段及通用校验/装配。
 `protocol.c` 的 const `bindings[]` 声明设备号、采集总线、南向地址与表标识关联。
 `idu_register_point_tables()` 先调用 `dp_table_registry_bind()`，再注册原有 pltcb 回调。
@@ -121,7 +127,7 @@ protocol/
 ```c
 {.sig_id = IDU_SIG_SAMPLE_PERIOD, .sig_size = 2,
  .sig_flag = FLAG_PERSISTENCE | FLAG_RT_STORE | FLAG_RANGE_CHECK,
- .data_type = DATA_TYPE_U16, .pf_sig_proc = NULL,
+ .data_type = DATA_TYPE_U16, .pf_sig_proc = DP_POINT_DEFAULT_CALLBACK,
  .data = {.def_value.u16 = 500, .min_value.u16 = 100, .max_value.u16 = 1000}},
 ```
 
