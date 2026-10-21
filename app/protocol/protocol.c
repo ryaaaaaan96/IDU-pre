@@ -50,12 +50,12 @@ const DM_SIG_CFG_S *idu_process_table(uint8_t dev, uint16_t *count)
     return NULL;
 }
 
-/* rqst_cyl 为 8 位周期编码：0 不周期轮询，1 使用产品配置的采集间隔。 */
+/* 将点表的 8 位周期编码转换成实际采集间隔。 */
 static int collect_period(uint8_t code, uint32_t *ms)
 {
     switch (code) {
-    case 0: *ms = 0; return 0;
-    case 1: *ms = CONFIG_IDU_COLLECT_PERIOD_MS; return 0;
+    case IDU_COLLECT_NO_POLL: *ms = 0; return 0;
+    case IDU_COLLECT_SAMPLE: *ms = CONFIG_IDU_COLLECT_PERIOD_MS; return 0;
     default: return -ENOTSUP;
     }
 }
