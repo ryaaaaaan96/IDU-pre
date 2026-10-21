@@ -15,26 +15,10 @@ struct idu_snapshot;
 int idu_snapshot_publish(const struct idu_snapshot *snapshot);
 uint16_t idu_sample_period_ms(void);
 
-/* Profile-specific point handlers; selected by the product process table. */
+/* IDU 测点回调，由处理点表注册。 */
 int32_t idu_default_point(FUNC_PARA_ALL *in, FUNC_PARA_ALL *out,
                           void *new_value, void *old_value);
 int32_t idu_initialize_point(FUNC_PARA_ALL *in, FUNC_PARA_ALL *out,
                               void *new_value, void *old_value);
-
-#if defined(CONFIG_IDU_AIDC_PROFILE)
-struct modbus_iface_param;
-int idu_forwarding_settings(struct modbus_iface_param *param);
-
-int32_t idu_serial_setting(FUNC_PARA_ALL *in, FUNC_PARA_ALL *out,
-                              void *new_value, void *old_value);
-int32_t idu_protocol_identity(FUNC_PARA_ALL *in, FUNC_PARA_ALL *out,
-                              void *new_value, void *old_value);
-int32_t idu_firmware_version(FUNC_PARA_ALL *in, FUNC_PARA_ALL *out,
-                              void *new_value, void *old_value);
-int32_t idu_point_alias(FUNC_PARA_ALL *in, FUNC_PARA_ALL *out,
-                              void *new_value, void *old_value);
-int32_t idu_unsupported_service(FUNC_PARA_ALL *in, FUNC_PARA_ALL *out,
-                              void *new_value, void *old_value);
-#endif
 
 #endif

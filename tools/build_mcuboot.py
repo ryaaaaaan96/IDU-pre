@@ -117,7 +117,7 @@ def main():
     upload.add_argument("--no-upload", action="store_true", help="Build without an upload receiver")
     args = parser.parse_args()
     if args.iapv3 and args.smp_uart:
-        parser.error("--iapv3 is an MV-IO profile and an alternative to --smp-uart")
+        parser.error("--iapv3 is an upload protocol and an alternative to --smp-uart")
     args.iapv3 = args.iapv3 or not (args.smp_uart or args.no_upload)
     key = args.key.expanduser().resolve() if args.key else WORKSPACE / "build/keys/IDU-pre-dev.pem"
     if args.key and not key.is_file():
@@ -148,7 +148,6 @@ def main():
                "-d", build, "--", f"-DSB_CONFIG_BOOT_SIGNATURE_KEY_FILE={json.dumps(str(key))}",
                f"-DIDU-pre_EXTRA_CONF_FILE={';'.join(map(str, conf))}",
                f"-DIDU-pre_EXTRA_DTC_OVERLAY_FILE={';'.join(map(str, overlays))}",
-               "-DIDU-pre_CONFIG_IDU_AIDC_PROFILE=n",
                f"-DIDU-pre_CONFIG_MCUBOOT_IMGTOOL_SIGN_VERSION={json.dumps(args.version)}"]
     run(*command)
     export(build, key, WORKSPACE / f"build/hex/IDU-pre-mcuboot{suffix}", args.iapv3, args.version)

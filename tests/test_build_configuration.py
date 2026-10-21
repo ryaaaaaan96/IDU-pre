@@ -67,8 +67,7 @@ class ApplicationRequirements(unittest.TestCase):
 
     def configure(self, **overrides):
         values = {name: 'y' for name in self.required}
-        values.update(CO_SIMULATOR='n',
-                      IDU_AIDC_PROFILE='n', CO_MODEL_SIMULATOR='n', CO_MAX_BUSES='1')
+        values.update(CO_SIMULATOR='n', CO_MODEL_SIMULATOR='n', CO_MAX_BUSES='1')
         values.update(overrides)
         script = 'cmake_minimum_required(VERSION 3.20.0)\n'
         # Execute the actual configure checks without compiling a firmware image.

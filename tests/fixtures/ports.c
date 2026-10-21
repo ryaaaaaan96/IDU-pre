@@ -22,8 +22,3 @@ int idu_ports_init(void)
     int err = co_modbus_port_bind(IDU_PORT_ACQUISITION, "RAW_0", &io);
     return err ? err : tr_modbus_port_bind(SIMULATED_DEVICE, "RAW_1", &io);
 }
-int idu_forward_serial_configure(struct modbus_serial_param param)
-{
-    ARG_UNUSED(param);
-    return 0;
-}

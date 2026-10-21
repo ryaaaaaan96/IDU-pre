@@ -31,25 +31,3 @@ struct co_simulator idu_collect_simulator;
 const struct co_port_config idu_collect_port = {
     .simulator = &idu_collect_simulator, .simulation = &simulation,
 };
-
-#if defined(CONFIG_IDU_AIDC_PROFILE)
-#include "protocol.h"
-
-#include <collect/model_simulator.h>
-
-static struct co_model_simulator model = {
-    .first_device = IDU_DEV_DSP_FIRST, .last_device = IDU_DEV_DSP_LAST,
-    .defaults = idu_point_default,
-};
-static int read_model(void *user, uint16_t dev, uint16_t model_id,
-                      uint16_t offset, uint16_t *words, size_t count)
-{
-    uint16_t fields;
-    model.registry = idu_model_table(&fields);
-    return co_model_simulator_read(user, dev, model_id, offset, words, count);
-}
-const struct co_bus_cfg idu_model_bus = {
-    .id = 1, .iface = -1, .simulated = true,
-    .read_model = read_model, .user = (void *)&model,
-};
-#endif

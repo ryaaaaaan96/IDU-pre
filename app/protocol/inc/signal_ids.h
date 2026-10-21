@@ -7,8 +7,6 @@
 /* Logical device and signal IDs, independent of wire register addresses. */
 #define IDU_DEV_LOCAL 1
 #define IDU_DEV_REMOTE_IO 10
-#define IDU_DEV_DSP_FIRST 11
-#define IDU_DEV_DSP_LAST 18
 #define IDU_SIG_DI 8152
 #define IDU_SIG_CURRENT_1 8163
 #define IDU_SIG_PROTOCOL 8150

@@ -28,11 +28,6 @@ for phase in write recover verify; do
         -flash="$flash_test_file" -test=points::test_parameters_reboot_probe
 done
 
-# Full imported business profile uses its own native flash image.
-env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
-    applications/IDU-pre/tests/aidc -d "$test_dir/aidc"
-timeout 30s "$test_dir/aidc/zephyr/zephyr.exe" -flash_in_ram
-
 # Product register routing, persistence and bounded port recovery.
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/forwarding -d "$test_dir/forwarding"
@@ -44,7 +39,6 @@ for phase in write verify; do
         -flash="$flash_test_file" -test=forwarding::test_reboot_probe
 done
 python3 applications/IDU-pre/tests/test_mcuboot_image.py
-python3 applications/IDU-pre/tests/test_import_aidc.py
 python3 applications/IDU-pre/tests/test_build_configuration.py
 
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \

@@ -36,7 +36,6 @@
 
     aliases {
         idu-settings = &idu_settings;
-        idu-aidc-settings = &idu_aidc_settings;
         led0 = &run_led;
         idu-forward = &modbus0;
         /* CO/TR share this RS485 link for single-bus performance testing. */
@@ -106,11 +105,6 @@
                     idu_settings: partition@10000 {
                         label = "idu-settings";
                         reg = <0x10000 0x4000>;
-                    };
-                    /* Optional AIDC profile has a different parameter schema. */
-                    idu_aidc_settings: partition@14000 {
-                        label = "idu-aidc-settings";
-                        reg = <0x14000 0x4000>;
                     };
                 };
             };

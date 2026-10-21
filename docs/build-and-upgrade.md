@@ -14,8 +14,12 @@ SMP 和无上传入口使用各自的构建/导出目录。旧 BOOT 构建和旧
 | MCUboot + SMP UART | `./applications/IDU-pre/build.sh --mcuboot --smp-uart` |
 | MCUboot + IAPv3 | `./applications/IDU-pre/build.sh --mcuboot --iapv3` |
 
-IAPv3 与 SMP 互斥。AIDC 虚拟模型仅用于 `tests/aidc`，不再构建模拟固件。
+所有构建使用同一套 IDU 产品点表和业务。IAPv3 与 SMP 是互斥的升级入口选项，
+不是不同产品方案；不再保留 AIDC 产品分支。
 南北向共用 RS485 的联调配置见[端口说明](communication-ports.md)。
+
+从包含旧产品分支的版本更新后，首次执行 `./applications/IDU-pre/build.sh --pristine always`
+重新生成构建目录，清除已删除开关的配置缓存。
 
 采集和转发的实例数量、栈大小由各模块的 Kconfig 定义，在 `prj.conf`
 手动填写，不随固件类型自动覆盖。当前工作配置为 MCUboot + IAPv3：
@@ -41,9 +45,8 @@ IAPv3 通过 `./applications/IDU-pre/build.sh --mcuboot --iapv3` 构建，
 `co_init_bus()` 会在注册前检查全部设备的总线 ID 均小于配置容量，
 数据处理模块不再依赖采集线程数量。
 
-`app/CMakeLists.txt` 在配置阶段检查完整应用所需的模块，以及 AIDC 的第二总线和
-模型后端；缺少时给出对应配置错误。历史 AIDC 配置已不再自动增加总线槽，
-若以后使用其双总线点表，需要先手动把 `CONFIG_CO_MAX_BUSES` 改为 2。
+`app/CMakeLists.txt` 在配置阶段检查 IDU 应用所需的模块，缺少时给出对应配置错误。
+当前只有一个采集总线；后续扩展时手动调整点表、端口注册及 `.conf` 容量。
 模块自身仍可由其他应用或独立测试按需启用。
 
 ## Flash 与启动布局
@@ -51,12 +54,12 @@ IAPv3 通过 `./applications/IDU-pre/build.sh --mcuboot --iapv3` 构建，
 产品镜像布局集中在 `bootloader/partitions.dtsi`，由板级 DTS 引用。
 MCUboot 和应用分别通过 overlay 选择 boot 和 slot0；所有构建使用下节的同一布局。
 旧参数主备区、旧升级配置及 BIN 暂存区的设备树声明已移除，不再参与运行。
-有效存储偏移保持不变：
+AIDC 专用分区也已移除，0x014000–0x017fff 暂不分配；不会自动擦除其中旧内容。
+IDU NVS、IAP 和 MCUboot 的有效存储偏移保持不变：
 
 | 外部 Flash 内容 | 偏移 | 大小 |
 | --- | --- | --- |
 | IDU NVS 参数/事务 | 0x010000 | 16 KiB |
-| 可选 AIDC NVS 参数/事务 | 0x014000 | 16 KiB |
 | IAP 日志（启用 IAP 时） | 0x018000 | 16 KiB |
 | IAP SGZ 暂存（启用 IAP 时） | 0x201000 | 960 KiB |
 | MCUboot slot1 | 0x300000 | 448 KiB |
@@ -144,8 +147,8 @@ MCUboot 在板级早期初始化中将 PC13 设为浮空输入；
 | `IDU-pre-validation.json` | 签名、向量、边界检查及产物摘要；明确记录未做硬件验证 |
 
 `--no-upload` 的输出目录为 `build/hex/IDU-pre-mcuboot/`；默认 IAPv3 为
-`build/hex/IDU-pre-mcuboot-iapv3/`；AIDC + SMP 为
-`build/hex/IDU-pre-mcuboot-aidc-smp/`。HEX 与升级 BIN 从同一次签名结果生成，避免两次 ECDSA 签名造成内容差异。
+`build/hex/IDU-pre-mcuboot-iapv3/`；SMP 为
+`build/hex/IDU-pre-mcuboot-smp/`。HEX 与升级 BIN 从同一次签名结果生成，避免两次 ECDSA 签名造成内容差异。
 
 首次切换需要通过调试器安装新 BOOT 和新应用，**不能仅把新应用发给旧 BOOT**。
 首次安装还应清空外部 `0x300000..0x371fff` 的新 slot1/scratch 区，保留参数和

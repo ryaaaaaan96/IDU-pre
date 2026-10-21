@@ -5,6 +5,7 @@
 本页保存带日期的迁移记录和早期静态库分析。文中的“本轮”“当前”、测试数量、
 路径和能力缺口均指原记录时点，不能作为现在的支持清单或操作指南。
 不同参考目录/库的 SHA-256 分别保留；最新接口对照以 `reference-platform.md` 为准。
+AIDC 专用代码、测试、导入工具和来源快照已于 2026-10-21 删除，旧文件可从 Git 历史查阅。
 
 <a id="mvio-migration"></a>
 
@@ -101,7 +102,7 @@ python applications/IDU-pre/tools/import_aidc.py --source /path/to/AIDC_CODE/COD
 `tables/imported_signals.h`，保留标记外的手写配置。默认仓库报告写到
 `docs/point-table-import.json`；自定义 `--output` 时报告默认写到
 `<output>/migration.json`，可用 `--report` 显式指定。
-区段与文件对应关系见[点表维护入口](../app/cfg/README.md#更新导入点表)。
+旧导入区段与文件对应关系可查 Git 历史；现用配置见[点表维护入口](../app/protocol/README.md)。
 
 导入结果：172 个去重后的本地点、41 个 DSP 点 × 8 台设备，加 19 个缺失
 定义的占位点，共 519 个原表配置项；另保留 33 个 MV-IO 基础点，合计 552。
@@ -109,7 +110,7 @@ python applications/IDU-pre/tools/import_aidc.py --source /path/to/AIDC_CODE/COD
 108 个转发段（107 个原表映射 + 10012 虚拟来源标志）。AIDC 配置的转发地址
 以 AIDC 原表为准；MV-IO 默认寄存器表继续由默认配置提供。
 
-[`docs/point-table-import.json`](point-table-import.json) 记录输入源码 SHA-256、行号、原始 flags、回调名、
+`docs/point-table-import.json`（已移除，可查 Git 历史）记录输入源码 SHA-256、行号、原始 flags、回调名、
 全部 445 条 UPP 字段定义及生成诊断。它记录的是可见源码元数据，不是闭源
 库行为的证明。当前从具有 process 定义的信号中，每个选择一条模型绑定，
 用于虚拟后端测试；其他模型字段完整保留在元数据中，没有虚构其实际运行语义。

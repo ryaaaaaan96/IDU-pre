@@ -3,7 +3,8 @@
 [文档导航](../../docs/README.md) · [点表与寄存器](../../docs/point-tables.md)
 
 本目录声明产品点表、设备关联、协议服务配置和端口编排。
-采集、转发、参数存储及协议解析由各自模块执行。
+采集、转发、参数存储及协议解析由各自模块执行。这里只维护 IDU 产品方案，
+IAPv3 的启停只影响升级入口，不切换设备和点表。
 
 ```text
 protocol/
@@ -14,8 +15,7 @@ protocol/
 ├── mvio_signals.h   # 内部南向信号别名及周期编码
 ├── inc/             # 只保存对外头文件
 │   ├── protocol.h
-│   ├── signal_ids.h
-│   └── imported_signals.h
+│   └── signal_ids.h
 └── tables/
     ├── process.c    # 信号、标志、回调、默认值及范围
     ├── collect.c    # 南向地址、字序、轮询周期及写入目的地
@@ -90,13 +90,13 @@ int err = idu_point_parameters_get(IDU_PARAMETER_COUNTRY_COMMON,
 ```
 
 - 当前只配置通用参数，没有预置任何具体国家的值。
-- 增加国家时，在枚举中定义产品编号，并在同一数组的导入标记区外添加差异行。
+- 增加国家时，在枚举中定义产品编号，并在同一数组中添加差异行。
   已配置国家优先匹配自身行，缺项复用通用行；每个国家/型号/信号键只能定义一次。
   国家行须填写完整的默认值、上下限和恢复策略，不逐字段合并。
 - 没有通用记录但已定义的信号仍按原规则补零，范围全零表示使用类型范围。
   未定义的国家返回 `-ENOTSUP`；未定义的设备或信号返回 `-ENOENT`。
 - 共用同一处理表的设备共享型号参数，参数键使用 `devices[]` 中该型号首个实例的设备号；
-  当前 MV-IO 为 10、DSP 为 11。新增实例放在同型号首个实例之后，避免改变默认值来源。
+  当前南向设备为 10。新增实例放在同型号首个实例之后，避免改变默认值来源。
   数组初值的返回指针只读。
 - `restore` 表示允许主动恢复默认，不表示启动时强制覆盖已保存参数。
   查询不更新 DP 当前值、不读写 NVS。
@@ -104,22 +104,6 @@ int err = idu_point_parameters_get(IDU_PARAMETER_COUNTRY_COMMON,
 当前 `idu_point_default()` / `idu_point_restore()` 均固定查询通用参数。
 国家选择来源、保存方式和运行期切换暂未接入；后续接入时，在 DP 初始化前确定国家，
 两个回调使用同一固定选择，并明确已有持久参数的处理规则。
-
-## 更新导入点表
-
-`tools/import_aidc.py` 只更新成对标记区，保留手写点表与国家参数：
-
-- `process.c`：`points`（含整表登记）、`defaults`。
-- `collect.c`：`fields`、`collect`（含模型登记）；`transmit.c`：`transmit`。
-- `protocol.c`：`devices`。条目数由 C 数组计算，不再生成 counts 头文件。
-
-```bash
-python applications/IDU-pre/tools/import_aidc.py --source /path/to/AIDC_CODE/CODE
-```
-
-默认输出 `app/protocol`，符号写入 `inc/imported_signals.h`，来源记录写入
-`docs/point-table-import.json`。不恢复 `.inc` 或 generated 代码目录。
-导入的 AIDC/UPP 模型只供原生测试，不提供产品 UPP 线协议。
 
 ## 同线 RS485 联调
 

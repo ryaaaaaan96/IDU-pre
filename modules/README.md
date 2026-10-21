@@ -34,11 +34,11 @@ compatibility.
 Product point-table configuration lives in [`app/protocol/`](../app/protocol/README.md),
 outside these modules. `protocol.c` binds devices to registered table IDs; `inc/` holds public headers only;
 `tables/` holds collection, processing and forwarding tables, including default
-values and ranges in `process.c`. Imported data is inline in marked C sections, with symbols in
-`inc/imported_signals.h` and provenance in
-[`docs/point-table-import.json`](../docs/point-table-import.json).
+values and ranges in `process.c`. The application maintains one IDU product scheme;
+IAPv3 is an optional upgrade module and does not select a different set of tables.
 The three application tables use the reference `DM_SIG_CFG_S`,
-`MODBUS_RTU_TABLE_S` / UPP model layouts and `MB_TABLE_CELL_T`.
+`MODBUS_RTU_TABLE_S` and `MB_TABLE_CELL_T`. Generic UPP model layouts remain
+available in the modules and are covered by independent tests.
 The single const `parameters[]` array in `process.c` supplies `DM_SIG_DATA_S`
 through the reference callback. A country lookup API is reserved in the application;
 registered DP callbacks currently use common parameters.
@@ -403,8 +403,7 @@ depending on the collector's worker pool.
 Tests with multiple buses or forwarding workers explicitly declare their fixture
 capacity in their own `.conf`; they do not supply product defaults.
 
-The AIDC example increases point width to 32 words and changes these bounds for
-its 546 configured points (560 runtime slots). `ZBUS_MSG_SUBSCRIBER_NET_BUF_STATIC_DATA_SIZE` must cover
+`ZBUS_MSG_SUBSCRIBER_NET_BUF_STATIC_DATA_SIZE` must cover
 `sizeof(dp_point_batch)` despite isolated pools in Zephyr 4.4.2. Tables are static;
 reference key lookup searches the device list and then only that device's rows,
 without reordering rows or allocating a RAM index. Native tables use a linear
@@ -416,7 +415,7 @@ DEV_TABLE_S pointer view. Process and acquisition rows remain shared const array
 execution views use caller scratch storage. There is no full-table RAM copy or heap allocation. See [the model and pipeline design](../docs/collect-process-transmit.md).
 
 NVS requires FLASH, FLASH_MAP, FLASH_PAGE_LAYOUT and NVS_DATA_CRC. Reserve at least
-three equal erase sectors. The example uses four 4 KB sectors per profile.
+three equal erase sectors. IDU uses four 4 KB sectors for its parameter partition.
 Parameter and device events are notifications; state/result APIs are authoritative.
 
 `transmit/protocols/modbus/compat/prepare_modbus.py` generates build-local copies of four reviewed Zephyr

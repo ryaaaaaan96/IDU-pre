@@ -1,6 +1,0 @@
-/ {
-    aliases {
-        idu-settings = &storage_partition;
-        idu-aidc-settings = &storage_partition;
-    };
-};

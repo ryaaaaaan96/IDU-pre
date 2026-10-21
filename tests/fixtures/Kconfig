@@ -3,6 +3,3 @@ config IDU_TEST_FIXTURES
     default y
     depends on ZTEST
     select CO_SIMULATOR
-
-config CO_MODEL_SIMULATOR
-    default y if IDU_AIDC_PROFILE

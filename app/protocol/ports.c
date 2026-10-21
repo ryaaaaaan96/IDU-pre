@@ -116,15 +116,6 @@ static int receive(void *user, const uint8_t *data, size_t size)
 }
 #endif
 
-int idu_forward_serial_configure(struct modbus_serial_param param)
-{
-    int err = k_mutex_lock(&wire_lock, K_NO_WAIT);
-    if (err) { return -EBUSY; }
-    err = serial < 0 ? -ENODEV : mb_serial_configure(serial, param);
-    k_mutex_unlock(&wire_lock);
-    return err;
-}
-
 int idu_ports_init(void)
 {
     if (k_is_in_isr()) { return -EWOULDBLOCK; }

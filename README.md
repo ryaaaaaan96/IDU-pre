@@ -141,8 +141,8 @@ IDU-pre/
 命令及参数默认值；`protocol/ports.c` 注册应用收发回调，发送按虚拟口 ID 和链路选择
 实际接口，接收按当前南向事务分流；共享链路锁覆盖请求到应答/超时。`collect` 管理采集端口和轮询，`transmit` 管理
 转发状态机、协议解析与命令分发，`vport` 提供通用回调端口，`iap` 管理升级。
-AIDC 参数编码转换属于业务，保留在 `process/serial_settings.c`；各模块不引用
-IDU 配置头文件。模拟设备和虚拟 UPP 模型仅在测试中使用，不实现真实 UPP 链路。
+各模块不引用 IDU 配置头文件。通用模拟设备和模型后端仅在模块测试中使用，
+不实现真实 UPP 链路。
 
 `collect` / `transmit` 的协议适配统一放在各自的 `protocols/modbus/`，核心服务留在
 `src/`。采集客户端由 `CO_MODBUS_ADAPTER` 控制，转发适配由 `TR_MODBUS_ADAPTER`
@@ -169,7 +169,9 @@ IDU 的引脚、外部看门狗和分区属于板级及产品配置，分别留�
 
 参考平台四个公开头文件的 89 个接口名称中，当前覆盖 79 个；
 [接口说明](docs/reference-platform.md) 列出限制和其余 10 个入口的原因。
-AIDC 点表和部分业务保留在原目录，虚拟 DSP 仅用于 `tests/aidc`；UPP 完整协议未实现，不再提供 `--aidc` 模拟固件。
+应用只维护 IDU 一套产品点表和业务，已删除 AIDC 产品分支及专用测试。
+IAPv3 是可选升级模块，启停它不会切换产品点表；模块独立配置仍可用于复用和测试。
+决策见[单一 IDU 产品方案](docs/adr/0001-single-idu-product.md)。
 
 已记录的桌面验证包括主机回归、native_sim、固件构建和镜像检查。
 Zephyr 版的实际启动、UART/DE 时序、Flash 掉电和升级回退仍需实板验证。

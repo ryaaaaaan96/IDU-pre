@@ -10,7 +10,6 @@ int idu_register_point_tables(void);
 const DEV_TABLE_S *idu_device_table(void);
 uint16_t idu_device_count(void);
 const DM_SIG_CFG_S *idu_process_table(uint8_t dev, uint16_t *count);
-const UPP_M_MOD_REG *idu_model_table(uint16_t *count);
 
 enum idu_parameter_country {
     IDU_PARAMETER_COUNTRY_COMMON = 0,
@@ -34,8 +33,6 @@ struct co_bus_cfg;
 
 /* 启动期注册路由和回调，须先于采集/转发启动；可重复调用。 */
 int idu_ports_init(void);
-struct modbus_serial_param;
-int idu_forward_serial_configure(struct modbus_serial_param param);
 extern const struct co_port_config idu_collect_port;
 extern const struct co_bus_cfg idu_collect_bus;
 extern const struct tr_server_config idu_forwarding;

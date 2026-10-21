@@ -20,7 +20,7 @@
 - 通用硬件服务归 `modules/analog_input`、`modules/gpio`、`modules/watchdog`。`idu_inputs_sample()` 只返回原始值；引脚、极性、位序、时序归设备树，平均次数归 Kconfig。LED 直接在 `status.c` 使用 Zephyr LED API，启动/故障常亮、健康采样翻转；有复用需求时再抽模块。外部看门狗使用 `WATCHDOG_MONITOR`；GPIO 的 `DIGITAL_IO` 和 `IDU_INPUTS` 可分别启用。
 - 产品升级开关归 `app/Kconfig`，`modules/iap` 从设备树选择分区和内存，从 Kconfig 读取密钥来源、镜像上限和保存策略。调用方直接使用 `<iap/iap.h>`；不设 `app/iap/` 兼容目录。健康确认策略归 `app/status/`。
 - 源码由 `app/CMakeLists.txt` 及各功能目录的 CMakeLists 集中管理；头文件与所属功能源码同目录，跨功能引用以 `app/` 为搜索根目录，通用 `dp_*`、`co_*`、`tr_*` 实现留在 `modules/`。
-- `app/protocol/` 保存产品协议配置。`protocol.c` 声明设备与表标识关联、周期转换、CO/TR 服务和 IAP 绑定；`ports.c` 编排物理端口；`inc/` 仅放对外头文件，内部 `tables.h`、`ports.h` 放目录根部。三表独立编译，显式填写参考结构行；每张 static const 数组使用 Zephyr Iterable Sections 登记一次，以 ARRAY_SIZE 自动计数。通用校验/装配归 DP 的 DP_TABLE_REGISTRY；点表及登记项在 Flash，仅 DEV_TABLE_S 关联视图占少量 RAM，启动后不可修改。不得恢复 extern 数组、手工数量枚举、包含 .c、逐行宏或 point_metadata。导入工具更新点表、登记项与设备绑定，符号位于 inc/imported_signals.h，来源记录在 docs/point-table-import.json。
+- `app/protocol/` 保存产品协议配置。`protocol.c` 声明设备与表标识关联、周期转换、CO/TR 服务和 IAP 绑定；`ports.c` 编排物理端口；`inc/` 仅放对外头文件，内部 `tables.h`、`ports.h` 放目录根部。三表独立编译，显式填写参考结构行；每张 static const 数组使用 Zephyr Iterable Sections 登记一次，以 ARRAY_SIZE 自动计数。通用校验/装配归 DP 的 DP_TABLE_REGISTRY；点表及登记项在 Flash，仅 DEV_TABLE_S 关联视图占少量 RAM，启动后不可修改。不得恢复 extern 数组、手工数量枚举、包含 .c、逐行宏或 point_metadata。应用只维护 IDU 产品点表与业务，不保留 AIDC 产品分支、导入工具或专用测试。IAPv3 是独立升级模块，不是产品方案；其开关不切换业务点表。
 - FLAG_COLLECT 表示南向下发，与 FLAG_PERSISTENCE 独立。非持久命令只写一次，不读回、不写 NVS、不自动重放；持久设置保留意图日志和读回恢复。下发点非零周期可以同时轮询，反馈只更新缓存，不能覆盖已保存目标。现用 IAPv3、参数状态/命令寄存器和恢复入口保留。南向周期采集 DI 和两路模拟量，周期由 .conf 手动设置；协议号和地址只初始化读取。本地模拟量保持现有换算单位，变更须明确协议含义。
 - 在应用目录执行 `./build.sh` 构建 MCUboot + IAPv3；`--smp-uart` 选择 SMP，`--no-upload` 关闭上传入口。旧 BOOT 构建不再提供。
 - 当前工作固件启用 MCUboot + IAPv3。采集总线数量及栈大小由 `modules/collect/Kconfig` 定义，隔离转发口数量、转发栈及共享重配置栈由 `modules/transmit/Kconfig` 定义；数值保留在 `prj.conf` 手动维护，不按固件类型自动覆盖，也不预留未来端口。扩展时手动修改 `.conf`，多端口测试在自己的配置中显式声明容量。
@@ -28,7 +28,7 @@
 - 构建与测试产物放在工作区 `build/`，签名私钥放在 `build/keys/`，均不提交。
 - 分开记录主机测试、模拟器验证与实物验证，不能以编译通过代替实物验证。
 
-- 应用不再设置 `communication/`。`protocol/ports.c` 声明传输绑定并实现应用收发编排回调，`protocol.c` 选择转发服务、声明状态/命令寄存器并通过 `extension` 直接绑定 `iap_route()`，模拟配置已移至 `tests/fixtures/`，产品不编译模拟从机。`main.c` 调用 `idu_ports_init()` 注册 CO/TR RAW 端口、应用回调和实际串口接入，`co_port_open()` 打开采集端口、co_init_bus 注册 idu_collect_bus，`tr_server_service()` 管理各转发口；`acquisition` 直接调用模块接口。AIDC 参数解释保留在 `process/serial_settings.c`。IAP 由独立 Kconfig 开关启用，AIDC 虚拟模型仅用于原生测试；模块不得包含产品头文件或直接读取 IDU 设备树别名。
+- 应用不再设置 `communication/`。`protocol/ports.c` 声明传输绑定并实现应用收发编排回调，`protocol.c` 选择转发服务、声明状态/命令寄存器并通过 `extension` 直接绑定 `iap_route()`，模拟配置已移至 `tests/fixtures/`，产品不编译模拟从机。`main.c` 调用 `idu_ports_init()` 注册 CO/TR RAW 端口、应用回调和实际串口接入，`co_port_open()` 打开采集端口、co_init_bus 注册 idu_collect_bus，`tr_server_service()` 管理各转发口；`acquisition` 直接调用模块接口。IAP 由独立 Kconfig 开关启用，通用模拟后端仅用于模块测试；模块不得包含产品头文件或直接读取 IDU 设备树别名。
 
 - 不恢复旧 MV-IO 特殊协议、247 地址门控、跨空洞跳读、补零保留区、无效写 ACK 或旧 BOOT 路径迁移。当前 dp_/co_/tr_ 参考接口和实际采集设备点表继续保留；IAPv3 的线协议仍由 iap 模块维护。产品分区集中在 `bootloader/partitions.dtsi`，板级 DTS 引用，IAP 暂存/日志由 overlay 补充。
 

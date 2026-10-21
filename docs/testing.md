@@ -4,6 +4,8 @@
 
 各日期章节记录当时的实现与验证结果，旧模块名称不代表当前目录。当前职责以
 [根 README](../README.md) 和[模块接口](../modules/README.md)为准。
+AIDC 产品代码、专用测试及导入工具已移除；下方日期章节保留当时的历史记录，
+其中的旧构建命令和文件路径不再作为当前操作入口。
 
 ## 运行测试
 
@@ -36,8 +38,8 @@ build/IDU-pre/tests/reference_services/zephyr/zephyr.exe -flash_in_ram
 
 | 测试 | 主要内容 |
 | --- | --- |
-| `test_engineering.c`、`test_mcuboot_image.py`、`test_import_aidc.py` | 工程换算、签名镜像导出边界、导入标记保护及离线快照复现 |
-| `points`、`aidc`、`forwarding` | 产品点表、标准转发、NVS/事务、扩展报文及 schema 拒写 |
+| `test_engineering.c`、`test_mcuboot_image.py` | 工程换算、签名镜像导出边界 |
+| `points`、`forwarding` | IDU 点表、标准转发、NVS/事务、扩展报文及 schema 拒写 |
 | `pipeline`、`models` | 无存储数据流、模型复用、多设备及多总线隔离 |
 | `dataprocess`、`collector`、`transmit` | 核心模块独立配置、采集调度、转发模式和恢复 |
 | `reference_config`、`reference_dp`、`reference_ports`、`reference_services` | 原表注册、同步字节接口、CO/TR 适配、策略回调和迁移 |
@@ -628,3 +630,23 @@ Zephyr Iterable Sections 按整表登记，DP 按标识校验并装配设备关�
 
 日志位于工作区 `build/IDU-pre/protocol-refactor/tests.log` 和 `build.log`。
 本地模拟量仍使用原电流换算；本轮未烧录实板，不代表总线性能、电气时序或真实掉电验证。
+
+## 移除 AIDC 产品分支（2026-10-21）
+
+应用只保留 IDU 点表与业务；IAPv3 仍是独立升级模块。删除 AIDC 专用测试及导入工具
+回归，通用模型、DP/CO/TR、IAP 和产品通信测试继续运行。
+
+- `CCACHE_DISABLE=1 ASAN_OPTIONS=detect_leaks=0 bash applications/IDU-pre/tests/run.sh`
+  通过：44 次 native_sim 执行，283 项 Ztest PASS、0 FAIL，包含独立进程的参数重启恢复。
+- Python 共 21 项，18 项通过；2 项缺少外部旧压缩器源码，1 项缺少外部 SGZ 样本，
+  按原测试条件跳过。主机工程换算 ASan/UBSan 检查通过。
+- `CCACHE_DISABLE=1 ./applications/IDU-pre/build.sh --pristine always` 通过，
+  IDU 固件启用 MCUboot 与 IAPv3，签名验证及 SGZ 导出通过；构建和测试均无编译警告。
+- 清理后的 8 个 IDU 配置数组与旧代码中实际使用的 IDU 分支逐字一致：
+  处理表、参数表、采集表、转发表、设备绑定、命令和状态寄存器均未改动。
+- 应用和 MCUboot 的生成设备树中已没有 AIDC 专用分区；IDU NVS、IAP 与升级分区
+  地址保持不变。删除分区声明不会擦除旧数据。
+- IDU 应用 Flash 121,596 B、RAM 102,112 B；MCUboot Flash 36,568 B、RAM 18,096 B。
+
+日志位于工作区 `build/IDU-pre/remove-aidc/tests.log` 和 `build.log`。
+本轮未烧录实板；通用模型测试仅验证模块接口，不代表实现了 UPP 线协议。
