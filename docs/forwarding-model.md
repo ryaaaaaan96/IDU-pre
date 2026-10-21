@@ -77,6 +77,79 @@ FC04/10000 读取远端设备 10 的 DI；两者可以共享同一信号 ID。
 这会重新评估 [ADR 0003](adr/0003-iap-protocol-segments.md) 中协议段挂载设备的方式，
 尚未形成替代 ADR，不修改现有代码或升级广播策略。
 
+### 候选结构与 IDU 配置示例
+
+以下名称和字段是待讨论的接口草案，不是当前可调用的新接口。
+`data_device_cfg` 属于配置装配接口：按设备建立 DP 数据视图，以及可选的 CO 采集视图；
+`tr_forward_cfg` 由 TR 描述北向入口。执行模块各自取得所属视图，表内容继续通过 Iterable Sections 登记。
+
+```c
+struct data_device_cfg {
+    uint8_t dev_id;                /* 数据归属：本地或南向设备。 */
+    uint16_t process_table;        /* 必填，处理表标识。 */
+    uint16_t collect_table;        /* 0：不启用南向采集/下发。 */
+    uint8_t collect_port;          /* CO 逻辑总线号，不是 UART 编号。 */
+    uint8_t collect_addr;          /* 当前 Modbus 南向站号。 */
+};
+
+struct tr_forward_cfg {
+    uint16_t forward_id;           /* TR 内部身份，与 DP dev_id 分开。 */
+    uint16_t port_id;              /* 北向逻辑端口。 */
+    uint16_t transmit_table;       /* 本入口独立使用的转发表标识。 */
+    uint16_t protocol_segments;    /* 0：没有协议地址段。 */
+    bool route_broadcast;          /* 是否将广播交给协议段。 */
+};
+
+static const struct data_device_cfg data_devices[] = {
+    {
+        .dev_id = IDU_DEV_LOCAL,
+        .process_table = IDU_TABLE_LOCAL_PROCESS,
+        .collect_table = 0,
+        .collect_port = 0,
+        .collect_addr = 0,
+    },
+    {
+        .dev_id = 10,
+        .process_table = IDU_TABLE_REMOTE_PROCESS,
+        .collect_table = IDU_TABLE_COLLECT,
+        .collect_port = 0,
+        .collect_addr = 1,
+    },
+    {
+        .dev_id = 11,
+        .process_table = IDU_TABLE_REMOTE_PROCESS,
+        .collect_table = IDU_TABLE_COLLECT,
+        .collect_port = 0,
+        .collect_addr = 2,
+    },
+};
+
+/* 当前示例启用 IAPv3；未启用时协议段标识为 0、广播策略为 false。 */
+static const struct tr_forward_cfg forwarding_devices[] = {
+    {
+        .forward_id = 1,
+        .port_id = IDU_PORT_FORWARD,
+        .transmit_table = IDU_TABLE_TRANSMIT,
+        .protocol_segments = IDU_TABLE_PROTOCOL_SEGMENTS,
+        .route_broadcast = true,
+    },
+};
+```
+
+`collect_table=0` 时不解释该行的 collect_port/collect_addr，也不生成采集目标；
+本地采样仍由现有输入模块和业务映射写入 DP。两台远端共享 const 点表，仅各自保存运行状态。
+`forward_id` 不作为数据键调用 dp_set；转发表中的 dev_id 仍指向已有数据设备。
+例如北向 10000 → `(10, IDU_SIG_DI)`，10001 → `(10, IDU_SIG_CURRENT_1)`，
+8152 → `(IDU_DEV_LOCAL, IDU_SIG_DI)`。北向数据不额外复制一份。
+
+北向站号继续沿用当前拨码输入 `sample.address`，在运行时传给 TR，因此没有在静态结构中重复保存 unit_id。
+采集总线与北向逻辑口仍由应用 ports 编排到当前同一 RS485；配置分开不增加物理多主仲裁能力。
+示例仅描述当前 Modbus/RS485；未来 CAN 标识及分帧规则不在本轮提前加入字段。
+
+该候选结构将普通转发表与协议段直接归虚拟转发设备，原 idu_registers 对象及额外 protocol 指针
+可由模块内部装配；应用无需同时维护设备挂表和另一份转发服务关联。
+要实现按入口独立映射，读、写和地址冲突校验均须使用当前 forward_id 选择的表，不能继续全局合并。
+
 ### 第一轮待确认
 
 1. 虚拟转发设备是否只作为协议入口，不配置独立 process 表、不复制测点，状态及命令仍归数据设备？
