@@ -132,21 +132,21 @@ static const struct dp_device_group remote_io_group = {
 | `DP_POINTS_VALUE_WORDS` | 512 | `63 + 32 × 9 = 351`；当前 512 足够 |
 | `DP_POINTS_MAX_POLLS` | 16 | `32 × 5 = 160`，含 96 个周期项和 64 个初始化项 |
 | `DP_PARAMS_MAX_COUNT` | 16 | `3 + 32 × 2 = 67` |
-| `DP_PARAMS_SNAPSHOT_BYTES` | 2048 | 当前内容编码为 `16 + 38 + 32 × 18 = 630 B`，当前上限足够 |
+| `DP_PARAMS_TRANSACTION_BYTES` | 2048 | 当前内容编码为 `16 + 38 + 32 × 18 = 630 B`，当前上限足够 |
 | `CO_MAX_BUSES` | 1 | 仍为 1，不因同端口设备数变为 32 |
 
 核算来源：[process 表（本地 26 行、远端 7 行）](../app/protocol/tables/process.c)、
 [collect 表（3 个周期、2 个初始化、2 个仅下发项）](../app/protocol/tables/collect.c)、
 [默认容量](../modules/dataprocess/Kconfig#L75)、
 [只统计挂载采集表的设备、关联视图允许 MAX_DEVICES+2](../modules/dataprocess/src/reference_config.c#L534)、
-[参数计数及快照公式](../modules/dataprocess/src/params.c#L108)。
+[参数计数及临时事务载荷公式](../modules/dataprocess/src/params.c#L108)。
 `DP_MAX_DEVICES` 不是所有关联视图数量的直观同义词，这是现有实现的边界，而非新增建议。
 需在 `.conf` 手动调整，不能只简化配置语法后直接启用 32 台设备。
 
 共享表只节省重复定义，不能消除运行状态。当前 ARM 设备视图按 64 B/设备估算，
 33 份为 2112 B；扩大的点状态、设备状态、轮询截止时间和参数缓存还需额外 RAM。
 尤其参数模块按 `DP_PARAMS_MAX_COUNT` 同时预留 `cache`、四份 `dp_value` 数组、索引和 dirty 标志，
-67 个参数的成本远高于单纯把 NVS 快照从少量参数扩到 630 B。实际净 Flash/RAM 增量须用目标构建核对，
+67 个参数的成本远高于单纯把临时事务载荷从少量参数扩到 630 B。实际净 Flash/RAM 增量须用目标构建核对，
 不能根据配置行数承诺节省。
 [来源：设备视图定义](../modules/dataprocess/include/dataprocess/reference_tables.h)、
 [点状态池](../modules/dataprocess/src/points.c#L14)、
@@ -172,13 +172,10 @@ static const struct dp_device_group remote_io_group = {
    北向来源设备 ID/寄存器映射也须另配置，不能自动从模型产生。
    [来源：ports.c receive()](../app/protocol/ports.c#L112)、
    [当前转发模型说明](forwarding-model.md)。
-4. **实例数量变化可能改变 NVS schema。** 当前签名按持久参数遍历顺序累计设备 ID、信号 ID、类型、宽度、标志和下发地址。
-   若仅改变配置表达方式，展开顺序和字段完全相同，签名可保持；若新增持久参数实例、改 ID 或重排持久参数顺序，
-   schema 就可能改变。不能默认新固件会自动接受旧参数，也不应为通过初始化而自动擦 NVS。
-   当前参考表配置未提供批量新增实例自动迁移能力，迁移是独立实现项。
-   [来源：schema 累计](../modules/dataprocess/src/params.c#L567)、
-   [旧快照验收 decode_snapshot()](../modules/dataprocess/src/params.c#L262)、
-   [参考配置生成](../modules/dataprocess/src/reference_config.c#L539)。
+4. **保持参数逻辑身份稳定。** 当前参数存储以 `(dev_id, sig_id)` 独立寻址；新增实例或重排
+   不使已有值失效，新增键使用默认值，删除的键暂留。修改类型/长度而不能转换或记录格式
+   不兼容时，按当前策略自动清空参数区并重新初始化。不要复用旧键表示不同含义。
+   [当前持久化规则](point-tables.md)、[架构决策](adr/0005-parameter-records.md)。
 
 ## 可选方案比较
 

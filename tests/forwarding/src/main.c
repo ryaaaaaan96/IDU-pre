@@ -29,6 +29,7 @@ static struct modbus_context *emulated_tx_context;
 static const struct flash_area *storage;
 static struct modbus_iface_param server_param;
 static int fail_after = -1;
+static int fail_erase_after = -1;
 static K_SEM_DEFINE(config_done, 0, 1);
 static int config_error;
 static bool capture_only;
@@ -71,7 +72,22 @@ static int inject_flash_write(const struct device *dev, off_t offset, uint8_t by
     if (fail_after > 0) { --fail_after; }
     return byte;
 }
-static const struct flash_simulator_cb flash_cb = {.write_byte = inject_flash_write};
+static int inject_flash_erase(const struct device *dev, off_t offset)
+{
+    if (!fail_erase_after) { return -EIO; }
+    if (fail_erase_after > 0) { --fail_erase_after; }
+    const struct flash_simulator_params *params = flash_simulator_get_params(dev);
+    size_t size;
+    uint8_t *memory = flash_simulator_get_memory(dev, &size);
+    zassert_true(offset >= storage->fa_off);
+    zassert_true(offset + params->erase_unit <= storage->fa_off + storage->fa_size);
+    zassert_true(offset + params->erase_unit <= size);
+    memset(memory + offset, params->erase_value, params->erase_unit);
+    return 0;
+}
+static const struct flash_simulator_cb flash_cb = {
+    .write_byte = inject_flash_write, .erase_unit = inject_flash_erase,
+};
 
 static int request(int iface, const struct modbus_adu *adu, void *user)
 {
@@ -90,16 +106,6 @@ static void completed(int iface, int err, void *user)
     config_error = err; k_sem_give(&config_done);
 }
 
-static uint32_t checksum(const struct flash_area *area)
-{
-    uint32_t crc = 0;
-    uint8_t block[64];
-    for (size_t i = 0; i < area->fa_size; i += sizeof(block)) {
-        zassert_ok(flash_area_read(area, i, block, sizeof(block)));
-        crc = crc32_ieee_update(crc, block, sizeof(block));
-    }
-    return crc;
-}
 static uint16_t saved(void)
 {
     struct dp_point_state state;
@@ -178,7 +184,7 @@ static void *setup(void)
 
 static void before(void *fixture)
 {
-    ARG_UNUSED(fixture); fail_after = -1; fail_init = 0;
+    ARG_UNUSED(fixture); fail_after = fail_erase_after = -1; fail_init = 0;
     if (getenv("IDU_FORWARDING_PHASE")) { return; }
     fresh_nvs(); zassert_ok(dp_params_reload());
     zassert_ok(attach_profile());
@@ -293,31 +299,48 @@ ZTEST(forwarding, test_disabled_iap_has_no_registers)
     zassert_equal(modbus_write_holding_reg(client, 16, 20049, 3), MODBUS_EXC_ILLEGAL_DATA_ADDR);
 }
 
-ZTEST(forwarding, test_previous_schema_is_rejected_without_migration)
+ZTEST(forwarding, test_obsolete_snapshot_resets_settings)
 {
     write_incompatible_fixture(false);
-    uint32_t previous = checksum(storage);
-    zassert_equal(dp_params_reload(), -EPROTO);
+    zassert_ok(dp_params_reload());
     struct dp_param_status status; dp_params_get_status(&status);
-    zassert_false(status.flags & DP_PARAM_STORAGE_READY);
-    zassert_false(status.flags & DP_PARAM_SCHEMA_MIGRATED);
-    zassert_equal(dp_params_flush(), -EROFS);
-    zassert_equal(checksum(storage), previous);
+    zassert_equal(status.flags, DP_PARAM_STORAGE_READY | DP_PARAM_STORAGE_RESET);
+    zassert_equal(saved(), 1);
+    struct nvs_fs fs; mount_fixture(&fs);
+    uint8_t probe; zassert_equal(nvs_read(&fs, 1, &probe, 1), -ENOENT);
+    zassert_ok(dp_params_reload());
+    dp_params_get_status(&status); zassert_equal(status.flags, DP_PARAM_STORAGE_READY);
 }
 
-ZTEST(forwarding, test_previous_schema_intent_never_replays)
+ZTEST(forwarding, test_obsolete_intent_is_discarded_without_replay)
 {
     write_incompatible_fixture(true);
-    uint32_t previous = checksum(storage);
     unsigned writes = co_simulator_write_count(&idu_collect_simulator);
-    zassert_equal(dp_params_reload(), -EPROTO);
+    zassert_ok(dp_params_reload()); zassert_ok(dp_params_recover());
     zassert_equal(co_simulator_write_count(&idu_collect_simulator), writes);
-    zassert_equal(checksum(storage), previous);
+    zassert_equal(saved(), 1);
+    struct nvs_fs fs; mount_fixture(&fs);
+    uint8_t probe; zassert_equal(nvs_read(&fs, 2, &probe, 1), -ENOENT);
 }
 
-ZTEST(forwarding, test_default_snapshot_torn_write_is_retryable)
+ZTEST(forwarding, test_format_reset_erase_failure_can_retry)
 {
-    for (int cut = 0; cut < 110; ++cut) {
+    for (int cut = 0; cut < storage->fa_size / 4096; ++cut) {
+        write_incompatible_fixture(true);
+        unsigned writes = co_simulator_write_count(&idu_collect_simulator);
+        fail_erase_after = cut;
+        zassert_equal(dp_params_reload(), -EIO);
+        fail_erase_after = -1;
+        zassert_equal(dp_params_flush(), -EROFS);
+        zassert_ok(dp_params_reload()); zassert_ok(dp_params_recover());
+        zassert_equal(saved(), 1);
+        zassert_equal(co_simulator_write_count(&idu_collect_simulator), writes);
+    }
+}
+
+ZTEST(forwarding, test_default_records_torn_write_is_retryable)
+{
+    for (int cut = 0; cut < 320; ++cut) {
         fresh_nvs(); fail_after = cut;
         int err = dp_params_reload(); fail_after = -1;
         zassert_true(err == 0 || err == -EIO, "cut=%d err=%d", cut, err);

@@ -72,12 +72,9 @@ struct dp_point_cfg {
     uint16_t write_address;
     enum dp_word_order write_order;
     dp_process_fn prepare_write;
-    /* Explicit one-generation additive NVS migration. The only accepted older
-     * schema is the exact signature with these entries omitted. Missing values
-     * use initial, optionally seeded from a read-only seed store at mount.
-     * seed_missing may perform I/O, returns 0 or -errno; never reenter params.
+    /* Missing persistent keys use initial or this optional read-only seed store.
+     * May perform I/O; returns 0 or -errno and must never reenter parameter APIs.
      */
-    bool param_added;
     int (*seed_missing)(const struct dp_point_cfg *cfg, struct dp_value *value);
     /* Transaction callback; use dp_txn_* accessors, never reenter the engine. */
     dp_handler_fn handler;
@@ -143,10 +140,6 @@ struct dp_equip_cfg {
     /* Optional original catalogs may reside entirely in flash. */
     const DEV_TABLE_S *reference_devices;
     size_t reference_device_count;
-    /* Explicitly authorized previous NVS schema for size-mismatch conversion.
-     * Zero rejects unknown schemas as before. Pending intents never migrate.
-     */
-    uint32_t previous_parameter_schema;
     /* Optional readers expose const reference tables without allocating copies
      * of every native descriptor. A reader fills caller-owned scratch storage.
      * Configuration and default/range providers must remain immutable.

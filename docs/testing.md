@@ -39,7 +39,8 @@ build/IDU-pre/tests/reference_services/zephyr/zephyr.exe -flash_in_ram
 | 测试 | 主要内容 |
 | --- | --- |
 | `test_engineering.c`、`test_mcuboot_image.py` | 工程换算、签名镜像导出边界 |
-| `points`、`forwarding` | IDU 点表、标准转发、NVS/事务、扩展报文及 schema 拒写 |
+| `points`、`forwarding` | IDU 点表、标准转发、NVS/事务、扩展报文及存储格式重新初始化 |
+| `parameter_records` | 跨进程的新增、重排、停用及恢复参数，键冲突、格式清空与失败边界 |
 | `pipeline`、`models` | 无存储数据流、模型复用、多设备及多总线隔离 |
 | `dataprocess`、`collector`、`transmit` | 核心模块独立配置、采集调度、转发模式和恢复 |
 | `reference_config`、`reference_dp`、`reference_ports`、`reference_services` | 原表注册、同步字节接口、CO/TR 适配、策略回调和迁移 |
@@ -810,3 +811,27 @@ CO 后端回调和 Modbus 事务接口显式接收 `dev_id`；vport 来源结构
 
 最终日志保存在工作区 `build/IDU-pre/device-memory/tests.log` 与 `build.log`。
 本轮未进行实板双从机、RS485 电气时序、性能或真实 Flash 掉电验证。
+
+## 按参数存储及格式重新初始化（2026-10-21）
+
+- 持久值改为按 `(dev_id, sig_id)` 分别保存，不存默认值和上下限，不再依赖全表签名。
+  临时提交日志仅包含新建或变化值；批量中途掉电后补完整批，南向恢复仍只读不重放。
+- `parameter_records` 用同一个 Flash 文件启动 11 次独立进程，覆盖新增与重排行、删除后重加、
+  不同设备同信号及哈希冲突隔离、无变化 flush 不写 Flash、seed 回调失败不清空、
+  范围改变拒绝加载、类型/长度不兼容与旧快照触发重新初始化。
+- `points` 按 256 个写入切点验证多参数提交只出现整批旧值或整批新值，覆盖记录历史 CRC 恢复、
+  未决南向意图、丢失应答与独立进程重启。`forwarding` 还验证旧意图被清除且不下发，
+  自动清空在逐个扇区处失败可重试，并断言所有擦除均在参数分区内。
+- `reference_services` 验证单参数长度转换只执行一次、拒绝转换时清空并恢复默认值。
+  旧整体快照解析、增量迁移字段和旧 schema 授权均已删除；版本 2 格式不兼容时按用户指定
+  自动清空参数区，并记录警告日志及 `DP_PARAM_STORAGE_RESET` 状态。旧历史章节的拒绝格式化策略
+  由[当前存储决策](adr/0005-parameter-records.md)替代。
+- `ASAN_OPTIONS=detect_leaks=0 CCACHE_DISABLE=1 bash applications/IDU-pre/tests/run.sh` 通过：
+  59 次 native 执行、328 次 Ztest 成功，主机 C/Python、IAP 编解码及镜像回归通过；无编译警告。
+  当前沙箱不支持 LeakSanitizer，因此关闭泄漏扫描，ASan/UBSan 保持启用。
+- `CCACHE_DISABLE=1 ./applications/IDU-pre/build.sh` 通过，MCUboot/IDU/IAPv3 镜像验签及 SGZ 导出通过。
+  IDU Flash 124548 B、RAM 102772 B；相对上一轮 Flash 增加 1576 B、静态 RAM 不变。
+  MCUboot 仍为 Flash 36568 B、RAM 18096 B。
+
+日志位于工作区 `build/IDU-pre/parameter-records/{all-tests.log,product-build.log}`。
+本轮未进行实物 NOR 掉电、实际串口或运行时栈余量测试。

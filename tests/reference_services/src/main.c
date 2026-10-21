@@ -4,6 +4,7 @@
 #include <dataprocess/reference_internal.h>
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/byteorder.h>
+#include <zephyr/sys/crc.h>
 #include <zephyr/ztest.h>
 #include <string.h>
 #if defined(CONFIG_DP_PARAMS)
@@ -63,7 +64,7 @@ static const struct dp_point_cfg points[] = {
 static const struct dp_device_cfg devices[] = {{.dev_id = 2, .unit_id = 9, .bus_id = 1, .dev_code = 42}};
 static const struct dp_equip_cfg equipment = {
     .points = points, .point_count = ARRAY_SIZE(points), .devices = devices,
-    .device_count = ARRAY_SIZE(devices), .previous_parameter_schema = 0x11223344,
+    .device_count = ARRAY_SIZE(devices),
 };
 static bool range(uint16_t dev, uint16_t sig, uint8_t size, uint8_t *bytes)
 { ARG_UNUSED(dev); ARG_UNUSED(sig); ARG_UNUSED(size); ARG_UNUSED(bytes); return !bypass_range; }
@@ -114,21 +115,29 @@ static void mount_test_nvs(struct nvs_fs *fs)
         .sector_size = page.size, .sector_count = area->fa_size / page.size};
     zassert_ok(nvs_mount(fs)); flash_area_close(area);
 }
-static void seed_old_schema(void)
+/* Seed only individual v2 records. Width conversion is a per-key policy,
+ * independent of table order, routes or a global schema fingerprint. */
+static void seed_previous_values(void)
 {
-    struct nvs_fs fs;
-    mount_test_nvs(&fs);
-    uint8_t snapshot[34] = {0};
-    sys_put_le32(0x50554449, snapshot); sys_put_le16(1, snapshot + 4);
-    sys_put_le16(2, snapshot + 6); sys_put_le32(0x11223344, snapshot + 8);
-    sys_put_le32(9, snapshot + 12);
-    sys_put_le16(1, snapshot + 16); sys_put_le16(5, snapshot + 18);
-    snapshot[20] = DP_WORDS; snapshot[21] = 2;
-    sys_put_le16(0x1111, snapshot + 22); sys_put_le16(0x2222, snapshot + 24);
-    sys_put_le16(1, snapshot + 26); sys_put_le16(6, snapshot + 28);
-    snapshot[30] = DP_U16; snapshot[31] = 1; sys_put_le16(55, snapshot + 32);
-    zassert_equal(nvs_write(&fs, 1, snapshot, sizeof(snapshot)), sizeof(snapshot));
+    struct nvs_fs fs; mount_test_nvs(&fs);
+    uint8_t meta[12] = {0};
+    sys_put_le32(0x4d554449, meta); sys_put_le16(2, meta + 4); sys_put_le32(9, meta + 8);
+    zassert_true(nvs_write(&fs, 3, meta, sizeof(meta)) >= 0);
+    for (uint16_t sig = 5; sig <= 6; ++sig) {
+        uint8_t key[4], record[20] = {0};
+        sys_put_le16(1, key); sys_put_le16(sig, key + 2);
+        uint16_t id = 0x100 + crc32_ieee(key, sizeof(key)) % 1024;
+        sys_put_le32(0x56554449, record); sys_put_le16(2, record + 4);
+        memcpy(record + 6, key, sizeof(key));
+        record[10] = sig == 5 ? DP_WORDS : DP_U16;
+        record[11] = sig == 5 ? 2 : 1; sys_put_le32(9, record + 12);
+        sys_put_le16(sig == 5 ? 0x1111 : 55, record + 16);
+        if (sig == 5) { sys_put_le16(0x2222, record + 18); }
+        size_t length = 16 + 2 * record[11];
+        zassert_true(nvs_write(&fs, id, record, length) >= 0);
+    }
 }
+
 #endif
 static void *setup(void)
 {
@@ -141,7 +150,7 @@ static void *setup(void)
     zassert_ok(dp_para_reg_set_func(collect));
     zassert_ok(dp_init_config(&equipment));
 #if defined(CONFIG_DP_PARAMS)
-    seed_old_schema();
+    seed_previous_values();
     zassert_ok(dp_params_init(&equipment, DT_FIXED_PARTITION_ID(DT_NODELABEL(storage_partition))));
 #endif
     return NULL;
@@ -156,7 +165,7 @@ static void before(void *fixture)
     k_sem_reset(&event_received); k_sem_reset(&log_received);
 }
 
-ZTEST(reference_services, test_a_explicit_schema_migration)
+ZTEST(reference_services, test_a_per_key_width_conversion)
 {
 #if defined(CONFIG_DP_PARAMS)
     struct dp_point_state state;
@@ -164,7 +173,7 @@ ZTEST(reference_services, test_a_explicit_schema_migration)
     zassert_mem_equal(state.value.words, ((uint16_t[]){0x1111, 0x2222, 0x3333}), 6);
     zassert_equal(atomic_get(&migrated), 1);
     zassert_ok(dp_params_reload());
-    zassert_equal(atomic_get(&migrated), 1); /* New schema saved exactly once. */
+    zassert_equal(atomic_get(&migrated), 1); /* Converted value saved exactly once. */
 #else
     zassert_false(pltcb_para_size_mismatch_pro(NULL));
 #endif
@@ -190,28 +199,19 @@ ZTEST(reference_services, test_native_catalog_and_query_contract)
     zassert_equal(dp_set_init(99), -ENOENT);
 }
 
-ZTEST(reference_services, test_b_schema_migration_requires_explicit_acceptance)
+ZTEST(reference_services, test_b_rejected_width_conversion_resets_settings)
 {
 #if defined(CONFIG_DP_PARAMS)
-    struct nvs_fs fs;
-    uint8_t saved[64], invalid[64], actual[64];
-    mount_test_nvs(&fs);
-    ssize_t length = nvs_read(&fs, 1, saved, sizeof(saved));
-    zassert_true(length > 16);
-    memcpy(invalid, saved, length);
-    sys_put_le32(0x55667788, invalid + 8);
-    zassert_equal(nvs_write(&fs, 1, invalid, length), length);
-    zassert_equal(dp_params_reload(), -EPROTO);
-    mount_test_nvs(&fs);
-    zassert_equal(nvs_read(&fs, 1, actual, sizeof(actual)), length);
-    zassert_mem_equal(actual, invalid, length); /* Never reformat unknown data. */
-    seed_old_schema();
+    seed_previous_values();
     reject_migration = true;
-    zassert_equal(dp_params_reload(), -EPROTO);
-    reject_migration = false;
-    mount_test_nvs(&fs);
-    zassert_equal(nvs_write(&fs, 1, saved, length), length);
     zassert_ok(dp_params_reload());
+    reject_migration = false;
+    struct dp_param_status status; dp_params_get_status(&status);
+    zassert_true(status.flags & DP_PARAM_STORAGE_RESET);
+    struct dp_point_state state; zassert_ok(dp_read((struct dp_key){1, 5}, &state));
+    zassert_mem_equal(state.value.words, ((uint16_t[]){1, 2, 3}), 6);
+    zassert_ok(dp_params_reload());
+    dp_params_get_status(&status); zassert_false(status.flags & DP_PARAM_STORAGE_RESET);
 #else
     zassert_false(pltcb_para_size_mismatch_pro(NULL));
 #endif

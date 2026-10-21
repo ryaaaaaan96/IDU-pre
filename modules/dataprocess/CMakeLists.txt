@@ -9,7 +9,7 @@ if(CONFIG_DATAPROCESS)
     src/reference_services.c
   )
   zephyr_library_sources_ifdef(CONFIG_DP_PROCESS src/process.c)
-  zephyr_library_sources_ifdef(CONFIG_DP_PARAMS src/params.c)
+  zephyr_library_sources_ifdef(CONFIG_DP_PARAMS src/params.c src/parameter_store.c)
 endif()
 
 if(CONFIG_DP_TABLE_REGISTRY)

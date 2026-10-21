@@ -1,4 +1,5 @@
 #include <dataprocess/params.h>
+#include "parameter_store.h"
 #include <dataprocess/reference_internal.h>
 #include <dataprocess/process.h>
 #include <errno.h>
@@ -9,19 +10,17 @@
 #include <zephyr/net_buf.h>
 #include <zephyr/storage/flash_map.h>
 #include <zephyr/sys/byteorder.h>
-#include <zephyr/sys/crc.h>
 
 LOG_MODULE_REGISTER(dp_params, LOG_LEVEL_INF);
 
-#define SNAP_ID 1
 #define INTENT_ID 2
-#define SNAP_MAGIC 0x50554449U
+#define IMAGE_MAGIC DP_STORE_IMAGE_MAGIC
 #define INTENT_MAGIC 0x4a554449U
-#define FORMAT_VERSION 1
-#define SNAP_HEADER 16
+#define FORMAT_VERSION DP_STORE_VERSION
+#define IMAGE_HEADER 16
 #define INTENT_HEADER 20
-#define SNAP_MAX CONFIG_DP_PARAMS_SNAPSHOT_BYTES
-#define INTENT_MAX (INTENT_HEADER + 4 * DP_TRANSFER_WORDS + SNAP_MAX)
+#define IMAGE_MAX CONFIG_DP_PARAMS_TRANSACTION_BYTES
+#define INTENT_MAX (INTENT_HEADER + 4 * DP_TRANSFER_WORDS + IMAGE_MAX)
 
 static const struct dp_equip_cfg *equipment;
 static uint16_t defs[CONFIG_DP_PARAMS_MAX_COUNT];
@@ -41,12 +40,10 @@ static struct nvs_fs fs;
 static const struct flash_area *area;
 static uint8_t partition_id;
 static struct dp_params_transport transport;
-static uint32_t schema, previous_schema;
-static bool has_added_params;
-static bool migration_pending;
+static bool stored[CONFIG_DP_PARAMS_MAX_COUNT];
 static struct dp_param_status status;
 /* Scratch space is serialized by transaction_lock, never borrowed by readers. */
-static uint8_t snapshot[SNAP_MAX];
+static uint8_t commit_image[IMAGE_MAX];
 static uint8_t intent[INTENT_MAX];
 static size_t intent_length;
 static uint16_t old_wire[DP_TRANSFER_WORDS], new_wire[DP_TRANSFER_WORDS], actual[DP_TRANSFER_WORDS];
@@ -107,12 +104,12 @@ static int range_check(const struct dp_point_cfg *p, const struct dp_value *v)
 
 int dp_params_validate(const struct dp_equip_cfg *cfg)
 {
-    size_t count = 0, bytes = SNAP_HEADER;
+    size_t count = 0, bytes = IMAGE_HEADER;
     for (size_t i = 0; i < cfg->point_count; ++i) {
         struct dp_point_cfg p_scratch;
         const struct dp_point_cfg *p = dp_config_point(cfg, i, &p_scratch);
         if (p->source != DP_SOURCE_PARAMETER) {
-            if (p->param_flags || p->prepare_write || p->param_added || p->seed_missing) {
+            if (p->param_flags || p->prepare_write || p->seed_missing) {
                 return -EINVAL;
             }
             continue;
@@ -120,12 +117,12 @@ int dp_params_validate(const struct dp_equip_cfg *cfg)
         if (++count > CONFIG_DP_PARAMS_MAX_COUNT || p->process || p->stale_ms ||
             (p->param_flags & ~0x1fU) || range_check(p, &p->initial) ||
             ((p->param_flags & DP_PARAM_RESTORE) && !(p->param_flags & DP_PARAM_WRITE)) ||
-            ((p->param_added || p->seed_missing) && !(p->param_flags & DP_PARAM_PERSIST))) {
+            (p->seed_missing && !(p->param_flags & DP_PARAM_PERSIST))) {
             LOG_ERR("Invalid parameter %u:%u count=%u flags=%u",p->key.dev_id,p->key.sig_id,(unsigned)count,p->param_flags);
             return -EINVAL;
         }
         if (p->param_flags & DP_PARAM_PERSIST) { bytes += 6 + p->width * 2; }
-        if (bytes > SNAP_MAX) { return -E2BIG; }
+        if (bytes > IMAGE_MAX) { return -E2BIG; }
         if (p->param_flags & DP_PARAM_FORWARD) {
             bool found = false;
             for (size_t d = 0; d < cfg->device_count; ++d) {
@@ -231,27 +228,44 @@ static void commit_cache(uint32_t sequence)
     k_mutex_unlock(&cache_lock);
 }
 
-static size_t encode_snapshot(uint8_t *buf, uint32_t sequence)
+static int load_value(const struct dp_point_cfg *p, uint8_t type, uint8_t width,
+                       const uint8_t *bytes, struct dp_value *value)
 {
-    size_t offset = SNAP_HEADER;
+    if (type != p->type) { return -EPROTO; }
+    *value = (struct dp_value){0};
+    if (width != p->width) {
+        uint8_t converted[DP_POINT_WORDS * 2] = {0};
+        static const uint32_t types[] = {
+            DATA_TYPE_U16, DATA_TYPE_S16, DATA_TYPE_U32, DATA_TYPE_S32,
+            DATA_TYPE_U16ARRAY, DATA_TYPE_U8,
+        };
+        DM_SIG_CFG_DATA_S data = {.dev_id = p->key.dev_id, .sig_id = p->key.sig_id,
+            .sig_store_size = width * 2, .sig_cfg_size = dp_reference_size(p),
+            .p_store_value = (void *)bytes, .p_load_value = converted,
+            .cfg_data_type = p->reference_data_type ? p->reference_data_type : types[p->type]};
+        if (!pltcb_para_size_mismatch_pro(&data)) { return -EPROTO; }
+        dp_reference_unpack(value, converted, data.sig_cfg_size);
+    } else {
+        for (size_t w = 0; w < width; ++w) { value->words[w] = sys_get_le16(bytes + w * 2); }
+    }
+    return range_check(p, value);
+}
+
+/* 临时事务镜像仅包含新建/变化的设定值；不持久化默认值或范围配置。 */
+static size_t encode_changes(uint8_t *buf, uint32_t sequence)
+{
+    size_t offset = IMAGE_HEADER;
     uint16_t count = 0;
-    sys_put_le32(SNAP_MAGIC, buf);
-    sys_put_le16(FORMAT_VERSION, buf + 4);
-    sys_put_le32(schema, buf + 8);
-    sys_put_le32(sequence, buf + 12);
+    sys_put_le32(IMAGE_MAGIC, buf); sys_put_le16(FORMAT_VERSION, buf + 4);
+    sys_put_le32(0, buf + 8); sys_put_le32(sequence, buf + 12);
     for (size_t i = 0; i < param_count; ++i) {
         const struct dp_point_cfg *p = PARAM_DEF(i);
-        if (!(p->param_flags & DP_PARAM_PERSIST)) {
-            continue;
-        }
-        sys_put_le16(p->key.dev_id, buf + offset);
-        sys_put_le16(p->key.sig_id, buf + offset + 2);
-        buf[offset + 4] = p->type;
-        buf[offset + 5] = p->width;
-        offset += 6;
+        if (!(p->param_flags & DP_PARAM_PERSIST) ||
+            (stored[i] && !memcmp(&durable_stage[i], &durable[i], p->width * 2))) { continue; }
+        sys_put_le16(p->key.dev_id, buf + offset); sys_put_le16(p->key.sig_id, buf + offset + 2);
+        buf[offset + 4] = p->type; buf[offset + 5] = p->width; offset += 6;
         for (size_t w = 0; w < p->width; ++w) {
-            sys_put_le16(durable_stage[i].words[w], buf + offset);
-            offset += 2;
+            sys_put_le16(durable_stage[i].words[w], buf + offset); offset += 2;
         }
         ++count;
     }
@@ -259,70 +273,17 @@ static size_t encode_snapshot(uint8_t *buf, uint32_t sequence)
     return offset;
 }
 
-static int decode_snapshot(const uint8_t *buf, size_t len, uint32_t *sequence, bool allow_mismatch)
+static int save_parameters(uint32_t sequence)
 {
-    bool mismatch = allow_mismatch && len >= SNAP_HEADER && equipment->previous_parameter_schema &&
-                    sys_get_le32(buf + 8) == equipment->previous_parameter_schema &&
-                    sys_get_le32(buf + 8) != schema;
-    bool previous = len >= SNAP_HEADER && has_added_params &&
-                    sys_get_le32(buf + 8) == previous_schema;
-    if (len < SNAP_HEADER || sys_get_le32(buf) != SNAP_MAGIC ||
-        sys_get_le16(buf + 4) != FORMAT_VERSION ||
-        (sys_get_le32(buf + 8) != schema && !previous && !mismatch)) {
-        return -EPROTO;
-    }
-    size_t offset = SNAP_HEADER;
-    uint16_t count = 0;
-    for (size_t i = 0; i < param_count; ++i) {
-        const struct dp_point_cfg *p = PARAM_DEF(i);
-        if (!(p->param_flags & DP_PARAM_PERSIST) || (previous && p->param_added)) {
-            continue;
-        }
-        if (offset + 6 > len ||
-            sys_get_le16(buf + offset) != p->key.dev_id ||
-            sys_get_le16(buf + offset + 2) != p->key.sig_id ||
-            buf[offset + 4] != p->type) { return -EPROTO; }
-        size_t old_width = buf[offset + 5];
-        offset += 6;
-        if (!old_width || old_width > 72 || offset + 2 * old_width > len) { return -EPROTO; }
-        if (old_width != p->width) {
-            if (!mismatch) { return -EPROTO; }
-            uint8_t converted[DP_POINT_WORDS * 2] = {0};
-            static const uint32_t types[] = {
-                DATA_TYPE_U16, DATA_TYPE_S16, DATA_TYPE_U32, DATA_TYPE_S32,
-                DATA_TYPE_U16ARRAY, DATA_TYPE_U8,
-            };
-            DM_SIG_CFG_DATA_S data = {.dev_id = p->key.dev_id, .sig_id = p->key.sig_id,
-                .sig_store_size = old_width * 2, .sig_cfg_size = dp_reference_size(p),
-                .p_store_value = buf + offset, .p_load_value = converted,
-                .cfg_data_type = p->reference_data_type ? p->reference_data_type : types[p->type]};
-            if (!pltcb_para_size_mismatch_pro(&data)) { return -EPROTO; }
-            dp_reference_unpack(&durable_stage[i], converted, data.sig_cfg_size);
-        } else {
-            for (size_t w = 0; w < p->width; ++w) { durable_stage[i].words[w] = sys_get_le16(buf + offset + w * 2); }
-        }
-        offset += old_width * 2;
-        if (range_check(p, &durable_stage[i])) {
-            return -ERANGE;
-        }
-        ++count;
-    }
-    if (offset != len || count != sys_get_le16(buf + 6)) {
-        return -EPROTO;
-    }
-    *sequence = sys_get_le32(buf + 12);
-    return 0;
-}
-
-static int save_snapshot(uint32_t sequence)
-{
-    size_t len = encode_snapshot(snapshot, sequence);
-    ssize_t rc = nvs_write(&fs, SNAP_ID, snapshot, len);
-    if (rc >= 0) {
+    size_t len = encode_changes(commit_image, sequence);
+    int err = dp_store_commit(&fs, commit_image, len);
+    if (!err) {
         memcpy(durable, durable_stage, sizeof(durable));
-        migration_pending = false;
+        for (size_t i = 0; i < param_count; ++i) {
+            if (PARAM_DEF(i)->param_flags & DP_PARAM_PERSIST) { stored[i] = true; }
+        }
     }
-    return rc < 0 ? (int)rc : 0; /* NVS returns 0 when unchanged. */
+    return err;
 }
 
 static uint8_t unit_for(uint16_t dev_id)
@@ -352,9 +313,27 @@ static int intent_validate(void)
         intent_length != INTENT_HEADER + 4U * intent[7] + sys_get_le16(intent + 16)) {
         return -EPROTO;
     }
-    uint32_t sequence;
-    int err = decode_snapshot(intent + INTENT_HEADER + 4U * intent[7],
-                               sys_get_le16(intent + 16), &sequence, false);
+    const uint8_t *image = intent + INTENT_HEADER + 4U * intent[7];
+    size_t length = sys_get_le16(intent + 16);
+    int err = dp_store_validate_image(image, length);
+    uint32_t sequence = length >= IMAGE_HEADER ? sys_get_le32(image + 12) : 0;
+    for (size_t at = IMAGE_HEADER; !err && at < length; at += 6 + 2U * image[at + 5]) {
+        int i = index_of((struct dp_key){sys_get_le16(image + at), sys_get_le16(image + at + 2)});
+        if (i < 0) { return -EPROTO; }
+        const struct dp_point_cfg *p = PARAM_DEF(i);
+        uint16_t begin = sys_get_le16(intent + 8);
+        if (!(p->param_flags & DP_PARAM_FORWARD) || !(p->param_flags & DP_PARAM_PERSIST) ||
+            p->key.dev_id != sys_get_le16(intent + 18) || p->write_address < begin ||
+            (uint32_t)p->write_address + p->width > begin + intent[7]) { return -EPROTO; }
+        err = load_value(p, image[at + 4], image[at + 5], image + at + 6, &durable_stage[i]);
+        if (!err) {
+            for (size_t w = 0; w < p->width; ++w) {
+                if (dp_order_word(durable_stage[i].words, p->width, w, p->write_order) !=
+                    sys_get_le16(intent + INTENT_HEADER + 2U * intent[7] +
+                                 2U * (p->write_address - begin + w))) { return -EPROTO; }
+            }
+        }
+    }
     return err ? err : sequence == sys_get_le32(intent + 12) ? 0 : -EPROTO;
 }
 
@@ -404,8 +383,9 @@ static int recover_locked(void)
     }
     uint32_t sequence = sys_get_le32(intent + 12);
     if (is_new) {
-        err = save_snapshot(sequence);
+        err = save_parameters(sequence);
         if (err) {
+            set_status(err, status.flags & ~DP_PARAM_STORAGE_READY);
             return err;
         }
         uint8_t flags = sys_get_le16(intent + 10);
@@ -430,11 +410,6 @@ static int recover_locked(void)
         }
         commit_cache(sequence);
     }
-    if (!is_new && migration_pending) {
-        stage_cache();
-        err = save_snapshot(status.sequence);
-        if (err) { return err; }
-    }
     err = nvs_delete(&fs, INTENT_ID);
     if (err < 0) {
         return err;
@@ -448,8 +423,14 @@ static int recover_locked(void)
     return is_new ? 0 : 1;
 }
 
-static int mount_locked(void)
+static bool incompatible_format(int err)
 {
+    return err == -EPROTO || err == -EMSGSIZE || err == -EEXIST;
+}
+
+static int load_locked(bool *incompatible)
+{
+    *incompatible = false;
     set_status(0, 0);
     memset(&fs, 0, sizeof(fs));
     struct flash_pages_info page;
@@ -483,73 +464,89 @@ static int mount_locked(void)
         staged[i] = durable_stage[i];
     }
     uint32_t sequence = 0;
-    bool recovered = false, empty = false, migrate = false;
-    for (uint16_t history = 0; history < 8; ++history) {
-        ssize_t len = nvs_read_hist(&fs, SNAP_ID, snapshot, sizeof(snapshot), history);
-        if (len == -ENOENT && history == 0) {
-            empty = true;
-            break; /* New empty partition, use defaults. */
+    bool recovered = false, present = false, converted = false;
+    memset(stored, 0, sizeof(stored));
+    err = dp_store_open(&fs, commit_image, sizeof(commit_image), &sequence, &present, &recovered);
+    if (err) { *incompatible = incompatible_format(err); return err; }
+    bool seed[CONFIG_DP_PARAMS_MAX_COUNT] = {0};
+    if (present) {
+        for (size_t i = 0; i < param_count; ++i) {
+            const struct dp_point_cfg *p = PARAM_DEF(i);
+            if (!(p->param_flags & DP_PARAM_PERSIST)) { continue; }
+            struct dp_stored_value value;
+            err = dp_store_read(&fs, p->key, &value, &recovered);
+            if (err == -ENOENT) { seed[i] = true; continue; }
+            if (err) { *incompatible = incompatible_format(err); return err; }
+            uint8_t bytes[DP_STORE_MAX_WORDS * 2];
+            for (size_t w = 0; w < value.width; ++w) { sys_put_le16(value.words[w], bytes + w * 2); }
+            err = load_value(p, value.type, value.width, bytes, &durable_stage[i]);
+            if (err) { *incompatible = incompatible_format(err); return err; }
+            stored[i] = value.width == p->width;
+            if (!stored[i]) { converted = true; }
         }
-        if (len == -EIO) {
-            recovered = true;
-            if (history == 7) {
-                return -EIO;
-            }
-            continue;
+    } else {
+        /* ID 1 belonged to the retired aggregate format. No payload is imported. */
+        uint8_t probe;
+        ssize_t legacy = nvs_read(&fs, 1, &probe, sizeof(probe));
+        if (legacy != -ENOENT) {
+            *incompatible = legacy >= 0;
+            return legacy < 0 ? (int)legacy : -EPROTO;
         }
-        if (len < 0 || len > sizeof(snapshot)) {
-            return len < 0 ? len : -EMSGSIZE;
-        }
-        err = decode_snapshot(snapshot, len, &sequence, true);
-        if (err) {
-            return err; /* Unknown schema is not reformatted or silently reset. */
-        }
-        migrate = sys_get_le32(snapshot + 8) != schema;
-        break;
+        for (size_t i = 0; i < param_count; ++i) { seed[i] = true; }
     }
+    bool need_save = !present;
     for (size_t i = 0; i < param_count; ++i) {
         const struct dp_point_cfg *p = PARAM_DEF(i);
-        if (empty || (migrate && p->param_added)) {
+        if (seed[i]) {
             err = p->seed_missing ? p->seed_missing(p, &durable_stage[i]) :
                                    dp_reference_default(p, &durable_stage[i], true);
             if (!err) { err = range_check(p, &durable_stage[i]); }
             if (err) { return err; }
         }
+        need_save |= (p->param_flags & DP_PARAM_PERSIST) && !stored[i];
     }
-    migration_pending = empty || migrate;
     memcpy(staged, durable_stage, sizeof(staged));
     memcpy(durable, durable_stage, sizeof(durable));
-    memset(dirty, 0, sizeof(dirty));
-    flush_at = 0;
+    memset(dirty, 0, sizeof(dirty)); flush_at = 0;
     commit_cache(sequence);
     ssize_t len = nvs_read(&fs, INTENT_ID, intent, sizeof(intent));
     intent_length = 0;
     if (len != -ENOENT) {
-        if (len < 0 || len > sizeof(intent)) {
-            return len < 0 ? len : -EMSGSIZE;
-        }
+        if (len < 0) { return len; }
+        if (len > sizeof(intent)) { *incompatible = true; return -EMSGSIZE; }
         intent_length = len;
         stage_cache();
         err = intent_validate();
-        if (err) {
-            return err;
-        }
+        if (err) { *incompatible = incompatible_format(err); return err; }
     }
-    /* Validate the intent before writing anything. With a pending transaction,
-     * recovery upgrades its snapshot after readback; never replay the write.
-     * Do not save its candidate here as the current committed configuration. */
-    if ((empty || migrate) && !intent_length) {
-        err = save_snapshot(sequence);
+    /* 只保存已确认的设定值。南向候选值必须等待读回确认。 */
+    stage_cache();
+    if (need_save) {
+        err = save_parameters(sequence);
         if (err) { return err; }
     }
     set_status(0, DP_PARAM_STORAGE_READY |
                (recovered ? DP_PARAM_HISTORY_RECOVERED : 0) |
-               (migrate ? DP_PARAM_SCHEMA_MIGRATED : 0) |
+               (converted ? DP_PARAM_VALUE_CONVERTED : 0) |
                (intent_length ? DP_PARAM_PENDING : 0));
     if (intent_length) {
         invalidate_pending(-EINPROGRESS);
     }
     return 0;
+}
+
+/* Format changes explicitly discard settings; I/O failures never trigger erase.
+ * Bound the retry so a bad current definition cannot create an erase loop. */
+static int mount_locked(void)
+{
+    bool incompatible;
+    int err = load_locked(&incompatible);
+    if (!incompatible || !fs.ready) { return err; }
+    LOG_WRN("Parameter format incompatible (%d): clearing settings partition %u", err, partition_id);
+    err = nvs_clear(&fs);
+    if (!err) { err = load_locked(&incompatible); }
+    if (!err) { set_status(0, status.flags | DP_PARAM_STORAGE_RESET); }
+    return err;
 }
 
 int dp_params_init(const struct dp_equip_cfg *cfg, uint8_t area_id)
@@ -569,18 +566,6 @@ int dp_params_init(const struct dp_equip_cfg *cfg, uint8_t area_id)
         const struct dp_point_cfg *p = dp_config_point(cfg, i, &p_scratch);
         if (p->source != DP_SOURCE_PARAMETER) { continue; }
         defs[param_count++] = i;
-        if (!(p->param_flags & DP_PARAM_PERSIST)) { continue; }
-        uint8_t signature[12] = {0};
-        sys_put_le16(p->key.dev_id, signature);
-        sys_put_le16(p->key.sig_id, signature + 2);
-        signature[4] = p->type;
-        signature[5] = p->width;
-        signature[6] = p->param_flags;
-        signature[7] = p->write_order;
-        sys_put_le16(p->write_address, signature + 8);
-        schema = crc32_ieee_update(schema, signature, sizeof(signature));
-        if (p->param_added) { has_added_params = true; }
-        else { previous_schema = crc32_ieee_update(previous_schema, signature, sizeof(signature)); }
     }
     for (size_t i = 0; i < param_count; ++i) {
         staged[i] = PARAM_DEF(i)->initial;
@@ -589,6 +574,7 @@ int dp_params_init(const struct dp_equip_cfg *cfg, uint8_t area_id)
     cache_initialized = true;
     err = mount_locked();
     if (err) {
+        LOG_ERR("Parameter storage initialization failed (%d)", err);
         set_status(err, 0);
     }
     return err;
@@ -678,7 +664,7 @@ static int apply_staged(const bool selected[CONFIG_DP_PARAMS_MAX_COUNT])
     }
     uint32_t sequence = status.sequence + (changed ? 1U : 0U);
     if (!remote) {
-        int err = persistent ? save_snapshot(sequence) : 0;
+        int err = persistent ? save_parameters(sequence) : 0;
         if (err) {
             /* An I/O failure may have happened after metadata was written.
              * Freeze writes until remount resolves the durable state. */
@@ -734,7 +720,7 @@ static int apply_staged(const bool selected[CONFIG_DP_PARAMS_MAX_COUNT])
     if (err) {
         return err < 0 ? err : -EIO;
     }
-    size_t image_len = encode_snapshot(intent + INTENT_HEADER + 4 * count, sequence);
+    size_t image_len = encode_changes(intent + INTENT_HEADER + 4 * count, sequence);
     sys_put_le32(INTENT_MAGIC, intent);
     sys_put_le16(FORMAT_VERSION, intent + 4);
     intent[6] = unit;
@@ -864,7 +850,7 @@ static int flush_for_reboot(bool freeze)
     for (size_t i = 0; i < param_count; ++i) {
         if (dirty[i]) { durable_stage[i] = deferred[i]; }
     }
-    err = save_snapshot(status.sequence);
+    err = save_parameters(status.sequence);
     if (!err) { memset(dirty, 0, sizeof(dirty)); flush_at = 0; reboot_frozen = freeze; }
     if (err) {
         set_status(err, status.flags & ~DP_PARAM_STORAGE_READY);

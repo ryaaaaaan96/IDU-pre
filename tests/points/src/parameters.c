@@ -280,14 +280,14 @@ ZTEST(points, test_parameters_power_loss_after_downstream_before_commit)
     zassert_equal(co_simulator_write_count(&idu_collect_simulator), writes_at_start + 1);
 }
 
-ZTEST(points, test_parameters_torn_flash_write_keeps_whole_snapshot)
+ZTEST(points, test_parameters_torn_flash_write_keeps_whole_batch)
 {
     uint16_t baseline[9];
     zassert_ok(modbus_read_holding_regs(north_client, 16, 31000, baseline, 9));
     uint16_t request[9] = {700, 0x7465, 0x7374, 0x2d69, 0x6475, 0, 0, 0, 0};
-    /* Fail each possible byte in this snapshot's data, CRC, and metadata,
+    /* Fail each possible byte in the journal, individual records, CRC, and metadata,
      * plus successful writes. Repeated iterations also exercise NVS GC. */
-    for (int cut = 0; cut < 160; ++cut) {
+    for (int cut = 0; cut < 256; ++cut) {
         zassert_ok(dp_params_write_registers(31000, baseline, 9));
         bytes_before_failure = cut;
         int err = dp_params_write_registers(31000, request, 9);
@@ -298,7 +298,7 @@ ZTEST(points, test_parameters_torn_flash_write_keeps_whole_snapshot)
         zassert_ok(modbus_read_holding_regs(north_client, 16, 31000, result, 9));
         zassert_true(memcmp(result, baseline, sizeof(result)) == 0 ||
                      memcmp(result, request, sizeof(result)) == 0,
-                     "torn snapshot at byte %d", cut);
+                     "torn batch at byte %d", cut);
         if (!err) {
             zassert_mem_equal(result, request, sizeof(result));
         }
@@ -372,27 +372,21 @@ ZTEST(points, test_status_point_is_live_and_read_only)
     zassert_equal(words[1], expected.sequence >> 16);
 }
 
-ZTEST(points, test_parameters_unknown_storage_schema_is_read_only)
+ZTEST(points, test_parameters_unknown_format_resets_settings)
 {
     struct flash_pages_info page;
-    zassert_ok(flash_get_page_info_by_offs(flash_area_get_device(storage),
-                                          storage->fa_off, &page));
-    struct nvs_fs other = {
-        .flash_device = flash_area_get_device(storage), .offset = storage->fa_off,
-        .sector_size = page.size, .sector_count = storage->fa_size / page.size,
-    };
+    zassert_ok(flash_get_page_info_by_offs(flash_area_get_device(storage), storage->fa_off, &page));
+    struct nvs_fs other = {.flash_device = flash_area_get_device(storage), .offset = storage->fa_off,
+        .sector_size = page.size, .sector_count = storage->fa_size / page.size};
     zassert_ok(nvs_mount(&other));
-    uint8_t saved[1024];
-    ssize_t len = nvs_read(&other, 1, saved, sizeof(saved));
-    zassert_true(len > 16 && len <= sizeof(saved));
-    uint8_t unknown[16] = {0};
-    zassert_equal(nvs_write(&other, 1, unknown, sizeof(unknown)), sizeof(unknown));
-    zassert_equal(dp_params_reload(), -EPROTO);
-    zassert_equal(dp_params_flush(), -EROFS);
-    zassert_false(param_status().flags & DP_PARAM_STORAGE_READY);
-    /* Restore the exact test fixture without exposing a production erase API. */
-    zassert_equal(nvs_write(&other, 1, saved, len), len);
+    uint8_t unknown[12] = {0};
+    zassert_equal(nvs_write(&other, 3, unknown, sizeof(unknown)), sizeof(unknown));
     zassert_ok(dp_params_reload());
+    zassert_equal(param_status().flags, DP_PARAM_STORAGE_READY | DP_PARAM_STORAGE_RESET);
+    zassert_equal(read_word(31000), CONFIG_IDU_SAMPLE_PERIOD_MS);
+    zassert_ok(dp_params_flush());
+    zassert_ok(dp_params_reload());
+    zassert_equal(param_status().flags, DP_PARAM_STORAGE_READY); /* Reset only once. */
 }
 
 ZTEST(points, test_parameters_business_api_callbacks_and_permissions)
@@ -424,7 +418,7 @@ ZTEST(points, test_parameters_business_api_callbacks_and_permissions)
     zassert_equal(state.value.words[0], 7);
 }
 
-ZTEST(points, test_parameters_corrupt_snapshot_recovers_valid_history)
+ZTEST(points, test_parameters_corrupt_value_recovers_valid_history)
 {
     zassert_ok(modbus_write_holding_reg(north_client, 16, 31000, 601));
     zassert_ok(modbus_write_holding_reg(north_client, 16, 31000, 602));
@@ -434,7 +428,9 @@ ZTEST(points, test_parameters_corrupt_snapshot_recovers_valid_history)
     zassert_true(storage->fa_off + storage->fa_size <= memory_size);
     unsigned corruptions = 0;
     for (size_t off = storage->fa_off; off + 16 <= storage->fa_off + storage->fa_size; ++off) {
-        if (sys_get_le32(memory + off) == 0x50554449 &&
+        if (sys_get_le32(memory + off) == 0x56554449 &&
+            sys_get_le16(memory + off + 6) == IDU_DEV_LOCAL &&
+            sys_get_le16(memory + off + 8) == IDU_SIG_SAMPLE_PERIOD &&
             sys_get_le32(memory + off + 12) == seq) {
             memory[off + 12] ^= 0x80; /* Leave NVS metadata intact; data CRC must detect it. */
             ++corruptions;

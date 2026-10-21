@@ -71,7 +71,7 @@ Modbus 字序采用 `arc_byte_order.h:60–64` 的实际宏：0 默认按 BIGSMA
 IDU 的处理表扩展 `DM_SIG_CFG_S`，内嵌 `DM_SIG_DATA_S data`，恢复及范围开关归 `sig_flag`，
 设备表 getter 负责挂表，DP 直接读取默认值和范围；IDU 不再注册默认值/恢复查表回调。
 持久参数默认允许恢复，`FLAG_NO_RESTORE` 禁止该参数主动恢复默认；
-现用持久点全部保持允许恢复，不改变 NVS schema。业务回调直接写在 `pf_sig_proc` 中，
+现用持久点全部保持允许恢复，不影响参数逻辑键。业务回调直接写在 `pf_sig_proc` 中，
 信号 ID 使用宏或枚举；不再通过 `point_metadata` 字符串分发。
 `dp_reference_prepare()` 可在启动线程前取得已校验配置。原生扩展
 `dp_register_config_provider()` / `dp_init_config()` 仍供独立模块使用，与原表注册互斥。
@@ -196,10 +196,13 @@ GD32E505 上每个 `stored_point` 从 32 字节缩至 24 字节；64 点容量�
 - 范围策略返回 false 可跳过数值上下限检查，仍保留类型容量和字节长度校验。
   默认策略返回 false 时采用回调填入的值；两类回调都须快速、不可重入 DP。
   初始化成功后冻结 PLTCB 注册，旧 void 注册函数不能报告错误，应用必须遵守启动顺序。
-- NVS 长度迁移须在 `dp_equip_cfg.previous_parameter_schema` 中明确授权一个旧签名，
-  并由迁移回调返回 true。只允许已识别的同设备/同信号/同类型条目转换长度，结果仍校验范围。
-  未知签名、拒绝转换及损坏记录均报错且不格式化；未完成事务意图不走该长度迁移路径。
-  持久化格式以 word 保存，不能据此检测奇数字节长度变化但 word 数不变的布局差异。
+- NVS 当前以 `(dev_id, sig_id)` 单独保存版本 2 的参数值，不使用整表签名。
+  默认、范围和回调不落盘；新增或重排表行保留已有值。仅同类型的长度变化可以由
+  `pltcb_para_size_mismatch_pro` 接受，结果仍校验范围；转换成功设置 `DP_PARAM_VALUE_CONVERTED`。
+  类型不匹配、拒绝转换或未知记录格式自动清空应用指定的整个参数分区，记录日志并按默认值
+  重新初始化，设置 `DP_PARAM_STORAGE_RESET`。旧快照及旧意图不导入、不重放。
+  Flash I/O 错误和已保存值的范围错误仍报错停写。持久格式以 word 保存，不能检测奇数字节
+  长度变化但 word 数不变的布局差异。批量原子性和清空规则见[存储决策](adr/0005-parameter-records.md)。
 - `dp_para_reg_set_func` 注册一次，CO 初始化注册 `co_dp_fast_set`。直接下发复制请求数据，
   后端返回 0 表示接受且必须恰好完成一次，错误表示拒绝且不得随后完成。等待上限 1 秒；
   若已接受但超时，仍保留数据直到迟到完成，期间新请求返回 `-EBUSY`。同步下发接口不能
@@ -227,7 +230,7 @@ GD32E505 上每个 `stored_point` 从 32 字节缩至 24 字节；64 点容量�
 
 | 接口 | 原因 |
 | --- | --- |
-| `dp_dev_add`、`dp_dev_del`、`dp_reg_devchg_callback` | 当前采用启动后固定的 const 配置；动态增删还要处理运行中采集、索引、事务、NVS schema 和读者生命周期，不能只改设备数组。原库 add/del 的成功桩不作为实现。 |
+| `dp_dev_add`、`dp_dev_del`、`dp_reg_devchg_callback` | 当前采用启动后固定的 const 配置；动态增删还要处理运行中采集、索引、事务、持久参数身份和读者生命周期，不能只改设备数组。原库 add/del 的成功桩不作为实现。 |
 | `dp_plat_ver_init` | 原实现写入固定本地设备/信号的版本字段，需确定产品点号与编码；不以 Zephyr 版本字符串替代产品版本协议。 |
 | `dp_set_para_can_id`、`dp_updata_meter_coller_set` | 依赖 CAN 标识和电表采集产品策略，当前没有对应驱动配置/数据定义。 |
 | `co_put_passthough_queue` | 原始透传包所有权、路由、应答关联与非 Modbus 协议未定义，不能直接塞进现有请求队列。 |

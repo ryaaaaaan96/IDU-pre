@@ -465,6 +465,12 @@ execution views use caller scratch storage. There is no full-table RAM copy or h
 
 NVS requires FLASH, FLASH_MAP, FLASH_PAGE_LAYOUT and NVS_DATA_CRC. Reserve at least
 three equal erase sectors. IDU uses four 4 KB sectors for its parameter partition.
+Parameters use independent versioned records keyed by `(dev_id, sig_id)`; only
+values and identity/type/length metadata are persisted. Defaults and bounds stay
+in the process table. Temporary commit journals preserve batch recovery. An
+incompatible format clears only the configured settings partition, logs a warning
+and loads defaults (`DP_PARAM_STORAGE_RESET`); I/O errors fail without reformatting.
+Old aggregate snapshots are discarded, not migrated. See [storage rules](../docs/point-tables.md).
 Parameter and device events are notifications; state/result APIs are authoritative.
 
 `transmit/protocols/modbus/compat/prepare_modbus.py` generates build-local copies of four reviewed Zephyr

@@ -138,7 +138,14 @@ int err = dp_process_start(&plan);
 非持久命令直接写一次，存储故障不阻止这类写入，失败保持缓存旧值。
 FLAG_COLLECT 与 FLAG_PERSISTENCE 独立；非零周期可同时轮询，反馈只更新缓存。
 显式 dp_params_sync_device() 只同步持久目标值，不使用反馈值，也不重发一次性命令。
-本次拆分保留既有 NVS magic、版本、schema 签名和意图字节布局。
+NVS 使用版本 2 的单参数记录，以 `(dev_id, sig_id)` 独立索引，仅保存设定值及必要元数据。
+默认值、上下限和回调归 const process 表；新增或重排参数无需匹配全表签名。
+整批提交通过临时日志保证掉电后补完；无变化的 flush 不写 Flash。
+`CONFIG_DP_PARAMS_TRANSACTION_BYTES` 控制临时批量载荷，替代旧 SNAPSHOT_BYTES。
+存储格式不兼容时自动清空所配置的参数分区，记录警告并恢复当前默认值，设置
+`DP_PARAM_STORAGE_RESET`；不保留、解析或迁移旧快照正文。Flash I/O 错误则报错停写。
+同类型长度变化可由既有 mismatch 回调转换；拒绝则重新初始化。范围失败不自动擦除。
+详见[记录布局与恢复边界](../../docs/point-tables.md#参数下发与持久化)。
 关闭参数后端时参数点配置被拒绝，`dp_process_save_reboot()` 返回 `-ENOTSUP`。
 
 `tests/dataprocess` 仅注册此模块，覆盖无 Flash、仅本地 NVS、注入假传输

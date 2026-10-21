@@ -11,7 +11,8 @@
 #define DP_PARAM_STORAGE_READY BIT(0)
 #define DP_PARAM_PENDING BIT(1)
 #define DP_PARAM_HISTORY_RECOVERED BIT(2)
-#define DP_PARAM_SCHEMA_MIGRATED BIT(3)
+#define DP_PARAM_VALUE_CONVERTED BIT(3)
+#define DP_PARAM_STORAGE_RESET BIT(4)
 
 struct dp_param_status {
     uint32_t sequence;
@@ -41,9 +42,13 @@ struct dp_params_transport {
  */
 int dp_params_set_transport(const struct dp_params_transport *transport);
 
-/* Initialization mounts only the supplied partition. No erase/format fallback.
- * Failed initialization leaves readable defaults and rejects persistent writes. Values are
- * desired configuration; downstream live telemetry remains separate.
+/* Mount only the supplied partition. Persist values by (dev_id, sig_id); defaults
+ * and bounds remain in the process table. Incompatible record formats clear this
+ * partition once, log a warning and set STORAGE_RESET; no old snapshot migration.
+ * I/O errors disable persistent writes instead of erasing. Batch journals recover
+ * complete value sets; downstream intents are reconciled by readback only.
+ * Failed initialization leaves readable defaults. Values are desired configuration;
+ * downstream live telemetry remains separate.
  */
 int dp_params_init(const struct dp_equip_cfg *cfg, uint8_t area_id);
 /* Collection feedback changes the live cache only; pending writes take priority. */

@@ -79,18 +79,21 @@ config DP_MAX_DEVICES
     range 1 64
 
 config DP_PARAMS
-    bool "Transactional parameter writes and durable NVS snapshots"
+    bool "Transactional parameter writes and durable NVS parameter records"
     depends on FLASH && FLASH_PAGE_LAYOUT && FLASH_MAP
     select DP_PROCESS
     select NVS
     select NVS_DATA_CRC
     select REBOOT
 
-config DP_PARAMS_SNAPSHOT_BYTES
-    int "Maximum encoded parameter snapshot bytes"
+config DP_PARAMS_TRANSACTION_BYTES
+    int "Maximum encoded parameter transaction bytes"
     default 2048
     range 256 8192
     depends on DP_PARAMS
+    help
+      Buffer for a temporary batch commit or downstream intent. Individual
+      parameter values are stored separately by device and signal identity.
 
 config DP_PARAMS_MAX_COUNT
     int "Maximum parameter points"

@@ -75,7 +75,7 @@ env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     -- -DEXTRA_CONF_FILE=large.conf
 timeout 30s "$test_dir/communication-large/zephyr/zephyr.exe"
 
-# Reference parameter policies, explicit schema migration and deferred reboot.
+# Reference parameter policies, per-key width conversion and deferred reboot.
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/reference_services -d "$test_dir/reference_services-params" \
     -- -DEXTRA_CONF_FILE=params.conf
@@ -118,3 +118,13 @@ timeout 30s "$test_dir/point_storage/zephyr/zephyr.exe"
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/table_registry -d "$test_dir/table_registry"
 timeout 30s "$test_dir/table_registry/zephyr/zephyr.exe" -flash_in_ram
+
+# Fresh processes model firmware adding/reordering/removing keys and hash collisions.
+env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
+    applications/IDU-pre/tests/parameter_records -d "$test_dir/parameter_records"
+rm -f -- "$flash_test_file"
+flash_test_file="$(mktemp "$workspace_dir/$test_dir/parameter-records.XXXXXX")"
+for phase in write add remove readd collision verify seed_error range_change type_change width_change obsolete; do
+    env IDU_RECORD_PHASE="$phase" timeout 30s "$test_dir/parameter_records/zephyr/zephyr.exe" \
+        -flash="$flash_test_file"
+done
