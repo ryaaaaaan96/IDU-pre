@@ -3,8 +3,8 @@
 ## Git 工作流
 
 - 每次完成一轮修改并执行相应验证后，自动在 `applications/IDU-pre/` 创建本地 Git 提交。
-- West 清单改动在工作区的 `manifest/` 仓库单独提交；实际目录名为 `manifest/`。
-- 提交范围限于这两个仓库，复用现有 Git 元数据，不在工作区根目录初始化仓库。推送需用户明确要求。
+- 仅允许修改 `applications/` 下的应用仓库。工作区根目录下的 `manifest/`、`zephyr/`、`modules/`、`bootloader/` 等仓库保持只读。
+- 当前项目仅在 `applications/IDU-pre/` 创建本地提交，复用现有 Git 仓库，不在工作区根目录初始化仓库。推送需用户明确要求。
 - 修改前检查 `git status --short`，保留用户已有的暂存和未暂存改动；只暂存、提交当前任务的文件或修改块。
 - 提交说明简洁描述行为变化，完成后报告提交哈希和验证结果。无法完成验证或提交时如实说明原因。
 
@@ -31,3 +31,15 @@
 - 应用不再设置 `communication/`。`protocol/ports.c` 声明传输绑定并实现应用收发编排回调，`protocol.c` 选择转发服务、声明状态/命令寄存器并通过 `extension` 直接绑定 `iap_route()`，模拟配置已移至 `tests/fixtures/`，产品不编译模拟从机。`main.c` 调用 `idu_ports_init()` 注册 CO/TR RAW 端口、应用回调和实际串口接入，`co_port_open()` 打开采集端口、co_init_bus 注册 idu_collect_bus，`tr_server_service()` 管理各转发口；`acquisition` 直接调用模块接口。AIDC 参数解释保留在 `process/serial_settings.c`。IAP 由独立 Kconfig 开关启用，AIDC 虚拟模型仅用于原生测试；模块不得包含产品头文件或直接读取 IDU 设备树别名。
 
 - 不恢复旧 MV-IO 特殊协议、247 地址门控、跨空洞跳读、补零保留区、无效写 ACK 或旧 BOOT 路径迁移。当前 dp_/co_/tr_ 参考接口和实际采集设备点表继续保留；IAPv3 的线协议仍由 iap 模块维护。产品分区集中在 `bootloader/partitions.dtsi`，板级 DTS 引用，IAP 暂存/日志由 overlay 补充。
+
+## Agent skills
+
+### Issue tracker
+
+使用本地 Markdown 记录任务和规格，通过本仓库的 Git 提交保存。
+具体约定见 [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md)。
+
+### Domain docs
+
+采用单一领域布局：仓库根目录 `GLOSSARY.md` 与 `docs/adr/`。
+读取规则见 [docs/agents/domain.md](docs/agents/domain.md)。
