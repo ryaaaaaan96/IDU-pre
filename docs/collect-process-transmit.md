@@ -119,7 +119,8 @@ flowchart LR
 | 配置 | 职责 |
 | --- | --- |
 | `CONFIG_DATAPROCESS` | 有界数据池、zbus 样本副本、纯变换；不依赖 Modbus |
-| `CONFIG_COLLECT` | 每总线采集、调度及可替换后端；依赖 Modbus client |
+| `CONFIG_COLLECT` | 每总线采集、调度及可替换后端；当前保留 Modbus ADU 类型契约 |
+| `CONFIG_CO_MODBUS_ADAPTER` | 内置 Zephyr Modbus 客户端；可独立关闭，改用 `transfer` / `read_model` 回调 |
 | `CONFIG_TRANSMIT` | 协议映射、寄存器读写；依赖 Modbus server |
 | `CONFIG_DP_PROCESS` | 事务回调、复制式 `k_msgq` 异步任务、业务定时器；默认开启，无需 Flash |
 | `CONFIG_DP_PARAMS` | NVS 参数存储、下发与回读恢复；自动启用 Process |

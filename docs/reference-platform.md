@@ -149,7 +149,7 @@ GD32E505 上每个 `stored_point` 从 32 字节缩至 24 字节；64 点容量�
 具体实现位于 [reference_services.c](../modules/dataprocess/src/reference_services.c)、
 [data_process.c](../modules/dataprocess/src/data_process.c)、
 [collect.c](../modules/collect/src/collect.c) 和
-[modbus_adapter.c](../modules/transmit/src/modbus_adapter.c)。
+[modbus_adapter.c](../modules/transmit/protocols/modbus/modbus_adapter.c)。
 
 <a id="回调存储与直接下发的约定"></a>
 

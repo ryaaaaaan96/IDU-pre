@@ -1,4 +1,5 @@
 #include <collect/collect.h>
+#include "../protocols/modbus/client.h"
 #include <collect_lib.h>
 #include <dataprocess/reference_internal.h>
 #include <dataprocess/params.h>
@@ -78,42 +79,6 @@ static void record_status(uint16_t dev_id, int err)
     zbus_chan_pub(&co_device_events, &event, K_NO_WAIT);
 }
 
-/* Standard functions also work on Zephyr RAW loopback client interfaces. */
-static int standard_transfer(int iface, struct modbus_adu *adu)
-{
-    if (adu->length < 4 || adu->length > sizeof(adu->data)) { return -EINVAL; }
-    uint16_t address = sys_get_be16(adu->data), count = sys_get_be16(adu->data + 2);
-    uint16_t words[123];
-    int err;
-    switch (adu->fc) {
-    case 3: case 4:
-        if (adu->length != 4 || !count || count > 123 || 1 + count * 2 > sizeof(adu->data) || (uint32_t)address + count > 65536) { return -EINVAL; }
-        err = adu->fc == 3 ? modbus_read_holding_regs(iface, adu->unit_id, address, words, count) :
-                            modbus_read_input_regs(iface, adu->unit_id, address, words, count);
-        if (!err) {
-            adu->length = 1 + count * 2; adu->data[0] = count * 2;
-            for (size_t i = 0; i < count; ++i) { sys_put_be16(words[i], adu->data + 1 + 2 * i); }
-        }
-        return err;
-    case 6:
-        if (adu->length != 4) { return -EINVAL; }
-        return modbus_write_holding_reg(iface, adu->unit_id, address, count);
-    case 16:
-        if (!count || count > 123 || adu->length != 5 + count * 2 ||
-            adu->data[4] != count * 2 || (uint32_t)address + count > 65536) { return -EINVAL; }
-        for (size_t i = 0; i < count; ++i) { words[i] = sys_get_be16(adu->data + 5 + i * 2); }
-        err = modbus_write_holding_regs(iface, adu->unit_id, address, words, count);
-        if (!err) { adu->length = 4; }
-        return err;
-    default:
-#if defined(CONFIG_MODBUS_RAW_ADU)
-        return modbus_raw_backend_txn(iface, adu);
-#else
-        return -ENOTSUP;
-#endif
-    }
-}
-
 int co_transfer_mode(uint16_t dev_id, enum co_port_mode mode, struct modbus_adu *adu)
 {
     struct bus_state *bus = bus_for(dev_id);
@@ -128,7 +93,7 @@ int co_transfer_mode(uint16_t dev_id, enum co_port_mode mode, struct modbus_adu 
     adu->unit_id = equipment->devices[d].unit_id;
     uint8_t fc = adu->fc;
     int err = bus->cfg.transfer ? bus->cfg.transfer(bus->cfg.user, adu) :
-                                  standard_transfer(bus->cfg.iface, adu);
+                                  co_modbus_transfer(bus->cfg.iface, adu);
     if (!err && adu->unit_id != equipment->devices[d].unit_id) { err = -EBADMSG; }
     if (!err && adu->fc == (fc | 0x80) && adu->length == 1 && adu->data[0]) { err = adu->data[0]; }
     else if (!err && (adu->fc != fc || adu->unit_id != equipment->devices[d].unit_id ||
@@ -200,6 +165,9 @@ int co_init_bus(const struct dp_equip_cfg *cfg, const struct co_bus_cfg *config)
 {
     if (!config || config->id >= ARRAY_SIZE(buses) || (!config->transfer && !config->read_model && config->iface < 0) ||
         !cfg || cfg->device_count > CONFIG_DP_MAX_DEVICES) { return -EINVAL; }
+    if (!IS_ENABLED(CONFIG_CO_MODBUS_ADAPTER) && !config->transfer && !config->read_model) {
+        return -ENOTSUP;
+    }
     int err = dp_validate(cfg);
     if (err) { return err; }
     /* Worker capacity belongs to collect; DP only validates point-table data. */
@@ -487,8 +455,7 @@ int co_reconfigure(uint8_t id, struct modbus_iface_param param)
     struct bus_state *bus = &buses[id];
     if (k_mutex_lock(&bus->lock, K_NO_WAIT)) { return -EBUSY; }
     if (bus->init_owner) { k_mutex_unlock(&bus->lock); return -EBUSY; }
-    int err = modbus_disable(bus->cfg.iface);
-    if (!err) { err = modbus_init_client(bus->cfg.iface, param); }
+    int err = co_modbus_reconfigure(bus->cfg.iface, param);
     if (err) {
         k_mutex_lock(&schedule_lock, K_FOREVER); bus->mode = CO_PORT_SLEEP;
         k_mutex_unlock(&schedule_lock);

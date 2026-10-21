@@ -26,7 +26,7 @@ compatibility.
 | [`vport`](vport/README.md) | `vport/vport.h` | Registered transport backends, logical routing, CAN ID filters, bounded RX and per-link TX ownership |
 | `dataprocess` | `data_process.h`, `platform_callback.h`, `dataprocess/{points,process,params}.h` | Shared data contracts/store, `dp_*` processing, optional NVS |
 | `collect` | `collect_lib.h`, `collect/{collect,port,simulator,model_simulator}.h` | `co_*` acquisition, bus scheduling, client initialization and optional simulation |
-| `transmit` | `transmit_lib.h`, `transmit/{transmit,modbus_adapter,modbus_transport,server,registers,mvio}.h` | `tr_*` mappings, server lifecycle, register services, protocol handlers and optional vport adaptation |
+| `transmit` | `transmit_lib.h`, `transmit/{transmit,modbus_adapter,modbus_transport,server,registers}.h` | `tr_*` mappings, server lifecycle, register services, protocol handlers and optional vport adaptation |
 | `quicklz` | `quicklz/quicklz.h` | `qlz_decode_level3()` bounded QuickLZ level 3 decoding in plain C |
 | [`iap`](iap/README.md) | `iap/{iap,sgz}.h` | IAPv3 reception, SGZ/AES, signed images, flash staging and recovery; devicetree/Kconfig product policy |
 | [`gd32e505`](gd32e505/README.md) | Zephyr `soc_root`, `dts_root`, `adc_*` | E505 SoC, devicetree clock startup and synchronous ADC0 driver |
@@ -59,6 +59,44 @@ live in `app/process/points.c`, with engineering conversion in
 publication, sample-period access and business callbacks. Status and trial-image
 readiness belong to `app/status/`. There is no separate generic equipment module
 or legacy `idu_equipment_*` application API.
+
+## Protocol implementation layout
+
+Both acquisition and forwarding separate protocol adapters from their core:
+
+```text
+collect/                              transmit/
+├── src/                              ├── src/
+│   ├── collect.c                      │   └── transmit.c
+│   └── model_simulator.c              └── protocols/modbus/
+└── protocols/modbus/                      ├── modbus_adapter.c
+    ├── client.c / client.h                ├── server.c
+    ├── port.c                            ├── registers.c
+    ├── simulator.c                       ├── modbus_transport.c
+    ├── CMakeLists.txt                     ├── compat/
+    └── Kconfig                           ├── CMakeLists.txt
+                                          └── Kconfig
+```
+
+Public headers remain under each module's `include/`; existing `co_*` / `tr_*`
+callers do not change include paths. `CO_MODBUS_ADAPTER` enables the built-in
+Zephyr client, port initialization and reconfiguration without requiring transmit.
+With it disabled, register `transfer` and/or `read_model` callbacks; `co_port_open()`
+and attempts to register a bus without a backend return `-ENOTSUP`.
+Scheduling, initialization, queues, statuses and callback-based register operations
+continue to work. `TR_MODBUS_ADAPTER` independently enables whole-PDU server
+adaptation and isolated workers, with its existing service/transport sub-options.
+
+`CO_SIMULATOR` deliberately models a remote server and still uses the transmit
+adapter; it is optional and is not a dependency of the acquisition client.
+The current shared complete-ADU handoff remains in transmit's Modbus subdirectory.
+Extracting a common transport backend and switching physical RTU interfaces to
+RAW are later migration steps; this layout change does not alter wire framing.
+
+`tests/collect_modbus` exercises real Zephyr client reads, writes, reconfiguration
+and lost acknowledgements with transmit and the Modbus server disabled.
+`tests/collector/adapter-off.conf` exercises the scheduler with custom callbacks
+and both the client adapter and transmit disabled.
 
 ## Communication ownership
 
@@ -169,8 +207,10 @@ or append individual module directories to `ZEPHYR_EXTRA_MODULES`.
 `hardware.cmake` registers only the SoC module and is also used by Sysbuild before
 image discovery. IDU board GPIO policy and boot partitions remain outside it;
 the SoC sources are compiled only when `gd32e505` is selected.
-Enable `DATAPROCESS`; enable `COLLECT` with the Modbus client role and `TRANSMIT`
-with the server role as needed. `DP_PROCESS` enables business
+Enable `DATAPROCESS`; enable `COLLECT` and its `CO_MODBUS_ADAPTER` with the Modbus
+client role, and `TRANSMIT` with the server role as needed. Callback-only acquisition
+can disable `CO_MODBUS_ADAPTER` and `MODBUS_CLIENT`; the existing ADU data types still
+require `MODBUS`. `DP_PROCESS` enables business
 transactions, sample/read/init handlers, asynchronous jobs and timers independently
 of flash. `DP_PARAMS` adds parameter points, durable transactions and NVS recovery;
 parameter tables are rejected without it. With `DP_PROCESS=n`, pure point
@@ -379,7 +419,7 @@ NVS requires FLASH, FLASH_MAP, FLASH_PAGE_LAYOUT and NVS_DATA_CRC. Reserve at le
 three equal erase sectors. The example uses four 4 KB sectors per profile.
 Parameter and device events are notifications; state/result APIs are authoritative.
 
-`transmit/compat/prepare_modbus.py` generates build-local copies of four reviewed Zephyr
+`transmit/protocols/modbus/compat/prepare_modbus.py` generates build-local copies of four reviewed Zephyr
 4.4.2 sources for whole-PDU routing, isolated RX scheduling and one-byte RAW
 exceptions, a quiet interface-availability check, plus optional vport handoff
 and TX-completion hooks. The west checkout is unchanged. Strict source hashes intentionally

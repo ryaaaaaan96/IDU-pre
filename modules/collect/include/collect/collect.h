@@ -20,7 +20,9 @@ struct co_bus_cfg {
     uint8_t id;
     int iface;
     bool simulated;
-    /* Optional protocol backend. In-place request/response; called under bus lock. */
+    /* Optional protocol backend. In-place request/response; called under bus lock.
+     * Without CO_MODBUS_ADAPTER, provide transfer and/or read_model.
+     */
     int (*transfer)(void *user, struct modbus_adu *adu);
     int (*initialize)(void *user, uint16_t dev_id);
     int (*read_model)(void *user, uint16_t dev_id, uint16_t model,

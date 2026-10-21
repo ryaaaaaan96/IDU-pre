@@ -7,3 +7,10 @@ tests:
       - modbus
       - zbus
       - idu
+  idu.collector.callback_backend:
+    platform_allow: native_sim/native/64
+    extra_args: EXTRA_CONF_FILE=adapter-off.conf
+    tags:
+      - modbus
+      - zbus
+      - idu

@@ -142,6 +142,11 @@ IDU-pre/
 AIDC 参数编码转换属于业务，保留在 `process/serial_settings.c`；各模块不引用
 IDU 配置头文件。虚拟模型后端只提供模型数据，不实现真实 UPP 链路。
 
+`collect` / `transmit` 的协议适配统一放在各自的 `protocols/modbus/`，核心服务留在
+`src/`。采集客户端由 `CO_MODBUS_ADAPTER` 控制，转发适配由 `TR_MODBUS_ADAPTER`
+控制；纯采集无需启用转发。关闭采集适配时可使用自定义 `transfer` / `read_model`
+回调。目录及依赖边界见[模块说明](modules/README.md#protocol-implementation-layout)。
+
 [`bootloader/`](bootloader/README.md) 保存本板 MCUboot 配置、分区和联合构建设置。
 MCUboot 源码仍使用 West 工作区中的独立仓库；`app/status/image_confirm.c` 负责应用健康确认。
 [`modules/iap/`](modules/iap/README.md) 负责升级接收、解包和验签，分区／内存取自

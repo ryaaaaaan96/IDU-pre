@@ -1,6 +1,6 @@
 # 通信端口接入
 
-`vport` 负责通用链路和路由。`transmit/src/modbus_transport.c` 将 Zephyr
+`vport` 负责通用链路和路由。`transmit/protocols/modbus/modbus_transport.c` 将 Zephyr
 已组帧的 Modbus 接口接入它，供现有 `collect` / `transmit` 使用；
 这部分属于已有协议适配层，不另建模块。IDU 默认启用，应用绑定及收发编排回调在
 [`app/cfg/ports.c`](../app/cfg/ports.c)。
@@ -18,15 +18,22 @@
 
 ## 模块与产品配置
 
+`collect` 与 `transmit` 都使用 `src/` 保存核心服务、`protocols/modbus/` 保存协议适配，
+子目录分别维护 CMake 和 Kconfig；公共头文件路径不变。
+`CO_MODBUS_ADAPTER` 控制采集客户端适配，纯采集不依赖转发服务；
+`TR_MODBUS_ADAPTER` 控制转发侧完整请求适配。可选 `CO_SIMULATOR` 需要模拟一个服务端，
+当前仍显式依赖转发适配。公共传输拆分与 RAW 串口接入尚未实施。
+
 `app/communication` 已删除，执行逻辑按职责归属既有模块：
 
 | 位置 | 内容 |
 | --- | --- |
-| `modules/transmit/src/server.c` | 多端口生命周期与配置更新 |
-| `modules/transmit/src/registers.c` | 状态读取、命令匹配及普通参数写入入口 |
+| `modules/transmit/protocols/modbus/server.c` | 多端口生命周期与配置更新 |
+| `modules/transmit/protocols/modbus/registers.c` | 状态读取、命令匹配及普通参数写入入口 |
 | `modules/iap/src/receiver.c` | IAP 完整报文及能力/版本查询，由寄存器服务扩展回调接入 |
-| `modules/collect/src/port.c` | 采集客户端初始化 |
-| `modules/collect/src/simulator.c` | 配置驱动的模拟设备及故障注入 |
+| `modules/collect/protocols/modbus/port.c` | 采集客户端初始化 |
+| `modules/collect/protocols/modbus/client.c` | Zephyr 客户端事务及重新配置，受 `CO_MODBUS_ADAPTER` 控制 |
+| `modules/collect/protocols/modbus/simulator.c` | 配置驱动的模拟设备及故障注入 |
 | `modules/collect/src/model_simulator.c` | 模型默认值后端 |
 | `app/cfg/ports.c` | 虚拟口/链路绑定、应用收发回调和 `idu_ports_init()` 注册入口 |
 | `app/cfg/forwarding.c` | 转发协议选择及串口设置 |
@@ -123,7 +130,7 @@ IAPv3 配置使用 1100 字节 Modbus 缓冲及 1108 字节 vport 载荷。
 
 ## 适配边界与验证
 
-`transmit/compat` 对 Zephyr 4.4.2 四个 Modbus 源文件做哈希校验，在构建目录
+`transmit/protocols/modbus/compat` 对 Zephyr 4.4.2 四个 Modbus 源文件做哈希校验，在构建目录
 生成含交接/发送完成钩子的副本；不修改 West 管理的源码。升级 Zephyr
 时必须复核这些钩子。
 

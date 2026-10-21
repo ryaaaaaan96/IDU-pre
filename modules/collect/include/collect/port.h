@@ -11,6 +11,8 @@ struct co_port_config {
     const struct co_simulator_config *simulation;
 };
 
-/* 在绑定传输层之后、co_init_bus 之前调用。成功返回 Zephyr 接口号。 */
+/* 在绑定传输层之后、co_init_bus 之前调用。成功返回 Zephyr 接口号。
+ * 需要 CONFIG_CO_MODBUS_ADAPTER；关闭时返回 -ENOTSUP。
+ */
 int co_port_open(const struct co_port_config *config);
 #endif

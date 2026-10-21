@@ -1,0 +1,24 @@
+menuconfig CO_MODBUS_ADAPTER
+    bool "Zephyr Modbus client adapter"
+    depends on MODBUS_CLIENT
+    default y
+    help
+      Enable the built-in RTU/RAW client and port configuration. No transmit
+      service is required. Disable for buses supplying their own transfer or
+      read_model callbacks; the existing ADU data contract is retained.
+
+config CO_TIMEOUT_MS
+    int "Modbus acquisition response timeout (ms)"
+    depends on CO_MODBUS_ADAPTER
+    default 100
+    range 10 1000
+
+config CO_SIMULATOR
+    bool "Configured Modbus ADU device simulator"
+    depends on CO_MODBUS_ADAPTER && MODBUS_RAW_ADU && TR_MODBUS_ADAPTER
+
+config CO_SIMULATOR_WORDS
+    int "Words per simulated register bank"
+    depends on CO_SIMULATOR
+    default 32
+    range 1 256

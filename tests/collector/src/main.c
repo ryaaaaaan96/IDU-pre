@@ -1,4 +1,5 @@
 #include <collect/collect.h>
+#include <collect/port.h>
 #include <dataprocess/process.h>
 #include <errno.h>
 #include <zephyr/sys/atomic.h>
@@ -129,6 +130,13 @@ static void *setup(void)
         .id = 0, .iface = -1, .transfer = transfer, .initialize = initialize,
     };
     zassert_ok(dp_init_config(&equipment));
+    if (!IS_ENABLED(CONFIG_CO_MODBUS_ADAPTER)) {
+        zassert_false(IS_ENABLED(CONFIG_MODBUS_CLIENT));
+        zassert_false(IS_ENABLED(CONFIG_TRANSMIT));
+        const struct co_port_config port = {.iface_name = "RAW_0"};
+        zassert_equal(co_port_open(&port), -ENOTSUP);
+        zassert_equal(co_init(&equipment, 0, false), -ENOTSUP);
+    }
     /* Reject a table that references a later bus outside the configured pool,
      * even when the bus currently being registered has a valid ID.
      */

@@ -147,7 +147,7 @@ SoC Kconfig、设备树、板定义和 HAL 接入，不切换工作区 checkout�
 
 截至本次核查，官方 [latest release](https://github.com/zephyrproject-rtos/zephyr/releases/tag/v4.4.2)
 仍为 4.4.2。未发现“只改 West revision 就能删除 E505 适配”的官方版本。
-当前 `transmit/compat` 还对 Zephyr 4.4.2 的 Modbus 源码校验固定哈希；更换版本
+当前 `transmit/protocols/modbus/compat` 还对 Zephyr 4.4.2 的 Modbus 源码校验固定哈希；更换版本
 需同时审核该适配、MCUboot、Flash 和驱动行为。对于解决 E505 支持这一目的，
 继续使用现有固定版本、维护最小本地适配更合适；若准备贡献上游，可沿 #111834
 沟通 E505 SoC/DTS 与时钟/ADC 的具体缺口。

@@ -1,7 +1,7 @@
 menuconfig COLLECT
     bool "Equipment acquisition and bus scheduling"
-    depends on DATAPROCESS && MODBUS_CLIENT
-    default y
+    depends on DATAPROCESS && MODBUS
+    default y if MODBUS_CLIENT
 
 if COLLECT
 
@@ -28,20 +28,7 @@ config CO_STACK_SIZE
       Total reserved stack space is CO_MAX_BUSES times this size, plus any
       architecture alignment or guard requirements.
 
-config CO_TIMEOUT_MS
-    int "Modbus acquisition response timeout (ms)"
-    default 100
-    range 10 1000
-
-config CO_SIMULATOR
-    bool "Configured Modbus ADU device simulator"
-    depends on MODBUS_RAW_ADU && TR_MODBUS_ADAPTER
-
-config CO_SIMULATOR_WORDS
-    int "Words per simulated register bank"
-    depends on CO_SIMULATOR
-    default 32
-    range 1 256
+rsource "protocols/modbus/Kconfig"
 
 config CO_MODEL_SIMULATOR
     bool "Reference model default-value simulator"
