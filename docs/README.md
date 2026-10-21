@@ -11,6 +11,7 @@
 | 核对硬件 | [硬件与板级适配](hardware.md) | 时钟、引脚、Flash、看门狗和已实现行为 |
 | 理解框架 | [采集、处理与转发架构](collect-process-transmit.md) | 模块职责、数据流、Zephyr 调度、初始化顺序 |
 | 维护点表 | [配置指南](../app/protocol/README.md) | 文件职责、新增设备/点、分散登记与参数配置 |
+| 规划多张转发表 | [转发表与北向服务](forwarding-model.md) | 挂表设备、数据来源、站号、寄存器地址及当前服务隔离限制 |
 | 查询协议和存储语义 | [点表、寄存器与参数事务](point-tables.md) | 点值/质量、扩展寄存器、NVS/下发恢复、真实采集口 |
 | 使用模块 | [模块接口](../modules/README.md)、[DP](../modules/dataprocess/README.md) | 依赖、配置、API 单位、同步/异步与事务约束 |
 | 扩展逻辑通信端口 | [vport](../modules/vport/README.md) | 回调端口、CO/TR 收发入口、来源保持与缓冲区所有权 |
