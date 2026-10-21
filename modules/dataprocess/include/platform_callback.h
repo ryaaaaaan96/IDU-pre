@@ -48,7 +48,12 @@ void pltcb_reg_para_recover_finish_cb(PARA_RECOVER_FINISH callback);
 void pltcb_para_recover_fininsh(void);
 
 /* Register before dp_init(). Successful initialization freezes registration.
- * Original device table and default/range callbacks retain their contracts.
+ * Device table and legacy default/range callbacks retain their contracts.
+ * New products put data directly in DM_SIG_CFG_S, controlling range checks and
+ * default restoration with FLAG_RANGE_CHECK / FLAG_NO_RESTORE in sig_flag. The
+ * default/range callback overrides row data and is incompatible with country
+ * overrides. Without it, pltcb_para_get_range_def reads the selected row data
+ * and reports recover_default=false, never forcing defaults over NVS.
  * CONFIG_DP_REFERENCE_TABLES exposes supported const tables to the engine.
  */
 void pltcb_reg_cfg_get_dev_tbl(CFG_GET_DEV_TBL callback);

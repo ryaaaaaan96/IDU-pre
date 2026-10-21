@@ -1,6 +1,7 @@
 #include <platform_callback.h>
 #include <dataprocess/points.h>
 #include <dataprocess/params.h>
+#include <dataprocess/point_parameters.h>
 #include <errno.h>
 #include <limits.h>
 #include <string.h>
@@ -19,8 +20,71 @@ static CFG_GET_INIT_REG_NUM get_initializer_count;
 static dp_config_provider_fn native_provider;
 static dp_collect_period_fn collect_period;
 static dp_collect_period_fn model_period;
+static dp_country_parameter_fn country_override;
+static uint16_t parameter_country;
 static bool frozen, initializing;
 static bool registry_started, registry_starting;
+
+static const uint8_t zero_defaults[144];
+
+static const DM_SIG_CFG_S *configured_signal(uint16_t dev, uint16_t sig)
+{
+    if (!dev || dev > UINT8_MAX) { return NULL; }
+    const DEV_TABLE_S *devices = get_devices ? get_devices() : NULL;
+    size_t count = get_device_count ? get_device_count() : 0;
+    for (size_t i = 0; devices && i < count; ++i) {
+        if (devices[i].dev_id != dev) { continue; }
+        const DEV_TBL_CFG_S *group = &devices[i].ptl_tbl_cfg[0];
+        if (group->proto_type != PRO_DATA_PROCESS || !group->pst_table) { return NULL; }
+        const DM_SIG_CFG_S *rows = group->pst_table;
+        for (size_t n = 0; n < group->sig_num; ++n) {
+            if (rows[n].sig_id == sig) { return &rows[n]; }
+        }
+        return NULL;
+    }
+    return NULL;
+}
+
+static int parameter_values(uint16_t country, uint16_t dev, const DM_SIG_CFG_S *row,
+                             DM_SIG_DATA_S *value, bool *restore)
+{
+    if (!row->sig_size || row->sig_size > sizeof(zero_defaults)) { return -EINVAL; }
+    DM_SIG_DATA_S data = row->data;
+    bool enabled = !(row->sig_flag & FLAG_NO_RESTORE);
+    if (country != DP_COUNTRY_COMMON) {
+        if (!country_override) { return -ENOTSUP; }
+        int err = country_override(country, dev, row->sig_id, &data, &enabled);
+        if (err == -ENOENT) {
+            data = row->data; enabled = !(row->sig_flag & FLAG_NO_RESTORE);
+        } else if (err) { return err < 0 ? err : -EINVAL; }
+    }
+    if (row->sig_size > 4 && !data.def_value.pst) {
+        data.def_value.pst = (void *)zero_defaults;
+    }
+    *value = data;
+    *restore = enabled;
+    return 0;
+}
+
+int dp_point_parameters_get(uint16_t country, uint16_t dev, uint16_t sig,
+                             DM_SIG_DATA_S *value, bool *restore)
+{
+    if (!value || !restore) { return -EINVAL; }
+    if (k_is_in_isr()) { return -EWOULDBLOCK; }
+    const DM_SIG_CFG_S *row = configured_signal(dev, sig);
+    return row ? parameter_values(country, dev, row, value, restore) : -ENOENT;
+}
+
+int dp_register_parameter_country(uint16_t country, dp_country_parameter_fn override)
+{
+    if (k_is_in_isr()) { return -EWOULDBLOCK; }
+    if (country != DP_COUNTRY_COMMON && !override) { return -EINVAL; }
+    k_mutex_lock(&configuration_lock, K_FOREVER);
+    int err = frozen || initializing || dp_config() ? -EBUSY : get_range ? -EINVAL : 0;
+    if (!err) { parameter_country = country; country_override = override; }
+    k_mutex_unlock(&configuration_lock);
+    return err;
+}
 
 #define REGISTER_CALLBACK(name, type, slot) \
     void name(type callback) \
@@ -72,8 +136,12 @@ uint16_t pltcb_cfg_get_init_reg_num(void)
 int pltcb_para_get_range_def(uint16_t dev_id, uint16_t sig_id,
                            DM_SIG_DATA_S *value, bool *recover_default)
 {
-    if (!get_range || !value || !recover_default) { return -1; }
-    return get_range(dev_id, sig_id, value, recover_default);
+    if (!value || !recover_default) { return -1; }
+    if (get_range) { return get_range(dev_id, sig_id, value, recover_default); }
+    bool restore;
+    int err = dp_point_parameters_get(parameter_country, dev_id, sig_id, value, &restore);
+    if (!err) { *recover_default = false; }
+    return err;
 }
 
 int dp_register_config_provider(dp_config_provider_fn provider)
@@ -207,7 +275,8 @@ static int point_values(uint8_t dev, const DM_SIG_CFG_S *signal, struct dp_point
      * product model; importing it must not silently change persistence rules.
      */
     if (signal->sig_flag & ~(FLAG_PERSISTENCE | FLAG_COLLECT | FLAG_RT_STORE |
-                            FLAG_READ_CALLBACK | FLAG_PERSISTENCE_SYNC)) {
+                            FLAG_READ_CALLBACK | FLAG_PERSISTENCE_SYNC |
+                            FLAG_NO_RESTORE | FLAG_RANGE_CHECK)) {
         return -ENOTSUP;
     }
     if ((signal->sig_flag & (FLAG_RT_STORE | FLAG_PERSISTENCE_SYNC)) &&
@@ -245,38 +314,44 @@ static int point_values(uint8_t dev, const DM_SIG_CFG_S *signal, struct dp_point
         p->type = DP_WORDS; break;
     default: return -ENOTSUP;
     }
+    if ((signal->sig_flag & FLAG_RANGE_CHECK) && p->type == DP_WORDS) { return -ENOTSUP; }
+    DM_SIG_DATA_S defaults;
+    bool restore;
+    int err = parameter_values(parameter_country, dev, signal, &defaults, &restore);
+    if (err) { return err; }
+    /* 旧消费者可以继续提供完整默认/范围回调；IDU 直接使用行内配置。 */
+    bool recover_default = false;
     if (get_range) {
-        DM_SIG_DATA_S defaults = {0};
-        bool recover_default = false;
-        if (get_range(dev, signal->sig_id, &defaults, &recover_default)) {
-            return -EINVAL;
-        }
-        /* Forcing defaults over an existing NVS record is a product migration
-         * decision, not a safe generic interpretation of this callback flag.
-         */
-        if (recover_default && (signal->sig_flag & FLAG_PERSISTENCE)) {
-            return -ENOTSUP;
-        }
-        const uint8_t *bytes = signal->sig_size > 4 ? defaults.def_value.pst :
-                                                     defaults.def_value.str;
-        if (!bytes) { return -EINVAL; }
-        for (size_t i = 0; i < signal->sig_size; ++i) {
-            p->initial.words[i / 2] |= (uint16_t)bytes[i] << (8 * (i % 2));
-        }
-        /* The reference range checker treats two zero bounds as unrestricted. */
-        if (defaults.min_value.u32 || defaults.max_value.u32) {
-            switch (p->type) {
-            case DP_U8:
-            case DP_U16:
-                p->minimum = defaults.min_value.u16; p->maximum = defaults.max_value.u16; break;
-            case DP_S16:
-                p->minimum = defaults.min_value.s16; p->maximum = defaults.max_value.s16; break;
-            case DP_U32:
-                p->minimum = defaults.min_value.u32; p->maximum = defaults.max_value.u32; break;
-            case DP_S32:
-                p->minimum = defaults.min_value.s32; p->maximum = defaults.max_value.s32; break;
-            default: break;
-            }
+        if (country_override || parameter_country != DP_COUNTRY_COMMON) { return -EINVAL; }
+        defaults = (DM_SIG_DATA_S){0};
+        if (get_range(dev, signal->sig_id, &defaults, &recover_default)) { return -EINVAL; }
+    }
+    /* Forcing defaults over an existing NVS record is a product migration
+     * decision, not a safe generic interpretation of this callback flag.
+     */
+    if (recover_default && (signal->sig_flag & FLAG_PERSISTENCE)) {
+        return -ENOTSUP;
+    }
+    const uint8_t *bytes = signal->sig_size > 4 ? defaults.def_value.pst :
+                                                 defaults.def_value.str;
+    if (!bytes) { return -EINVAL; }
+    for (size_t i = 0; i < signal->sig_size; ++i) {
+        p->initial.words[i / 2] |= (uint16_t)bytes[i] << (8 * (i % 2));
+    }
+    /* 新表显式启用范围；旧回调保留非零上下限即检查的约定。 */
+    if ((signal->sig_flag & FLAG_RANGE_CHECK) ||
+        (get_range && (defaults.min_value.u32 || defaults.max_value.u32))) {
+        switch (p->type) {
+        case DP_U8:
+        case DP_U16:
+            p->minimum = defaults.min_value.u16; p->maximum = defaults.max_value.u16; break;
+        case DP_S16:
+            p->minimum = defaults.min_value.s16; p->maximum = defaults.max_value.s16; break;
+        case DP_U32:
+            p->minimum = defaults.min_value.u32; p->maximum = defaults.max_value.u32; break;
+        case DP_S32:
+            p->minimum = defaults.min_value.s32; p->maximum = defaults.max_value.s32; break;
+        default: break;
         }
     }
     if (signal->sig_flag & (FLAG_PERSISTENCE | FLAG_COLLECT)) {
@@ -284,7 +359,8 @@ static int point_values(uint8_t dev, const DM_SIG_CFG_S *signal, struct dp_point
         p->source = DP_SOURCE_PARAMETER;
         p->param_flags = DP_PARAM_WRITE;
         if (signal->sig_flag & FLAG_PERSISTENCE) {
-            p->param_flags |= DP_PARAM_PERSIST | DP_PARAM_RESTORE;
+            p->param_flags |= DP_PARAM_PERSIST;
+            if (restore) { p->param_flags |= DP_PARAM_RESTORE; }
         }
         if ((signal->sig_flag & FLAG_PERSISTENCE) &&
             !(signal->sig_flag & (FLAG_RT_STORE | FLAG_PERSISTENCE_SYNC))) {
@@ -551,7 +627,8 @@ int dp_init(void)
     if (frozen || initializing || dp_config()) { err = -EALREADY; goto out; }
     initializing = true;
     if (native_provider) {
-        if (get_devices || get_device_count || get_range || collect_period || model_period) {
+        if (get_devices || get_device_count || get_range || collect_period || model_period ||
+            country_override || parameter_country != DP_COUNTRY_COMMON) {
             err = -EINVAL;
         } else {
             err = dp_init_config(native_provider());

@@ -32,24 +32,6 @@ const DEV_TABLE_S *idu_device_table(void)
 
 uint16_t idu_device_count(void) { return ARRAY_SIZE(devices); }
 
-/* 参数查询同样从设备配置读取关联，无需维护另一份设备号到型号的分支。 */
-const DM_SIG_CFG_S *idu_process_table(uint8_t dev, uint16_t *count)
-{
-    *count = 0;
-    for (size_t i = 0; i < ARRAY_SIZE(devices); ++i) {
-        if (devices[i].dev_id != dev) {
-            continue;
-        }
-        const DEV_TBL_CFG_S *group = &devices[i].ptl_tbl_cfg[0];
-        if (group->proto_type == PRO_DATA_PROCESS) {
-            *count = group->sig_num;
-            return group->pst_table;
-        }
-        break;
-    }
-    return NULL;
-}
-
 /* 将点表的 8 位周期编码转换成实际采集间隔。 */
 static int collect_period(uint8_t code, uint32_t *ms)
 {
@@ -72,8 +54,6 @@ int idu_register_point_tables(void)
     if (err) { return err; }
     pltcb_reg_cfg_get_dev_tbl(idu_device_table);
     pltcb_reg_cfg_get_dev_num(idu_device_count);
-    pltcb_reg_para_range_def_cb(idu_point_default);
-    pltcb_reg_para_is_load_def_cb(idu_point_restore);
     return 0;
 }
 

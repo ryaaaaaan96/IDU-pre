@@ -39,9 +39,19 @@ IAPv3 is an optional upgrade module and does not select a different set of table
 The three application tables use the reference `DM_SIG_CFG_S`,
 `MODBUS_RTU_TABLE_S` and `MB_TABLE_CELL_T`. Generic UPP model layouts remain
 available in the modules and are covered by independent tests.
-The single const `parameters[]` array in `process.c` supplies `DM_SIG_DATA_S`
-through the reference callback. A country lookup API is reserved in the application;
-registered DP callbacks currently use common parameters.
+`DM_SIG_CFG_S` extends the original layout with inline `data` (`DM_SIG_DATA_S`) and
+range/restoration flags inside `sig_flag`. DP reads the const data directly; IDU
+has no parallel parameter array or default/range lookup callback. Omitted values
+are zero. `FLAG_RANGE_CHECK` enables both configured bounds; with zero bounds it
+accepts only zero. Without it, inline bounds are inactive and type limits apply.
+`FLAG_NO_RESTORE` opts a persistent point out of explicit default restoration
+without changing its saved value. Large arrays use static const defaults, with NULL meaning zero.
+[`point_parameters.h`](dataprocess/include/dataprocess/point_parameters.h) provides
+read-only country queries and an optional startup-only country override. COMMON remains
+the product default. Known-country misses fall back to row data; unknown countries fail.
+Successful DP initialization freezes country selection. Queries do not alter live values,
+NVS or RAM overrides. Legacy default/range callbacks remain supported for other consumers
+and cannot be combined with country overrides.
 Signal macros and function pointers bind business handlers directly; there is no
 runtime callback-name registry or duplicate model metadata.
 Register-to-signal mappings belong

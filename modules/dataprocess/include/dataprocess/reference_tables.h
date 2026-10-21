@@ -3,7 +3,7 @@
 
 #include <data_process.h>
 
-/* Public table layouts from the reference platform, using standard C types.
+/* Table vocabulary from the reference platform, extended for Zephyr products.
  * They describe business data, not an ARC/RTOS abstraction or binary ABI.
  */
 #define MAX_PTL_TBL_NUM 7
@@ -18,19 +18,25 @@ typedef enum {
     PRO_UPP_SLAVE_INCRE = 18, PRO_UPP_MASTER_INCRE = 19, PRO_MAX_NUM
 } PTL_TYPE_E;
 
+typedef struct dm_sig_data_s {
+    DATA_U def_value;
+    DATA_U min_value;
+    DATA_U max_value;
+} DM_SIG_DATA_S;
+
 typedef struct dm_sig_cfg_s {
     uint16_t sig_id;
     uint8_t sig_size;
     uint8_t sig_flag;
     uint32_t data_type;
     DM_PF_SIG_PROC pf_sig_proc;
+    /* 默认值和范围常驻 Flash；FLAG_RANGE_CHECK 开启配置上下限检查。
+     * 未开启时使用类型范围；开启且双零时只允许零。仅支持标量整数。
+     * 大于四字节时 def_value.pst 指向静态 const 数据，NULL 表示全零。
+     * FLAG_NO_RESTORE 禁止主动恢复默认，不影响启动加载 NVS。
+     */
+    DM_SIG_DATA_S data;
 } DM_SIG_CFG_S;
-
-typedef struct dm_sig_data_s {
-    DATA_U def_value;
-    DATA_U min_value;
-    DATA_U max_value;
-} DM_SIG_DATA_S;
 
 typedef struct dev_tbl_cfg_s {
     uint16_t proto_type;

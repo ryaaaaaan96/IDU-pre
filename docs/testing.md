@@ -703,3 +703,32 @@ IAPv3 从全局 `extension` 改为本地设备的 `PRO_ADDR_SLAVE` / `MB_TABLE_S
 
 日志保存在工作区 `build/IDU-pre/iap-segments/`。本轮未进行实板 RS485 升级、
 物理 DE 时序或真实掉电验证。
+
+## 2026-10-21 默认值和范围内嵌处理表
+
+处理表行直接包含 `DM_SIG_DATA_S data`，删除 IDU 的 `point_parameter`、
+`parameters[]`、行宏和默认/范围/恢复查表桥接。DP 直接读取 Flash 配置，
+`FLAG_NO_RESTORE` 与 `FLAG_RANGE_CHECK` 统一放在 `sig_flag`；没有独立恢复策略字段。
+决策见 [ADR 0004](adr/0004-inline-process-parameters.md)。
+
+- `CCACHE_DISABLE=1 ASAN_OPTIONS=detect_leaks=0 bash applications/IDU-pre/tests/run.sh`
+  通过：47 次 native_sim 执行、310 项 Ztest PASS、0 FAIL。Python 共 21 项，
+  18 项通过，3 项因缺少外部 QuickLZ/SGZ 样本按原条件跳过；主机工程换算 ASan/UBSan 通过。
+- 新增 `tests/point_parameters` 通用/国家两种初始化测试，共 12 次测试通过：
+  国家只读查询、缺项回退、共享处理表、未知国家、失败输出不变、注册冻结、
+  数组零默认、显式数组字序、有符号范围、主动恢复开关、NVS 优先及 RAM 动态覆盖。
+  `FLAG_RANGE_CHECK` 开启且双零时只允许零；未开启时填写的范围不生效，使用类型范围。
+- 旧默认/范围回调的独立适配、状态/命令回调、南向下发、持久化重启、
+  未决事务恢复和 IAPv3 协议段回归继续通过。国家参数选择固定在初始化前，
+  当前产品仍为 COMMON，未加入具体国家参数或自动覆盖已保存值的行为。
+- 五个持久参数的键、类型、宽度、顺序和派生存储标志保持不变；
+  新范围检查标志不进入 NVS schema 签名，未引入存储格式迁移。
+- `CCACHE_DISABLE=1 ./applications/IDU-pre/build.sh` 通过；最终启用 MCUboot/IAPv3，
+  镜像验签及 SGZ 导出通过。IDU Flash 121836 B、RAM 102120 B；
+  MCUboot Flash 36568 B、RAM 18096 B。
+  相比 `acef3be`，IDU Flash 减少 124 B，RAM 增加 8 B，来自国家选择及覆盖回调状态。
+  `nm` 确认处理表和零默认数组在 Flash 的只读区，没有将参数配置复制到 RAM。
+- 构建与回归无编译警告或错误；文档本地链接、脚本语法及 `git diff --check` 通过。
+
+最终日志保存在工作区 `build/IDU-pre/process-parameters/tests.log` 和 `build.log`。
+本轮未进行实板 Flash 掉电、RS485 升级或总线时序验证。

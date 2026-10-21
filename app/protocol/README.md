@@ -41,13 +41,14 @@ protocol/
 装配按标识查找，不依赖链接顺序；重复、缺失、类型错误及数量溢出均报错，失败不修改输出。
 
 点表、默认值和登记项仍在 Flash。只有 `DEV_TABLE_S devices[]` 指针关联视图占用 RAM，
-启动后保持不变；没有将三张完整点表复制到 RAM。原 dp_/co_/tr_ 接口及表行结构保留。
+启动后保持不变；没有将三张完整点表复制到 RAM。dp_/co_/tr_ 接口继续使用，
+处理表行增加默认值、范围和恢复策略，采集/转发行保持原字段。
 新文件仍须加入 CMake；链接段不会自动扫描源码目录。
 
 ## 修改设备或测点
 
 1. 在信号头文件定义 ID，在 `process.c` 添加信号及业务回调。
-2. 默认值、上下限及恢复策略放在同文件的 const `parameters[]`，无需另建元数据表。
+2. 在同一处理表行填写 `data` 默认值及上下限，通过 `sig_flag` 控制范围检查和恢复策略。
 3. 南向采集或写入目的地放入 `collect.c`；北向寄存器映射放入 `transmit.c`。
 4. 新增整张表时，在文件末尾登记一次，并在内部 `tables.h` 分配唯一标识。
 5. 在 `protocol.c` 的 `bindings[]` 选择设备要使用的表和南向地址。
@@ -112,37 +113,51 @@ protocol/
 本轮保留原有五个持久参数的键、类型与映射；原演示南向设置地址仍为 40000–40002。
 质量寄存器、样本年龄过期和旧 NVS 自动迁移仍暂缓，见[根 README](../../README.md)。
 
-## 国家参数预留接口
+## 行内参数与国家差异
 
-`process.c` 的 `parameters[]` 是一张 `static const` 数组，每行包含国家编号、
-设备/信号 ID、`DM_SIG_DATA_S`（默认值、最小值、最大值）及主动恢复默认策略。
-未指定 `country` 的条目使用通用配置 `IDU_PARAMETER_COUNTRY_COMMON = 0`。
+`DM_SIG_CFG_S` 的 `data` 直接包含 `DM_SIG_DATA_S`，范围和恢复开关统一使用 `sig_flag`。
+默认值、范围、类型和业务回调在同一行维护，例如：
 
-通过 `inc/protocol.h` 中的只读接口查询：
+```c
+{.sig_id = IDU_SIG_SAMPLE_PERIOD, .sig_size = 2,
+ .sig_flag = FLAG_PERSISTENCE | FLAG_RT_STORE | FLAG_RANGE_CHECK,
+ .data_type = DATA_TYPE_U16, .pf_sig_proc = NULL,
+ .data = {.def_value.u16 = 500, .min_value.u16 = 100, .max_value.u16 = 1000}},
+```
+
+- 持久参数默认允许主动恢复；设置 `FLAG_NO_RESTORE` 后恢复时跳过该点，
+  仍可正常保存、写入和启动加载。无需额外的恢复策略字段。
+- `FLAG_RANGE_CHECK` 同时启用最小/最大值检查，仅用于整数标量。开启且双零时只允许零；
+  未开启时使用类型范围，即使填写非零上下限也不启用行内限制。
+  `dp_set_para_def_range()` 的显式运行期覆盖独立生效。
+- 省略 `data` 时初值为零。
+  大于四字节的初值使用静态 const 数组，NULL 指针由 DP 提供全零默认。
+- 设备号由设备挂表决定，共用处理表的设备直接共享配置，不再寻找型号首个实例。
+- 点表常驻 Flash；`dp_set_para_def_range()` 的 RAM 动态覆盖仍独立，不能改写配置表。
+
+默认/范围解释和恢复策略查询归 DP，不再注册应用查表回调。只读查询使用
+[`point_parameters.h`](../../modules/dataprocess/include/dataprocess/point_parameters.h)：
 
 ```c
 DM_SIG_DATA_S data;
 bool restore;
-int err = idu_point_parameters_get(IDU_PARAMETER_COUNTRY_COMMON,
-                                   IDU_DEV_LOCAL, IDU_SIG_SAMPLE_PERIOD,
-                                   &data, &restore);
+int err = dp_point_parameters_get(DP_COUNTRY_COMMON,
+                                  IDU_DEV_LOCAL, IDU_SIG_SAMPLE_PERIOD,
+                                  &data, &restore);
 ```
 
-- 当前只配置通用参数，没有预置任何具体国家的值。
-- 增加国家时，在枚举中定义产品编号，并在同一数组中添加差异行。
-  已配置国家优先匹配自身行，缺项复用通用行；每个国家/型号/信号键只能定义一次。
-  国家行须填写完整的默认值、上下限和恢复策略，不逐字段合并。
-- 没有通用记录但已定义的信号仍按原规则补零，范围全零表示使用类型范围。
-  未定义的国家返回 `-ENOTSUP`；未定义的设备或信号返回 `-ENOENT`。
-- 共用同一处理表的设备共享型号参数，参数键使用 `devices[]` 中该型号首个实例的设备号；
-  当前南向设备为 10。新增实例放在同型号首个实例之后，避免改变默认值来源。
-  数组初值的返回指针只读。
-- `restore` 表示允许主动恢复默认，不表示启动时强制覆盖已保存参数。
-  查询不更新 DP 当前值、不读写 NVS。
+当前产品使用 `DP_COUNTRY_COMMON = 0`，没有具体国家数据或自动切换行为。
+以后可在 `dp_init()` 之前调用 `dp_register_parameter_country(country, override)`。
+覆盖回调收到行内通用值；返回 0 使用覆盖值，`-ENOENT` 表示已知国家无该点差异、
+整体回退通用配置，`-ENOTSUP` 表示未知国家。回调只读、确定、非阻塞，不重入 DP；
+数组指针生命周期覆盖配置使用期。需要国家差异范围的点必须启用 `FLAG_RANGE_CHECK`。
+DP 初始化成功后固定选择，拒绝重新注册。
+旧默认/范围回调与国家覆盖互斥，避免两份默认来源。
 
-当前 `idu_point_default()` / `idu_point_restore()` 均固定查询通用参数。
-国家选择来源、保存方式和运行期切换暂未接入；后续接入时，在 DP 初始化前确定国家，
-两个回调使用同一固定选择，并明确已有持久参数的处理规则。
+查询不修改当前值、不读写 NVS，也不应用 RAM 动态覆盖。未知设备/信号返回
+`-ENOENT`，未知国家返回 `-ENOTSUP`；失败不改输出。国家选择会影响初始化的默认值
+和范围，但已有 NVS 继续按现有规则校验并优先加载，不自动恢复默认或迁移存储。
+详见[处理表参数决策](../../docs/adr/0004-inline-process-parameters.md)。
 
 ## 同线 RS485 联调
 

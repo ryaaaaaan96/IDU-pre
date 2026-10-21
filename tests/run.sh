@@ -54,6 +54,15 @@ for suite in adc io vport communication shared_rs485 simulator pipeline models c
     timeout 30s "$test_dir/$suite/zephyr/zephyr.exe"
 done
 
+# Inline defaults/ranges and a startup-selected country are independent of CO/TR.
+env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
+    applications/IDU-pre/tests/point_parameters -d "$test_dir/point_parameters"
+timeout 30s "$test_dir/point_parameters/zephyr/zephyr.exe" -flash_in_ram
+env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
+    applications/IDU-pre/tests/point_parameters -d "$test_dir/point_parameters-country" \
+    -- -DEXTRA_CONF_FILE=country.conf
+timeout 30s "$test_dir/point_parameters-country/zephyr/zephyr.exe" -flash_in_ram
+
 # Callback-only acquisition does not compile the Zephyr client or transmit.
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/collector -d "$test_dir/collector-no-adapter" \

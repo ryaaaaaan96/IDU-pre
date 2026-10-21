@@ -45,7 +45,8 @@ python3 applications/IDU-pre/tools/analyze_reference.py \
 
 ## 配置契约与支持范围
 
-[reference_tables.h](../modules/dataprocess/include/dataprocess/reference_tables.h) 保留原表结构的字段语义，使用标准整数和布尔类型：
+[reference_tables.h](../modules/dataprocess/include/dataprocess/reference_tables.h) 保留参考字段语义，
+处理表按产品需求扩展；下表描述原定义，不代表新版二进制布局相同：
 
 | 原类型与来源 | 需要保持的契约 |
 | --- | --- |
@@ -59,14 +60,18 @@ python3 applications/IDU-pre/tools/analyze_reference.py \
 
 `platform_callback.h:37–54` 的原注册关系为设备表 getter、数量 getter，以及 `PARA_GET_RANGE_DEF(dev_id, sig_id, DM_SIG_DATA_S *, bool *recover_default)`。新版通过 `pltcb_reg_cfg_get_dev_tbl()`、`pltcb_reg_cfg_get_dev_num()`、`pltcb_reg_para_range_def_cb()` 注册，在 `dp_init(void)` 中校验并建立按需读取视图，成功初始化后冻结注册。实现见 [reference_config.c](../modules/dataprocess/src/reference_config.c)。
 
-启用 `CONFIG_DP_REFERENCE_TABLES` 后，配置适配接收 U8、U16、S16、U32、S32、STRING、U8ARRAY、U16ARRAY，以及 `PRO_DATA_PROCESS`、Modbus MASTER/SLAVE 表以及下述 UPP 模型表子集。字节长度须精确匹配类型及配置容量。持久化本地点需要 `CONFIG_DP_PARAMS`，NVS 分区及恢复仍由应用启动。`FLAG_PERSISTENCE` 决定是否存储，FC03 映射本身不隐含 NVS；无持久标志的本地点仍可通过 FC03/06/16 运行回调并更新 RAM。默认/范围来自注册回调；未注册时初值为零并使用类型范围。回调给出的最小值和最大值均为零时，表示不额外检查范围，仍保留类型的完整取值范围，不将值限制为零。持久化点要求强制恢复默认值时会拒绝配置，避免静默覆盖已有 NVS 数据。
+启用 `CONFIG_DP_REFERENCE_TABLES` 后，配置适配接收 U8、U16、S16、U32、S32、STRING、U8ARRAY、U16ARRAY，以及 `PRO_DATA_PROCESS`、Modbus MASTER/SLAVE 表以及下述 UPP 模型表子集。字节长度须精确匹配类型及配置容量。持久化本地点需要 `CONFIG_DP_PARAMS`，NVS 分区及恢复仍由应用启动。`FLAG_PERSISTENCE` 决定是否存储，FC03 映射本身不隐含 NVS；无持久标志的本地点仍可通过 FC03/06/16 运行回调并更新 RAM。默认/范围直接来自处理行的 `data`；旧消费者仍可注册默认/范围回调覆盖它。
+省略 `data` 时初值为零并使用类型范围，大数组空初值由 DP 补零。新行内范围由 `FLAG_RANGE_CHECK` 显式启用，双零表示只允许零；未开启时使用类型范围。
+旧回调给出的双零仍表示不额外检查范围，保持适配语义。持久化点要求强制恢复默认值时会拒绝配置，避免静默覆盖已有 NVS 数据。
 
 原 `rqst_cyl` 的头文件只写“查询频率”。反汇编 `co_port_mgr.o:co_porc_scan_list+0x70 / +0x112 / +0x11a` 可见计数递减和重装，不能直接当作毫秒。当前要求显式注册 `dp_register_collect_period()`，由产品将该编码转换为毫秒，普通采集行的零周期表示仅初始化读取；带 FLAG_COLLECT 的零周期行表示仅下发。每个 Modbus 行独立请求，支持 `FLAG_FRAME`；不自动合帧。特殊采集数据类型、`scan_pri` 和未支持协议使初始化失败。`FLAG_COLLECT` 支持带明确 FC3 写目标的参数/命令；非持久命令只下发一次，持久设定值保留读回确认。非零采集周期允许同时轮询，反馈不覆盖持久目标。
 
 Modbus 字序采用 `arc_byte_order.h:60–64` 的实际宏：0 默认按 BIGSMALL、1 SMALL、2 BIGSMALL、3 SMALLBIG、4 BIG。0/2 对应 native 低字在前，4 对应高字在前，1/3 另需字节交换。UPP 的 `PUB_BYTE_ORDER_BIG=0` 是另一套编码，不能混用；无需引入该头里的 ARC 函数。
 
-IDU 的三张应用点表也使用这些原结构，通过设备表及默认/范围 getter 注册。
-`process.c` 的 `parameters[]` 提供原接口的 `DM_SIG_DATA_S`，回调直接写在 `DM_SIG_CFG_S.pf_sig_proc` 中，
+IDU 的处理表扩展 `DM_SIG_CFG_S`，内嵌 `DM_SIG_DATA_S data`，恢复及范围开关归 `sig_flag`，
+设备表 getter 负责挂表，DP 直接读取默认值和范围；IDU 不再注册默认值/恢复查表回调。
+持久参数默认允许恢复，`FLAG_NO_RESTORE` 禁止该参数主动恢复默认；
+现用持久点全部保持允许恢复，不改变 NVS schema。业务回调直接写在 `pf_sig_proc` 中，
 信号 ID 使用宏或枚举；不再通过 `point_metadata` 字符串分发。
 `dp_reference_prepare()` 可在启动线程前取得已校验配置。原生扩展
 `dp_register_config_provider()` / `dp_init_config()` 仍供独立模块使用，与原表注册互斥。
@@ -134,8 +139,9 @@ IDU 明确采用首地址匹配、重叠拒绝、命中错误不回退的契约�
 
 产品的 `app/protocol/tables/{process,collect,transmit}.c` 使用 `const`，
 整张点表保持 `static const`，通过 Iterable Sections 登记；内部 `tables.h` 只声明表标识。DP 根据标识装配 DEV_TABLE_S 指针视图，数量由定义文件的 ARRAY_SIZE 自动计算。
-默认值和范围集中在 `process.c` 的单一数组中，预留按国家查询及缺项回退通用参数；
-当前注册回调仍使用通用配置，未引入运行期国家切换或改变 NVS 恢复策略。
+默认值和范围内嵌在 `process.c` 的处理表行中，不再另有参数数组。
+DP 提供国家查询及初始化前选择接口，当前产品使用通用值；没有运行期切换或自动覆盖 NVS。
+该扩展的取舍见 [ADR 0004](adr/0004-inline-process-parameters.md)。
 同型号设备共享处理和采集行。`DEV_TBL_CFG_S.pst_table` 使用 `const void *`，
 设备绑定声明保存在 Flash，启动期装配的 DEV_TABLE_S 指针视图留在 RAM，getter 返回只读指针。
 三表由 CMake 独立编译，通过链接段按标识关联；条目数由各数组 ARRAY_SIZE 获取，
