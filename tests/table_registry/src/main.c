@@ -19,12 +19,6 @@ static int write_error;
 static uint16_t remote[3];
 static const DEV_TABLE_S *get_devices(void) { return devices; }
 static uint16_t get_count(void) { return ARRAY_SIZE(devices); }
-static int period(uint8_t code, uint32_t *ms)
-{
-    if (code != 1) { return -EINVAL; }
-    *ms = 100;
-    return 0;
-}
 static int read_words(void *user, uint16_t dev, uint16_t address, uint16_t *out, size_t count)
 {
     ARG_UNUSED(user); zassert_equal(dev, 1);
@@ -59,7 +53,6 @@ static void *setup(void)
 {
     zassert_ok(dp_table_registry_bind(bindings, ARRAY_SIZE(bindings), devices));
     pltcb_reg_cfg_get_dev_tbl(get_devices); pltcb_reg_cfg_get_dev_num(get_count);
-    zassert_ok(dp_register_collect_period(period));
     zassert_ok(dp_init());
     const struct dp_params_transport write_only = {.write = write_words};
     zassert_ok(dp_params_set_transport(&write_only));
@@ -89,6 +82,10 @@ ZTEST(table_registry, test_discovery_and_independent_polling)
     const struct co_cfg *poll = dp_config_collect(cfg, 0, &scratch);
     zassert_equal(poll->fields[0].sig_id, 3);
     zassert_equal(poll->period_ms, 100);
+    poll = dp_config_collect(cfg, 1, &scratch);
+    zassert_not_null(poll);
+    zassert_equal(poll->fields[0].sig_id, 4);
+    zassert_equal(poll->period_ms, 2000); /* Same device, independently configured interval. */
     zassert_equal(devices[0].ptl_tbl_cfg[1].proto_type, PRO_MB_SLAVE);
     /* 协议段不增加 DP 点数、轮询数或普通转发行数。 */
     zassert_equal(devices[0].ptl_tbl_cfg[3].proto_type, PRO_ADDR_SLAVE);

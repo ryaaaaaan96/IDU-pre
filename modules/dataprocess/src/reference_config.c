@@ -18,8 +18,7 @@ static CFG_GET_TIMER_REG_NUM get_timer_count;
 static CFG_GET_INIT_REG_TBL get_initializers;
 static CFG_GET_INIT_REG_NUM get_initializer_count;
 static dp_config_provider_fn native_provider;
-static dp_collect_period_fn collect_period;
-static dp_collect_period_fn model_period;
+static dp_model_period_fn model_period;
 static dp_country_parameter_fn country_override;
 static uint16_t parameter_country;
 static bool frozen, initializing;
@@ -154,17 +153,7 @@ int dp_register_config_provider(dp_config_provider_fn provider)
     return err;
 }
 
-int dp_register_collect_period(dp_collect_period_fn convert)
-{
-    if (k_is_in_isr()) { return -EWOULDBLOCK; }
-    k_mutex_lock(&configuration_lock, K_FOREVER);
-    int err = frozen || initializing || dp_config() ? -EBUSY : 0;
-    if (!err) { collect_period = convert; }
-    k_mutex_unlock(&configuration_lock);
-    return err;
-}
-
-int dp_register_model_period(dp_collect_period_fn convert)
+int dp_register_model_period(dp_model_period_fn convert)
 {
     if (k_is_in_isr()) { return -EWOULDBLOCK; }
     k_mutex_lock(&configuration_lock, K_FOREVER);
@@ -414,7 +403,7 @@ static int reference_point(const struct dp_equip_cfg *cfg, size_t index,
                     err = word_order(row->byte_order, &p->write_order);
                     if (err) { return err; }
                     forwarded = true;
-                    acquired |= row->rqst_cyl != 0;
+                    acquired |= row->period_ms != 0;
                 } else { acquired = true; }
             }
         } else if (group->proto_type == PRO_UPP_MASTER) {
@@ -452,20 +441,18 @@ static int reference_collect(const struct dp_equip_cfg *cfg, size_t index,
                 for (size_t i = 0; i < group->sig_num; ++i) {
                     const MODBUS_RTU_TABLE_S *row = &rows[i];
                     const DM_SIG_CFG_S *sig = signal_row(dev, row->sig_id);
-                    if (sig && (sig->sig_flag & FLAG_COLLECT) && !row->rqst_cyl) { continue; }
+                    if (sig && (sig->sig_flag & FLAG_COLLECT) && !row->period_ms) { continue; }
                     if (index) { --index; continue; }
                     if (!sig || row->reg_num != (sig->sig_size + 1U) / 2U ||
                         (row->reg_type != 3 && row->reg_type != 4)) { return -EINVAL; }
                     /* Each row is an exact request, so FRAME already holds. */
                     if ((row->flag & ((sig->sig_flag & FLAG_COLLECT) ? ~7U : ~1U)) ||
-                        row->data_type || row->scan_pri ||
-                        !collect_period) { return -ENOTSUP; }
+                        row->data_type || row->scan_pri) { return -ENOTSUP; }
                     *poll = (struct co_cfg){.dev_id = dev->dev_id,
                         .function = row->reg_type, .address = row->reg_addr,
                         .count = row->reg_num, .priority = row->priority,
                         .field_count = 1};
-                    int err = collect_period(row->rqst_cyl, &poll->period_ms);
-                    if (err) { return err; }
+                    poll->period_ms = row->period_ms;
                     poll->init_only = poll->period_ms == 0;
                     poll->reference_field = (struct co_field){.sig_id = row->sig_id,
                         .width = row->reg_num};
@@ -588,7 +575,7 @@ static int compile_tables(void)
             for (size_t i = 0; i < group->sig_num; ++i) {
                 const DM_SIG_CFG_S *sig = signal_row(dev, rows[i].sig_id);
                 if (!sig) { return -ENOENT; }
-                if (!(sig->sig_flag & FLAG_COLLECT) || rows[i].rqst_cyl) { ++compiled.collect_count; }
+                if (!(sig->sig_flag & FLAG_COLLECT) || rows[i].period_ms) { ++compiled.collect_count; }
             }
         }
         if (has_collect) {
@@ -627,7 +614,7 @@ int dp_init(void)
     if (frozen || initializing || dp_config()) { err = -EALREADY; goto out; }
     initializing = true;
     if (native_provider) {
-        if (get_devices || get_device_count || get_range || collect_period || model_period ||
+        if (get_devices || get_device_count || get_range || model_period ||
             country_override || parameter_country != DP_COUNTRY_COMMON) {
             err = -EINVAL;
         } else {

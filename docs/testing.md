@@ -835,3 +835,19 @@ CO 后端回调和 Modbus 事务接口显式接收 `dev_id`；vport 来源结构
 
 日志位于工作区 `build/IDU-pre/parameter-records/{all-tests.log,product-build.log}`。
 本轮未进行实物 NOR 掉电、实际串口或运行时栈余量测试。
+
+## Modbus 采集表直接配置毫秒周期（2026-10-21）
+
+- `MODBUS_RTU_TABLE_S` 的 8 位 `rqst_cyl` 编码改为 `uint16_t period_ms`，应用逐行直接填写毫秒数。
+  删除 IDU 周期转换函数、转换注册接口和周期编码宏；`.conf` 的 500 ms 产品周期保持不变。
+- 0 继续表示只读点初始化采集、FLAG_COLLECT 下发点仅按指令执行；非零值直接参与轮询。
+  UPP 模型保留独立周期策略，与本次 Modbus 表字段变更分开。
+- `reference_config` 在未注册 Modbus 周期转换的情况下验证 0、1、500、8000、60000、
+  UINT16_MAX，确认不截断并正确区分初始化请求；`table_registry` 验证同设备各行分别使用
+  100 ms 和 2000 ms，并保留仅下发及周期反馈回归。
+- `CCACHE_DISABLE=1 ASAN_OPTIONS=detect_leaks=0 bash applications/IDU-pre/tests/run.sh`
+  通过：59 次 native 执行、328 次 Ztest 成功，主机及 IAP 回归通过，无编译警告。
+- `CCACHE_DISABLE=1 ./applications/IDU-pre/build.sh` 通过，MCUboot／IDU／IAPv3 验签及 SGZ 导出通过。
+  IDU Flash 124400 B、RAM 102764 B；相对此前分别减少 148 B 和 8 B。
+
+日志位于工作区 `build/IDU-pre/collect-period/{tests.log,build.log}`；未进行实板时序测量。

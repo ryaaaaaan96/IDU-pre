@@ -12,7 +12,7 @@ static DM_SIG_CFG_S remote_signals[] = {
 };
 static MODBUS_RTU_TABLE_S acquisition[] = {
     {.sig_id = 10, .reg_addr = 500, .reg_num = 2, .reg_type = 4,
-     .rqst_cyl = 200, .priority = 3, .byte_order = BYTE_ORDER_BIG},
+     .period_ms = 8000, .priority = 3, .byte_order = BYTE_ORDER_BIG},
 };
 static MB_TABLE_CELL_T forwarding[] = {
     {.sig_id = 10, .dev_id = 11, .reg_addr = 100, .reg_num = 2,
@@ -155,9 +155,7 @@ ZTEST(reference_configuration, test_original_tables_validate_before_initializati
     zassert_ok(dp_register_config_provider(no_native_config));
     zassert_equal(dp_init(), -1); /* Never silently choose one configuration. */
     zassert_ok(dp_register_config_provider(NULL));
-    zassert_equal(dp_init(), -1); /* No guessed rqst_cyl conversion. */
     zassert_is_null(dp_config());
-    zassert_ok(dp_register_collect_period(period));
 
     table[0].ptl_tbl_cfg[1].proto_type = PRO_UPP_SLAVE;
     zassert_equal(dp_init(), -1);
@@ -177,6 +175,21 @@ ZTEST(reference_configuration, test_original_tables_validate_before_initializati
     zassert_equal(dp_init(), -1);
     acquisition[0].byte_order = BYTE_ORDER_BIG;
 
+    /* No application conversion is registered: each Modbus row carries its
+     * actual interval, including 60 seconds and the 16-bit maximum. */
+    const struct dp_equip_cfg *prepared;
+    const uint16_t intervals[] = {0, 1, 500, 8000, 60000, UINT16_MAX};
+    for (size_t i = 0; i < ARRAY_SIZE(intervals); ++i) {
+        acquisition[0].period_ms = intervals[i];
+        zassert_ok(dp_reference_prepare(&prepared));
+        struct co_cfg scratch;
+        const struct co_cfg *poll = dp_config_collect(prepared, 0, &scratch);
+        zassert_not_null(poll);
+        zassert_equal(poll->period_ms, intervals[i]);
+        zassert_equal(poll->init_only, intervals[i] == 0);
+    }
+    acquisition[0].period_ms = 8000;
+
     /* A model table uses a registry pointer and a total field count. */
     UPP_M_MOD_DATA model_field = {.sig_id = 10, .mod_data_offset = 20,
         .mod_data_len = 4, .mod_data_type = DATA_TYPE_U32,
@@ -186,7 +199,6 @@ ZTEST(reference_configuration, test_original_tables_validate_before_initializati
     UPP_M_MOD_REG registry = {.p_model_ary = &model, .model_num = 1};
     DEV_TBL_CFG_S original = table[1].ptl_tbl_cfg[1];
     table[1].ptl_tbl_cfg[1] = (DEV_TBL_CFG_S){PRO_UPP_MASTER, 1, &registry};
-    const struct dp_equip_cfg *prepared;
     zassert_not_equal(dp_reference_prepare(&prepared), 0); /* Missing cycle policy. */
     zassert_is_null(prepared);
     zassert_ok(dp_register_model_period(period));

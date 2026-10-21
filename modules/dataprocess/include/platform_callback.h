@@ -89,14 +89,11 @@ struct dp_equip_cfg;
 typedef const struct dp_equip_cfg *(*dp_config_provider_fn)(void);
 int dp_register_config_provider(dp_config_provider_fn provider);
 
-/* Original rqst_cyl is an encoded scheduling policy. A product must supply its
- * conversion before importing collection tables. Zero milliseconds denotes an
- * initialization-only request. The compiler never guesses a time unit.
+/* UPP model rqst_cyl retains its encoded scheduling policy. Modbus tables
+ * configure period_ms directly and require no conversion registration.
  */
-typedef int (*dp_collect_period_fn)(uint8_t encoded, uint32_t *period_ms);
-int dp_register_collect_period(dp_collect_period_fn convert);
-/* Model backends have a separate scheduling policy from Modbus RTU. */
-int dp_register_model_period(dp_collect_period_fn convert);
+typedef int (*dp_model_period_fn)(uint8_t encoded, uint32_t *period_ms);
+int dp_register_model_period(dp_model_period_fn convert);
 /* Validate and expose immutable reference table views before starting workers.
  * The returned configuration belongs to DP and is valid until reset. No copies
  * of point/collect/transmit descriptors are allocated. Register providers first.

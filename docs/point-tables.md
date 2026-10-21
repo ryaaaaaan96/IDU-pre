@@ -127,7 +127,9 @@ Zephyr 4.4.2 的标准输入/保持寄存器读回调把应用读错误统一转
 原来的 DI=`0x0005`、电流 `100,200,...,800` 等数据已迁至 `tests/fixtures/simulation.c`，
 只供回归使用；它们不进入产品镜像。
 
-采集表按原结构每行独立请求：DI 和两路模拟量按 CONFIG_IDU_COLLECT_PERIOD_MS 轮询；协议号、远程地址只在初始化时读取。
+Modbus 采集表每行独立请求，`uint16_t period_ms` 直接配置毫秒周期，无周期编码转换。
+DI 和两路模拟量填写 CONFIG_IDU_COLLECT_PERIOD_MS；协议号、远程地址填写 0，仅初始化读取。
+带 FLAG_COLLECT 的下发目标填写 0 时仅按指令写入；填写非零周期时同时轮询。
 周期从上次完成开始计算；失败在下个周期重试，不做无间隔重试。
 默认响应超时 100 ms，经接口转换为 Zephyr Modbus 所需的微秒。
 修改 `CONFIG_CO_TIMEOUT_MS` 时要评估总线负载；当前应用不启用按样本年龄过期。

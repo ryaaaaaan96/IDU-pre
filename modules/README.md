@@ -62,6 +62,10 @@ to the module that interprets the table: `DP_POINT_DEFAULT_*` in
 `TR_TABLE_DEFAULT_BYTE_ORDER` in [`transmit_lib.h`](transmit/include/transmit_lib.h).
 These are compile-time field constants, not whole-row macros or runtime templates.
 Required addresses, IDs, widths and protocol choices remain explicit product values.
+Modbus acquisition rows set `uint16_t period_ms` directly in milliseconds; no cycle
+encoding or conversion callback is registered. Zero means initialization-only for
+read-only points and command-only for `FLAG_COLLECT` destinations. UPP model cycle
+conversion remains a separate API.
 
 The same convention applies to device bindings and startup plans (`DP_DEVICE_DEFAULT_*`,
 `DP_BINDING_*`, `DP_PROCESS_DEFAULT_*`), acquisition configuration (`CO_BUS_DEFAULT_*`,

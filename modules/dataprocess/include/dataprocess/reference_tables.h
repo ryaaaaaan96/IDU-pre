@@ -77,7 +77,8 @@ typedef struct {
     uint16_t reg_addr;
     uint8_t reg_num;
     uint8_t reg_type;
-    uint8_t rqst_cyl;
+    /* 毫秒范围 0–65535；0：只读点初始化采集，FLAG_COLLECT 点仅下发。 */
+    uint16_t period_ms;
     uint8_t flag;
     uint8_t priority : 2;
     uint8_t data_type : 3;

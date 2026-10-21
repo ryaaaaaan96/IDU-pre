@@ -54,7 +54,7 @@ python3 applications/IDU-pre/tools/analyze_reference.py \
 | `DEV_TBL_CFG_S`，`:307` | `proto_type` + 条目数 + 对应类型的表指针，不是任意 native 配置指针 |
 | `DM_SIG_CFG_S`，`:261` | 信号 ID、**字节数**、标志、数据类型、处理函数；自身没有默认值和范围 |
 | `DM_SIG_DATA_S`，`:272` | 默认值、最小值、最大值；超过 4 字节的默认值通过 `DATA_U.pst` 提供 |
-| `MODBUS_RTU_TABLE_S`，`collect_lib.h:64` | 信号、地址、寄存器数、功能码、查询频率编码、标志、优先级和字序 |
+| `MODBUS_RTU_TABLE_S`，`collect_lib.h:64` | 信号、地址、寄存器数、功能码、查询频率编码（当前改为毫秒 period_ms）、标志、优先级和字序 |
 | `MB_TABLE_CELL_T` / `_S`，`transmit_lib.h:66` | 外部寄存器到设备/信号及字序的映射 |
 | `INIT_DATA_SET_S` / `TIME_DATA_SET_S`，`data_process.h:355–368` | 全局初始化/定时处理函数；定时周期为毫秒，调用时四个参数均为空 |
 
@@ -64,7 +64,14 @@ python3 applications/IDU-pre/tools/analyze_reference.py \
 省略 `data` 时初值为零并使用类型范围，大数组空初值由 DP 补零。新行内范围由 `FLAG_RANGE_CHECK` 显式启用，双零表示只允许零；未开启时使用类型范围。
 旧回调给出的双零仍表示不额外检查范围，保持适配语义。持久化点要求强制恢复默认值时会拒绝配置，避免静默覆盖已有 NVS 数据。
 
-原 `rqst_cyl` 的头文件只写“查询频率”。反汇编 `co_port_mgr.o:co_porc_scan_list+0x70 / +0x112 / +0x11a` 可见计数递减和重装，不能直接当作毫秒。当前要求显式注册 `dp_register_collect_period()`，由产品将该编码转换为毫秒，普通采集行的零周期表示仅初始化读取；带 FLAG_COLLECT 的零周期行表示仅下发。每个 Modbus 行独立请求，支持 `FLAG_FRAME`；不自动合帧。特殊采集数据类型、`scan_pri` 和未支持协议使初始化失败。`FLAG_COLLECT` 支持带明确 FC3 写目标的参数/命令；非持久命令只下发一次，持久设定值保留读回确认。非零采集周期允许同时轮询，反馈不覆盖持久目标。
+原 `rqst_cyl` 的头文件只写“查询频率”。反汇编 `co_port_mgr.o:co_porc_scan_list+0x70 / +0x112 / +0x11a` 可见计数递减和重装，不能直接当作毫秒。
+当前 Modbus 采集表主动偏离原字段：使用 `uint16_t period_ms` 直接填写毫秒数，支持每行独立周期，
+删除 `collect_period()`、`dp_register_collect_period()` 及周期编码宏。
+普通采集行的零周期表示仅初始化读取；带 `FLAG_COLLECT` 的零周期行表示仅下发。
+UPP 模型表仍使用自己的 `rqst_cyl` 编码，由独立的 `dp_register_model_period()` 转换。
+每个 Modbus 行独立请求，支持 `FLAG_FRAME`；不自动合帧。特殊采集数据类型、`scan_pri` 和未支持协议使初始化失败。
+`FLAG_COLLECT` 支持带明确 FC3 写目标的参数/命令；非持久命令只下发一次，持久设定值保留读回确认。
+非零采集周期允许同时轮询，反馈不覆盖持久目标。
 
 Modbus 字序采用 `arc_byte_order.h:60–64` 的实际宏：0 默认按 BIGSMALL、1 SMALL、2 BIGSMALL、3 SMALLBIG、4 BIG。0/2 对应 native 低字在前，4 对应高字在前，1/3 另需字节交换。UPP 的 `PUB_BYTE_ORDER_BIG=0` 是另一套编码，不能混用；无需引入该头里的 ARC 函数。
 

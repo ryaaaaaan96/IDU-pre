@@ -71,16 +71,6 @@ const DEV_TABLE_S *idu_device_table(void)
 
 uint16_t idu_device_count(void) { return ARRAY_SIZE(devices); }
 
-/* 将点表的 8 位周期编码转换成实际采集间隔。 */
-static int collect_period(uint8_t code, uint32_t *ms)
-{
-    switch (code) {
-    case IDU_COLLECT_NO_POLL: *ms = 0; return 0;
-    case IDU_COLLECT_SAMPLE: *ms = CONFIG_IDU_COLLECT_PERIOD_MS; return 0;
-    default: return -ENOTSUP;
-    }
-}
-
 /* 应用只登记配置回调；通用校验、执行视图及数据池初始化由 dp_init() 完成。
  * 在启动 DP、采集和转发线程之前调用，运行期不得重新注册。
  */
@@ -88,8 +78,6 @@ int idu_register_point_tables(void)
 {
     if (dp_config()) { return -EBUSY; }
     int err = dp_table_registry_bind(bindings, ARRAY_SIZE(bindings), devices);
-    if (err) { return err; }
-    err = dp_register_collect_period(collect_period);
     if (err) { return err; }
     pltcb_reg_cfg_get_dev_tbl(idu_device_table);
     pltcb_reg_cfg_get_dev_num(idu_device_count);
