@@ -5,7 +5,9 @@
 本页描述 IDU 的点值/质量、北向寄存器、参数持久化及采集后端配置。
 文件职责和新增点步骤集中在[点表维护指南](../app/protocol/README.md)，
 原平台接口覆盖集中在[参考平台对照](reference-platform.md)。
-普通转发只使用连续地址点表；IAPv3 通过独立的完整 ADU 扩展接入。
+普通转发使用连续地址点表；IAPv3 通过设备挂载的 `PRO_ADDR_SLAVE` 协议段接入。
+段表见 [`segments.c`](../app/protocol/tables/segments.c)：按请求首地址匹配，
+IAP 回调校验完整 ADU 和变长载荷，不套用普通寄存器段的整段范围限制。
 历史迁移和旧库分析见[迁移记录](migration-history.md)。
 
 ## 运行链路

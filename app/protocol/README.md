@@ -4,7 +4,7 @@
 
 本目录声明产品点表、设备关联、协议服务配置和端口编排。
 采集、转发、参数存储及协议解析由各自模块执行。这里只维护 IDU 产品方案，
-IAPv3 的启停只影响升级入口，不切换设备和点表。
+IAPv3 的启停只影响升级协议段，不切换业务点表。
 
 ```text
 protocol/
@@ -18,17 +18,19 @@ protocol/
 └── tables/
     ├── process.c    # 信号、标志、回调、默认值及范围
     ├── collect.c    # 南向地址、字序、轮询周期及写入目的地
-    └── transmit.c   # 北向寄存器到设备/信号的映射
+    ├── transmit.c   # 北向寄存器到设备/信号的映射
+    └── segments.c   # 可选 IAPv3 协议地址段与回调
 ```
 
 `forwarding.c` 和 `parameters.c` 已删除。参数状态/命令由 `tables/process.c` 绑定回调，
-`tables/transmit.c` 映射北向地址；`protocol.c` 只选择服务、可选地址段和 IAPv3 的
-`iap_route()` 完整 ADU 扩展。Flash 实现始终位于 DP 模块。
+`tables/transmit.c` 映射北向地址；`tables/segments.c` 通过设备的
+`PRO_ADDR_SLAVE` 绑定 IAPv3 地址段，`protocol.c` 选择设备、服务和广播策略。
+参数 Flash 保存实现位于 DP 模块，升级暂存和验签位于 IAP 模块。
 `main.c` 仍负责明确的启动顺序，不通过 SYS_INIT 隐藏业务依赖。
 
 ## 分散登记与设备关联
 
-三表由 CMake 独立编译。每张表是普通 `static const` 数组，使用参考结构显式写行，
+三张业务点表及可选协议段表由 CMake 独立编译。每张表是普通 `static const` 数组，使用参考结构显式写行，
 文件内通过 `STRUCT_SECTION_ITERABLE(dp_registered_table, ...)` 登记一次。
 登记项保存表标识、协议类型、数组指针及 `ARRAY_SIZE` 得到的条目数。
 不使用逐行宏，不维护 extern 数组及手工数量枚举，不包含其他 `.c` 文件。
@@ -81,11 +83,17 @@ protocol/
 - 普通值回调只校验、转换或输出候选值；恢复默认、保存等不可撤销动作通过 DP 延后动作
   接口登记，不直接在校验回调中执行 I/O。接口只接受单个本地非持久写点，不允许派生写入
   或同时登记其他完成动作；可读取其他点辅助校验。
-- `tr_register_service.routes` 保留 `tr_segment` 地址段回调；未命中段时按转发表访问 DP。
-  产品当前没有额外地址段。IAP 完整 ADU 扩展在标准 Modbus PDU 校验之前调用，
-  保留扩展大包和广播语义，不改成普通测点回调。
+- `tr_register_service.device` 选择设备挂载的 `MB_TABLE_SEG_T` 协议段；
+  IAPv3 使用 20003、20049–20104、31996–31997 三段，填写实际线地址。
+  段按请求首地址匹配，在标准 PDU 校验前调用 `iap_route()`，保留变长升级包。
+  回调负责精确长度、功能码、会话及广播行为；命中错误不回退到点表。
+  注册时拒绝空回调、非法区间、重叠段和重复的协议段分组。
+- `tr_register_service.routes` 保留标准 `tr_segment` 地址段，执行完整寄存器范围检查；
+  协议段未命中时进入此处及普通转发表。产品当前没有额外的标准透传段。
+  `route_broadcast` 显式允许协议段收到广播，段外广播保持静默且无副作用。
 
-详见[回调归属决策](../../docs/adr/0002-process-point-callbacks.md)。
+详见[回调归属决策](../../docs/adr/0002-process-point-callbacks.md)及
+[协议段决策](../../docs/adr/0003-iap-protocol-segments.md)。
 
 ## 下发、轮询与掉电保存
 

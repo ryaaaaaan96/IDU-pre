@@ -6,6 +6,18 @@
 #include <transmit/transmit.h>
 #include <dataprocess/reference_tables.h>
 
+/* 参考地址段表布局；地址直接使用线地址，不隐式加一。
+ * 回调使用 Zephyr 完整 ADU，负责功能码、长度及广播语义。
+ * 命中后不再回退；-ENOENT 也作为非法地址返回给请求方。
+ */
+typedef int (*MB_SEG_CB)(int port_id, const struct modbus_adu *request,
+                         struct modbus_adu *response);
+typedef struct mb_table_seg_t {
+    uint16_t reg_addr;
+    uint16_t end_addr;
+    MB_SEG_CB func;
+} MB_TABLE_SEG_T, MB_TABLE_SEG_S;
+
 typedef enum {
     MB_MODE_SLAVE = 0, MB_MODE_SLEEP = 1, MB_MODE_CALLBACK = 2, MB_MODE_MAX,
 } MB_MODE_E;

@@ -115,10 +115,20 @@ IDU 的三张应用点表也使用这些原结构，通过设备表及默认/范
 它只支持单个本地非持久写点，不提交触发值，不支持混合或派生写入及重放。
 普通设置回调继续使用原有事务辅助函数，不应直接执行不可撤销操作。
 
-TR 保留 `tr_routes` / `tr_segment` 地址段处理与可选完整 ADU 扩展；
-`tr_register_service` 只组合这两项能力，不再依赖 `DP_PARAMS`。
-IAP 扩展仍先于标准请求长度校验。具体决策见
-[ADR 0002](adr/0002-process-point-callbacks.md)。
+参考 `app/cfg/equip/dev_cfg.c` 将三字段 `MB_TABLE_SEG_T` 挂到设备的
+`PRO_ADDR_SLAVE`。IDU 使用相同字段 `reg_addr / end_addr / func`，采用
+Zephyr 完整 ADU 回调参数；协议段按首地址匹配，在标准 PDU 校验前执行。
+IAP 能力、版本和升级区均由该表绑定，删除全局 `extension` 入口。
+
+参考 `platform/inc/modbus.h` 规定从机接收首地址加一，所以参考段表的
+20050–20104 对应线地址 20049–20103。IDU 直接填写线地址，保留当前接收器
+20049–20104 的入口边界，不引入隐式偏移。参考闭源库的段匹配和重叠策略不可见；
+IDU 明确采用首地址匹配、重叠拒绝、命中错误不回退的契约，不声称这些行为与闭源库一致。
+
+标准 `tr_routes` / `tr_segment` 保留，继续校验整个请求落在段内。
+`tr_register_service` 不依赖 `DP_PARAMS` 或 IAP。具体决策见
+[ADR 0002](adr/0002-process-point-callbacks.md)和
+[ADR 0003](adr/0003-iap-protocol-segments.md)。
 
 ## 点表的 Flash / RAM 分工
 
@@ -218,7 +228,8 @@ GD32E505 上每个 `stored_point` 从 32 字节缩至 24 字节；64 点容量�
 | `co_get_port_dev_bind_inf`、`co_set_dev_bind_status` | 依赖旧 DSP 设备发现/绑定模型，当前为静态 Zephyr 总线配置。 |
 | `tr_aes_pkt_send` | 缺少旧帧格式、密钥/IV、认证与重放约定；仅有 AES 算法不足以兼容线协议。 |
 
-原 `MB_TABLE_SEG_S` 原始分段回调、增量表、其他 TR 硬件控制命令以及 UPP 完整协议栈、
+`MB_TABLE_SEG_T` / `MB_TABLE_SEG_S` 已按参考三字段布局提供，但回调参数适配为
+Zephyr ADU，不兼容旧 `MB_PKT_DATA_T` 或原始字节响应 ABI。增量表、其他 TR 硬件控制命令以及 UPP 完整协议栈、
 IEC104/61850、MQTT/FTP/WEB、EGD、CAN/PLC 产品业务、旧日志/文件/升级服务和 ARC
 仍不在本次范围。已有 native 路由/分段/升级接口继续使用，不宣称兼容全部旧平台。
 

@@ -44,7 +44,7 @@ config TR_SERVER_SERVICE
     depends on TR_MODBUS_ADAPTER
 
 config TR_REGISTER_SERVICE
-    bool "Configured address segments and protocol extension"
+    bool "Configured protocol segments and standard address routes"
     depends on TR_MODBUS_ADAPTER
 
 

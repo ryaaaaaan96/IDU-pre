@@ -675,3 +675,31 @@ Zephyr Iterable Sections 按整表登记，DP 按标识校验并装配设备关�
 
 日志保存在工作区 `build/IDU-pre/process-callbacks/`，不纳入源码仓库。
 本轮未进行实板 Flash 掉电、RS485 性能或 DE 时序验证。
+
+## 2026-10-21 IAPv3 迁移到协议地址段
+
+IAPv3 从全局 `extension` 改为本地设备的 `PRO_ADDR_SLAVE` / `MB_TABLE_SEG_T`。
+协议段表与登记项在 Flash，回调继续使用 Zephyr 完整 ADU；普通点表与标准透传段
+保留原校验规则。决策见 [ADR 0003](adr/0003-iap-protocol-segments.md)。
+
+- `CCACHE_DISABLE=1 ASAN_OPTIONS=detect_leaks=0 bash applications/IDU-pre/tests/run.sh`
+  通过：45 次 native_sim 执行、298 项 Ztest PASS、0 FAIL。Python 共 21 项，
+  18 项通过，3 项因缺少外部 QuickLZ/SGZ 样本而按原条件跳过；主机工程换算
+  ASan/UBSan 检查通过。
+- 地址段回归覆盖：首尾地址命中、段外地址、跨段变长载荷、完整 1029 字节 ADU、
+  单元地址过滤、显式广播允许/禁止、段外广播不写参数、命中错误不回退到 writer；
+  空表/回调、倒置区间、重叠和重复协议组均拒绝，失败保留已安装路由。
+- 新增 `tests/iap/routed.conf`：真实 IAP 状态机经 TR 协议段入口运行，覆盖能力、版本、
+  登录、1 KiB 包、广播写、乱序补包、元数据原子校验、超时、Flash 故障、验签和升级。
+  该变体不启用 DP 处理线程、参数存储或 collect。原独立 IAP 及配置式 IAP 测试继续通过。
+- Iterable Sections 的设备装配支持 `PRO_ADDR_SLAVE`；协议段不增加 DP 点数、
+  普通转发数或轮询数。未启用 IAP 的产品点表/参数转发及标准段测试通过。
+  原五个持久参数的键、类型、顺序与 NVS 分区不变。
+- `CCACHE_DISABLE=1 ./applications/IDU-pre/build.sh` 通过；最终启用
+  `CONFIG_IDU_IAPV3=y`，MCUboot/IDU 镜像验签与 IAPv3 SGZ 导出成功。
+  IDU Flash 121960 B、RAM 102112 B；MCUboot Flash 36568 B、RAM 18096 B。
+  `nm` 确认产品协议段数组、登记项和服务配置均在 Flash 的只读区。
+- 构建/回归未出现编译警告或错误；文档本地链接及 `git diff --check` 通过。
+
+日志保存在工作区 `build/IDU-pre/iap-segments/`。本轮未进行实板 RS485 升级、
+物理 DE 时序或真实掉电验证。

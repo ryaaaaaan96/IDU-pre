@@ -28,7 +28,7 @@
 - 构建与测试产物放在工作区 `build/`，签名私钥放在 `build/keys/`，均不提交。
 - 分开记录主机测试、模拟器验证与实物验证，不能以编译通过代替实物验证。
 
-- 应用不再设置 `communication/`。`protocol/ports.c` 声明传输绑定并实现应用收发编排回调，`protocol.c` 选择转发服务、地址段并通过 `extension` 直接绑定 `iap_route()`；状态/命令在 process 表绑定回调，transmit 表只映射地址，模拟配置已移至 `tests/fixtures/`，产品不编译模拟从机。`main.c` 调用 `idu_ports_init()` 注册 CO/TR RAW 端口、应用回调和实际串口接入，`co_port_open()` 打开采集端口、co_init_bus 注册 idu_collect_bus，`tr_server_service()` 管理各转发口；`acquisition` 直接调用模块接口。IAP 由独立 Kconfig 开关启用，通用模拟后端仅用于模块测试；模块不得包含产品头文件或直接读取 IDU 设备树别名。
+- 应用不再设置 `communication/`。`protocol/ports.c` 声明传输绑定并实现应用收发编排回调，`protocol.c` 选择转发设备和广播策略，`tables/segments.c` 以 `MB_TABLE_SEG_T` 经 `PRO_ADDR_SLAVE` 挂载 IAP；协议段按首地址分派并自行校验变长报文，标准 `tr_segment` 保留完整范围检查；状态/命令在 process 表绑定回调，transmit 表只映射地址，模拟配置已移至 `tests/fixtures/`，产品不编译模拟从机。`main.c` 调用 `idu_ports_init()` 注册 CO/TR RAW 端口、应用回调和实际串口接入，`co_port_open()` 打开采集端口、co_init_bus 注册 idu_collect_bus，`tr_server_service()` 管理各转发口；`acquisition` 直接调用模块接口。IAP 由独立 Kconfig 开关启用，通用模拟后端仅用于模块测试；模块不得包含产品头文件或直接读取 IDU 设备树别名。
 
 - 不恢复旧 MV-IO 特殊协议、247 地址门控、跨空洞跳读、补零保留区、无效写 ACK 或旧 BOOT 路径迁移。当前 dp_/co_/tr_ 参考接口和实际采集设备点表继续保留；IAPv3 的线协议仍由 iap 模块维护。产品分区集中在 `bootloader/partitions.dtsi`，板级 DTS 引用，IAP 暂存/日志由 overlay 补充。
 

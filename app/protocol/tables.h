@@ -15,5 +15,6 @@ enum idu_table_id {
     IDU_TABLE_REMOTE_PROCESS,
     IDU_TABLE_COLLECT,
     IDU_TABLE_TRANSMIT,
+    IDU_TABLE_PROTOCOL_SEGMENTS,
 };
 #endif

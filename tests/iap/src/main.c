@@ -10,6 +10,33 @@
 #include <zephyr/ztest.h>
 #include <stdlib.h>
 #include <string.h>
+#if defined(CONFIG_TR_REGISTER_SERVICE)
+#include <transmit/registers.h>
+
+static const MB_TABLE_SEG_T upgrade_segments[] = {
+    {.reg_addr = 20003, .end_addr = 20003, .func = iap_route},
+    {.reg_addr = 20049, .end_addr = 20104, .func = iap_route},
+    {.reg_addr = 31996, .end_addr = 31997, .func = iap_route},
+};
+static const DEV_TABLE_S upgrade_device = {.dev_id = 1, .ptl_tbl_cfg = {
+    [2] = {.proto_type = PRO_ADDR_SLAVE, .sig_num = ARRAY_SIZE(upgrade_segments),
+           .pst_table = upgrade_segments},
+}};
+static const struct tr_register_service upgrade_service = {
+    .device = &upgrade_device, .route_broadcast = true,
+};
+#endif
+
+/* The routed variant exercises the real IAP state machine through TR dispatch;
+ * the standalone variants retain the transport-independent receiver contract. */
+static int dispatch(int iface, const struct modbus_adu *request, struct modbus_adu *response)
+{
+#if defined(CONFIG_TR_REGISTER_SERVICE)
+    return tr_register_route(iface, request, response, (void *)&upgrade_service);
+#else
+    return iap_route(iface, request, response);
+#endif
+}
 
 static struct modbus_adu rx, tx;
 static bool confirmed = true;
@@ -46,13 +73,13 @@ static int command(uint16_t reg, uint16_t value)
 {
     rx = (struct modbus_adu){.unit_id = 1, .fc = 6, .length = 4};
     sys_put_be16(reg, rx.data); sys_put_be16(value, rx.data + 2);
-    return iap_route(2, &rx, &tx);
+    return dispatch(2, &rx, &tx);
 }
 static int read_regs(uint16_t reg, uint16_t count)
 {
     rx = (struct modbus_adu){.unit_id = 1, .fc = 3, .length = 4};
     sys_put_be16(reg, rx.data); sys_put_be16(count, rx.data + 2);
-    return iap_route(2, &rx, &tx);
+    return dispatch(2, &rx, &tx);
 }
 static uint16_t word(uint16_t reg)
 { zassert_ok(read_regs(reg, 1)); return sys_get_be16(tx.data + 1); }
@@ -96,7 +123,7 @@ static int send_blob(unsigned number, bool broadcast, bool corrupt, const uint8_
     sys_put_be16(offset + length == sizeof(fixture_sgz) ? length : 0, rx.data + 11);
     memcpy(rx.data + 13, blob + offset, length);
     if (corrupt) { rx.data[13 + length - 1] ^= 1; }
-    return iap_route(2, &rx, &tx);
+    return dispatch(2, &rx, &tx);
 }
 static int packet_send(unsigned number, bool broadcast, bool corrupt)
 { return send_blob(number, broadcast, corrupt, fixture_sgz); }
@@ -110,6 +137,9 @@ static void full_receive(void)
 }
 static void *setup(void)
 {
+#if defined(CONFIG_TR_REGISTER_SERVICE)
+    zassert_ok(tr_register_attach(modbus_iface_get_by_name("RAW_2"), &upgrade_service));
+#endif
     phase = getenv("IDU_IAP_PHASE");
     zassert_ok(flash_area_open(DT_FIXED_PARTITION_ID(DT_NODELABEL(iap_staging)), &stage));
     zassert_ok(flash_area_open(DT_FIXED_PARTITION_ID(DT_NODELABEL(slot1_partition)), &slot));
@@ -187,15 +217,15 @@ ZTEST(iap, test_a_metadata_and_validation)
     zassert_equal(command(20083, 0xa1), IAP_ROUTE_SILENT);
     zassert_ok(read_regs(20099, 4)); zassert_equal(sys_get_be16(tx.data + 1), 1);
     zassert_equal(sys_get_be16(tx.data + 7), 1024);
-    rx.unit_id = 247; zassert_equal(iap_route(2, &rx, &tx), IAP_ROUTE_SILENT);
-    rx.unit_id = 1; zassert_equal(iap_route(3, &rx, &tx), IAP_ROUTE_SILENT);
-    rx.unit_id = 0; rx.fc = 4; zassert_ok(iap_route(2, &rx, &tx));
+    rx.unit_id = 247; zassert_equal(dispatch(2, &rx, &tx), IAP_ROUTE_SILENT);
+    rx.unit_id = 1; zassert_equal(dispatch(3, &rx, &tx), IAP_ROUTE_SILENT);
+    rx.unit_id = 0; rx.fc = 4; zassert_ok(dispatch(2, &rx, &tx));
     /* Combined login + reserved gap + packet geometry, nonstandard byte count. */
     rx = (struct modbus_adu){.unit_id = 1, .fc = 16, .length = 19};
     sys_put_be16(20083, rx.data); sys_put_be16(7, rx.data + 2); rx.data[4] = 0;
     sys_put_be16(0xaa, rx.data + 5); sys_put_be16(1024, rx.data + 15);
     sys_put_be16(DIV_ROUND_UP(sizeof(fixture_sgz), 1024), rx.data + 17);
-    zassert_ok(iap_route(2, &rx, &tx)); k_sleep(K_MSEC(10));
+    zassert_ok(dispatch(2, &rx, &tx)); k_sleep(K_MSEC(10));
     zassert_equal(word(20088), 1024); zassert_equal(state(), 1);
     zassert_ok(read_regs(20063, 8)); zassert_equal(tx.data[1], 0);
 }
@@ -224,7 +254,7 @@ ZTEST(iap, test_b_combined_login_and_packet)
     sys_put_be16(DIV_ROUND_UP(sizeof(fixture_sgz), 1024), rx.data + 17);
     sys_put_be16(1, rx.data + 19); sys_put_be16(1024, rx.data + 25);
     memcpy(rx.data + 27, fixture_sgz, 1024);
-    zassert_ok(iap_route(2, &rx, &tx)); k_sleep(K_MSEC(10));
+    zassert_ok(dispatch(2, &rx, &tx)); k_sleep(K_MSEC(10));
     zassert_equal(state(), 2); zassert_equal(word(20099), 2);
     zassert_ok(command(20083, 0x55)); k_sleep(K_MSEC(10)); zassert_equal(state(), 0);
 }
@@ -252,10 +282,10 @@ ZTEST(iap, test_c_sector_crossing_and_atomic_frame_rejection)
     sys_put_be16(20090, rx.data); sys_put_be16(4, rx.data + 2); rx.data[4] = 8;
     sys_put_be16(1, rx.data + 5); sys_put_be16(240, rx.data + 11);
     /* Metadata can be written separately, as in the old protocol. */
-    zassert_equal(iap_route(2, &rx, &tx), 0); /* metadata-only is valid */
+    zassert_equal(dispatch(2, &rx, &tx), 0); /* metadata-only is valid */
     rx.length = 15; sys_put_be16(5, rx.data + 2); rx.data[4] = 10;
     sys_put_be16(2, rx.data + 5); /* claims 240 bytes but contains only 2 */
-    zassert_equal(iap_route(2, &rx, &tx), IAP_ROUTE_SILENT);
+    zassert_equal(dispatch(2, &rx, &tx), IAP_ROUTE_SILENT);
     zassert_equal(word(20090), 1);
 }
 

@@ -1,4 +1,14 @@
 tests:
+  idu.iap.routed:
+    platform_allow: native_sim/native/64
+    integration_platforms:
+      - native_sim/native/64
+    extra_args:
+      - EXTRA_CONF_FILE=routed.conf
+    tags:
+      - modbus
+      - nvs
+      - mcuboot
   idu.iap.receiver:
     platform_allow: native_sim/native/64
     integration_platforms:

@@ -112,7 +112,7 @@ logical port and opaque source link/peer. Module code never includes product hea
 | Forwarding lifecycle | `tr_server_service()` | Interface, protocol attach callback, serial settings and recovery interval |
 | Register dispatch | `tr_register_route()` / `tr_register_write()` | Optional `routes` address segments; ordinary values go through DP tables |
 | Point status and commands | `DM_SIG_CFG_S.pf_sig_proc` | SET callback; `FLAG_READ_CALLBACK` enables GET; `dp_defer_para_action()` for validated single-point actions |
-| Optional protocol extension | `tr_register_service.extension` | Complete-ADU callback, e.g. `iap_route()` |
+| Protocol segments | `MB_TABLE_SEG_T` under the selected device’s `PRO_ADDR_SLAVE` | Start/end wire address and complete-ADU callback, e.g. `iap_route()` |
 | Acquisition port | `co_port_open()` | RTU client configuration or simulator instance |
 | Simulated device | `co_simulator_*()` | Register addresses, widths, limits and initial values |
 | Simulated model | `co_model_simulator_read()` | Model registry, device range and default-value callback |
@@ -120,9 +120,15 @@ logical port and opaque source link/peer. Module code never includes product hea
 Enable these independently with `TR_SERVER_SERVICE`, `TR_REGISTER_SERVICE` (requires the
 Modbus adapter, independently of DP parameter storage), `CO_SIMULATOR` and `CO_MODEL_SIMULATOR`. The product Kconfig
 selects defaults; standalone module consumers opt in. vport never interprets registers
-or commands. The optional register-service extension runs before standard PDU
-validation so IAP can validate its own extended FC16 packets. Returning `-ENOENT`
-continues normal point-table handling. Transmit has no dependency on IAP.
+or commands. `tr_register_service.device` selects the device’s protocol segments.
+These match the request start address before standard PDU validation; the handler
+validates function, exact length, payload bounds and session ownership. This supports
+extended IAP FC16 packets without relaxing ordinary Modbus limits. A matched handler’s
+`-ENOENT` becomes an address error instead of falling through. Duplicate segment groups,
+invalid ranges and overlapping protocol segments fail attachment. Unmatched requests
+continue through standard `tr_segment` routes and DP tables. Device views, tables and
+service configs must remain valid and immutable after attachment. Transmit has no
+dependency on IAP or parameter storage.
 
 Each server config owns one interface. The service keeps separate active/pending
 settings, applies changes asynchronously after admitted requests finish, and services
@@ -434,8 +440,8 @@ version-bound rather than a portable public extension API. See the
 
 Per-interface `tr_modbus_set_policy()` optionally replaces the unit filter after
 CRC/RAW validation. `route_broadcast` explicitly delegates broadcast handling and
-reply policy to the router. `tr_register_attach()` enables this only when an
-extension is configured; ordinary parameter broadcasts are always ignored without
+reply policy to the router. `tr_register_attach()` enables this only when the service explicitly
+sets `route_broadcast`; ordinary parameter broadcasts are always ignored without
 replying. A route returns `TR_MODBUS_SILENT` to consume a frame silently. The IDU
 product has no special unit 247 filter or ordered MV-IO window handler.
 

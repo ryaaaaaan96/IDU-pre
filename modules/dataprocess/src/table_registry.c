@@ -21,7 +21,8 @@ int dp_table_bind(const struct dp_device_binding *devices, size_t count,
         const struct dp_registered_table *t = &tables[i];
         if (!t->id || !t->rows || !t->count || t->count > UINT16_MAX ||
             (t->type != PRO_DATA_PROCESS && t->type != PRO_MB_MASTER &&
-             t->type != PRO_MB_SLAVE && t->type != PRO_UPP_MASTER)) { return -EINVAL; }
+             t->type != PRO_MB_SLAVE && t->type != PRO_UPP_MASTER &&
+             t->type != PRO_ADDR_SLAVE)) { return -EINVAL; }
         for (size_t j = 0; j < i; ++j) {
             if (tables[j].id == t->id) { return -EEXIST; }
         }

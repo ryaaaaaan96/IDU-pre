@@ -33,9 +33,11 @@ bool iap_ready(void);
 int iap_start(void);
 
 /* Caller supplies an already unit-filtered complete Modbus ADU, including
- * legacy oversized FC16 packets. Return 0 to reply, -ENOENT to pass through,
+ * legacy oversized FC16 packets. Return 0 to reply, -ENOENT for an unowned address,
  * IAP_ROUTE_SILENT to consume without a reply. No transport is registered here.
- * Interface IDs must be nonnegative. Multiple ports share one upload owner. */
+ * Interface IDs must be nonnegative. Multiple ports share one upload owner.
+ * When registered in a PRO_ADDR_SLAVE table, TR selects by start address and
+ * treats -ENOENT as an address error, never falling through to point writes. */
 #define IAP_ROUTE_SILENT (-ECANCELED)
 int iap_route(int iface, const struct modbus_adu *request, struct modbus_adu *response);
 

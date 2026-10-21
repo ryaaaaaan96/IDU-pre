@@ -9,7 +9,8 @@
 
 static const struct dp_device_binding bindings[] = {
     {.dev_id = 1, .coll_addr = 7,
-     .tables = {{20, PRO_DATA_PROCESS}, {30, PRO_MB_SLAVE}, {10, PRO_MB_MASTER}}},
+     .tables = {{20, PRO_DATA_PROCESS}, {30, PRO_MB_SLAVE}, {10, PRO_MB_MASTER},
+                {40, PRO_ADDR_SLAVE}}},
 };
 static DEV_TABLE_S devices[ARRAY_SIZE(bindings)];
 static unsigned reads, writes, flash_writes;
@@ -89,6 +90,11 @@ ZTEST(table_registry, test_discovery_and_independent_polling)
     zassert_equal(poll->fields[0].sig_id, 3);
     zassert_equal(poll->period_ms, 100);
     zassert_equal(devices[0].ptl_tbl_cfg[1].proto_type, PRO_MB_SLAVE);
+    /* 协议段不增加 DP 点数、轮询数或普通转发行数。 */
+    zassert_equal(devices[0].ptl_tbl_cfg[3].proto_type, PRO_ADDR_SLAVE);
+    zassert_equal(devices[0].ptl_tbl_cfg[3].sig_num, 1);
+    zassert_not_null(devices[0].ptl_tbl_cfg[3].pst_table);
+    zassert_equal(cfg->transmit_count, 4);
 }
 ZTEST(table_registry, test_invalid_bindings_leave_output_untouched)
 {
@@ -97,6 +103,7 @@ ZTEST(table_registry, test_invalid_bindings_leave_output_untouched)
         {.id = 20, .type = PRO_DATA_PROCESS, .rows = &dummy, .count = 1},
         {.id = 30, .type = PRO_MB_SLAVE, .rows = &dummy, .count = 1},
         {.id = 10, .type = PRO_MB_MASTER, .rows = &dummy, .count = 1},
+        {.id = 40, .type = PRO_ADDR_SLAVE, .rows = &dummy, .count = 1},
     };
     DEV_TABLE_S output, original;
     memset(&original, 0xa5, sizeof(original)); output = original;
@@ -106,11 +113,15 @@ ZTEST(table_registry, test_invalid_bindings_leave_output_untouched)
     entries[1].id = 30;
     zassert_equal(dp_table_bind(bindings, 1, entries, 2, &output), -ENOENT);
     entries[1].type = PRO_MB_MASTER;
-    zassert_equal(dp_table_bind(bindings, 1, entries, 3, &output), -EINVAL);
+    zassert_equal(dp_table_bind(bindings, 1, entries, 4, &output), -EINVAL);
     zassert_mem_equal(&output, &original, sizeof(output));
     entries[1].type = PRO_MB_SLAVE;
     entries[1].count = UINT16_MAX + 1U;
-    zassert_equal(dp_table_bind(bindings, 1, entries, 3, &output), -EINVAL);
+    zassert_equal(dp_table_bind(bindings, 1, entries, 4, &output), -EINVAL);
+    entries[1].count = 1;
+    entries[3].type = PRO_MB_SLAVE;
+    zassert_equal(dp_table_bind(bindings, 1, entries, 4, &output), -EINVAL);
+    zassert_mem_equal(&output, &original, sizeof(output));
 }
 ZTEST(table_registry, test_volatile_command_does_not_read_or_store)
 {

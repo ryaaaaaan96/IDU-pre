@@ -6,3 +6,4 @@ target_sources(app PRIVATE
   tables/collect.c
   tables/transmit.c
 )
+target_sources_ifdef(CONFIG_IDU_IAPV3 app PRIVATE tables/segments.c)

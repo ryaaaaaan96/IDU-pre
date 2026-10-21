@@ -6,9 +6,6 @@
 #include "ports.h"
 #include <transmit/registers.h>
 #include <zephyr/sys/util.h>
-#if defined(CONFIG_IDU_IAPV3)
-#include <iap/iap.h>
-#endif
 #include <transmit/server.h>
 #include <zephyr/device.h>
 
@@ -16,7 +13,11 @@
 static const struct dp_device_binding bindings[] = {
     {.dev_id = IDU_DEV_LOCAL,
      .tables = {{IDU_TABLE_LOCAL_PROCESS, PRO_DATA_PROCESS},
-                {IDU_TABLE_TRANSMIT, PRO_MB_SLAVE}}},
+                {IDU_TABLE_TRANSMIT, PRO_MB_SLAVE},
+#if defined(CONFIG_IDU_IAPV3)
+                {IDU_TABLE_PROTOCOL_SEGMENTS, PRO_ADDR_SLAVE},
+#endif
+               }},
     {.dev_id = IDU_DEV_REMOTE_IO, .port = 0, .coll_addr = 1,
      .tables = {{IDU_TABLE_REMOTE_PROCESS, PRO_DATA_PROCESS},
                 {IDU_TABLE_COLLECT, PRO_MB_MASTER}}},
@@ -76,10 +77,11 @@ int idu_register_point_tables(void)
     return 0;
 }
 
-/* 状态和命令回调归 process 表；此处只绑定协议扩展和地址段。 */
+/* 状态和命令回调归 process 表；协议段随本地设备统一装配。 */
 static const struct tr_register_service idu_registers = {
+    .device = &devices[0],
 #if defined(CONFIG_IDU_IAPV3)
-    .extension = iap_route,
+    .route_broadcast = true,
 #endif
 };
 

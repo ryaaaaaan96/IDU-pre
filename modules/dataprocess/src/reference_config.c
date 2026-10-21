@@ -480,6 +480,8 @@ static int compile_tables(void)
             if (!t) { compiled.point_count += group->sig_num; continue; }
             if (group->proto_type == PRO_MB_SLAVE) { compiled.transmit_count += group->sig_num; }
             else if (group->proto_type == PRO_MB_MASTER) { /* Count below. */ }
+            /* 协议段由 TR 校验/执行，不生成 DP 测点或普通转发行。 */
+            else if (group->proto_type == PRO_ADDR_SLAVE) { continue; }
             else if (group->proto_type == PRO_UPP_MASTER) {
                 const UPP_M_MOD_REG *models = group->pst_table;
                 if (!models->p_model_ary || !models->model_num || models->cfg_mode != 0 ||

@@ -501,12 +501,12 @@ ZTEST(forwarding, test_register_service_retains_segment_callbacks)
     zassert_equal(words[0], 500);
 }
 
-static atomic_t extension_calls;
-static int protocol_extension(int iface, const struct modbus_adu *rx, struct modbus_adu *tx)
+static atomic_t protocol_calls;
+static int protocol_packet(int iface, const struct modbus_adu *rx, struct modbus_adu *tx)
 {
     zassert_equal(iface, server);
-    if (rx->length < 2 || sys_get_be16(rx->data) != 20049) { return -ENOENT; }
-    atomic_inc(&extension_calls);
+    zassert_true(sys_get_be16(rx->data) >= 20049 && sys_get_be16(rx->data) <= 20104);
+    atomic_inc(&protocol_calls);
     zassert_equal(rx->length, 1029);
     zassert_equal(sys_get_be16(rx->data + 2), 512);
     zassert_equal(rx->data[1028], 0xa5);
@@ -515,15 +515,24 @@ static int protocol_extension(int iface, const struct modbus_adu *rx, struct mod
     return rx->unit_id ? 0 : TR_MODBUS_SILENT;
 }
 
-ZTEST(forwarding, test_extension_receives_complete_adu_before_standard_validation)
+ZTEST(forwarding, test_protocol_segment_receives_complete_adu_before_standard_validation)
 {
-    static const struct tr_register_service service = {.extension = protocol_extension};
+    static const MB_TABLE_SEG_T segments[] = {
+        {.reg_addr = 20049, .end_addr = 20104, .func = protocol_packet},
+    };
+    static const DEV_TABLE_S device = {.dev_id = 1, .ptl_tbl_cfg = {
+        [2] = {.proto_type = PRO_ADDR_SLAVE, .sig_num = ARRAY_SIZE(segments),
+               .pst_table = segments},
+    }};
+    static const struct tr_register_service service = {
+        .device = &device, .route_broadcast = true,
+    };
     static struct modbus_adu rx;
     rx = (struct modbus_adu){.unit_id = 16, .fc = 16, .length = 1029};
     sys_put_be16(20049, rx.data); sys_put_be16(512, rx.data + 2);
     rx.data[1028] = 0xa5;
     zassert_ok(tr_register_attach(server, &service));
-    atomic_clear(&extension_calls);
+    atomic_clear(&protocol_calls);
     capture_only = true;
     k_sem_reset(&captured);
     zassert_ok(modbus_raw_submit_rx(server, &rx));
@@ -532,12 +541,40 @@ ZTEST(forwarding, test_extension_receives_complete_adu_before_standard_validatio
     rx.unit_id = 0;
     zassert_ok(modbus_raw_submit_rx(server, &rx));
     zassert_equal(k_sem_take(&captured, K_MSEC(100)), -EAGAIN);
-    zassert_equal(atomic_get(&extension_calls), 2);
+    zassert_equal(atomic_get(&protocol_calls), 2);
     rx.unit_id = 247;
     zassert_ok(modbus_raw_submit_rx(server, &rx));
     zassert_equal(k_sem_take(&captured, K_MSEC(100)), -EAGAIN);
-    zassert_equal(atomic_get(&extension_calls), 2);
-    /* Reattaching the product service removes the extension and its policy. */
+    zassert_equal(atomic_get(&protocol_calls), 2);
+    /* Match the final start address even though a variable payload extends past it. */
+    rx.unit_id = 16; sys_put_be16(20104, rx.data);
+    zassert_ok(modbus_raw_submit_rx(server, &rx));
+    zassert_ok(k_sem_take(&captured, K_MSEC(100)));
+    zassert_equal(atomic_get(&protocol_calls), 3);
+    /* No protocol segment at either adjacent address. */
+    static const uint16_t adjacent[] = {20048, 20105};
+    for (size_t i = 0; i < ARRAY_SIZE(adjacent); ++i) {
+        sys_put_be16(adjacent[i], rx.data);
+        zassert_ok(modbus_raw_submit_rx(server, &rx));
+        zassert_ok(k_sem_take(&captured, K_MSEC(100)));
+        zassert_equal(captured_adu.fc, 16 | 0x80);
+    }
+    zassert_equal(atomic_get(&protocol_calls), 3);
+    /* Ordinary broadcasts remain side-effect free with protocol broadcasts enabled. */
+    rx = (struct modbus_adu){.unit_id = 0, .fc = 6, .length = 4};
+    sys_put_be16(30459, rx.data); sys_put_be16(45, rx.data + 2);
+    zassert_ok(modbus_raw_submit_rx(server, &rx));
+    zassert_equal(k_sem_take(&captured, K_MSEC(100)), -EAGAIN);
+    zassert_equal(saved(), 1);
+    /* Explicitly disabling protocol broadcasts suppresses callbacks. */
+    const struct tr_register_service unicast = {.device = &device};
+    zassert_ok(tr_register_attach(server, &unicast));
+    rx = (struct modbus_adu){.unit_id = 0, .fc = 16, .length = 1029};
+    sys_put_be16(20049, rx.data); sys_put_be16(512, rx.data + 2); rx.data[1028] = 0xa5;
+    zassert_ok(modbus_raw_submit_rx(server, &rx));
+    zassert_equal(k_sem_take(&captured, K_MSEC(100)), -EAGAIN);
+    zassert_equal(atomic_get(&protocol_calls), 3);
+    /* Reattaching the product service removes the test protocol segments/policy. */
     zassert_ok(attach_profile());
     rx.unit_id = 16;
     zassert_ok(modbus_raw_submit_rx(server, &rx));
@@ -545,6 +582,59 @@ ZTEST(forwarding, test_extension_receives_complete_adu_before_standard_validatio
     zassert_equal(captured_adu.fc, 16 | 0x80);
     zassert_equal(captured_adu.data[0], MODBUS_EXC_ILLEGAL_DATA_VAL);
     capture_only = false;
+}
+
+static int unhandled_protocol(int iface, const struct modbus_adu *rx, struct modbus_adu *tx)
+{
+    ARG_UNUSED(iface); ARG_UNUSED(rx); ARG_UNUSED(tx);
+    return -ENOENT;
+}
+
+ZTEST(forwarding, test_protocol_error_never_falls_through_to_point_writer)
+{
+    static const MB_TABLE_SEG_T segments[] = {
+        {.reg_addr = 30459, .end_addr = 30459, .func = unhandled_protocol},
+    };
+    static const DEV_TABLE_S device = {.dev_id = 1, .ptl_tbl_cfg = {
+        [2] = {.proto_type = PRO_ADDR_SLAVE, .sig_num = ARRAY_SIZE(segments),
+               .pst_table = segments},
+    }};
+    const struct tr_register_service service = {.device = &device};
+    zassert_ok(tr_register_attach(server, &service));
+    zassert_equal(modbus_write_holding_reg(client, 16, 30459, 45),
+                  MODBUS_EXC_ILLEGAL_DATA_ADDR);
+    zassert_equal(saved(), 1);
+    uint16_t words[4];
+    zassert_ok(modbus_read_holding_regs(client, 16, 32000, words, 4));
+    zassert_ok(attach_profile());
+}
+
+ZTEST(forwarding, test_invalid_protocol_segments_preserve_installed_router)
+{
+    MB_TABLE_SEG_T segments[] = {
+        {.reg_addr = 100, .end_addr = 101, .func = unhandled_protocol},
+        {.reg_addr = 101, .end_addr = 102, .func = unhandled_protocol},
+    };
+    DEV_TABLE_S device = {.dev_id = 1, .ptl_tbl_cfg = {
+        [2] = {.proto_type = PRO_ADDR_SLAVE, .sig_num = ARRAY_SIZE(segments),
+               .pst_table = segments},
+    }};
+    const struct tr_register_service service = {.device = &device};
+    zassert_equal(tr_register_attach(server, &service), -EEXIST);
+    segments[1].reg_addr = 103;
+    zassert_equal(tr_register_attach(server, &service), -EINVAL); /* Reversed. */
+    segments[1].end_addr = 104; segments[1].func = NULL;
+    zassert_equal(tr_register_attach(server, &service), -EINVAL);
+    segments[1].func = unhandled_protocol;
+    device.ptl_tbl_cfg[3] = device.ptl_tbl_cfg[2];
+    zassert_equal(tr_register_attach(server, &service), -EEXIST);
+    device.ptl_tbl_cfg[3] = (DEV_TBL_CFG_S){0};
+    device.ptl_tbl_cfg[2].pst_table = NULL;
+    zassert_equal(tr_register_attach(server, &service), -EINVAL);
+    device.ptl_tbl_cfg[2].pst_table = segments; device.ptl_tbl_cfg[2].sig_num = 0;
+    zassert_equal(tr_register_attach(server, &service), -EINVAL);
+    uint16_t words[4];
+    zassert_ok(modbus_read_holding_regs(client, 16, 32000, words, 4));
 }
 
 ZTEST_SUITE(forwarding, NULL, setup, before, NULL, NULL);

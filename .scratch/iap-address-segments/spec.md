@@ -1,6 +1,6 @@
 # IAPv3 地址段回调迁移方案
 
-Status: proposed
+Status: accepted
 
 ## 目标和现状
 
@@ -28,7 +28,7 @@ Status: proposed
 
 参考库没有公开地址段匹配、重叠处理和优先级的实现，不能宣称完整行为兼容。
 
-## 建议的明确规则（待用户确认）
+## 已确认的明确规则
 
 1. 增加与参考工程同名、同三字段的 `MB_TABLE_SEG_T`，使用 Zephyr/C 类型。
    回调参数使用现有完整 `modbus_adu` 请求/响应，不引入 ARC 或旧解析结构。
@@ -59,4 +59,8 @@ Status: proposed
 
 ## Comments
 
-当前只完成只读调查与迁移方案；尚未修改运行代码。等待用户确认方案后实施。
+2026-10-21：用户回复“按照这个方案来”，方案已确认，开始实施。
+
+实现完成：段表见 `app/protocol/tables/segments.c`；设备挂载、广播策略及协议段
+分派已接入，独立 `extension` 已删除。45 次 native_sim、298 项 Ztest 与 IDU/IAPv3
+构建通过，详细结果见 [验证记录](../../docs/testing.md)。未进行实板测试。
