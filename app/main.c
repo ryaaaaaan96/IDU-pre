@@ -2,82 +2,14 @@
 #include "process/idu_process.h"
 #include "protocol/inc/protocol.h"
 #include "status/idu_status.h"
-#include <collect/collect.h>
-#include <collect/port.h>
-#include <dataprocess/params.h>
-#include <dataprocess/process.h>
 #include <gpio/idu_inputs.h>
-#include <platform_callback.h>
 #ifdef CONFIG_IDU_IAPV3
 #include <iap/iap.h>
 #endif
 #include <errno.h>
 #include <zephyr/logging/log.h>
-#include <zephyr/storage/flash_map.h>
 
 LOG_MODULE_REGISTER(idu_main, LOG_LEVEL_INF);
-
-static int start_points(void)
-{
-    int err = idu_register_point_tables();
-
-    if (!err) {
-        err = dp_init();
-    }
-    if (err) {
-        return err;
-    }
-
-    const struct dp_equip_cfg *config = dp_config();
-
-    /* 参数恢复可能读取下游设备，必须先注册所有采集总线。 */
-    err = idu_connect_point_services();
-    if (!err) { err = idu_ports_init(); }
-    if (err) {
-        return err;
-    }
-    int iface = co_port_open(&idu_collect_port);
-
-    if (iface < 0) {
-        return iface;
-    }
-    err = co_init_bus(config, &idu_collect_bus);
-    if (err) {
-        return err;
-    }
-    const uint8_t storage_id = DT_FIXED_PARTITION_ID(DT_ALIAS(idu_settings));
-
-    /* 保留降级策略：存储不可用时可采集，但禁止持久参数写入和试运行确认。 */
-    err = dp_params_init(config, storage_id);
-    if (err) {
-        LOG_ERR("Parameter storage unavailable (%d); persistent writes disabled", err);
-    } else {
-        err = dp_params_recover();
-        if (err) {
-            LOG_WRN("Parameter transaction awaiting readback: %d", err);
-        }
-    }
-
-    /* INIT 和已注册定时任务就绪后才启动轮询。 */
-    static const struct dp_process_plan process_plan = {
-        .initialize_all = true,
-        .init_keys = DP_PROCESS_DEFAULT_INIT_KEYS,
-        .init_count = DP_PROCESS_DEFAULT_COUNT,
-        .timers = DP_PROCESS_DEFAULT_TIMERS,
-        .timer_count = DP_PROCESS_DEFAULT_COUNT,
-    };
-
-    err = dp_process_start(&process_plan);
-    if (!err) {
-        err = dp_reference_start();
-    }
-    if (!err) {
-        idu_start_point_tasks();
-        err = co_start();
-        if (!err) { idu_start_collect_task(); }
-    }
-    return err;
-}
 
 int idu_startup(struct idu_status *status)
 {
@@ -93,16 +25,13 @@ int idu_startup(struct idu_status *status)
     if (!err) {
         err = idu_inputs_init();
     }
-    if (!err) {
-        err = start_points();
-    }
 #ifdef CONFIG_IDU_IAPV3
     if (!err) {
         err = iap_start();
     }
 #endif
     if (!err) {
-        err = idu_start_forwarding();
+        err = idu_protocol_init();
     }
     if (err) {
         idu_status_fail(status, IDU_STATUS_STARTING, err);

@@ -7,7 +7,8 @@ target_include_directories(app PRIVATE ../../app ../../modules/iap/include
   ../../modules/gpio/include ../../modules/watchdog/include ../../modules/transmit/include
   ../../modules/dataprocess/include ../../modules/collect/include ../../modules/vport/include)
 target_sources(app PRIVATE src/main.c ../../app/main.c
-  ../../app/acquisition/acquisition.c ../../app/status/status.c)
+  ../../app/acquisition/acquisition.c ../../app/status/status.c
+  ../../app/protocol/init.c)
 # Ztest owns main; expose the real application's startup function to the fixture.
 set_source_files_properties(../../app/main.c PROPERTIES
   COMPILE_DEFINITIONS "main=idu_application_main")

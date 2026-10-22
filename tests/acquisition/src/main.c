@@ -1,3 +1,4 @@
+#include <dataprocess/acquisition.h>
 #include "protocol/inc/protocol.h"
 #include <transmit/forward.h>
 #include "acquisition/idu_acquisition.h"
@@ -18,9 +19,9 @@
 /* main.c keeps startup local to the application entry, without a public header. */
 int idu_startup(struct idu_status *status);
 
-enum service { WATCHDOG_INIT, LED_START, INPUTS_INIT, TABLES_INIT, DP_INIT,
+enum service { WATCHDOG_INIT, LED_START, INPUTS_INIT, IAP_INIT, TABLES_INIT, DP_INIT, DATA_BIND, TASKS_PREPARE,
                NETWORK_INIT, PORT_OPEN, COLLECT_INIT, PARAMS_INIT, PARAMS_RECOVER,
-               PROCESS_INIT, REFERENCE_INIT, COLLECT_START, IAP_INIT, FORWARD_INIT,
+               PROCESS_INIT, REFERENCE_INIT, COLLECT_START, FORWARD_INIT,
                SAMPLE, PUBLISH, PROTOCOL, LED, CHECKPOINT, WATCHDOG_PROGRESS, SERVICES };
 static int errors[SERVICES];
 static unsigned calls[SERVICES], kicks, stops;
@@ -31,6 +32,7 @@ static struct idu_snapshot published;
 static struct idu_status acquisition;
 static int previous_startup_service;
 static uint16_t parameter_flags;
+static unsigned workers_started;
 static const struct dp_equip_cfg point_config;
 const struct co_bus_cfg idu_collect_bus = {0};
 const struct co_port_config idu_collect_port;
@@ -43,6 +45,8 @@ static int service(enum service service)
         [INPUTS_INIT] = IDU_STATUS_STARTING,
         [TABLES_INIT] = IDU_STATUS_STARTING,
         [DP_INIT] = IDU_STATUS_STARTING,
+        [DATA_BIND] = IDU_STATUS_STARTING,
+        [TASKS_PREPARE] = IDU_STATUS_STARTING,
         [NETWORK_INIT] = IDU_STATUS_STARTING,
         [PORT_OPEN] = IDU_STATUS_STARTING,
         [COLLECT_INIT] = IDU_STATUS_STARTING,
@@ -73,9 +77,19 @@ int watchdog_start(struct watchdog *monitor, const struct watchdog_config *confi
 { return service(WATCHDOG_INIT); }
 int idu_inputs_init(void) { return service(INPUTS_INIT); }
 int idu_register_point_tables(void) { return service(TABLES_INIT); }
-int idu_connect_point_services(void) { return 0; }
-void idu_start_point_tasks(void) {}
-void idu_start_collect_task(void) {}
+int idu_dp_tasks_prepare(void) { return service(TASKS_PREPARE); }
+int idu_co_tasks_prepare(void) { return 0; }
+void idu_dp_tasks_start(void) { workers_started |= 1; }
+void idu_co_tasks_start(void) { workers_started |= 2; }
+int co_set_data_callbacks(const struct co_data_callbacks *callbacks)
+{
+    zassert_equal_ptr(callbacks->sample, dp_accept_samples);
+    return service(DATA_BIND);
+}
+int dp_accept_samples(struct dp_point_batch *batch, bool sync) { return 0; }
+int dp_initialize_acquired_device(uint16_t dev_id) { return 0; }
+int32_t co_dp_fast_set(PARA_DATA_S *data, PARA_SET_STATUS status) { return 0; }
+int32_t dp_para_reg_set_func(PARA_SET_FUNC callback) { return 0; }
 int dp_init(void) { return service(DP_INIT); }
 const struct dp_equip_cfg *dp_config(void) { return &point_config; }
 int idu_ports_init(void)
@@ -191,6 +205,7 @@ static void reset(void)
     indicator_on = false;
     previous_startup_service = -1;
     parameter_flags = DP_PARAM_STORAGE_READY;
+    workers_started = 0;
 }
 
 static void before(void *fixture)
@@ -222,9 +237,18 @@ ZTEST(acquisition, test_startup_failure_stops_before_later_services)
     }
 }
 
+ZTEST(acquisition, test_failed_forwarding_never_starts_acquisition)
+{
+    errors[FORWARD_INIT] = -EIO;
+    zassert_equal(idu_startup(&acquisition), -EIO);
+    zassert_equal(workers_started, 0,
+                  "Do not release acquisition before local protocol assembly completes");
+}
+
 ZTEST(acquisition, test_success_publishes_complete_sample_and_checks_trial_health)
 {
     zassert_ok(idu_startup(&acquisition));
+    zassert_equal(workers_started, 3);
     zassert_ok(idu_acquisition_cycle(&acquisition));
     zassert_true(published.valid);
     zassert_equal(published.di, 0x1234);

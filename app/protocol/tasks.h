@@ -7,4 +7,6 @@ void idu_dp_tasks_start(void);
 int idu_co_tasks_prepare(void);
 void idu_co_tasks_start(void);
 
+int idu_start_forwarding(void);
+
 #endif

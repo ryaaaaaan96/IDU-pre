@@ -8,7 +8,10 @@ IAPv3 的启停只影响升级协议段，不切换业务点表。
 
 ```text
 protocol/
-├── protocol.c       # 设备关联、周期转换、服务配置、地址段和 IAP 注册
+├── protocol.c       # 数据设备与独立转发入口的静态关联
+├── init.c           # 模块连接、参数加载/恢复和统一任务放行
+├── tasks.c          # 应用创建 DP/CO/TR 执行上下文与通信维护
+├── tasks.h          # 内部任务编排接口
 ├── ports.c          # 实际端口映射、共享 RS485 事务锁及收发编排
 ├── ports.h          # 内部链路标识
 ├── tables.h         # 内部表标识及登记类型引用
@@ -23,10 +26,12 @@ protocol/
 ```
 
 `forwarding.c` 和 `parameters.c` 已删除。参数状态/命令由 `tables/process.c` 绑定回调，
-`tables/transmit.c` 映射北向地址；`tables/segments.c` 通过设备的
-`PRO_ADDR_SLAVE` 绑定 IAPv3 地址段，`protocol.c` 选择设备、服务和广播策略。
+`tables/transmit.c` 映射北向地址；`tables/segments.c` 通过独立转发入口的
+协议段配置绑定 IAPv3，`protocol.c` 选择数据设备、转发表和广播策略。
 参数 Flash 保存实现位于 DP 模块，升级暂存和验签位于 IAP 模块。
-`main.c` 仍负责明确的启动顺序，不通过 SYS_INIT 隐藏业务依赖。
+`main.c` 启动硬件、状态和可选 IAP 后调用 `idu_protocol_init()`。
+协议层完成本地装配后才放行采集和处理任务，不等待远端上线，不通过 SYS_INIT 隐藏业务依赖。
+本地采样只查询已锁存的协议维护故障，不承担首次转发启动或周期维护。
 
 ## 分散登记与设备关联
 
@@ -48,8 +53,10 @@ transmit 的 `TR_TABLE_DEFAULT_BYTE_ORDER`。这些是编译期字段常量，�
 
 北向使用独立 `tr_forward_cfg idu_forwarding`，声明转发身份、逻辑口、普通转发表、可选协议段和广播策略。
 缺省段标识和广播策略使用 TR 的 `TR_FORWARD_DEFAULT_*`，无需 process 或七槽占位。
-采样循环调用 `tr_forward_service(&idu_forwarding, sample.address)`；TR 内部装配 RAW 服务，
-应用通过 `ports.c` 登记实际收发回调。没有绑定逻辑口时返回 `-ENOTCONN`，不会选择其他端口。
+协议层先通过 `tr_forward_init()` 显式装配 RAW 服务，之后由应用维护任务调用 `tr_forward_service()`。
+接收和重配置队列由应用创建并绑定，`ports.c` 登记实际收发回调。
+北向站号由 `CONFIG_IDU_FORWARD_UNIT` 在初始化确定，不随后续 GPIO 样本变化。
+没有绑定逻辑口时返回 `-ENOTCONN`，不会选择其他端口。
 
 所有点表、默认值与配置声明在 Flash。DP 的小型设备关联视图、TR 的入口映射/生命周期视图
 留在 RAM，不复制完整点表；执行行仍在调用者栈上按需转换。
@@ -188,7 +195,8 @@ DP 初始化成功后固定选择，拒绝重新注册。
 ## 同线 RS485 联调
 
 产品不编译模拟从机。`ports.c` 将 CO/TR 两个 RAW 逻辑口接入同一个 USART2/RS485。
-南向地址为 1，IDU 拨码必须使用不同地址，如 2。设备 ID、从机地址和寄存器地址相互独立。
+当前南向地址为 1、2，北向在 .conf 显式配置为 16，必须避免同线地址冲突。
+拨码采样仍是本地测点，不自动修改本次初始化确定的北向站号；设备 ID、从机地址和寄存器地址相互独立。
 本机锁覆盖南向请求到响应/超时，不具备外部多主仲裁；等待南向响应时不匹配的北向帧会被丢弃。
 外部主站需留出采集窗口，实际性能和 DE 时序仍需实板测试。
 详见[端口说明](../../docs/communication-ports.md)。

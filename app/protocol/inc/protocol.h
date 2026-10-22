@@ -7,11 +7,8 @@
 
 /* 注册产品点表回调；随后由调用者执行通用模块 dp_init()。 */
 int idu_register_point_tables(void);
-/* 显式连接采集样本、初始化处理及同步参数下发，先于参数加载。 */
-int idu_connect_point_services(void);
-void idu_start_point_tasks(void);
-void idu_start_collect_task(void);
-int idu_start_forwarding(void);
+/* 完成本地协议装配后放行任务，不等待远端上线。 */
+int idu_protocol_init(void);
 /* 已锁存的本地通信维护故障，不驱动首次启动或采样。 */
 int idu_protocol_error(void);
 const DEV_TABLE_S *idu_device_table(void);
