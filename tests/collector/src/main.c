@@ -1,3 +1,4 @@
+#include "../../fixtures/dp_tasks.h"
 #include "../../fixtures/point_connections.h"
 #include <collect/collect.h>
 #include <collect/port.h>
@@ -131,7 +132,7 @@ static void *setup(void)
     const struct co_bus_cfg bus = {
         .id = 0, .iface = -1, .transfer = transfer, .initialize = initialize,
     };
-    zassert_ok(dp_init_config(&equipment));
+    zassert_ok(dp_init_config(&equipment)); fixture_start_dp();
     if (!IS_ENABLED(CONFIG_CO_MODBUS_ADAPTER)) {
         zassert_false(IS_ENABLED(CONFIG_MODBUS_CLIENT));
         zassert_false(IS_ENABLED(CONFIG_TRANSMIT));

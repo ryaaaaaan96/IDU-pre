@@ -1,3 +1,4 @@
+#include "../../fixtures/dp_tasks.h"
 #include <dataprocess/params.h>
 #include <dataprocess/process.h>
 #include <zephyr/ztest.h>
@@ -131,7 +132,7 @@ static const struct dp_params_transport transport = {
 
 static void *setup(void)
 {
-    zassert_ok(dp_init_config(&equipment));
+    zassert_ok(dp_init_config(&equipment)); fixture_start_dp();
 #if defined(CONFIG_DP_PARAMS)
     const struct dp_params_transport invalid = {.read = read_words};
     zassert_equal(dp_params_set_transport(&invalid), -EINVAL);

@@ -26,7 +26,11 @@ transmit 提供。数据池数值采用主机字节序、低字在前。
 调用无参数 `dp_init()`。支持范围与反汇编证据见
 [参考平台对照](../../docs/reference-platform.md)。以下是独立的 Zephyr 扩展接口。
 
-`dp_init_config()` 接收 Zephyr 原生静态设备配置。应用线程通过 `dataprocess/points.h` 提交本地遥测：
+`dp_init_config()` 接收 Zephyr 原生静态设备配置，不创建或启动处理线程。
+应用创建线程，以 `dp_samples_task()` 作为样本消费者入口，启用业务处理时另以
+`dp_business_task()` 作为业务消费者入口，在本地装配完成后放行。
+队列等待和处理算法仍归模块，线程、栈与放行时机归应用。
+应用线程通过 `dataprocess/points.h` 提交本地遥测：
 
 ```c
 int dp_submit_sig_value(struct dp_key key, const uint16_t *words, size_t word_count,

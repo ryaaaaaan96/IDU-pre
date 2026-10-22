@@ -456,7 +456,7 @@ bool dp_healthy(uint32_t max_idle_ms)
            max_idle_ms;
 }
 
-static void process_thread(void *a, void *b, void *c)
+void dp_samples_task(void *a, void *b, void *c)
 {
     ARG_UNUSED(a);
     ARG_UNUSED(b);
@@ -557,9 +557,6 @@ static void process_thread(void *a, void *b, void *c)
         complete_ticket(batch.ticket);
     }
 }
-
-K_THREAD_DEFINE(dp_process_tid, CONFIG_DP_POINTS_STACK_SIZE,
-                process_thread, NULL, NULL, NULL, 5, 0, 0);
 
 const struct dp_equip_cfg *dp_config(void) { return equipment; }
 

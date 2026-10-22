@@ -60,6 +60,8 @@ int dp_process_execute(const struct dp_process_request *request,
  */
 int dp_process_submit(const struct dp_process_request *request,
                        dp_process_done_fn done, void *user);
+/* Application-created business worker, independent of the sample consumer. */
+void dp_business_task(void *unused1, void *unused2, void *unused3);
 int dp_txn_get(struct dp_process_ctx *ctx, struct dp_key key,
                 bool old, struct dp_value *value);
 bool dp_txn_contains(struct dp_process_ctx *ctx, struct dp_key key);

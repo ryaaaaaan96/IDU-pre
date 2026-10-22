@@ -73,6 +73,7 @@ int watchdog_start(struct watchdog *monitor, const struct watchdog_config *confi
 int idu_inputs_init(void) { return service(INPUTS_INIT); }
 int idu_register_point_tables(void) { return service(TABLES_INIT); }
 int idu_connect_point_services(void) { return 0; }
+void idu_start_point_tasks(void) {}
 int dp_init(void) { return service(DP_INIT); }
 const struct dp_equip_cfg *dp_config(void) { return &point_config; }
 int idu_ports_init(void)

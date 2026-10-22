@@ -1,3 +1,4 @@
+#include "../../fixtures/dp_tasks.h"
 #include "../../fixtures/point_connections.h"
 #include "model_fixture.h"
 #include <collect/collect.h>
@@ -59,7 +60,7 @@ static int transfer(void *user, uint16_t dev_id, struct modbus_adu *adu)
 
 static void *setup(void)
 {
-    zassert_ok(dp_init_config(&cfg));
+    zassert_ok(dp_init_config(&cfg)); fixture_start_dp();
     for (size_t i = 0; i < ARRAY_SIZE(peers); ++i) {
         struct co_bus_cfg bus = {
             .id = i, .iface = -1, .simulated = i == 0,

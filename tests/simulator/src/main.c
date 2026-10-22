@@ -1,3 +1,4 @@
+#include "../../fixtures/dp_tasks.h"
 #include <collect/port.h>
 #include <collect/simulator.h>
 #include <zephyr/ztest.h>
@@ -33,7 +34,7 @@ static int clients[2];
 
 static void *setup(void)
 {
-    zassert_ok(dp_init_config(&equipment));
+    zassert_ok(dp_init_config(&equipment)); fixture_start_dp();
     for (size_t i = 0; i < ARRAY_SIZE(sims); ++i) {
         struct co_port_config port = {.simulator = &sims[i], .simulation = &configs[i]};
         clients[i] = co_port_open(&port);

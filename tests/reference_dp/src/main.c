@@ -1,3 +1,4 @@
+#include "../../fixtures/dp_tasks.h"
 #include <data_process.h>
 #include <dataprocess/points.h>
 #include <dataprocess/process.h>
@@ -98,7 +99,7 @@ static const struct dp_equip_cfg config = {.points = points, .point_count = ARRA
 
 static void *setup(void)
 {
-    zassert_ok(dp_init_config(&config));
+    zassert_ok(dp_init_config(&config)); fixture_start_dp();
     return NULL;
 }
 

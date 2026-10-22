@@ -1,3 +1,4 @@
+#include "../../fixtures/dp_tasks.h"
 #include <zephyr/ztest.h>
 #include <platform_callback.h>
 #include <dataprocess/points.h>
@@ -220,7 +221,7 @@ ZTEST(reference_configuration, test_original_tables_validate_before_initializati
     zassert_equal(model_poll.count, 2);
     table[1].ptl_tbl_cfg[1] = original;
 
-    zassert_ok(dp_init());
+    zassert_ok(dp_init()); fixture_start_dp();
     const struct dp_equip_cfg *cfg = dp_config();
     zassert_not_null(cfg);
     zassert_equal(dp_dev_get_num(), ARRAY_SIZE(table));

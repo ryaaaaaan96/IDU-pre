@@ -1,3 +1,4 @@
+#include "../../fixtures/dp_tasks.h"
 #include <dataprocess/points.h>
 #include <transmit/transmit.h>
 #include <transmit/server.h>
@@ -130,7 +131,7 @@ static const struct tr_server_config managed[] = {
 
 static void *setup(void)
 {
-    zassert_ok(dp_init_config(&equipment));
+    zassert_ok(dp_init_config(&equipment)); fixture_start_dp();
     client = modbus_iface_get_by_name("RAW_0");
     servers[0] = modbus_iface_get_by_name("RAW_1");
     servers[1] = modbus_iface_get_by_name("RAW_2");

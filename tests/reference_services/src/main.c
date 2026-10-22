@@ -1,3 +1,4 @@
+#include "../../fixtures/dp_tasks.h"
 #include <data_process.h>
 #include <platform_callback.h>
 #include <dataprocess/params.h>
@@ -148,7 +149,7 @@ static void *setup(void)
     pltcb_reg_para_recover_finish_cb(recovery);
     zassert_ok(dp_reg_sig_callback(change));
     zassert_ok(dp_para_reg_set_func(collect));
-    zassert_ok(dp_init_config(&equipment));
+    zassert_ok(dp_init_config(&equipment)); fixture_start_dp();
 #if defined(CONFIG_DP_PARAMS)
     seed_previous_values();
     zassert_ok(dp_params_init(&equipment, DT_FIXED_PARTITION_ID(DT_NODELABEL(storage_partition))));

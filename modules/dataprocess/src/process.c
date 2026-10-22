@@ -557,7 +557,7 @@ int dp_process_save_reboot(uint32_t delay_ms)
 __weak void dp_process_reboot(void) { sys_reboot(SYS_REBOOT_COLD); }
 #endif
 
-static void process_jobs_thread(void *a, void *b, void *c)
+void dp_business_task(void *a, void *b, void *c)
 {
     ARG_UNUSED(a); ARG_UNUSED(b); ARG_UNUSED(c);
     struct async_job job;
@@ -598,5 +598,3 @@ static void process_jobs_thread(void *a, void *b, void *c)
         dp_reference_drain_events();
     }
 }
-K_THREAD_DEFINE(dp_jobs_tid, CONFIG_DP_PROCESS_STACK_SIZE,
-                process_jobs_thread, NULL, NULL, NULL, 6, 0, 0);

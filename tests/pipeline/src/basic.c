@@ -1,3 +1,4 @@
+#include "../../fixtures/dp_tasks.h"
 #include <dataprocess/points.h>
 #include <transmit/transmit.h>
 #include <zephyr/ztest.h>
@@ -37,7 +38,7 @@ static const struct dp_equip_cfg equipment = {
 
 static void *setup(void)
 {
-    zassert_ok(dp_init_config(&equipment));
+    zassert_ok(dp_init_config(&equipment)); fixture_start_dp();
     return NULL;
 }
 

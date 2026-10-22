@@ -1,3 +1,4 @@
+#include "../../fixtures/dp_tasks.h"
 #include "../../fixtures/point_connections.h"
 #include "protocol/inc/protocol.h"
 #include "protocol/inc/signal_ids.h"
@@ -106,7 +107,7 @@ static void *setup(void)
 {
     k_work_init_delayable(&respond, respond_work);
     uart_emul_callback_tx_data_ready_set(uart, transmitted, NULL);
-    zassert_ok(idu_register_point_tables()); zassert_ok(dp_init());
+    zassert_ok(idu_register_point_tables()); zassert_ok(dp_init()); fixture_start_dp();
     zassert_ok(idu_ports_init()); zassert_ok(idu_ports_init());
     zassert_true(co_port_open(&idu_collect_port) >= 0);
     fixture_connect_points();

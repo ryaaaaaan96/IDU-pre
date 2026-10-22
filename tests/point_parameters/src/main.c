@@ -1,3 +1,4 @@
+#include "../../fixtures/dp_tasks.h"
 #include <dataprocess/point_parameters.h>
 #include <dataprocess/params.h>
 #include <platform_callback.h>
@@ -81,7 +82,7 @@ static void *setup(void)
     zassert_equal(dp_init(), -1); /* Invalid provider status cannot initialize DP. */
     zassert_ok(dp_register_parameter_country(IS_ENABLED(CONFIG_TEST_COUNTRY_OVERRIDE) ? 1 : 0,
                                              country_override));
-    zassert_ok(dp_init());
+    zassert_ok(dp_init()); fixture_start_dp();
     zassert_ok(flash_area_open(DT_FIXED_PARTITION_ID(DT_NODELABEL(storage_partition)), &storage));
     zassert_ok(flash_area_erase(storage, 0, storage->fa_size));
     zassert_ok(dp_params_init(dp_config(), storage->fa_id));

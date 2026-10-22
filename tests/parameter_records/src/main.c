@@ -1,3 +1,4 @@
+#include "../../fixtures/dp_tasks.h"
 #include <dataprocess/params.h>
 #include <platform_callback.h>
 #include <errno.h>
@@ -107,7 +108,7 @@ ZTEST(parameter_records, test_firmware_transition)
         zassert_equal(nvs_write(&fs, 1, obsolete, sizeof(obsolete)), sizeof(obsolete));
     }
     uint32_t before = checksum();
-    zassert_ok(dp_init_config(&equipment));
+    zassert_ok(dp_init_config(&equipment)); fixture_start_dp();
     int err = dp_params_init(&equipment, area->fa_id);
     if (!strcmp(phase, "seed_error")) {
         zassert_equal(err, -EPROTO); zassert_equal(checksum(), before); return;

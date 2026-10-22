@@ -1,3 +1,4 @@
+#include "../../fixtures/dp_tasks.h"
 #include "../../fixtures/point_connections.h"
 #include "simulation.h"
 #include "protocol/inc/protocol.h"
@@ -165,7 +166,7 @@ static void *setup(void)
     zassert_ok(flash_area_open(DT_FIXED_PARTITION_ID(DT_ALIAS(idu_settings)), &storage));
     flash_simulator_set_callbacks(flash_area_get_device(storage), &flash_cb);
     zassert_ok(idu_register_point_tables());
-    zassert_ok(dp_init());
+    zassert_ok(dp_init()); fixture_start_dp();
     const struct dp_equip_cfg *cfg = dp_config();
     zassert_ok(idu_ports_init());
     int south = co_port_open(&idu_collect_port); zassert_true(south >= 0);

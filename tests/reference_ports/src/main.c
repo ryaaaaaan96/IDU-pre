@@ -1,3 +1,4 @@
+#include "../../fixtures/dp_tasks.h"
 #include "../../fixtures/point_connections.h"
 #include <collect_lib.h>
 #include <transmit_lib.h>
@@ -143,7 +144,7 @@ static void init_server(size_t index)
 
 static void *setup(void)
 {
-    zassert_ok(dp_init_config(&equipment));
+    zassert_ok(dp_init_config(&equipment)); fixture_start_dp();
     const struct co_bus_cfg bus = {.id = 0, .iface = -1, .transfer = transfer,
                                    .initialize = initialize};
     fixture_connect_points();

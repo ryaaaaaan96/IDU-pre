@@ -1,3 +1,4 @@
+#include "../../fixtures/dp_tasks.h"
 #include "../../fixtures/point_connections.h"
 #include <collect/collect.h>
 #include <collect/port.h>
@@ -81,7 +82,7 @@ static const struct co_port_config port = {
 
 static void *setup(void)
 {
-    zassert_ok(dp_init_config(&equipment));
+    zassert_ok(dp_init_config(&equipment)); fixture_start_dp();
     zassert_ok(co_modbus_port_bind(1, "RAW_0", &io));
     int iface = co_port_open(&port);
     zassert_true(iface >= 0);

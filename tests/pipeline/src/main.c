@@ -1,3 +1,4 @@
+#include "../../fixtures/dp_tasks.h"
 #include <collect/collect.h>
 #include <transmit/transmit.h>
 #include <dataprocess/process.h>
@@ -133,6 +134,13 @@ static int send_response(int iface, const struct modbus_adu *adu, void *user)
 static void *setup(void)
 {
     zassert_ok(dp_init_config(&equipment));
+    struct dp_point_batch cold = {.source = DP_SOURCE_MODBUS, .count = 1,
+        .points = {{.key = {10, 1}, .width = 1, .value.words = {1}}}};
+    zassert_ok(dp_publish(&cold, K_NO_WAIT));
+    zassert_equal(dp_wait_processed(cold.ticket, K_MSEC(5)), -ETIMEDOUT,
+                  "DP must wait until the application starts its consumers");
+    fixture_start_dp();
+    zassert_ok(dp_wait_processed(cold.ticket, K_SECONDS(1)));
     const struct co_bus_cfg bus = {
         .id = 0, .iface = -1, .simulated = true, .transfer = transfer,
     };

@@ -1,3 +1,4 @@
+#include "../../fixtures/dp_tasks.h"
 #include <dataprocess/table_registry.h>
 #include <dataprocess/params.h>
 #include <platform_callback.h>
@@ -53,7 +54,7 @@ static void *setup(void)
 {
     zassert_ok(dp_table_registry_bind(bindings, ARRAY_SIZE(bindings), devices));
     pltcb_reg_cfg_get_dev_tbl(get_devices); pltcb_reg_cfg_get_dev_num(get_count);
-    zassert_ok(dp_init());
+    zassert_ok(dp_init()); fixture_start_dp();
     const struct dp_params_transport write_only = {.write = write_words};
     zassert_ok(dp_params_set_transport(&write_only));
     const struct dp_params_transport transport = {.read = read_words, .write = write_words};

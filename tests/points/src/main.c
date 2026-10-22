@@ -1,3 +1,4 @@
+#include "../../fixtures/dp_tasks.h"
 #include "../../fixtures/point_connections.h"
 #include <transmit/server.h>
 #include "simulation.h"
@@ -171,7 +172,7 @@ static void *setup(void)
         .order = DP_HIGH_WORD_FIRST,
     };
     module_add_points(&test_cfg, test_points, test_transmit);
-    zassert_ok(dp_init_config(&test_cfg));
+    zassert_ok(dp_init_config(&test_cfg)); fixture_start_dp();
     zassert_equal(state_of(remote_di).quality, DP_QUALITY_UNINITIALIZED);
     uint16_t initial;
     zassert_equal(tr_read_register(4, 10000, &initial), -EIO);

@@ -1,3 +1,4 @@
+#include "../../fixtures/dp_tasks.h"
 #include <dataprocess/points.h>
 #include <transmit/transmit.h>
 #include <transmit/forward.h>
@@ -136,7 +137,7 @@ static void *setup(void)
         zassert_ok(dp_data_device_bind(data_devices, ARRAY_SIZE(data_devices), devices));
     }
     pltcb_reg_cfg_get_dev_tbl(get_devices); pltcb_reg_cfg_get_dev_num(get_count);
-    zassert_ok(dp_init());
+    zassert_ok(dp_init()); fixture_start_dp();
     const struct dp_params_transport transport = {.read = south_read, .write = south_write};
     zassert_ok(dp_params_set_transport(&transport));
     zassert_ok(dp_params_init(dp_config(), DT_FIXED_PARTITION_ID(DT_NODELABEL(storage_partition))));

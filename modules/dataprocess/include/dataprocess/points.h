@@ -190,6 +190,8 @@ struct dp_point_state {
  */
 int dp_validate(const struct dp_equip_cfg *cfg);
 int dp_init_config(const struct dp_equip_cfg *cfg);
+/* Application-created thread entry; initialize the store before releasing it. */
+void dp_samples_task(void *unused1, void *unused2, void *unused3);
 /* Local telemetry input, from threads only (-EWOULDBLOCK in an ISR).
  * Words use the dp_value layout, not the reference platform's byte-buffer ABI.
  * The single-point form reports no acquisition error; the batch form can report

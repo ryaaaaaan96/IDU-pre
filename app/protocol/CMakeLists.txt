@@ -8,6 +8,6 @@ target_sources(app PRIVATE
 )
 target_sources_ifdef(CONFIG_IDU_IAPV3 app PRIVATE tables/segments.c)
 
-if(CONFIG_COLLECT)
-  target_sources(app PRIVATE connections.c)
+if(CONFIG_COLLECT AND CONFIG_DP_PROCESS)
+  target_sources(app PRIVATE connections.c tasks.c)
 endif()

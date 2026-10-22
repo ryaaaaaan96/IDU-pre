@@ -72,6 +72,7 @@ static int start_points(void)
         err = dp_reference_start();
     }
     if (!err) {
+        idu_start_point_tasks();
         err = co_start();
     }
     return err;
