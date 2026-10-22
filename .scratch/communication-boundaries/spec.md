@@ -1,5 +1,5 @@
 Status: accepted
-Labels: ready-for-agent
+Labels: implemented
 Blocked by: None
 
 # 协议层统一装配、显式任务编排与南向设备状态机
@@ -241,3 +241,6 @@ IDU 的采集、测点处理、参数恢复与北向转发存在顺序依赖，�
 ## Comments
 
 2026-10-22：依据用户 to-spec 请求创建规格并发布到本地任务库，标记 `ready-for-agent`。
+
+2026-10-22 实施完成：10 项任务已 resolved，完整回归、IDU/MCUboot/IAPv3 构建、验签和导出通过；
+运行实现及资源见 [验证记录](validation.md)，两轴审查修复及复核见 [review.md](review.md)。实物时序、性能、栈高水位与掉电验证仍待执行。

@@ -79,3 +79,44 @@
 - IAP 的实际接收流程在 prepare_reboot 返回 EROFS 后进入错误态，不提交 MCUboot 请求、不重启；既有 boot request 错误测试继续通过。
 - parameter_records 11 个独立进程阶段全部通过：write/add/remove/readd/collision/verify/seed_error/range_change/type_change/width_change/obsolete。
 - 没有改变 NVS 键、记录版本、意图日志、参数区或 IAPv3 线协议；存储降级不等于允许绕过升级保存保护。
+
+## 10：集成、审查与固件验收
+
+- 统一装配和执行上下文已收敛到 app/protocol/init.c、tasks.c；main 调用一个协议初始化入口。
+- DP/CO/TR 模块内已无 K_THREAD_DEFINE、k_thread_create 或 k_work_queue_start；相关等待、队列和算法仍归模块。Zephyr 框架线程及 IAP 任务归属未改。
+- 两轴代码审查初审各发现 1 项，均已修复并由原代理复核通过；详见 [审查记录](review.md)。
+- Red：同线南向站号等于北向站号仍成功启动；Green：开放端口和准备任务前返回 EADDRINUSE，acquisition 16 项通过。
+- 同一 collect_state 存储故障装配 14 项通过，北向持久写为 Server Device Failure；北向非持久命令实际发送一次，设备掉线恢复不重放。
+- 固件命令：`CCACHE_DISABLE=1 ./applications/IDU-pre/build.sh`；IDU/MCUboot/IAPv3 构建、两次镜像验签与 SGZ 导出成功。
+- 产物：工作区 `build/hex/IDU-pre-mcuboot-iapv3/` 的 factory/app/boot HEX、update BIN/SGZ、公开密钥及 validation.json；签名私钥继续保存在 build/keys，未提交。
+- validation.json：signature_verified=true、hardware_verified=false、iap_sgz_supported=true；签名应用 129662 B，槽位 458752 B。
+
+### 资源
+
+基线为本轮开始前已完成的独立转发入口构建，见 [前轮验证](../forwarding-devices/validation.md)。
+
+| 指标 | 迁移前 | 本轮 | 变化 |
+| --- | ---: | ---: | ---: |
+| IDU Flash | 125240 B | 129512 B | +4272 B |
+| IDU 静态 RAM | 102940 B | 104124 B | +1184 B |
+| MCUboot Flash | 36568 B | 36568 B | 0 |
+| MCUboot RAM | 18096 B | 18096 B | 0 |
+
+应用实际创建 DP 样本 4096 B、DP 业务 6144 B、CO 总线 4096 B、TR 接收 4096 B、TR 配置 2048 B，
+相关 5 个执行上下文共 20480 B 声明栈，与原总容量相同；所有权迁移没有宣称节省栈。
+CO 状态与诊断增加 RAM；链接器 RAM 占用约 79.44%。以上是链接占用，不是运行栈高水位或峰值堆占用。
+
+### 验证边界
+
+- 主机：ASan/UBSan C 及 Python 回归；当前 ptrace 环境不支持 LeakSanitizer，按已有测试说明仅关闭 detect_leaks，保留其余地址/未定义行为检测。
+- native：完整脚本覆盖现用模块与关闭适配器/业务处理、启用参数等变体，独立进程参数记录和 IAP 日志覆盖软件重启边界。
+- 首轮回归捕获新增夹具未注册写回调（实际返回 Illegal Function）；补齐实际 tr_write 连接后，相关测试通过；修复后重新执行完整脚本，单次退出 0。
+- 实物待验证：共享 RS485 的外部主站窗口、DE/帧时序、吞吐、长时间故障恢复、任务栈高水位、NOR 断电中断写及整机升级。
+- 未改上游仓库、Flash 分区、私钥、参数键/记录版本或 IAPv3 线协议；不宣称外部多主仲裁能力。
+
+### 最终完整回归
+
+工作区执行 `ASAN_OPTIONS=detect_leaks=0 CCACHE_DISABLE=1 bash applications/IDU-pre/tests/run.sh`，退出 0。
+完整日志在 `build/IDU-pre/communication-validation/regression.log`，固件日志在同目录 `firmware.log`，均为本地构建产物不提交。
+所有实际请求、质量/参数缓存、掉线恢复、诊断清理、存储失效及独立进程重启验证通过。
+代码变更相对实施基线的 diff --check 通过；用户 getter 原有的未提交格式改动仍保留。

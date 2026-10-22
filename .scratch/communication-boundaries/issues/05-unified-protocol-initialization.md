@@ -1,5 +1,5 @@
 Status: resolved
-Labels: ready-for-agent
+Labels: resolved
 Blocked by: 02, 03, 04
 Type: task
 

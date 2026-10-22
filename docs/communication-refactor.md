@@ -1,6 +1,6 @@
 # 采集与转发重构方案
 
-状态：2026-10-22，核心迁移已实现，最终固件验收进行中。依据[正式规格](../.scratch/communication-boundaries/spec.md)；逐项结果见[实施验证](../.scratch/communication-boundaries/validation.md)。
+状态：2026-10-22，10 项实施任务已完成，完整主机/native 回归和固件构建、验签、导出均通过。依据[正式规格](../.scratch/communication-boundaries/spec.md)；逐项结果见[实施验证](../.scratch/communication-boundaries/validation.md)。
 本文件描述当前接口和边界；实物时序、性能与掉电验证仍须单独进行。
 决策依据见 [ADR 0007](adr/0007-protocol-assembly-lifecycle.md)、[ADR 0008](adr/0008-southbound-offline-polling.md)，
 问答过程见[边界讨论](../.scratch/communication-boundaries/discussion.md)。
