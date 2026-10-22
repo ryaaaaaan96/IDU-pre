@@ -1,5 +1,5 @@
 Status: accepted
-Labels: in-progress
+Labels: implemented
 Blocked by: None
 
 # 修复整体审查发现的两个 P2
@@ -15,3 +15,8 @@ Blocked by: None
 - 保留 IAPv3 原有线协议、NVS 格式、持久值及北向寄存器布局。
 - 沿用已确认的公开测试边界：完整 Modbus 请求、DP 公开状态、应用启动/健康，以及产品构建配置。
 - 各修复先验证失败再实现，最后完整回归、固件构建与两轴代码审查，仅本地提交。
+
+## Answer
+
+两个 P2 已修复。完整回归、实际错误配置拒绝、正常固件构建验签与两轴复审均完成。
+见 [验证记录](validation.md) 和 [审查记录](review.md)。

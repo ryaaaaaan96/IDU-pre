@@ -24,4 +24,11 @@
 
 ## 最终验证
 
-完整回归、实际错误配置拒绝、默认 IDU/MCUboot/IAPv3 构建及两轴审查进行中，待结果归档。
+- 完整命令：`ASAN_OPTIONS=detect_leaks=0 CCACHE_DISABLE=1 bash applications/IDU-pre/tests/run.sh`，最终版本单次退出 0。
+- 65 次 native suite 执行中 371 项通过；Python 6+8+9 共 23 项通过，主机 ASan/UBSan 回归通过。当前环境仅关闭不支持的 LeakSanitizer，编译无 warning/error。
+- 实际固件以 `--extra-conf /tmp/idu-p2-iap247.conf` 配置 IAPv3+247，正确触发产品 CMake 错误；默认重新构建成功，最终站号恢复 16。
+- 最终 IDU/MCUboot/IAPv3 构建、两次签名验证、BIN/HEX/SGZ 导出成功；validation.json 的 signature_verified=true、hardware_verified=false。
+- IDU 链接 Flash 129512 B、RAM 104140 B；RAM 比基线增加 16 B，来自独立诊断状态及消息。MCUboot 为 Flash 36568 B、RAM 18096 B。
+- 两轴初审中 Standards 0 项、Spec 发现 1 项错误出口遗漏；补修后两个原审查代理复核均无遗留，见 [review.md](review.md)。
+- 完整日志归档到工作区 `build/IDU-pre/review-p2-validation/`，产物及私钥均不提交。没有修改上游仓库、NVS 格式、Flash 分区或 IAPv3 线协议。
+- 没有执行实物 RS485、栈高水位及 NOR 断电测试；软件验证不替代实测。保留用户 getter 格式修改，未推送。
