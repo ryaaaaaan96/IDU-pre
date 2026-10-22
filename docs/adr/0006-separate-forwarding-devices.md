@@ -12,3 +12,7 @@ TR 按当前入口选择读写映射及协议段，允许不同入口复用地�
 当前数据键、参数存储、process 回调、采集周期及 IAPv3 线协议不变；不新增同物理口多站号分派。
 
 完整验收依据见[规格](../../.scratch/forwarding-devices/spec.md)，实施与验证记录见[关联任务](../../.scratch/forwarding-devices/issues/01-separate-data-and-forwarding.md)。
+
+后续变更：北向必须在运行期由拨码更新的要求，由 [ADR 0007](0007-protocol-assembly-lifecycle.md)
+及[协议编排重构规格](../../.scratch/communication-boundaries/spec.md)的初始化取号规则替代，尚未实施。
+本决定的数据归属、转发身份及按入口隔离规则继续有效。
