@@ -1,7 +1,7 @@
 # 采集与转发重构方案
 
-状态：2026-10-22，Q1–Q36 已逐项确认，已发布[正式规格](../.scratch/communication-boundaries/spec.md)，标签为 ready-for-agent。运行代码尚未迁移。
-本文件记录目标行为；不能将其视为当前固件已实现的能力。
+状态：2026-10-22，核心迁移已实现，最终固件验收进行中。依据[正式规格](../.scratch/communication-boundaries/spec.md)；逐项结果见[实施验证](../.scratch/communication-boundaries/validation.md)。
+本文件描述当前接口和边界；实物时序、性能与掉电验证仍须单独进行。
 决策依据见 [ADR 0007](adr/0007-protocol-assembly-lifecycle.md)、[ADR 0008](adr/0008-southbound-offline-polling.md)，
 问答过程见[边界讨论](../.scratch/communication-boundaries/discussion.md)。
 
@@ -79,7 +79,7 @@ stateDiagram-v2
 
 每设备显式配置自动采集重试次数、最大异常持续时间和掉线探测间隔。
 初始化与正常轮询共用重试次数，但耗尽后的状态转移不同；配置值可由 `.conf` 提供。
-线程栈和容量继续手动配置，不按固件类型预设或预留未来资源；本轮不擅自确定新的数值。
+线程栈和容量继续手动配置，不按固件类型预设或预留未来资源；实际数值由 `prj.conf` 手动设置。
 
 ## 下发、缓存与错误
 
@@ -103,7 +103,27 @@ stateDiagram-v2
 IAP 保留保存参数失败时不继续升级提交或重启的约束。
 
 本次重构保留现用 dp_/co_/tr_ 业务语义、点表关联、NVS 数据键/格式和 IAPv3 线协议。
-接口签名、线程/工作队列的具体安排及实际配置数值，在后续实施中按正式规格落实。
+实际装配在 `app/protocol/init.c`，执行上下文在 `tasks.c`；对应公开接口及配置见下表。
 
 验证应覆盖状态转移、组包边界、初始化失败、失效与逐点恢复、无显式重试、回调完成语义、
 启动放行及存储故障降级。主机/模拟器结果与实物 RS485 时序和性能验证分别记录。
+
+## 当前接口与运行配置
+
+| 入口 | 调用方及作用 |
+| --- | --- |
+| `idu_protocol_init()` | main 调用；本地装配、存储加载/恢复、计划、转发初始化和统一任务放行。 |
+| `dp_samples_task()` / `dp_business_task()` | 应用创建的样本和业务线程入口。 |
+| `co_set_data_callbacks()` | 应用注册 `dp_accept_samples`、显式初始化后处理和 `dp_invalidate_acquired_device`。 |
+| `dp_params_set_transport(co_parameter_transport())` | 显式绑定同步南向读写，须早于参数恢复。 |
+| `co_set_device_policy()` / `co_start()` / `co_bus_task()` | 每设备常驻策略、检查并启用调度、每实际总线的任务入口；不隐式创建线程。 |
+| `tr_modbus_bind_execution()` / `tr_forward_init()` | 绑定应用接收/配置队列，显式装配指定北向入口。 |
+| `tr_forward_service()` | 应用配置队列周期维护；未初始化返回 ENODEV。 |
+| `co_device_status()` / `co_clear_device_errors()` | 一致 RAM 快照 / 只清诊断和请求计数；清理不改变调度与质量。 |
+| `idu_protocol_update_status()` | 由本地采样线程接入远端阶段及存储降级，独立于本地维护故障锁存。 |
+
+北向站号 `CONFIG_IDU_FORWARD_UNIT=16`，南向站号 1、2，共用物理 RS485。
+自动采集额外重试 2 次，异常最长 3000 ms，掉线首包探测间隔 5000 ms；
+均由 `.conf` 显式设置，通用 CO 接口允许每设备不同策略。北向不做离线检测。
+上线自动采集不调用业务 INIT 或同步已保存目标；显式 `co_initialize_device()` 才执行已注册的初始化后处理。
+掉线失效直接更新缓存质量并设置时间屏障，避免排队旧样本恢复质量；持久参数目标独立保留。

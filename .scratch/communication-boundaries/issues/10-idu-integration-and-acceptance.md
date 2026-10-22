@@ -1,5 +1,5 @@
-Status: ready-for-agent
-Labels: ready-for-agent
+Status: in-progress
+Labels: in-progress
 Blocked by: 08, 09
 Type: task
 
