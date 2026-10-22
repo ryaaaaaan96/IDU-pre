@@ -1,3 +1,4 @@
+#include "../../fixtures/tr_tasks.h"
 #include <collect/modbus.h>
 #include <collect/port.h>
 #include <transmit/modbus.h>
@@ -136,9 +137,11 @@ static void *setup(void)
     zassert_true(serial >= 0);
     struct modbus_iface_param param = {.mode = MODBUS_MODE_RAW,
         .server = {.unit_id = 16, .user_cb = &callbacks}};
+    fixture_bind_tr(forward);
     zassert_ok(tr_modbus_init_server(forward, param, NULL, true));
     zassert_ok(tr_modbus_set_router(forward, echo, NULL));
     param.server.unit_id = 1;
+    fixture_bind_tr(server);
     zassert_ok(tr_modbus_init_server(server, param, NULL, true));
     zassert_ok(tr_modbus_set_router(server, echo, NULL));
     static const struct co_port_config config = {.iface_name = "RAW_0",

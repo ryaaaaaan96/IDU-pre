@@ -1,3 +1,4 @@
+#include "../../fixtures/tr_tasks.h"
 #include "../../fixtures/dp_tasks.h"
 #include <dataprocess/points.h>
 #include <transmit/transmit.h>
@@ -168,6 +169,7 @@ static void *setup(void)
         struct modbus_iface_param param = {.mode = MODBUS_MODE_RAW,
             .server = {.unit_id = 7, .user_cb = tr_callbacks()},
             .rawcb = {.raw_tx_cb = response}};
+        fixture_bind_tr(servers[i]);
         zassert_ok(tr_modbus_init_server(servers[i], param, tr_register_write, true));
     }
     struct modbus_iface_param param = {.mode = MODBUS_MODE_RAW,

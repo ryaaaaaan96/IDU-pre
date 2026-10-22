@@ -11,6 +11,9 @@ int idu_register_point_tables(void);
 int idu_connect_point_services(void);
 void idu_start_point_tasks(void);
 void idu_start_collect_task(void);
+int idu_start_forwarding(void);
+/* 已锁存的本地通信维护故障，不驱动首次启动或采样。 */
+int idu_protocol_error(void);
 const DEV_TABLE_S *idu_device_table(void);
 uint16_t idu_device_count(void);
 struct tr_forward_cfg;

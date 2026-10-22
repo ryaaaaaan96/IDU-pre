@@ -101,6 +101,9 @@ int idu_startup(struct idu_status *status)
         err = iap_start();
     }
 #endif
+    if (!err) {
+        err = idu_start_forwarding();
+    }
     if (err) {
         idu_status_fail(status, IDU_STATUS_STARTING, err);
         LOG_ERR("Startup failed: %d; watchdog feeding stopped", err);

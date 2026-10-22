@@ -1,3 +1,4 @@
+#include "../../fixtures/tr_tasks.h"
 #include "../../fixtures/dp_tasks.h"
 #include <dataprocess/points.h>
 #include <transmit/transmit.h>
@@ -151,7 +152,10 @@ static void *setup(void)
     for (size_t i = 0; i < ARRAY_SIZE(servers); ++i) {
         inject_startup_frame = i == 0;
         capture_startup_response = i == 0;
-        zassert_ok(tr_server_service(&managed[i], 7 + i));
+        zassert_equal(tr_server_service(&managed[i], 7 + i), -ENODEV,
+                      "Maintenance must not initialize a server");
+        fixture_bind_tr(servers[i]);
+        zassert_ok(tr_server_init(&managed[i], 7 + i));
         if (i == 0) {
             zassert_ok(k_sem_take(&startup_response_done, K_SECONDS(1)),
                        "RX received during initialization must be processed");

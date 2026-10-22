@@ -33,7 +33,8 @@ struct forwarding_port {
     bool allocated;
     bool starting;
     struct k_work *startup_work;
-    struct k_work_q queue;
+    struct k_work_q *queue;
+    struct k_work_q *configuration_queue;
     struct k_work_delayable reconfigure;
     struct modbus_iface_param current, pending;
     tr_modbus_config_done_fn done;
@@ -46,12 +47,9 @@ struct forwarding_port {
     bool changing, plugged, force;
 };
 static struct forwarding_port ports[CONFIG_TR_PORTS];
-K_THREAD_STACK_ARRAY_DEFINE(forward_stacks, CONFIG_TR_PORTS, CONFIG_TR_STACK_SIZE);
+static struct tr_modbus_execution executions[IFACE_LIMIT];
 static struct { tr_modbus_route_fn fn; void *user; k_tid_t caller; } routes[IFACE_LIMIT];
 K_MUTEX_DEFINE(config_lock);
-static struct k_work_q config_queue;
-K_THREAD_STACK_DEFINE(config_stack, CONFIG_TR_CONFIG_STACK_SIZE);
-static bool config_started;
 static struct k_spinlock submission_lock;
 
 int tr_port_get_mode(int iface, enum tr_port_mode *mode)
@@ -193,6 +191,21 @@ static struct forwarding_port *port_for(int iface)
     return NULL;
 }
 
+int tr_modbus_bind_execution(int iface, const struct tr_modbus_execution *execution)
+{
+    if (iface < 0 || iface >= IFACE_LIMIT || !execution || !execution->receive ||
+        !execution->configuration || execution->receive == execution->configuration ||
+        k_is_in_isr()) { return -EINVAL; }
+    k_mutex_lock(&config_lock, K_FOREVER);
+    struct tr_modbus_execution *current = &executions[iface];
+    int err = 0;
+    if (current->receive && (current->receive != execution->receive ||
+        current->configuration != execution->configuration)) { err = -EBUSY; }
+    else { *current = *execution; }
+    k_mutex_unlock(&config_lock);
+    return err;
+}
+
 static void reconfigure_work(struct k_work *work)
 {
     struct forwarding_port *port = CONTAINER_OF(k_work_delayable_from_work(work),
@@ -206,14 +219,14 @@ static void reconfigure_work(struct k_work *work)
     k_spin_unlock(&submission_lock, key);
     if (ctx && k_work_busy_get(&ctx->server_work)) {
         if (k_uptime_get() < port->deadline) {
-            k_work_reschedule_for_queue(&config_queue, &port->reconfigure, K_MSEC(5));
+            k_work_reschedule_for_queue(port->configuration_queue, &port->reconfigure, K_MSEC(5));
             return;
         }
         err = -ETIMEDOUT;
         goto complete;
     }
     if (!port->plugged) {
-        k_work_queue_drain(&port->queue, true);
+        k_work_queue_drain(port->queue, true);
         port->plugged = true;
     }
     /* Serial RX resumes only after TX complete/DE release. Busy work cannot be
@@ -221,7 +234,7 @@ static void reconfigure_work(struct k_work *work)
     bool idle = ctx && !k_work_busy_get(&ctx->server_work) &&
         (port->force || ctx->mode == MODBUS_MODE_RAW || atomic_test_bit(&ctx->state, MODBUS_STATE_RX_ENABLED));
     if (!idle && k_uptime_get() < port->deadline) {
-        k_work_reschedule_for_queue(&config_queue, &port->reconfigure, K_MSEC(5)); return;
+        k_work_reschedule_for_queue(port->configuration_queue, &port->reconfigure, K_MSEC(5)); return;
     }
     if (!idle) { err = -ETIMEDOUT; }
     else {
@@ -232,7 +245,7 @@ static void reconfigure_work(struct k_work *work)
         } else { port->current = port->pending; }
     }
 complete:
-    if (port->plugged) { k_work_queue_unplug(&port->queue); port->plugged = false; }
+    if (port->plugged) { k_work_queue_unplug(port->queue); port->plugged = false; }
     k_mutex_lock(&config_lock, K_FOREVER);
     tr_modbus_config_done_fn done = port->done; void *user = port->user;
     port->changing = false;
@@ -248,6 +261,7 @@ int tr_modbus_init_server(int iface, struct modbus_iface_param param,
                            tr_modbus_write_fn write_fn, bool isolated)
 {
     if (iface < 0 || iface >= IFACE_LIMIT) { return -EINVAL; }
+    if ((unsigned)param.mode > MODBUS_MODE_RAW) { return -ENOTSUP; }
 #ifdef CONFIG_TR_MODBUS_RAW_PORT
     int bound = tr_modbus_port_param(iface, &param);
     if (bound) { return bound; }
@@ -257,6 +271,9 @@ int tr_modbus_init_server(int iface, struct modbus_iface_param param,
     if (port && port->changing) { k_mutex_unlock(&config_lock); return -EBUSY; }
     int err = tr_modbus_check_available(iface);
     if (err) { k_mutex_unlock(&config_lock); return err; }
+    if (isolated && (!executions[iface].receive || !executions[iface].configuration)) {
+        k_mutex_unlock(&config_lock); return -ENOTCONN;
+    }
 
     bool reserved = false;
     if (isolated && !port) {
@@ -265,6 +282,8 @@ int tr_modbus_init_server(int iface, struct modbus_iface_param param,
             port = &ports[i];
             k_spinlock_key_t key = k_spin_lock(&submission_lock);
             port->iface = iface;
+            port->queue = executions[iface].receive;
+            port->configuration_queue = executions[iface].configuration;
             port->starting = true;
             atomic_set(&port->paused, 1);
             port->allocated = true;
@@ -287,9 +306,6 @@ int tr_modbus_init_server(int iface, struct modbus_iface_param param,
     if (!err && port) {
         /* RX stays paused until the worker exists. Failed startup consumes no slot. */
         if (reserved) {
-            size_t index = port - ports;
-            k_work_queue_start(&port->queue, forward_stacks[index],
-                               K_THREAD_STACK_SIZEOF(forward_stacks[index]), 6, NULL);
             k_work_init_delayable(&port->reconfigure, reconfigure_work);
         }
         port->current = param; port->last_error = 0;
@@ -306,7 +322,7 @@ int tr_modbus_init_server(int iface, struct modbus_iface_param param,
          * so a full RX buffer can be consumed and reception enabled again.
          */
         if (!err && port->startup_work) {
-            k_work_submit_to_queue(&port->queue, port->startup_work);
+            k_work_submit_to_queue(port->queue, port->startup_work);
         }
         port->startup_work = NULL;
         k_spin_unlock(&submission_lock, key);
@@ -374,14 +390,10 @@ static int schedule_config(int iface, const struct modbus_iface_param *param,
     k_mutex_lock(&config_lock, K_FOREVER);
     struct forwarding_port *port = port_for(iface);
     if (!port || port->changing) { k_mutex_unlock(&config_lock); return port ? -EBUSY : -ENODEV; }
-    if (!config_started) {
-        k_work_queue_start(&config_queue, config_stack, K_THREAD_STACK_SIZEOF(config_stack), 8, NULL);
-        config_started = true;
-    }
     port->pending = param ? *param : port->current;
     port->force = param == NULL; port->done = done; port->user = user;
     port->changing = true; port->deadline = k_uptime_get() + 2000;
-    k_work_reschedule_for_queue(&config_queue, &port->reconfigure, K_MSEC(20));
+    k_work_reschedule_for_queue(port->configuration_queue, &port->reconfigure, K_MSEC(20));
     k_mutex_unlock(&config_lock); return 0;
 }
 
@@ -460,7 +472,7 @@ int tr_modbus_submit_work(struct k_work *work)
         err = 0;
     } else {
         err = port && atomic_get(&port->paused) ? -EBUSY :
-              port ? k_work_submit_to_queue(&port->queue, work) : k_work_submit(work);
+              port ? k_work_submit_to_queue(port->queue, work) : k_work_submit(work);
     }
     k_spin_unlock(&submission_lock, key);
     return err;

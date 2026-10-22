@@ -7,7 +7,7 @@
 
 /* ROM configuration. forward_id has its own namespace, distinct from DP keys.
  * port_id identifies a registered TR complete-message port, not a UART or unit.
- * Unit is sampled at runtime and passed to tr_forward_service(). */
+ * Unit is supplied by the application during explicit initialization. */
 struct tr_forward_cfg {
     uint16_t forward_id;
     uint16_t port_id;
@@ -18,6 +18,7 @@ struct tr_forward_cfg {
 /* Startup only: install on an explicit Modbus interface. Configuration and
  * registry stay immutable; a failed declaration never replaces an active one. */
 int tr_forward_attach(int iface, const struct tr_forward_cfg *config);
-/* Periodic lifecycle for the registered logical port; no extra worker stacks. */
+int tr_forward_init(const struct tr_forward_cfg *config, uint8_t unit);
+/* Periodic maintenance; does not attach or initialize a missing entry. */
 int tr_forward_service(const struct tr_forward_cfg *config, uint8_t unit);
 #endif

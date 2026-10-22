@@ -1,3 +1,4 @@
+#include "../../fixtures/tr_tasks.h"
 #include "../../fixtures/dp_tasks.h"
 #include <collect/collect.h>
 #include <transmit/transmit.h>
@@ -163,6 +164,7 @@ static void *setup(void)
         .rawcb = {.raw_tx_cb = send_request},
     };
     zassert_ok(tr_attach(server_iface, NULL));
+    fixture_bind_tr(server_iface);
     zassert_ok(tr_modbus_init_server(server_iface, server, NULL, true));
     zassert_ok(modbus_init_client(client_iface, client));
 #endif

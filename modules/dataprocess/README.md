@@ -91,7 +91,8 @@ int dp_submit_sig_values(const struct dp_point_update *values, size_t count,
 模块提供初始化机制，由应用明确决定装配顺序。IDU 在 `app/main.c`
 组织启动流程：先注册配置并调用 `dp_init()`，建立采集接口并注册全部总线，
 再初始化/恢复参数，由应用判断存储故障是否允许降级，最后调用
-`dp_process_start()`、`dp_reference_start()` 和 `co_start()`。北向转发在首次地址就绪后绑定，
+`dp_process_start()`、`dp_reference_start()` 和 `co_start()`，再由应用放行处理任务。
+北向站号在本地初始化确定，显式初始化转发服务后由独立任务维护，
 不使用 `SYS_INIT` 隐式决定这组依赖顺序。
 
 原格式全局 INIT/TIMER 表通过 `pltcb_reg_cfg_get_*` 成对注册，由

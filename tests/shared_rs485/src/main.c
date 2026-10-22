@@ -1,3 +1,4 @@
+#include "../../fixtures/tr_tasks.h"
 #include "../../fixtures/co_tasks.h"
 #include "../../fixtures/dp_tasks.h"
 #include "../../fixtures/point_connections.h"
@@ -124,7 +125,8 @@ static void *setup(void)
     zassert_ok(co_read(IDU_DEV_REMOTE_IO, 4, 8152, &value, 1));
     zassert_ok(dp_process_init_device(0));
     local_address(16);
-    zassert_ok(tr_forward_service(&idu_forwarding, 16));
+    fixture_bind_tr(modbus_iface_get_by_name("RAW_1"));
+    zassert_ok(tr_forward_init(&idu_forwarding, 16));
     return NULL;
 }
 ZTEST(shared_rs485, test_collection_and_cached_north_read)
@@ -188,12 +190,13 @@ ZTEST(shared_rs485, test_timeouts_malformed_and_exception_responses_release_bus)
         request(3, 31000, 1); zassert_equal(reply[1], 3);
     }
 }
-ZTEST(shared_rs485, test_duplicate_local_and_remote_address_never_transmits)
+ZTEST(shared_rs485, test_gpio_address_does_not_change_initialized_station)
 {
     local_address(1);
-    int before = atomic_get(&requests); uint16_t value;
-    zassert_equal(co_read(IDU_DEV_REMOTE_IO, 4, 8152, &value, 1), -EADDRINUSE);
-    zassert_equal(atomic_get(&requests), before);
+    uint16_t value;
+    zassert_ok(co_read(IDU_DEV_REMOTE_IO, 4, 8152, &value, 1));
+    request(3, 31000, 1);
+    zassert_equal(reply[0], 16);
     local_address(16);
     zassert_ok(co_read(IDU_DEV_REMOTE_IO, 4, 8152, &value, 1));
 }

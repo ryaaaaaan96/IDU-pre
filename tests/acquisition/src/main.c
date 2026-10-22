@@ -20,7 +20,7 @@ int idu_startup(struct idu_status *status);
 
 enum service { WATCHDOG_INIT, LED_START, INPUTS_INIT, TABLES_INIT, DP_INIT,
                NETWORK_INIT, PORT_OPEN, COLLECT_INIT, PARAMS_INIT, PARAMS_RECOVER,
-               PROCESS_INIT, REFERENCE_INIT, COLLECT_START, IAP_INIT,
+               PROCESS_INIT, REFERENCE_INIT, COLLECT_START, IAP_INIT, FORWARD_INIT,
                SAMPLE, PUBLISH, PROTOCOL, LED, CHECKPOINT, WATCHDOG_PROGRESS, SERVICES };
 static int errors[SERVICES];
 static unsigned calls[SERVICES], kicks, stops;
@@ -52,6 +52,7 @@ static int service(enum service service)
         [REFERENCE_INIT] = IDU_STATUS_STARTING,
         [COLLECT_START] = IDU_STATUS_STARTING,
         [IAP_INIT] = IDU_STATUS_STARTING,
+        [FORWARD_INIT] = IDU_STATUS_STARTING,
         [SAMPLE] = IDU_STATUS_SAMPLING,
         [PUBLISH] = IDU_STATUS_PUBLISHING,
         [PROTOCOL] = IDU_STATUS_SERVICING_COMMUNICATION,
@@ -60,7 +61,7 @@ static int service(enum service service)
         [WATCHDOG_PROGRESS] = IDU_STATUS_CHECKING_HEALTH,
     };
     zassert_equal(acquisition.phase, phases[service]);
-    if (service <= IAP_INIT) {
+    if (service <= FORWARD_INIT) {
         zassert_true((int)service > previous_startup_service, "Startup order changed");
         previous_startup_service = service;
     }
@@ -109,6 +110,7 @@ int dp_reference_start(void) { return service(REFERENCE_INIT); }
 int co_start(void) { return service(COLLECT_START); }
 uint16_t idu_sample_period_ms(void) { return 500; }
 int iap_start(void) { return service(IAP_INIT); }
+int idu_start_forwarding(void) { return service(FORWARD_INIT); }
 int watchdog_progress(struct watchdog *monitor) { ++kicks; return service(WATCHDOG_PROGRESS); }
 void watchdog_stop(struct watchdog *monitor) { ++stops; }
 
@@ -163,10 +165,8 @@ int idu_snapshot_publish(const struct idu_snapshot *snapshot)
 
 const struct tr_forward_cfg idu_forwarding;
 
-int tr_forward_service(const struct tr_forward_cfg *config, uint8_t address)
+int idu_protocol_error(void)
 {
-    zassert_equal_ptr(config, &idu_forwarding);
-    zassert_equal(address, 7);
     return service(PROTOCOL);
 }
 
@@ -201,7 +201,7 @@ static void before(void *fixture)
 
 ZTEST(acquisition, test_startup_failure_stops_before_later_services)
 {
-    for (enum service failed = WATCHDOG_INIT; failed <= IAP_INIT; ++failed) {
+    for (enum service failed = WATCHDOG_INIT; failed <= FORWARD_INIT; ++failed) {
         /* Storage failures retain the product's read-only degraded mode. */
         if (failed == PARAMS_INIT || failed == PARAMS_RECOVER) {
             continue;
@@ -212,7 +212,7 @@ ZTEST(acquisition, test_startup_failure_stops_before_later_services)
         zassert_equal(acquisition.phase, IDU_STATUS_FAULT_LOCKED);
         zassert_equal(acquisition.fault_phase, IDU_STATUS_STARTING);
         zassert_equal(acquisition.last_error, -EIO);
-        for (enum service s = WATCHDOG_INIT; s <= IAP_INIT; ++s) {
+        for (enum service s = WATCHDOG_INIT; s <= FORWARD_INIT; ++s) {
             zassert_equal(calls[s], s <= failed ? 1 : 0);
         }
         zassert_equal(stops, 1);

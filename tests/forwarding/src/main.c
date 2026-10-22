@@ -1,3 +1,4 @@
+#include "../../fixtures/tr_tasks.h"
 #include "../../fixtures/dp_tasks.h"
 #include "../../fixtures/point_connections.h"
 #include "simulation.h"
@@ -180,6 +181,7 @@ static void *setup(void)
     struct modbus_iface_param client_param = {.mode = MODBUS_MODE_RAW, .rx_timeout = 50000,
                                               .rawcb = {.raw_tx_cb = request}};
     zassert_ok(attach_profile());
+    fixture_bind_tr(server);
     zassert_ok(tr_modbus_init_server(server, server_param, tr_register_write, true));
     zassert_ok(modbus_init_client(client, client_param));
     return NULL;
@@ -367,6 +369,7 @@ ZTEST(forwarding, test_recovery_reinitializes_and_rolls_back)
             zassert_equal(word, 1);
         } else { zassert_equal(tr_modbus_service(server, 20000), -ENOTRECOVERABLE); }
     }
+    fixture_bind_tr(server);
     zassert_ok(tr_modbus_init_server(server, server_param, tr_register_write, true));
 }
 

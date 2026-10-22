@@ -67,13 +67,8 @@ static int collect_transfer(void *user, uint16_t dev_id, struct modbus_adu *adu)
     if (!device || device->port != idu_collect_bus.id || device->coll_addr != adu->unit_id) {
         return -EINVAL;
     }
-    struct dp_point_state local;
-    int err = dp_read((struct dp_key){IDU_DEV_LOCAL, IDU_SIG_ADDRESS}, &local);
-    if (err) { return err; }
-    /* 同一物理总线中，本机和下游必须使用不同地址，广播不能用于采集。 */
-    /* 首次 GPIO 发布前尚未启动北向服务，参数恢复不能把默认值当成实际拨码。 */
-    if (!adu->unit_id || ((local.quality & 0xffU) == DP_QUALITY_GOOD &&
-                         adu->unit_id == local.value.words[0])) { return -EADDRINUSE; }
+    /* 北向站号在本地初始化确定，后续 GPIO 样本不改变端口身份。 */
+    if (!adu->unit_id || adu->unit_id == CONFIG_IDU_FORWARD_UNIT) { return -EADDRINUSE; }
     k_mutex_lock(&wire_lock, K_FOREVER);
     k_spinlock_key_t key = k_spin_lock(&response_lock);
     expected.unit = adu->unit_id;
@@ -85,7 +80,7 @@ static int collect_transfer(void *user, uint16_t dev_id, struct modbus_adu *adu)
     expected.active = true;
     k_spin_unlock(&response_lock, key);
 
-    err = co_modbus_transfer(client, dev_id, adu);
+    int err = co_modbus_transfer(client, dev_id, adu);
 
     key = k_spin_lock(&response_lock);
     expected.active = false; /* 超时、异常和发送失败也结束事务，不遗留收包归属。 */

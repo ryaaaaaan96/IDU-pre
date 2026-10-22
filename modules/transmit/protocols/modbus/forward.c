@@ -75,7 +75,7 @@ int tr_forward_attach(int iface, const struct tr_forward_cfg *config)
     return err;
 }
 
-int tr_forward_service(const struct tr_forward_cfg *config, uint8_t unit)
+static int forward_service(const struct tr_forward_cfg *config, uint8_t unit, bool initialize)
 {
 #if defined(CONFIG_TR_MODBUS_RAW_PORT)
     if (!config || !unit || unit > 247 || k_is_in_isr()) { return -EINVAL; }
@@ -94,12 +94,13 @@ int tr_forward_service(const struct tr_forward_cfg *config, uint8_t unit)
         attached = true;
         break;
     }
-    if (!attached) { err = attach(iface, config); }
+    if (!attached) { err = initialize ? attach(iface, config) : -ENODEV; }
     if (err) { k_mutex_unlock(&forwarding_lock); return err; }
     for (size_t i = 0; i < ARRAY_SIZE(entries); ++i) {
         struct forwarding_state *entry = &entries[i];
         if (entry->config != config) { continue; }
         if (!entry->server.iface_name) {
+            if (!initialize) { k_mutex_unlock(&forwarding_lock); return -ENODEV; }
             entry->server = (struct tr_server_config){.iface_name = name,
                 .param = {.mode = MODBUS_MODE_RAW}, .write = tr_register_write,
                 .attach = tr_register_attach, .protocol = &entry->registers,
@@ -107,12 +108,23 @@ int tr_forward_service(const struct tr_forward_cfg *config, uint8_t unit)
         }
         const struct tr_server_config *server = &entry->server;
         k_mutex_unlock(&forwarding_lock);
-        return tr_server_service(server, unit);
+        return initialize ? tr_server_init(server, unit) : tr_server_service(server, unit);
     }
     k_mutex_unlock(&forwarding_lock);
     return -ENOENT;
 #else
     ARG_UNUSED(config); ARG_UNUSED(unit);
+    ARG_UNUSED(initialize);
     return -ENOTSUP;
 #endif
+}
+
+int tr_forward_init(const struct tr_forward_cfg *config, uint8_t unit)
+{
+    return forward_service(config, unit, true);
+}
+
+int tr_forward_service(const struct tr_forward_cfg *config, uint8_t unit)
+{
+    return forward_service(config, unit, false);
 }

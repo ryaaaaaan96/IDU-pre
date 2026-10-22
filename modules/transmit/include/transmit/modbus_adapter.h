@@ -3,6 +3,16 @@
 
 #include <zephyr/modbus/modbus.h>
 #include <errno.h>
+#include <zephyr/kernel.h>
+
+struct tr_modbus_execution {
+    struct k_work_q *receive;
+    struct k_work_q *configuration;
+};
+/* Startup-only copied binding; queues belong to the application and must be
+ * distinct and started before enabling the server. No thread is created here.
+ */
+int tr_modbus_bind_execution(int iface, const struct tr_modbus_execution *execution);
 
 /* Called once for a complete FC06/FC16 PDU; return 0 or -errno. Never per-word.
  * isolated=true is required if callback waits for downstream Modbus or flash.

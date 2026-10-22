@@ -50,7 +50,7 @@ int idu_acquisition_cycle(struct idu_status *status)
         return lock_fault(status, status->phase, -ETIMEDOUT);
     }
     idu_status_set_phase(status, IDU_STATUS_SERVICING_COMMUNICATION);
-    err = tr_forward_service(&idu_forwarding, sample.address);
+    err = idu_protocol_error();
     if (err) {
         return lock_fault(status, status->phase, err);
     }

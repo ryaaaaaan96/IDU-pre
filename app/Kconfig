@@ -6,6 +6,16 @@ config IDU_COLLECT_PERIOD_MS
     default 500
     range 10 60000
 
+config IDU_FORWARD_UNIT
+    int "Northbound Modbus unit selected at initialization"
+    default 16
+    range 1 247
+
+config IDU_PROTOCOL_SERVICE_PERIOD_MS
+    int "Communication maintenance interval (ms)"
+    default 100
+    range 10 60000
+
 config DP_REFERENCE_TABLES
     default y
 

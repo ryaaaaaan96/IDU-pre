@@ -17,8 +17,8 @@ config TR_STACK_SIZE
     depends on TR_MODBUS_ADAPTER
     help
       Stack size for each isolated forwarding worker, including protocol and
-      write callbacks. Total reserved stack space is TR_PORTS times this size,
-      plus any architecture alignment or guard requirements.
+      write callbacks. The application supplies queues/stacks for its actual
+      contexts; transmit does not create workers or allocate their stacks.
 
 config TR_PORTS
     int "Maximum forwarding entries / isolated workqueues"
@@ -26,8 +26,8 @@ config TR_PORTS
     range 1 4
     help
       Maximum immutable forwarding mapping bindings. When TR_MODBUS_ADAPTER
-      is enabled, also reserves this many isolated forwarding workers/stacks.
-      Unused slots still reserve RAM. This is separate from the number of
+      is enabled, also reserves this many isolated forwarding states.
+      Stacks are supplied by the application. This is separate from the number of
       interfaces bound to the Modbus virtual-port transport.
 
 config TR_CONFIG_STACK_SIZE
@@ -36,8 +36,8 @@ config TR_CONFIG_STACK_SIZE
     range 1024 65536
     depends on TR_MODBUS_ADAPTER
     help
-      One shared control worker handles port reconfiguration and recovery.
-      Its stack is reserved once, independently of TR_PORTS.
+      Suggested stack size for the application-supplied control worker handling
+      port reconfiguration and recovery. Transmit does not allocate this stack.
 
 config TR_SERVER_SERVICE
     bool "Configured forwarding server lifecycle"

@@ -9,7 +9,7 @@
 struct server_state {
     const struct tr_server_config *config;
     int iface;
-    bool configured, changing, attached;
+    bool configured, changing, attached, initialized;
     struct modbus_iface_param active, pending;
 };
 static struct server_state servers[CONFIG_TR_PORTS];
@@ -38,7 +38,7 @@ static void changed(int iface, int error, void *user)
     k_mutex_unlock(&server_lock);
 }
 
-int tr_server_service(const struct tr_server_config *config, uint8_t unit)
+static int server_service(const struct tr_server_config *config, uint8_t unit, bool initialize)
 {
     if (!config || !config->iface_name || !unit || unit > 247 || k_is_in_isr() ||
         !config->recovery_timeout_ms || config->recovery_timeout_ms > INT32_MAX) {
@@ -54,9 +54,12 @@ int tr_server_service(const struct tr_server_config *config, uint8_t unit)
         else if (servers[i].iface == iface) { err = -EEXIST; }
     }
     if (!err && !server) {
-        if (!free) { err = -ENOSPC; }
+        if (!initialize) { err = -ENODEV; }
+        else if (!free) { err = -ENOSPC; }
         else { server = free; server->config = config; server->iface = iface; }
     }
+    if (!err && !initialize && !server->initialized) { err = -ENODEV; }
+    if (!err && initialize && server->initialized) { err = -EALREADY; }
     if (!err && !server->attached) {
         err = config->attach ? config->attach(iface, config->protocol) : tr_attach(iface, NULL);
         server->attached = !err;
@@ -65,14 +68,14 @@ int tr_server_service(const struct tr_server_config *config, uint8_t unit)
     param.server.unit_id = unit;
     if (!param.server.user_cb) { param.server.user_cb = tr_callbacks(); }
     if (!err && config->configure) { err = config->configure(&param); }
-    if (err == -EBUSY) { k_mutex_unlock(&server_lock); return 0; }
+    if (err == -EBUSY) { k_mutex_unlock(&server_lock); return initialize ? err : 0; }
 #ifdef CONFIG_TR_MODBUS_RAW_PORT
     if (!err) { err = tr_modbus_port_param(iface, &param); }
 #endif
     if (!err && (!param.server.unit_id || param.server.unit_id > 247)) { err = -ERANGE; }
     if (!err && !server->configured) {
         err = tr_modbus_init_server(iface, param, config->write, true);
-        if (!err) { server->active = param; server->configured = true; }
+        if (!err) { server->active = param; server->configured = true; server->initialized = true; }
     } else if (!err && !server->changing && !same_settings(&server->active, &param)) {
         server->pending = param;
         err = tr_modbus_reconfigure(iface, param, changed, server);
@@ -80,5 +83,15 @@ int tr_server_service(const struct tr_server_config *config, uint8_t unit)
         if (err == -EBUSY) { err = 0; }
     }
     k_mutex_unlock(&server_lock);
-    return err ? err : tr_modbus_service(iface, config->recovery_timeout_ms);
+    return err || initialize ? err : tr_modbus_service(iface, config->recovery_timeout_ms);
+}
+
+int tr_server_init(const struct tr_server_config *config, uint8_t unit)
+{
+    return server_service(config, unit, true);
+}
+
+int tr_server_service(const struct tr_server_config *config, uint8_t unit)
+{
+    return server_service(config, unit, false);
 }

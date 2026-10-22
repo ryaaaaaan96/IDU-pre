@@ -1,3 +1,4 @@
+#include "../../fixtures/tr_tasks.h"
 #include <transmit/modbus.h>
 #include <transmit/modbus_adapter.h>
 #include <zephyr/sys/byteorder.h>
@@ -33,6 +34,7 @@ ZTEST(transmit_port, test_server_without_collect_or_client)
     int iface = modbus_iface_get_by_name("RAW_0");
     struct modbus_iface_param param = {.mode = MODBUS_MODE_RAW,
         .server = {.unit_id = 6, .user_cb = &callbacks}};
+    fixture_bind_tr(iface);
     zassert_ok(tr_modbus_init_server(iface, param, NULL, true));
     uint8_t request[] = {6, 4, 0, 7, 0, 1, 0, 0};
     sys_put_le16(crc16_ansi(request, 6), request + 6);
