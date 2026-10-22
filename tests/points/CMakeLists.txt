@@ -15,5 +15,7 @@ target_sources(app PRIVATE src/modules.c)
 
 # Inject one backend initialization failure to verify serial rollback.
 zephyr_ld_options(-Wl,--wrap=modbus_init_server)
+# Fault the external NVS delete operation after a durable downstream commit.
+zephyr_ld_options(-Wl,--wrap=nvs_delete)
 
 add_subdirectory(${IDU_APP}/tests/fixtures fixtures)

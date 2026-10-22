@@ -23,6 +23,16 @@
 extern int north_client;
 static int bytes_before_failure = -1;
 static bool fail_after_downstream;
+static bool fail_deletes;
+
+int __real_nvs_delete(struct nvs_fs *fs, uint16_t id);
+int __wrap_nvs_delete(struct nvs_fs *fs, uint16_t id)
+{
+    /* ID 2 is the downstream intent in the existing NVS record format.
+     * Leave value-commit journal cleanup working so failure lands after save.
+     */
+    return fail_deletes && id == 2 ? -EIO : __real_nvs_delete(fs, id);
+}
 static unsigned writes_at_start;
 static const struct flash_area *storage;
 
@@ -62,6 +72,7 @@ void parameter_before(void)
     flash_simulator_set_callbacks(flash_area_get_device(storage), &flash_callbacks);
     bytes_before_failure = -1;
     fail_after_downstream = false;
+    fail_deletes = false;
     co_simulator_set_write_fault(&idu_collect_simulator, CO_SIMULATOR_WRITE_OK);
     co_simulator_set_online(&idu_collect_simulator, true);
     if (getenv("IDU_REBOOT_PHASE")) {
@@ -270,6 +281,28 @@ ZTEST(points, test_parameters_no_downstream_write_without_durable_intent)
     zassert_true(param_status().flags & DP_PARAM_STORAGE_READY);
     zassert_equal(param_status().storage_error, 0, "Successful storage reload clears the persistent fault");
     zassert_ok(dp_params_recover());
+}
+
+ZTEST(points, test_parameters_delete_failure_latches_storage_fault_until_reload)
+{
+    unsigned writes = co_simulator_write_count(&idu_collect_simulator);
+    fail_deletes = true;
+    zassert_equal(modbus_write_holding_reg(north_client, 16, 31500, 678),
+                  MODBUS_EXC_SERVER_DEVICE_FAILURE);
+    struct dp_param_status status = param_status();
+    zassert_equal(status.storage_error, -EIO, "Intent deletion is a storage failure too");
+    zassert_false(status.flags & DP_PARAM_STORAGE_READY);
+    zassert_true(status.flags & DP_PARAM_PENDING);
+    zassert_equal(co_simulator_write_count(&idu_collect_simulator), writes + 1);
+    fail_deletes = false;
+    zassert_ok(dp_params_reload());
+    zassert_equal(param_status().storage_error, 0);
+    zassert_true(param_status().flags & DP_PARAM_PENDING);
+    zassert_ok(dp_params_recover());
+    zassert_false(param_status().flags & DP_PARAM_PENDING);
+    zassert_equal(read_word(31500), 678);
+    zassert_equal(co_simulator_write_count(&idu_collect_simulator), writes + 1,
+                  "Storage recovery must not replay the downstream write");
 }
 
 ZTEST(points, test_parameters_power_loss_after_downstream_before_commit)

@@ -423,6 +423,7 @@ static int recover_locked(void)
     }
     err = nvs_delete(&fs, INTENT_ID);
     if (err < 0) {
+        set_status(err, status.flags & ~DP_PARAM_STORAGE_READY);
         return err;
     }
     if (!is_new) {

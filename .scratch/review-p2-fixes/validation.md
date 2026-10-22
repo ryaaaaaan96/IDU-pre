@@ -15,6 +15,13 @@
 - Green：在产品 CMake 明确拒绝该组合；关闭 IAPv3 时 247 以及开启时 246/16 正常。
 - test_build_configuration.py 8 项通过；IAP 接收器原协议过滤和状态寄存器布局未改。
 
+## 复审补充
+
+- Spec 复审指出：远端持久事务在删除意图记录时的 Flash 错误出口尚未标记存储不可用。
+- Red：只对外部 NVS 的意图删除注入 EIO，公开状态无法报告 storage_error。
+- Green：该出口清 STORAGE_READY 并锁存错误，保留 PENDING；reload/recover 后恢复且不重放下发，针对性测试通过。
+- 故障注入针对原有固定 NVS 记录 ID 2，仅测试夹具使用，不修改存储格式或产品协议。
+
 ## 最终验证
 
 完整回归、实际错误配置拒绝、默认 IDU/MCUboot/IAPv3 构建及两轴审查进行中，待结果归档。
