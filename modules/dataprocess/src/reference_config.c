@@ -500,6 +500,15 @@ static int reference_collect(const struct dp_equip_cfg *cfg, size_t index,
     return -ENOENT;
 }
 
+int dp_transmit_from_reference(const MB_TABLE_CELL_T *row, struct dp_transmit_cfg *map)
+{
+    if (!row || !map) { return -EINVAL; }
+    *map = (struct dp_transmit_cfg){.function = row->reg_type,
+        .address = row->reg_addr, .count = row->reg_num,
+        .key = {row->dev_id, row->sig_id}, .kind = DP_MAP_VALUE};
+    return word_order(row->byte_order, &map->order);
+}
+
 static int reference_transmit(const struct dp_equip_cfg *cfg, size_t index,
                                struct dp_transmit_cfg *map)
 {
@@ -509,10 +518,7 @@ static int reference_transmit(const struct dp_equip_cfg *cfg, size_t index,
             if (group->proto_type != PRO_MB_SLAVE) { continue; }
             if (index >= group->sig_num) { index -= group->sig_num; continue; }
             const MB_TABLE_CELL_T *row = &((const MB_TABLE_CELL_T *)group->pst_table)[index];
-            *map = (struct dp_transmit_cfg){.function = row->reg_type,
-                .address = row->reg_addr, .count = row->reg_num,
-                .key = {row->dev_id, row->sig_id}, .kind = DP_MAP_VALUE};
-            return word_order(row->byte_order, &map->order);
+            return dp_transmit_from_reference(row, map);
         }
     }
     return -ENOENT;

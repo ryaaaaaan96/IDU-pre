@@ -1,5 +1,6 @@
 #include <dataprocess/points.h>
 #include <transmit/transmit.h>
+#include "routes.h"
 #if defined(CONFIG_DP_PROCESS)
 #include <dataprocess/process.h>
 #endif
@@ -20,35 +21,55 @@ static int read_point(struct dp_key key, uint16_t port, uint8_t fc,
 #endif
 }
 
+struct mapping_binding {
+    uint16_t port;
+    const struct dp_equip_cfg *view;
+};
+static struct mapping_binding mappings[CONFIG_TR_PORTS];
+
+int tr_bind_mapping(uint16_t port, const struct dp_equip_cfg *view)
+{
+    if (!dp_config() || !view || !view->transmit_count) { return -EINVAL; }
+    int err = dp_validate(view);
+    if (err) { return err; }
+    struct mapping_binding *free = NULL;
+    for (size_t i = 0; i < ARRAY_SIZE(mappings); ++i) {
+        if (mappings[i].view && mappings[i].port == port) {
+            return mappings[i].view == view ? 0 : -EEXIST;
+        }
+        if (!mappings[i].view && !free) { free = &mappings[i]; }
+    }
+    if (!free) { return -ENOSPC; }
+    *free = (struct mapping_binding){.port = port, .view = view};
+    return 0;
+}
+
+static const struct dp_equip_cfg *mapping_config(uint16_t port)
+{
+    bool explicit = false;
+    for (size_t i = 0; i < ARRAY_SIZE(mappings); ++i) {
+        if (!mappings[i].view) { continue; }
+        explicit = true;
+        if (mappings[i].port == port) { return mappings[i].view; }
+    }
+    return explicit ? NULL : dp_config();
+}
+
 int tr_read_register(uint8_t function, uint16_t address, uint16_t *value)
 {
-    const struct dp_equip_cfg *cfg = dp_config();
-    if (!cfg || !value) { return -EINVAL; }
-    if (cfg->exact_overlapping_reads) {
-        size_t matches = 0;
-        for (size_t i = 0; i < cfg->transmit_count; ++i) {
-            struct dp_transmit_cfg t_scratch;
-            const struct dp_transmit_cfg *t = dp_config_transmit(cfg, i, &t_scratch);
-            if (t->function == function && address >= t->address &&
-                (uint32_t)address < (uint32_t)t->address + t->count) { ++matches; }
+    int port = -1;
+#if defined(CONFIG_TR_MODBUS_ADAPTER)
+    port = tr_modbus_request_iface();
+#endif
+    if (port < 0) {
+        for (size_t i = 0; i < ARRAY_SIZE(mappings); ++i) {
+            if (!mappings[i].view) { continue; }
+            if (port >= 0) { return -ENOTUNIQ; }
+            port = mappings[i].port;
         }
-        if (matches > 1) { return -ERANGE; }
     }
-    for (size_t i = 0; i < cfg->transmit_count; ++i) {
-        struct dp_transmit_cfg t_scratch;
-        const struct dp_transmit_cfg *t = dp_config_transmit(cfg, i, &t_scratch);
-        if (t->function != function || address < t->address ||
-            (uint32_t)address >= (uint32_t)t->address + t->count) { continue; }
-        if (t->kind == DP_MAP_ZERO) { *value = 0; return 0; }
-        struct dp_point_state state;
-        int err = read_point(t->key, 0, function, address, 1, &state);
-        if (err) { return err; }
-        if (t->kind == DP_MAP_QUALITY) { *value = state.quality; return 0; }
-        if ((state.quality & 0xffU) != DP_QUALITY_GOOD) { return -EIO; }
-        *value = dp_order_word(state.value.words, t->count, address - t->address, t->order);
-        return 0;
-    }
-    return -ENOTSUP;
+    int err = tr_read(port < 0 ? 0 : port, function, address, value, 1);
+    return err == -ENOENT ? -ENOTSUP : err == -ENOTSUP ? -EIO : err;
 }
 
 static int input_read(uint16_t address, uint16_t *value)
@@ -70,9 +91,8 @@ struct modbus_user_callbacks *tr_callbacks(void)
     return &callbacks;
 }
 
-static const struct dp_transmit_cfg *mapping(uint8_t fc, uint16_t address, struct dp_transmit_cfg *scratch)
+static const struct dp_transmit_cfg *mapping(const struct dp_equip_cfg *cfg, uint8_t fc, uint16_t address, struct dp_transmit_cfg *scratch)
 {
-    const struct dp_equip_cfg *cfg = dp_config();
     if (!cfg) { return NULL; }
     for (size_t i = 0; i < cfg->transmit_count; ++i) {
         const struct dp_transmit_cfg *m = dp_config_transmit(cfg, i, scratch);
@@ -86,8 +106,9 @@ int tr_read(uint16_t port, uint8_t fc, uint16_t address, uint16_t *words, size_t
 {
     if (!words || !count || count > 125 || (fc != 3 && fc != 4) ||
         (uint32_t)address + count > 65536) { return -EINVAL; }
-    const struct dp_equip_cfg *cfg = dp_config();
-    if (cfg && cfg->exact_overlapping_reads) {
+    const struct dp_equip_cfg *cfg = mapping_config(port);
+    if (!cfg) { return -ENOENT; }
+    if (cfg->exact_overlapping_reads) {
         bool ambiguous = false;
         struct dp_transmit_cfg exact_copy;
         const struct dp_transmit_cfg *exact = NULL;
@@ -116,11 +137,11 @@ int tr_read(uint16_t port, uint8_t fc, uint16_t address, uint16_t *words, size_t
     }
     for (size_t i = 0; i < count; ++i) {
         struct dp_transmit_cfg scratch;
-        if (!mapping(fc, address + i, &scratch)) { return -ENOENT; }
+        if (!mapping(cfg, fc, address + i, &scratch)) { return -ENOENT; }
     }
     for (size_t i = 0; i < count;) {
         struct dp_transmit_cfg scratch;
-        const struct dp_transmit_cfg *m = mapping(fc, address + i, &scratch);
+        const struct dp_transmit_cfg *m = mapping(cfg, fc, address + i, &scratch);
         size_t offset = address + i - m->address;
         size_t n = MIN(m->count - offset, count - i);
         struct dp_point_state state;
@@ -142,6 +163,8 @@ int tr_write(uint16_t port, uint16_t address, const uint16_t *words, size_t coun
 {
 #if defined(CONFIG_DP_PROCESS)
     if (!words || !count || count > DP_TRANSFER_WORDS || (uint32_t)address + count > 65536) { return -EINVAL; }
+    const struct dp_equip_cfg *cfg = mapping_config(port);
+    if (!cfg) { return -ENOENT; }
     struct dp_process_request request = {.operation = DP_OP_WRITE, .port_id = port,
                                           .address = address, .register_count = count};
 #if defined(CONFIG_TR_MODBUS_ADAPTER)
@@ -151,7 +174,7 @@ int tr_write(uint16_t port, uint16_t address, const uint16_t *words, size_t coun
     for (size_t offset = 0; offset < count;) {
         struct dp_transmit_cfg scratch;
         struct dp_point_cfg point_scratch;
-        const struct dp_transmit_cfg *m = mapping(3, address + offset, &scratch);
+        const struct dp_transmit_cfg *m = mapping(cfg, 3, address + offset, &scratch);
         const struct dp_point_cfg *p = m ? dp_find(m->key, &point_scratch) : NULL;
         if (!m || !p || m->kind != DP_MAP_VALUE) { return -ENOENT; }
         /* In original tables FC03 provides write access independently of
@@ -231,9 +254,8 @@ int tr_dispatch(int iface, const struct modbus_adu *rx,
     return -ENOENT; /* Ordinary FC06/16 point-table writer. */
 }
 
-int tr_attach(int iface, const struct tr_routes *routes)
+int tr_routes_validate(const struct tr_routes *routes)
 {
-#if defined(CONFIG_TR_MODBUS_ADAPTER)
     if (routes && routes->count && !routes->segments) { return -EINVAL; }
     for (size_t i = 0; routes && i < routes->count; ++i) {
         const struct tr_segment *a = &routes->segments[i];
@@ -244,6 +266,14 @@ int tr_attach(int iface, const struct tr_routes *routes)
                 a->begin <= b->end && b->begin <= a->end) { return -EEXIST; }
         }
     }
+    return 0;
+}
+
+int tr_attach(int iface, const struct tr_routes *routes)
+{
+#if defined(CONFIG_TR_MODBUS_ADAPTER)
+    int err = tr_routes_validate(routes);
+    if (err) { return err; }
     return tr_modbus_set_router(iface, tr_dispatch, (void *)routes);
 #else
     ARG_UNUSED(iface);

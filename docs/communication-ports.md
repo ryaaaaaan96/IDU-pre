@@ -43,7 +43,7 @@ vport 不建立另一套 RX 队列或工作线程。输入回调必须同步消�
 
 `idu_ports_init()` 用 `co_modbus_port_bind()` / `tr_modbus_port_bind()` 注册常驻
 配置，再通过 `mb_serial_open()` 准备实际串口。`co_port_open()` 和
-`tr_server_service()` 仍负责协议生命周期；RAW 发送回调由各自协议适配安装。
+`tr_forward_service()` 按逻辑口装配并调用内部 `tr_server_service()` 管理协议生命周期；RAW 发送回调由各自协议适配安装。
 重复注册同一配置允许重试，替换配置、跨模块抢占同一虚拟口均被拒绝。
 
 `CO_VPORT` / `TR_VPORT` 分别控制通用报文入口；`CO_MODBUS_RAW_PORT` /

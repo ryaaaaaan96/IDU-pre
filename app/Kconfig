@@ -27,6 +27,9 @@ config TR_SERVER_SERVICE
 config TR_REGISTER_SERVICE
     default y
 
+config TR_FORWARD_CONFIG
+    default y
+
 config IDU_SAMPLE_PERIOD_MS
     int "Acquisition period in milliseconds"
     default 500

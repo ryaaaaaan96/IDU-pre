@@ -1,5 +1,5 @@
 #include "protocol/inc/protocol.h"
-#include <transmit/server.h>
+#include <transmit/forward.h>
 #include "acquisition/idu_acquisition.h"
 #include "process/idu_process.h"
 #include <collect/collect.h>
@@ -158,9 +158,9 @@ int idu_snapshot_publish(const struct idu_snapshot *snapshot)
     return service(PUBLISH);
 }
 
-const struct tr_server_config idu_forwarding;
+const struct tr_forward_cfg idu_forwarding;
 
-int tr_server_service(const struct tr_server_config *config, uint8_t address)
+int tr_forward_service(const struct tr_forward_cfg *config, uint8_t address)
 {
     zassert_equal_ptr(config, &idu_forwarding);
     zassert_equal(address, 7);

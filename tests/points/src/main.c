@@ -15,6 +15,8 @@
 #include <dataprocess/process.h>
 #include <transmit/modbus_adapter.h>
 #include <transmit/transmit.h>
+#include <transmit/forward.h>
+#include <dataprocess/table_registry.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/storage/flash_map.h>
 #include <zephyr/drivers/flash/flash_simulator.h>
@@ -151,10 +153,13 @@ static void *setup(void)
         .width = 1, .maximum = 1000, .initial.words = {7},
         .param_flags = DP_PARAM_PERSIST, /* Readable, immutable, not restorable. */
     };
-    for (size_t i = 0; i < app_cfg->transmit_count; ++i) {
-        struct dp_transmit_cfg scratch;
-        test_transmit[i] = *dp_config_transmit(app_cfg, i, &scratch);
+    const struct dp_registered_table *mapping;
+    zassert_ok(dp_table_registry_find(idu_forwarding.transmit_table, PRO_MB_SLAVE, &mapping));
+    for (size_t i = 0; i < mapping->count; ++i) {
+        zassert_ok(dp_transmit_from_reference(&((const MB_TABLE_CELL_T *)mapping->rows)[i],
+                                               &test_transmit[i]));
     }
+    test_cfg.transmit_count = mapping->count;
     test_cfg.transmit_get = NULL;
     test_cfg.transmit = test_transmit;
     test_transmit[test_cfg.transmit_count++] = (struct dp_transmit_cfg){
@@ -189,7 +194,7 @@ static void *setup(void)
         .mode = MODBUS_MODE_RAW, .rx_timeout = 2000000,
         .rawcb = {.raw_tx_cb = north_request},
     };
-    zassert_ok(tr_register_attach(north_server, idu_forwarding.protocol));
+    zassert_ok(tr_register_attach(north_server, NULL));
     zassert_ok(tr_modbus_init_server(north_server, server, tr_register_write, true));
     zassert_ok(modbus_init_client(north_client, client));
     return NULL;
@@ -461,8 +466,8 @@ ZTEST(points, test_configuration_validation)
     points[0].width = 2;
     zassert_equal(dp_validate(&small), -EINVAL);
     points[0] = first;
-    struct dp_transmit_cfg map_scratch;
-    struct dp_transmit_cfg map = *dp_config_transmit(&cfg, 0, &map_scratch);
+    struct dp_transmit_cfg map = {.function = 3, .address = 31090,
+                                  .count = 1, .key = first.key};
     struct dp_transmit_cfg maps[2] = {map, map};
     small.transmit = maps;
     small.transmit_count = 2;
@@ -547,5 +552,5 @@ ZTEST(points,test_modules_dynamic_port_configuration_and_routes)
     zassert_ok(modbus_write_holding_reg(north_client,17,52000,16));
     zassert_ok(k_sem_take(&config_done,K_SECONDS(1))); zassert_ok(config_error);
     zassert_ok(modbus_read_holding_regs(north_client,16,31000,&word,1));
-    zassert_ok(tr_register_attach(north_server, idu_forwarding.protocol));
+    zassert_ok(tr_register_attach(north_server, NULL));
 }

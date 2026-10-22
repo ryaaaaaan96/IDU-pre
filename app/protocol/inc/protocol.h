@@ -9,7 +9,7 @@
 int idu_register_point_tables(void);
 const DEV_TABLE_S *idu_device_table(void);
 uint16_t idu_device_count(void);
-struct tr_server_config;
+struct tr_forward_cfg;
 struct co_port_config;
 struct co_bus_cfg;
 
@@ -17,7 +17,7 @@ struct co_bus_cfg;
 int idu_ports_init(void);
 extern const struct co_port_config idu_collect_port;
 extern const struct co_bus_cfg idu_collect_bus;
-extern const struct tr_server_config idu_forwarding;
+extern const struct tr_forward_cfg idu_forwarding;
 
 
 #endif

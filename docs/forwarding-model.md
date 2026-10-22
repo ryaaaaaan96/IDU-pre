@@ -1,14 +1,14 @@
 # 转发表挂载、地址与北向服务
 
 本记录区分“把一个地址空间拆成多张表维护”和“建立多个独立北向服务”。
-以下区分 IDU 现状、参考工程证据和已接受的目标方案。2026-10-22 已发布实施规格，运行实现尚未迁移。
+2026-10-22 已实现数据设备与虚拟转发入口分离；本文说明当前契约及参考工程证据。
 
 ## 三类身份与地址
 
 | 概念 | 当前来源 | 含义 |
 | --- | --- | --- |
 | 逻辑设备 ID | `IDU_DEV_LOCAL`、`IDU_DEV_REMOTE_IO` | DP 中数据归属的身份 |
-| 北向 Modbus 站号 | `sample.address` → `tr_server_service()` | 上位主站访问本机的 unit ID |
+| 北向 Modbus 站号 | `sample.address` → `tr_forward_service()` | 上位主站访问本机的 unit ID |
 | 北向寄存器地址 | 转发行 `.reg_addr`，配合 `.reg_type` | 本机对外协议中的位置 |
 | 南向 Modbus 站号 | 采集设备的 `.coll_addr` | CO 访问远端设备的 unit ID |
 | 南向寄存器地址 | 采集行 `.reg_addr` | 远端设备协议中的位置 |
@@ -16,7 +16,7 @@
 北向站号当前来自 GPIO 地址输入加偏移，采集周期将其传给服务：
 [`idu_inputs_sample()`](../modules/gpio/src/idu_inputs.c)、
 [`idu_acquisition_cycle()`](../app/acquisition/acquisition.c)、
-[`tr_server_service()`](../modules/transmit/protocols/modbus/server.c)。
+[`tr_forward_service()`](../modules/transmit/protocols/modbus/forward.c)。
 挂表设备的 `.dev_id` 或 `.coll_addr` 都不会自动成为北向站号。
 
 [`tables/transmit.c`](../app/protocol/tables/transmit.c) 中的 `.dev_id / .sig_id`
@@ -24,31 +24,31 @@
 FC04/10000 读取远端设备 10 的 DI；两者可以共享同一信号 ID。
 采集表中的 DI 地址仍为 FC04/8152，不会因北向使用 10000 而改变。
 
-## 多张表能否挂在本地设备
+## 当前装配与入口选择
 
-可以。每张表使用不同标识登记为 `PRO_MB_SLAVE`，再加入本地设备的绑定列表。
-[`dp_table_bind()`](../modules/dataprocess/src/table_registry.c) 不禁止同一设备存在
-多个同类型的协议表，但禁止同一设备重复绑定同一表标识。
+产品使用两类 const 声明，定义见下文；不再维护七个表槽或 `idu_registers`。
+`dp_data_device_bind()` 通过 Iterable Sections 解析 process 与可选 collect，生成
+兼容 DP/CO 的小型 `DEV_TABLE_S` 只读关联视图。本地只关联 process，远端 10、11
+共享 process/collect 行，并保留独立数据缓存、参数键和采集目标。
 
-当前 IDU 每个设备最多 7 个表槽，第一槽被要求是非空处理表；这不是参考项目所有设备的约束。
-当前开启 IAPv3 时再使用一个协议段槽，因此本地设备最多容纳 5 张普通转发表；现用 1 张，尚可再增加 4 张。
-分文件维护不需要复制测点或另外建立数据池。
+`tr_forward_attach()` 解析转发配置，直接关联普通转发表和协议段。
+每个 Modbus 接口绑定自己的只读映射视图；读、写、重叠校验均使用该入口。
+多个入口可以共用同一张 const 表，也可在同地址访问不同数据。
+`forward_id` 与数据设备 ID 分别校验，二者数值相同不形成关联。
+同一逻辑口或接口重复绑定不同配置会失败，不覆盖原入口。
 
-## 当前限制：普通转发表尚未按服务隔离
+- 同入口同功能码、同起始地址的重复映射仍拒绝；保留完整点精确读取的旧重叠兼容。
+- 跨空洞、半个多字参数、无效来源及批量校验失败仍拒绝，不产生部分业务写入。
+- TR 将地址解析为数据键后交给 DP；process 回调、一次性命令及持久下发逻辑保持。
+- 未绑定接口不借用其他入口。无上下文的 `tr_read_register()` 在多个显式绑定存在时
+  返回 `-ENOTUNIQ`；实际 Modbus 回调使用当前请求接口。
+- 原生/旧参考表消费者未登记任何显式映射时，仍可使用其单一全局映射。
+  新产品 DP 配置不含转发表，旧 `dp_params_write_registers()` 不再承担产品地址解析；
+  业务使用键式参数接口，协议使用 `tr_write()`。
 
-[`reference_transmit()`](../modules/dataprocess/src/reference_config.c) 将所有设备的
-所有 `PRO_MB_SLAVE` 表转换为全局映射序列，不保留挂表设备、表 ID、北向站号或端口。
-[`tr_read()` / `tr_write()`](../modules/transmit/src/transmit.c) 的端口参数用于回调上下文，
-不参与普通映射选择。换一个挂表设备或端口，不能复用同一功能码的同起始地址。
-
-- 同功能码、同起始地址的映射在初始化时拒绝，不能用不同设备 ID 消除冲突。
-- 参考配置保留了不同起始地址的覆盖区间重叠兼容；这不是服务隔离。
-  涉及重叠区的读取只接受起始地址和长度均精确匹配的 VALUE 行，其他读取可能报错；
-  写入没有同样的精确选择规则，不应依赖重叠区组织新协议。
-- 普通新表应使用清晰、不重叠的地址段；FC03 与 FC04 是不同的功能码空间。
-- `dp_devid_get_prototbl()` 等兼容查询只返回第一个匹配的协议组，不能用它们枚举多表。
-- `tr_register_service.device` 目前只选择 `PRO_ADDR_SLAVE` 协议段，
-  不把普通 `PRO_MB_SLAVE` 表限制到该设备。
+运行期 `tr_forward_service()` 根据配置的逻辑口找到应用登记的 RAW 接口，
+内部管理现有服务生命周期及恢复；北向站号由拨码传入，不复制到静态配置。
+当前产品仍只保留一个采集总线和一个转发线程栈。
 
 ## 参考工程已核实的虚拟转发设备
 
@@ -64,22 +64,22 @@ FC04/10000 读取远端设备 10 的 DI；两者可以共享同一信号 ID。
 
 之前建议继续把转发表挂在本地设备，是对当时 IDU 限制的折中；用户现在明确要求区分本地数据设备
 与转发入口，因此该建议不作为后续目标。只添加一项虚拟 DEV_TABLE_S 也不足够：
-当前装配器仍要求它具有 process 表，并将所有普通转发表合并到全局映射。
+旧装配器要求 process 首槽并合并普通转发表；新产品不再使用这条关联路径。
 
 ## 已接受方案：两类配置，通过测点身份关联
 
 数据设备配置描述本地或南向数据来源：process 表，以及需要时的 collect 表、南向端口和站号。
-虚拟转发设备配置描述北向协议入口：北向端口/站号、转发表和协议段。转发行继续引用已有
+虚拟转发设备配置描述北向协议入口：北向逻辑口、转发表和协议段。转发行继续引用已有
 `(dev_id, sig_id)`，数据由 DP 保存；南向发送与调度仍归 CO，北向请求与地址空间选择归 TR。
 
 应用只配置实际需要的表和端口关系，由模块完成校验、装配与注册；
 不要求应用填满七个协议槽，也不以 `devices[0]` 代表转发入口。Iterable Sections 的分散登记继续可用。
 [ADR 0006](adr/0006-separate-forwarding-devices.md) 已接受替代 ADR 0003 的数据设备挂载选择；
-协议处理及广播行为保持，运行迁移由关联任务承接。
+协议处理及广播行为保持。
 
 ### 已接受的结构示例
 
-以下结构关系已获认可；名称与字段用于表达目标契约，尚不是当前可调用的新接口。
+对应公共接口为 `dataprocess/table_registry.h` 和 `transmit/forward.h`。
 `data_device_cfg` 属于配置装配接口：按设备建立 DP 数据视图，以及可选的 CO 采集视图；
 `tr_forward_cfg` 由 TR 描述北向入口。执行模块各自取得所属视图，表内容继续通过 Iterable Sections 登记。
 
@@ -147,8 +147,8 @@ static const struct tr_forward_cfg forwarding_devices[] = {
 示例仅描述当前 Modbus/RS485；未来 CAN 标识及分帧规则不在本轮提前加入字段。
 
 该结构将普通转发表与协议段直接归虚拟转发设备，原 idu_registers 对象及额外 protocol 指针
-可由模块内部装配；应用无需同时维护设备挂表和另一份转发服务关联。
-要实现按入口独立映射，读、写和地址冲突校验均须使用当前 forward_id 选择的表，不能继续全局合并。
+已由模块内部装配；应用无需同时维护设备挂表和另一份转发服务关联。
+运行时按接口定位该转发身份的映射，读、写及冲突校验不再依赖全局合并。
 
 ### 确认与实施状态
 
@@ -157,6 +157,6 @@ static const struct tr_forward_cfg forwarding_devices[] = {
 
 - [正式规格](../.scratch/forwarding-devices/spec.md) 包含用户故事、实施决定、测试与排除项。
 - [实施任务](../.scratch/forwarding-devices/issues/01-separate-data-and-forwarding.md) 已标记 ready-for-agent。
-- 本次只发布文档；未把规格发布当作运行实现完成。
+- 实施结果与验证记录见关联任务；实板时序、运行时栈余量和 NOR 掉电仍需实测。
 
 同一物理口多站号接收分派不纳入本轮；继续沿用每个北向逻辑口一个活动入口及既有同线事务仲裁。

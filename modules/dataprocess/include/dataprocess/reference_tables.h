@@ -132,4 +132,7 @@ typedef struct upp_m_model_reg {
 #define BYTE_ORDER_SMALLBIG 3
 #define BYTE_ORDER_BIG 4
 
+struct dp_transmit_cfg;
+/* Decode one immutable reference row into a caller-owned execution descriptor. */
+int dp_transmit_from_reference(const MB_TABLE_CELL_T *row, struct dp_transmit_cfg *map);
 #endif

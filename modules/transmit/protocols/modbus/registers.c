@@ -1,9 +1,16 @@
 #include <transmit/registers.h>
+#include "../../src/routes.h"
 #include <zephyr/sys/byteorder.h>
 
-static const DEV_TBL_CFG_S *protocol_table(const struct tr_register_service *service)
+static const DEV_TBL_CFG_S *protocol_table(const struct tr_register_service *service, DEV_TBL_CFG_S *view)
 {
-    if (!service || !service->device) { return NULL; }
+    if (!service) { return NULL; }
+    if (service->segments) {
+        *view = (DEV_TBL_CFG_S){.proto_type = PRO_ADDR_SLAVE,
+            .pst_table = service->segments, .sig_num = service->segment_count};
+        return view;
+    }
+    if (!service->device) { return NULL; }
     const DEV_TBL_CFG_S *tables = service->device->ptl_tbl_cfg;
     for (size_t i = 0; i < MAX_PTL_TBL_NUM; ++i) {
         if (tables[i].proto_type == PRO_ADDR_SLAVE) { return &tables[i]; }
@@ -13,7 +20,11 @@ static const DEV_TBL_CFG_S *protocol_table(const struct tr_register_service *ser
 
 static int validate_protocol_table(const struct tr_register_service *service)
 {
-    const DEV_TBL_CFG_S *table = protocol_table(service);
+    DEV_TBL_CFG_S view;
+    const DEV_TBL_CFG_S *table = protocol_table(service, &view);
+    if (service && ((service->segments && service->device) ||
+                    (!service->segments && service->segment_count) ||
+                    service->segment_count > UINT16_MAX)) { return -EINVAL; }
     if (!table) { return 0; } /* 没有协议段的设备只提供普通点表。 */
     if (!table->pst_table || !table->sig_num) { return -EINVAL; }
     const MB_TABLE_SEG_T *segments = table->pst_table;
@@ -27,6 +38,7 @@ static int validate_protocol_table(const struct tr_register_service *service)
             }
         }
     }
+    if (!service->device) { return 0; }
     const DEV_TBL_CFG_S *tables = service->device->ptl_tbl_cfg;
     for (size_t i = 0; i < MAX_PTL_TBL_NUM; ++i) {
         if (&tables[i] != table && tables[i].proto_type == PRO_ADDR_SLAVE) {
@@ -45,7 +57,8 @@ int tr_register_route(int iface, const struct modbus_adu *rx,
     if (!rx->unit_id && (!service || !service->route_broadcast)) {
         return TR_MODBUS_SILENT;
     }
-    const DEV_TBL_CFG_S *table = protocol_table(service);
+    DEV_TBL_CFG_S view;
+    const DEV_TBL_CFG_S *table = protocol_table(service, &view);
     if (table) {
         uint16_t address = sys_get_be16(rx->data);
         const MB_TABLE_SEG_T *segments = table->pst_table;
@@ -70,6 +83,15 @@ int tr_register_attach(int iface, const void *config)
     /* 所有段表校验通过后才替换现有路由。 */
     int err = validate_protocol_table(service);
     if (err) { return err; }
+    enum tr_port_mode mode;
+    err = tr_port_get_mode(iface, &mode);
+    if (err) { return err; }
+    err = tr_routes_validate(service ? service->routes : NULL);
+    if (err) { return err; }
+    if (service && service->mapping) {
+        err = tr_bind_mapping(iface, service->mapping);
+        if (err) { return err; }
+    }
     err = tr_attach(iface, service ? service->routes : NULL);
     if (err) { return err; }
     err = tr_modbus_set_router(iface, tr_register_route, (void *)service);

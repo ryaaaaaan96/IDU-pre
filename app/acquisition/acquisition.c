@@ -3,7 +3,7 @@
 #include "process/idu_process.h"
 #include <dataprocess/points.h>
 #include <gpio/idu_inputs.h>
-#include <transmit/server.h>
+#include <transmit/forward.h>
 #include <errno.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
@@ -50,7 +50,7 @@ int idu_acquisition_cycle(struct idu_status *status)
         return lock_fault(status, status->phase, -ETIMEDOUT);
     }
     idu_status_set_phase(status, IDU_STATUS_SERVICING_COMMUNICATION);
-    err = tr_server_service(&idu_forwarding, sample.address);
+    err = tr_forward_service(&idu_forwarding, sample.address);
     if (err) {
         return lock_fault(status, status->phase, err);
     }

@@ -151,10 +151,10 @@ same bound interface: direct calls bypass the CO transaction lock.
 | Service | Module API | Product input |
 | --- | --- | --- |
 | Network registration | App `idu_ports_init()` calls `co_modbus_port_bind()` / `tr_modbus_port_bind()` | Logical IDs, application callbacks and physical serial endpoints |
-| Forwarding lifecycle | `tr_server_service()` | Interface, protocol attach callback, serial settings and recovery interval |
+| Forwarding lifecycle | `tr_forward_service()` | Independent forwarding identity, logical port, table IDs and broadcast policy; runtime unit |
 | Register dispatch | `tr_register_route()` / `tr_register_write()` | Optional `routes` address segments; ordinary values go through DP tables |
 | Point status and commands | `DM_SIG_CFG_S.pf_sig_proc` | SET callback; `FLAG_READ_CALLBACK` enables GET; `dp_defer_para_action()` for validated single-point actions |
-| Protocol segments | `MB_TABLE_SEG_T` under the selected device’s `PRO_ADDR_SLAVE` | Start/end wire address and complete-ADU callback, e.g. `iap_route()` |
+| Protocol segments | `MB_TABLE_SEG_T` selected by `tr_forward_cfg.protocol_segments` | Start/end wire address and complete-ADU callback, e.g. `iap_route()` |
 | Acquisition port | `co_port_open()` | RTU client configuration or simulator instance |
 | Simulated device | `co_simulator_*()` | Register addresses, widths, limits and initial values |
 | Simulated model | `co_model_simulator_read()` | Model registry, device range and default-value callback |
@@ -162,7 +162,7 @@ same bound interface: direct calls bypass the CO transaction lock.
 Enable these independently with `TR_SERVER_SERVICE`, `TR_REGISTER_SERVICE` (requires the
 Modbus adapter, independently of DP parameter storage), `CO_SIMULATOR` and `CO_MODEL_SIMULATOR`. The product Kconfig
 selects defaults; standalone module consumers opt in. vport never interprets registers
-or commands. `tr_register_service.device` selects the device’s protocol segments.
+or commands. Product declarations use `TR_FORWARD_CONFIG` to resolve their own mapping and protocol segments; `tr_register_service.device` remains an optional legacy consumer interface.
 These match the request start address before standard PDU validation; the handler
 validates function, exact length, payload bounds and session ownership. This supports
 extended IAP FC16 packets without relaxing ordinary Modbus limits. A matched handler’s
@@ -275,7 +275,7 @@ The application decides whether a storage failure permits degraded operation.
 It calls `dp_process_start()` for the per-point plan and `dp_reference_start()`
 for registered global INIT/TIMER tables before `co_start()` starts collection.
 This order is application orchestration, not `SYS_INIT` registration.
-Once the first sampled address is available, `tr_server_service()` attaches and
+Once the first sampled address is available, `tr_forward_service()` resolves the registered logical port, internally attaches and
 starts the northbound interface with an independent forwarding workqueue, then
 maintains its settings and recovery on subsequent application cycles.
 The system workqueue remains available for southbound Modbus receive work.
@@ -463,9 +463,9 @@ without reordering rows or allocating a RAM index. Native tables use a linear
 scan. Measure timing and stack margins on the target before release.
 
 The application registers const tables through Zephyr iterable sections. Device bindings
-in `app/protocol/protocol.c` select table IDs; DP validates and assembles a small RAM
+in `app/protocol/protocol.c` select process/optional collect table IDs through `data_device_cfg`; DP validates and assembles a small RAM
 DEV_TABLE_S pointer view. Process and acquisition rows remain shared const arrays;
-execution views use caller scratch storage. There is no full-table RAM copy or heap allocation. See [the model and pipeline design](../docs/collect-process-transmit.md).
+execution views use caller scratch storage. TR owns a small immutable mapping/lifecycle view per `tr_forward_cfg`, referencing const rows and the same DP keys. There is no full-table RAM copy; DP point values still use the existing exact-size heap allocation. See [the model and pipeline design](../docs/collect-process-transmit.md).
 
 NVS requires FLASH, FLASH_MAP, FLASH_PAGE_LAYOUT and NVS_DATA_CRC. Reserve at least
 three equal erase sectors. IDU uses four 4 KB sectors for its parameter partition.
@@ -510,3 +510,20 @@ These services have explicit limits and differ from some original behaviors.
 Use [reference-platform.md](../docs/reference-platform.md) for the exact contracts,
 remaining ten names and configuration requirements. Use
 [testing.md](../docs/testing.md) for dated validation and RAM measurements.
+
+### Independent forwarding configuration
+
+`TR_FORWARD_CONFIG` requires the reference-table registry, register dispatch and server lifecycle.
+Use `dp_data_device_bind()` for process/optional collect declarations, then `dp_init()`.
+Register physical I/O through CO/TR message APIs before `tr_forward_service(config, sampled_unit)`.
+For an already managed Modbus interface, `tr_forward_attach(iface, config)` installs the same routing.
+All declarations and tables must outlive the services and remain immutable; attachment is a startup operation.
+Each forward identity, logical port and actual interface can have one active declaration.
+No virtual forwarding entry is added to the DP point pool or NVS keys.
+
+The native `tr_bind_mapping(port, view)` API selects an immutable `dp_equip_cfg` mapping view.
+It validates before publishing. Once any explicit mapping exists, unbound interfaces fail instead of
+using the legacy global mapping. The context-free `tr_read_register()` rejects ambiguous use with
+`-ENOTUNIQ`; callbacks use the active request interface. Product writes resolve addresses in TR
+and pass keys into DP. `dp_params_write_registers()` remains only for legacy single-global-map consumers;
+it cannot resolve product forwarding addresses. No NVS format or stable data key changes are involved.

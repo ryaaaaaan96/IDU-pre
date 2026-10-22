@@ -4,6 +4,7 @@
 #include <collect/simulator.h>
 #include <transmit/server.h>
 #include <transmit/registers.h>
+#include <transmit/forward.h>
 #include "process/idu_process.h"
 #include "protocol/inc/signal_ids.h"
 #include <collect/message.h>
@@ -155,7 +156,7 @@ static void write_incompatible_fixture(bool intent)
 
 static int attach_profile(void)
 {
-    return idu_forwarding.attach(server, idu_forwarding.protocol);
+    return tr_forward_attach(server, &idu_forwarding);
 }
 
 static void *setup(void)
@@ -176,7 +177,6 @@ static void *setup(void)
     struct modbus_iface_param client_param = {.mode = MODBUS_MODE_RAW, .rx_timeout = 50000,
                                               .rawcb = {.raw_tx_cb = request}};
     zassert_ok(attach_profile());
-    if (idu_forwarding.configure) { zassert_ok(idu_forwarding.configure(&server_param)); }
     zassert_ok(tr_modbus_init_server(server, server_param, tr_register_write, true));
     zassert_ok(modbus_init_client(client, client_param));
     return NULL;

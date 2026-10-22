@@ -18,6 +18,11 @@ struct tr_register_service {
     const DEV_TABLE_S *device;
     /* 显式允许协议段收到广播；段外广播始终静默且不执行业务写。 */
     bool route_broadcast;
+    /* Direct ownership for forwarding declarations; mutually exclusive with device. */
+    const MB_TABLE_SEG_T *segments;
+    size_t segment_count;
+    const struct dp_equip_cfg *mapping;
+
 };
 
 /* 完整请求入口：协议段、标准地址段、普通点表依次处理，普通写交给 writer。

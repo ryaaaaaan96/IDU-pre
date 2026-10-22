@@ -136,7 +136,7 @@ IDU 的处理表扩展 `DM_SIG_CFG_S`，内嵌 `DM_SIG_DATA_S data`，恢复及�
 参考 `app/cfg/equip/dev_cfg.c` 将三字段 `MB_TABLE_SEG_T` 挂到设备的
 `PRO_ADDR_SLAVE`。IDU 使用相同字段 `reg_addr / end_addr / func`，采用
 Zephyr 完整 ADU 回调参数；协议段按首地址匹配，在标准 PDU 校验前执行。
-IAP 能力、版本和升级区均由该表绑定，删除全局 `extension` 入口。
+IAP 能力、版本和升级区均由该表绑定；IDU 的段表直接归 `tr_forward_cfg`，不再挂到本地数据设备，见 [ADR 0006](adr/0006-separate-forwarding-devices.md)。
 
 参考 `platform/inc/modbus.h` 规定从机接收首地址加一，所以参考段表的
 20050–20104 对应线地址 20049–20103。IDU 直接填写线地址，保留当前接收器
@@ -151,7 +151,7 @@ IDU 明确采用首地址匹配、重叠拒绝、命中错误不回退的契约�
 ## 点表的 Flash / RAM 分工
 
 产品的 `app/protocol/tables/{process,collect,transmit}.c` 使用 `const`，
-整张点表保持 `static const`，通过 Iterable Sections 登记；内部 `tables.h` 只声明表标识。DP 根据标识装配 DEV_TABLE_S 指针视图，数量由定义文件的 ARRAY_SIZE 自动计算。
+整张点表保持 `static const`，通过 Iterable Sections 登记；内部 `tables.h` 只声明表标识。DP 按 data_device_cfg 装配数据设备视图，TR 按 tr_forward_cfg 选择各入口的转发表与协议段；数量由定义文件的 ARRAY_SIZE 自动计算。
 默认值和范围内嵌在 `process.c` 的处理表行中，不再另有参数数组。
 DP 提供国家查询及初始化前选择接口，当前产品使用通用值；没有运行期切换或自动覆盖 NVS。
 该扩展的取舍见 [ADR 0004](adr/0004-inline-process-parameters.md)。
@@ -159,7 +159,7 @@ DP 提供国家查询及初始化前选择接口，当前产品使用通用值�
 设备绑定声明保存在 Flash，启动期装配的 DEV_TABLE_S 指针视图留在 RAM，getter 返回只读指针。
 三表由 CMake 独立编译，通过链接段按标识关联；条目数由各数组 ARRAY_SIZE 获取，
 无需 extern 数组、手工计数或包含其他 .c 文件。
-启用 `CONFIG_DP_REFERENCE_TABLES` 后，`dp_config_point/collect/transmit()` 在调用者
+启用 `CONFIG_DP_REFERENCE_TABLES` 后，`dp_config_point/collect()` 及 TR 的映射 reader 在调用者
 提供的栈缓冲中构造当前条目的执行视图；指针不得保留到缓冲失效后。
 参数索引、通知和默认覆盖分别保留索引或信号键，不保存临时视图指针。
 默认/范围与周期回调会被反复调用，必须只读、确定，不执行 I/O 或改变注册配置。

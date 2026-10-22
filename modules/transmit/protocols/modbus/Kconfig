@@ -24,7 +24,6 @@ config TR_PORTS
     int "Independent forwarding workqueues"
     default 1
     range 1 4
-    depends on TR_MODBUS_ADAPTER
     help
       Number of statically reserved isolated forwarding workers and stacks.
       Unused slots still reserve RAM. This is separate from the number of
@@ -59,3 +58,10 @@ config TR_MODBUS_TX_TIMEOUT_MS
     depends on TR_MODBUS_RAW_PORT
     default 3000
     range 10 10000
+
+config TR_FORWARD_CONFIG
+    bool "Independent forwarding device declarations"
+    depends on DP_TABLE_REGISTRY && TR_REGISTER_SERVICE && TR_SERVER_SERVICE
+    help
+      Resolve each forwarding entry's own const mapping and protocol segments.
+      Data identities and parameter records remain owned by DP.

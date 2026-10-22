@@ -41,4 +41,19 @@ int dp_table_bind(const struct dp_device_binding *devices, size_t count,
                   DEV_TABLE_S *output);
 int dp_table_registry_bind(const struct dp_device_binding *devices, size_t count,
                            DEV_TABLE_S *output);
+/* Compact product declaration; table rows stay in ROM. Zero collect_table
+ * means no acquisition target; collect_port/address are then ignored. */
+#define DP_DATA_DEFAULT_COLLECT_TABLE 0U
+struct data_device_cfg {
+    uint8_t dev_id;
+    uint16_t process_table;
+    uint16_t collect_table;
+    uint8_t collect_port;
+    uint8_t collect_addr;
+};
+int dp_data_device_bind(const struct data_device_cfg *devices, size_t count,
+                         DEV_TABLE_S *output);
+/* Returns a permanent registry entry; rejects duplicate IDs and wrong types. */
+int dp_table_registry_find(uint16_t id, uint16_t type,
+                           const struct dp_registered_table **table);
 #endif

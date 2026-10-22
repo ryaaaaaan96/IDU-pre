@@ -135,7 +135,7 @@ flowchart LR
 `idu_ports_init()` → `co_port_open()` →
 `co_init()` / `co_init_bus()` 注册全部总线 → `dp_params_init()` / 恢复参数 →
 `dp_process_start()` → `dp_reference_start()` → `co_start()`。参数存储失败后的降级策略由应用决定。
-首轮采样地址就绪后，调用 `tr_server_service()` 启动并维护转发接口；不使用 `SYS_INIT` 安排这些步骤。
+首轮采样地址就绪后，调用 `tr_forward_service()` 按虚拟转发配置装配并维护转发接口；不使用 `SYS_INIT` 安排这些步骤。
 初始化计划先完整校验并预留定时器槽，全部 INIT 成功后再启用定时器；
 失败释放预留槽，已成功的 INIT 事务不会回滚。成功后的重复启动返回
 `-EALREADY`。IDU 默认初始化全部测点，业务按需增加定时器。

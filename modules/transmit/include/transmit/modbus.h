@@ -7,4 +7,6 @@
  */
 int tr_modbus_port_bind(uint16_t port, const char *iface_name, const struct vport_io *io);
 int tr_modbus_port_param(int iface, struct modbus_iface_param *param);
+/* Bound interface name, or NULL for an unregistered logical port. */
+const char *tr_modbus_port_name(uint16_t port);
 #endif

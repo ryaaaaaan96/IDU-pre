@@ -41,25 +41,21 @@ DP 的 `DP_POINT_DEFAULT_*`、collect 的 `CO_TABLE_DEFAULT_*`、
 transmit 的 `TR_TABLE_DEFAULT_BYTE_ORDER`。这些是编译期字段常量，不隐藏整行配置，
 不增加初始化调用或 RAM 模板。地址、设备/信号 ID、类型、长度和轮询策略仍由应用填写。
 
-设备绑定的空表槽和无采集属性使用 DP 的 `DP_BINDING_*` / `DP_DEVICE_DEFAULT_*`；
-采集总线、端口使用 `CO_BUS_DEFAULT_*` / `CO_PORT_DEFAULT_*`，
-转发注册和生命周期配置使用 `TR_REGISTER_DEFAULT_*` / `TR_SERVER_DEFAULT_*`。
-vport 的可选完成回调、上下文和对端标识由 vport 提供默认值。
-RAW 参数分别显式填写客户端超时或服务端回调/站号，再填写 `rawcb`；不同时初始化联合体的串口成员。
-未绑定北向物理接口时 `iface_name` 仍为空，服务保持禁用；有效站号和 RAW 发送回调由模块启动流程填入。
+数据设备使用 `data_device_cfg`，逐项声明 process、可选 collect、采集总线和南向站号。
+`collect_table=DP_DATA_DEFAULT_COLLECT_TABLE`（零）表示不生成采集目标，并忽略采集口和站号。
+`idu_register_point_tables()` 先调用 `dp_data_device_bind()`，再登记 pltcb 数据目录回调。
+模块按表标识解析，不依赖链接顺序，缺表、错误类型、重复身份及非法采集关系明确失败。
 
-`modules/dataprocess` 的可选 `DP_TABLE_REGISTRY` 提供 ROM 链接段及通用校验/装配。
-`protocol.c` 的 const `bindings[]` 声明设备号、采集总线、南向地址与表标识关联。
-`idu_register_point_tables()` 先调用 `dp_table_registry_bind()`，再注册原有 pltcb 回调。
-装配按标识查找，不依赖链接顺序；重复、缺失、类型错误及数量溢出均报错，失败不修改输出。
+北向使用独立 `tr_forward_cfg idu_forwarding`，声明转发身份、逻辑口、普通转发表、可选协议段和广播策略。
+缺省段标识和广播策略使用 TR 的 `TR_FORWARD_DEFAULT_*`，无需 process 或七槽占位。
+采样循环调用 `tr_forward_service(&idu_forwarding, sample.address)`；TR 内部装配 RAW 服务，
+应用通过 `ports.c` 登记实际收发回调。没有绑定逻辑口时返回 `-ENOTCONN`，不会选择其他端口。
 
-点表、默认值和登记项仍在 Flash。只有 `DEV_TABLE_S devices[]` 指针关联视图占用 RAM，
-启动后保持不变；没有将三张完整点表复制到 RAM。dp_/co_/tr_ 接口继续使用，
-处理表行增加默认值、范围和恢复策略，采集/转发行保持原字段。
+所有点表、默认值与配置声明在 Flash。DP 的小型设备关联视图、TR 的入口映射/生命周期视图
+留在 RAM，不复制完整点表；执行行仍在调用者栈上按需转换。
 新文件仍须加入 CMake；链接段不会自动扫描源码目录。
-
-多张转发表可以挂同一设备，但当前普通映射仍是全局空间，挂载设备不决定北向站号，
-也不隔离寄存器地址。具体区别见[转发表与北向服务](../../docs/forwarding-model.md)。
+两个北向入口可以复用地址映射不同数据，也能共用同一张表；普通读写及协议段均按入口选择。
+详细边界见[转发表与北向服务](../../docs/forwarding-model.md)。
 
 当前 `protocol.c` 的 `IDU_REMOTE_DEVICE` 宏只复用同型设备挂表结构；
 `LISTIFY(2, IDU_REMOTE_DEVICE, (,), 0, IDU_DEV_REMOTE_IO, 1)` 在预处理期展开为
@@ -109,7 +105,7 @@ RAW 参数分别显式填写客户端超时或服务端回调/站号，再填写
 - 普通值回调只校验、转换或输出候选值；恢复默认、保存等不可撤销动作通过 DP 延后动作
   接口登记，不直接在校验回调中执行 I/O。接口只接受单个本地非持久写点，不允许派生写入
   或同时登记其他完成动作；可读取其他点辅助校验。
-- `tr_register_service.device` 选择设备挂载的 `MB_TABLE_SEG_T` 协议段；
+- `tr_forward_cfg.protocol_segments` 直接选择 `MB_TABLE_SEG_T` 协议段；
   IAPv3 使用 20003、20049–20104、31996–31997 三段，填写实际线地址。
   段按请求首地址匹配，在标准 PDU 校验前调用 `iap_route()`，保留变长升级包。
   回调负责精确长度、功能码、会话及广播行为；命中错误不回退到点表。
@@ -126,8 +122,8 @@ RAW 参数分别显式填写客户端超时或服务端回调/站号，再填写
 - `FLAG_COLLECT`：北向写入通过采集表找到南向目标，交给 collect；不表示开启轮询。
 - `FLAG_PERSISTENCE`：将参数保存到 NVS。低频配置使用 `FLAG_PERSISTENCE_SYNC` 或
   `FLAG_RT_STORE`，成功回复前保存；未设置这两个标志时，保留原有延后保存语义。
-- 带 `FLAG_COLLECT` 的 Modbus 行，周期编码 0 为仅下发，非零同时周期采集；
-  普通只读行的编码 0 保留初始化采集语义。`flag` 明确声明允许的写功能码。
+- 带 `FLAG_COLLECT` 的 Modbus 行，period_ms 为 0 为仅下发，非零同时周期采集；
+  普通只读行的 period_ms 为 0 保留初始化采集语义。`flag` 明确声明允许的写功能码。
 
 不持久化的下发只发送一次，不要求前置读回，不写意图日志，失败不更新缓存，重启不重放。
 持久化下发保留“记录意图—写设备—读回确认—保存”的原事务；不确定状态通过读回恢复。

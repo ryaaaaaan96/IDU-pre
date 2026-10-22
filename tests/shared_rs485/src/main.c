@@ -4,7 +4,7 @@
 #include <collect/port.h>
 #include <dataprocess/params.h>
 #include <dataprocess/process.h>
-#include <transmit/server.h>
+#include <transmit/forward.h>
 #include <zephyr/drivers/serial/uart_emul.h>
 #include <zephyr/drivers/gpio/gpio_emul.h>
 #include <zephyr/storage/flash_map.h>
@@ -120,7 +120,7 @@ static void *setup(void)
     zassert_ok(co_read(IDU_DEV_REMOTE_IO, 4, 8152, &value, 1));
     zassert_ok(dp_process_init_device(0));
     local_address(16);
-    zassert_ok(tr_server_service(&idu_forwarding, 16));
+    zassert_ok(tr_forward_service(&idu_forwarding, 16));
     return NULL;
 }
 ZTEST(shared_rs485, test_collection_and_cached_north_read)

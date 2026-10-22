@@ -180,7 +180,7 @@ Zephyr 版的实际启动、UART/DE 时序、Flash 掉电和升级回退仍需�
 ## 点表暂缓的扩展
 
 应用三表使用参考结构 `DM_SIG_CFG_S`、`MODBUS_RTU_TABLE_S` / UPP 模型表、
-`MB_TABLE_CELL_T`，由 `DEV_TABLE_S` 关联。信号使用宏或枚举，业务回调直接绑定；
+`MB_TABLE_CELL_T`，数据设备通过 `data_device_cfg` 关联 process/collect，北向入口通过 `tr_forward_cfg` 关联转发表及协议段。信号使用宏或枚举，业务回调直接绑定；
 默认值、范围和恢复策略直接内嵌在 `app/protocol/tables/process.c` 的处理表行。
 DP 提供 `dp_point_parameters_get()` 查询与初始化前的国家差异覆盖接口，当前产品使用通用参数；
 具体国家数据与选择策略尚未接入，见[配置说明](app/protocol/README.md#国家参数预留接口)。

@@ -50,6 +50,10 @@ struct tr_routes {
 int tr_attach(int iface, const struct tr_routes *routes);
 int tr_dispatch(int iface, const struct modbus_adu *request,
                           struct modbus_adu *response, void *user);
+struct dp_equip_cfg;
+/* Startup-only immutable view. After any explicit binding, an unbound port
+ * never falls back to the legacy global map. Failed validation preserves bindings. */
+int tr_bind_mapping(uint16_t port, const struct dp_equip_cfg *view);
 int tr_read(uint16_t port, uint8_t fc, uint16_t address, uint16_t *words, size_t count);
 int tr_write(uint16_t port, uint16_t address, const uint16_t *words, size_t count);
 int tr_read_register(uint8_t function, uint16_t address, uint16_t *value);

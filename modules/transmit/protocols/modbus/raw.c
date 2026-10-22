@@ -8,6 +8,7 @@
 struct raw_port {
     bool allocated, registered;
     int iface;
+    const char *name;
     struct vport_binding binding;
     struct vport_source source;
     atomic_t receiving;
@@ -77,7 +78,7 @@ int tr_modbus_port_bind(uint16_t id, const char *name, const struct vport_io *io
     int err = -ENOSPC;
     if (port && port->registered) { err = 0; }
     else if (port) {
-        *port = (struct raw_port){.allocated = true, .iface = iface,
+        *port = (struct raw_port){.allocated = true, .iface = iface, .name = name,
             .binding = {.port = id, .io = io, .receive = receive, .protocol = port}};
         err = mb_raw_set_done(iface, finished, port);
         if (!err) {
@@ -103,4 +104,12 @@ int tr_modbus_port_param(int iface, struct modbus_iface_param *param)
         }
     }
     return 0; /* Direct Zephyr RAW/RTU users may deliberately omit vport. */
+}
+
+const char *tr_modbus_port_name(uint16_t id)
+{
+    for (size_t i = 0; i < ARRAY_SIZE(ports); ++i) {
+        if (ports[i].registered && ports[i].binding.port == id) { return ports[i].name; }
+    }
+    return NULL;
 }
