@@ -1,3 +1,4 @@
+#include "../../fixtures/co_tasks.h"
 #include "../../fixtures/dp_tasks.h"
 #include "../../fixtures/point_connections.h"
 #include <collect/collect.h>
@@ -158,6 +159,15 @@ static void *setup(void)
     zassert_ok(co_enable_poll(0, false));
     set_mode(CO_PORT_SLEEP);
     zassert_ok(co_start());
+    set_mode(CO_PORT_UPDATE);
+    zassert_ok(submit(999, CO_PORT_UPDATE, 0));
+    struct completion_event delayed;
+    zassert_equal(k_msgq_get(&completions, &delayed, K_MSEC(5)), -EAGAIN,
+                  "CO must wait for the application-owned worker");
+    fixture_start_co();
+    expect_completion(999, 0);
+    expect_transfer(999, K_NO_WAIT);
+    set_mode(CO_PORT_SLEEP);
     return NULL;
 }
 

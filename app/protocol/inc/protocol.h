@@ -10,6 +10,7 @@ int idu_register_point_tables(void);
 /* 显式连接采集样本、初始化处理及同步参数下发，先于参数加载。 */
 int idu_connect_point_services(void);
 void idu_start_point_tasks(void);
+void idu_start_collect_task(void);
 const DEV_TABLE_S *idu_device_table(void);
 uint16_t idu_device_count(void);
 struct tr_forward_cfg;

@@ -10,9 +10,10 @@ config CO_MAX_BUSES
     default 1
     range 1 8
     help
-      Number of statically reserved bus workers, stacks and request queues.
+      Number of statically reserved bus states and request queues.
       Bus IDs must be in the range 0 to CO_MAX_BUSES - 1. Only registered buses
-      start workers, but all configured slots reserve RAM.
+      may be run by application-owned workers. Stacks are supplied by the
+      application; all configured state/queue slots reserve RAM.
 
 config CO_QUEUE_DEPTH
     int "Maximum queued requests per acquisition bus"
@@ -24,9 +25,9 @@ config CO_STACK_SIZE
     default 4096
     range 1024 65536
     help
-      Stack size for each bus worker, including acquisition backend callbacks.
-      Total reserved stack space is CO_MAX_BUSES times this size, plus any
-      architecture alignment or guard requirements.
+      Stack size used by applications creating a bus worker, including
+      acquisition backend callbacks. The application declares stacks only for
+      its configured execution contexts; collect does not allocate stacks.
 
 config CO_VPORT
     bool "Complete-message ports through vport"

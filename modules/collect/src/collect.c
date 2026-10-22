@@ -25,11 +25,9 @@ struct bus_state {
     enum co_port_mode mode;
     bool ready, running;
     k_tid_t init_owner;
-    struct k_thread thread;
     struct queued_request queue[CONFIG_CO_QUEUE_DEPTH];
 };
 static struct bus_state buses[CONFIG_CO_MAX_BUSES];
-K_THREAD_STACK_ARRAY_DEFINE(bus_stacks, CONFIG_CO_MAX_BUSES, CONFIG_CO_STACK_SIZE);
 static const struct dp_equip_cfg *equipment;
 static struct co_device_status statuses[CONFIG_DP_MAX_DEVICES];
 static int64_t next_poll[CONFIG_DP_POINTS_MAX_POLLS];
@@ -466,9 +464,16 @@ int co_reconfigure(uint8_t id, struct modbus_iface_param param)
     return err;
 }
 
-static void collect_thread(void *arg, void *b, void *c)
+void co_bus_task(void *arg, void *b, void *c)
 {
-    struct bus_state *bus = arg; ARG_UNUSED(b); ARG_UNUSED(c);
+    uintptr_t id = (uintptr_t)arg;
+    ARG_UNUSED(b); ARG_UNUSED(c);
+    if (!started || id >= ARRAY_SIZE(buses) || !buses[id].ready) { return; }
+    struct bus_state *bus = &buses[id];
+    k_mutex_lock(&schedule_lock, K_FOREVER);
+    if (bus->running) { k_mutex_unlock(&schedule_lock); return; }
+    bus->running = true;
+    k_mutex_unlock(&schedule_lock);
     while (true) {
         int poll = -1, queued = -1; int64_t best = INT64_MIN, now = k_uptime_get();
         int64_t deadline = INT64_MAX;
@@ -529,14 +534,6 @@ int co_start(void)
         if (!bus_for(equipment->devices[i].dev_id)) { return -ENODEV; }
     }
     started = true;
-    for (size_t i = 0; i < ARRAY_SIZE(buses); ++i) {
-        struct bus_state *bus = &buses[i];
-        if (!bus->ready) { continue; }
-        bus->running = true;
-        k_thread_create(&bus->thread, bus_stacks[i], K_THREAD_STACK_SIZEOF(bus_stacks[i]),
-                        collect_thread, bus, NULL, NULL, 7, 0, K_NO_WAIT);
-        k_thread_name_set(&bus->thread, "dp_bus");
-    }
     return 0;
 }
 

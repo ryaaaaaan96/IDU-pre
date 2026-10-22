@@ -74,6 +74,7 @@ static int start_points(void)
     if (!err) {
         idu_start_point_tasks();
         err = co_start();
+        if (!err) { idu_start_collect_task(); }
     }
     return err;
 }

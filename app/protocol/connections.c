@@ -16,10 +16,16 @@ int idu_connect_point_services(void)
 #endif
     if (!err) { err = dp_para_reg_set_func(co_dp_fast_set); }
     if (!err) { err = idu_dp_tasks_prepare(); }
+    if (!err) { err = idu_co_tasks_prepare(); }
     return err;
 }
 
 void idu_start_point_tasks(void)
 {
     idu_dp_tasks_start();
+}
+
+void idu_start_collect_task(void)
+{
+    idu_co_tasks_start();
 }

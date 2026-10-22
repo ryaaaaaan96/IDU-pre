@@ -20,3 +20,10 @@
 - dataprocess 9 项、reference_services（参数配置）11 项、reference_dp（关闭业务处理）3 项、pipeline_basic 3 项通过。
 - points 集成 46 项通过、1 个独立重启探针正常跳过，覆盖处理回调、参数、定时器和多总线。
 - 产品协议层创建挂起的 DP 执行上下文，并显式放行；后续 05 再统一收敛所有协议任务的启动位置。
+
+## 03：应用创建 CO 任务
+
+- Red：collector 在启用总线、应用尚未启动工作线程时提交请求；旧模块线程提前完成，预期等待超时的断言失败。
+- Green：`co_start()` 不创建线程，应用启动 `co_bus_task()` 后请求正常完成，collector 5 项通过。
+- points 46 项通过、1 个正常跳过；shared_rs485 7 项、reference_ports 11 项、collector 无适配器 5 项通过。
+- 模块保留总线状态和队列；产品仅声明当前总线的线程和栈，配置容量不再隐式分配模块线程栈。

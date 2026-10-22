@@ -1,3 +1,4 @@
+#include "../../fixtures/co_tasks.h"
 #include "../../fixtures/dp_tasks.h"
 #include "../../fixtures/point_connections.h"
 #include "protocol/inc/protocol.h"
@@ -211,7 +212,7 @@ ZTEST(shared_rs485, test_z_periodic_worker_updates_cache_on_the_shared_wire)
     struct co_device_status second_before, second_after;
     zassert_ok(co_device_status(IDU_DEV_REMOTE_IO, &before));
     zassert_ok(co_device_status(IDU_DEV_REMOTE_IO + 1, &second_before));
-    zassert_ok(co_start());
+    zassert_ok(co_start()); fixture_start_co();
     k_msleep(1200);
     /* Wait for the active poll to finish before disabling periodic traffic. */
     zassert_ok(co_set_port_mode(0, MODE_TRAN, 500));

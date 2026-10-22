@@ -59,7 +59,11 @@ typedef void (*co_done_fn)(const struct co_request *reply,
                                     int error, void *user);
 int co_init(const struct dp_equip_cfg *cfg, int iface, bool simulated);
 int co_poll(size_t block);
+/* Validate/arm registered buses; does not create threads. Then run one
+ * application-owned worker per bus, passing (void *)(uintptr_t)bus_id.
+ */
 int co_start(void);
+void co_bus_task(void *bus_id, void *unused1, void *unused2);
 /* All device bus IDs must fit CONFIG_CO_MAX_BUSES, including buses registered
  * later. Invalid configurations are rejected before installing callbacks.
  */
