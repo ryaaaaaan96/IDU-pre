@@ -33,7 +33,9 @@ static struct idu_status acquisition;
 static int previous_startup_service;
 static uint16_t parameter_flags;
 static unsigned workers_started;
-static const struct dp_equip_cfg point_config;
+static const struct dp_device_cfg remote_device[] = {{.dev_id = 10}};
+static const struct dp_equip_cfg point_config = {.devices = remote_device, .device_count = 1};
+static enum co_device_online remote_state;
 const struct co_bus_cfg idu_collect_bus = {0};
 const struct co_port_config idu_collect_port;
 
@@ -87,7 +89,14 @@ int co_set_data_callbacks(const struct co_data_callbacks *callbacks)
     return service(DATA_BIND);
 }
 int dp_accept_samples(struct dp_point_batch *batch, bool sync) { return 0; }
+int co_device_status(uint16_t dev_id, struct co_device_status *status)
+{
+    zassert_equal(dev_id, 10);
+    *status = (struct co_device_status){.dev_id = dev_id, .state = remote_state};
+    return 0;
+}
 int dp_initialize_acquired_device(uint16_t dev_id) { return 0; }
+int dp_invalidate_acquired_device(uint16_t dev_id, int error, int64_t observed_at) { return 0; }
 int32_t co_dp_fast_set(PARA_DATA_S *data, PARA_SET_STATUS status) { return 0; }
 int32_t dp_para_reg_set_func(PARA_SET_FUNC callback) { return 0; }
 int dp_init(void) { return service(DP_INIT); }
@@ -207,6 +216,7 @@ static void reset(void)
     previous_startup_service = -1;
     parameter_flags = DP_PARAM_STORAGE_READY;
     workers_started = 0;
+    remote_state = CO_DEVICE_ONLINE;
 }
 
 static void before(void *fixture)
@@ -409,6 +419,21 @@ ZTEST(acquisition, test_pending_recovery_prevents_confirmation_until_resolved)
     parameter_flags = DP_PARAM_STORAGE_READY;
     zassert_ok(idu_acquisition_cycle(&acquisition));
     zassert_true(checkpoint_ready);
+}
+
+ZTEST(acquisition, test_remote_outage_is_diagnostic_and_keeps_watchdog_progress)
+{
+    zassert_ok(idu_startup(&acquisition));
+    remote_state = CO_DEVICE_OFFLINE;
+    zassert_ok(idu_acquisition_cycle(&acquisition));
+    zassert_equal(acquisition.remote_offline, 1);
+    zassert_equal(kicks, 1);
+    zassert_equal(stops, 0);
+    remote_state = CO_DEVICE_INITIALIZING;
+    zassert_ok(idu_acquisition_cycle(&acquisition));
+    zassert_equal(acquisition.remote_offline, 0);
+    zassert_equal(acquisition.remote_initializing, 1);
+    zassert_equal(kicks, 2);
 }
 
 ZTEST_SUITE(acquisition, NULL, NULL, before, NULL, NULL);

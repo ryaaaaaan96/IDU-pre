@@ -11,6 +11,9 @@ int idu_register_point_tables(void);
 int idu_protocol_init(void);
 /* 已锁存的本地通信维护故障，不驱动首次启动或采样。 */
 int idu_protocol_error(void);
+struct idu_status;
+/* Called by the application owner of status; remote outages are diagnostics. */
+void idu_protocol_update_status(struct idu_status *status);
 const DEV_TABLE_S *idu_device_table(void);
 uint16_t idu_device_count(void);
 struct tr_forward_cfg;

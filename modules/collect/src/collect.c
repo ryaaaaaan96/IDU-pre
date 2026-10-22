@@ -40,6 +40,7 @@ int co_set_data_callbacks(const struct co_data_callbacks *callbacks)
     if (k_is_in_isr()) { return -EWOULDBLOCK; }
     if (started) { return -EBUSY; }
     data_callbacks = callbacks ? *callbacks : (struct co_data_callbacks){0};
+    co_state_set_offline_callback(data_callbacks.offline);
     return 0;
 }
 static CO_PORT_PF_PROC init_callbacks[CONFIG_CO_MAX_BUSES];

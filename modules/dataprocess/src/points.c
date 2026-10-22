@@ -1,4 +1,6 @@
 #include <dataprocess/points.h>
+#include <dataprocess/acquisition.h>
+#include "acquisition_internal.h"
 #include <dataprocess/reference_internal.h>
 #include <dataprocess/params.h>
 #if defined(CONFIG_DP_PROCESS)
@@ -637,5 +639,51 @@ int dp_store_reset_device(uint16_t dev)
         states[i].generation = generation;
     }
     k_mutex_unlock(&store_lock);
+    return 0;
+}
+
+bool dp_acquired_sample_current(uint16_t dev, int64_t sampled_at)
+{
+    bool current = true;
+    k_mutex_lock(&store_lock, K_FOREVER);
+    for (size_t i = 0; i < equipment->device_count; ++i) {
+        if (equipment->devices[i].dev_id == dev && reset_epoch[i] && sampled_at <= reset_epoch[i]) {
+            current = false; break;
+        }
+    }
+    k_mutex_unlock(&store_lock);
+    return current;
+}
+
+int dp_invalidate_acquired_device(uint16_t dev, int error, int64_t observed_at)
+{
+    if (!atomic_get(&ready) || !error || observed_at < 0 ||
+        observed_at > k_uptime_get() || k_is_in_isr()) { return -EINVAL; }
+    int device = -1;
+    for (size_t i = 0; i < equipment->device_count; ++i) {
+        if (equipment->devices[i].dev_id == dev) { device = i; break; }
+    }
+    if (device < 0) { return -ENOENT; }
+    k_mutex_lock(&store_lock, K_FOREVER);
+    reset_epoch[device] = MAX(reset_epoch[device], MAX(observed_at, 1));
+    struct dp_processed_event event = {.generation = ++generation};
+    for (size_t i = 0; i < equipment->point_count; ++i) {
+        struct dp_point_cfg scratch;
+        const struct dp_point_cfg *p = dp_config_point(equipment, i, &scratch);
+        if (p->key.dev_id != dev || p->source == DP_SOURCE_PARAMETER ||
+            !dp_acquired_key(equipment, p->key) || states[i].sampled_at > observed_at) { continue; }
+        states[i].quality = (states[i].quality & DP_QUALITY_SIMULATED) | DP_QUALITY_COMM_ERROR;
+        states[i].error = error;
+        states[i].generation = generation;
+        ++event.changed;
+    }
+    k_mutex_unlock(&store_lock);
+#if defined(CONFIG_DP_PARAMS)
+    /* Never hold store_lock while entering the parameter cache. Parameter sample
+     * commits check the epoch under cache_lock, so no pre-offline sample escapes.
+     */
+    dp_params_invalidate_acquired_device(dev, error, observed_at);
+#endif
+    (void)zbus_chan_pub(&dp_processed_chan, &event, K_NO_WAIT);
     return 0;
 }

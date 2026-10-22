@@ -58,6 +58,8 @@ struct co_data_callbacks {
      * its configured packets without replaying business INIT or saved writes.
      */
     int (*initialize)(uint16_t dev_id);
+    /* Actual offline transition only, outside CO locks. Retain the timestamp. */
+    int (*offline)(uint16_t dev_id, int error, int64_t observed_at);
 };
 int co_set_data_callbacks(const struct co_data_callbacks *callbacks);
 struct dp_params_transport;
@@ -87,6 +89,8 @@ int co_set_mode(uint8_t bus, enum co_port_mode mode);
 int co_get_mode(uint8_t bus, enum co_port_mode *mode);
 int co_enable_poll(size_t block, bool enabled);
 int co_device_status(uint16_t dev_id, struct co_device_status *status);
+/* Clear RAM errors and request counters only; preserve scheduling and quality. */
+int co_clear_device_errors(uint16_t dev_id);
 int co_initialize_device(uint16_t dev_id);
 /* Copies requests into the bounded per-bus queue and wakes its worker.
  * An accepted request completes once; only its matching port mode runs it.

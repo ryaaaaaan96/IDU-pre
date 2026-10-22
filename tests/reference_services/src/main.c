@@ -1,5 +1,6 @@
 #include "../../fixtures/dp_tasks.h"
 #include <data_process.h>
+#include <dataprocess/acquisition.h>
 #include <platform_callback.h>
 #include <dataprocess/params.h>
 #include <dataprocess/reference_internal.h>
@@ -56,6 +57,9 @@ static const struct dp_point_cfg points[] = {
      .maximum = UINT16_MAX, .initial.words = {7}},
     {.key = {1, 3}, .source = DP_SOURCE_LOCAL, .type = DP_U8, .width = 1, .maximum = 100},
 #if defined(CONFIG_DP_PARAMS)
+    {.key = {2, 9}, .source = DP_SOURCE_PARAMETER, .type = DP_U16, .width = 1,
+     .maximum = 100, .initial.words = {25}, .param_flags = DP_PARAM_WRITE | DP_PARAM_PERSIST | DP_PARAM_FORWARD,
+     .write_address = 100},
     {.key = {1, 5}, .source = DP_SOURCE_PARAMETER, .type = DP_WORDS, .width = 3,
      .initial.words = {1, 2, 3}, .param_flags = DP_PARAM_WRITE | DP_PARAM_PERSIST | DP_PARAM_RESTORE},
     {.key = {1, 6}, .source = DP_SOURCE_PARAMETER, .type = DP_U16, .width = 1, .maximum = 100,
@@ -63,9 +67,28 @@ static const struct dp_point_cfg points[] = {
 #endif
 };
 static const struct dp_device_cfg devices[] = {{.dev_id = 2, .unit_id = 9, .bus_id = 1, .dev_code = 42}};
+#if defined(CONFIG_DP_PARAMS)
+static const struct co_field feedback_field[] = {{.sig_id = 9, .width = 1}};
+static const struct co_cfg feedback[] = {{.dev_id = 2, .function = 3, .address = 100,
+    .count = 1, .period_ms = 100, .fields = feedback_field, .field_count = 1}};
+static uint16_t remote_setting = 25;
+static int read_setting(void *user, uint16_t dev, uint16_t address, uint16_t *words, size_t count)
+{
+    ARG_UNUSED(user); zassert_equal(dev, 2); zassert_equal(address, 100); zassert_equal(count, 1);
+    words[0] = remote_setting; return 0;
+}
+static int write_setting(void *user, uint16_t dev, uint16_t address, const uint16_t *words, size_t count)
+{
+    ARG_UNUSED(user); zassert_equal(dev, 2); zassert_equal(address, 100); zassert_equal(count, 1);
+    remote_setting = words[0]; return 0;
+}
+#endif
 static const struct dp_equip_cfg equipment = {
     .points = points, .point_count = ARRAY_SIZE(points), .devices = devices,
     .device_count = ARRAY_SIZE(devices),
+#if defined(CONFIG_DP_PARAMS)
+    .collect = feedback, .collect_count = ARRAY_SIZE(feedback),
+#endif
 };
 static bool range(uint16_t dev, uint16_t sig, uint8_t size, uint8_t *bytes)
 { ARG_UNUSED(dev); ARG_UNUSED(sig); ARG_UNUSED(size); ARG_UNUSED(bytes); return !bypass_range; }
@@ -151,6 +174,8 @@ static void *setup(void)
     zassert_ok(dp_para_reg_set_func(collect));
     zassert_ok(dp_init_config(&equipment)); fixture_start_dp();
 #if defined(CONFIG_DP_PARAMS)
+    static const struct dp_params_transport transport = {.read = read_setting, .write = write_setting};
+    zassert_ok(dp_params_set_transport(&transport));
     seed_previous_values();
     zassert_ok(dp_params_init(&equipment, DT_FIXED_PARTITION_ID(DT_NODELABEL(storage_partition))));
 #endif
@@ -339,4 +364,34 @@ ZTEST(reference_services, test_transaction_failure_cancels_reboot)
     zassert_equal(dp_set_sig_value(1,1,2,value), -ENOTSUP);
 #endif
 }
+ZTEST(reference_services, test_z_offline_feedback_keeps_durable_target_and_unrelated_quality)
+{
+#if defined(CONFIG_DP_PARAMS)
+    struct dp_point_update target = {.key = {2, 9}, .width = 1, .value.words = {42}};
+    zassert_ok(dp_params_set_values(&target, 1));
+    k_msleep(1);
+    struct dp_point_update live = {.key = {2, 9}, .width = 1, .value.words = {99}};
+    zassert_ok(dp_params_sample(&live, 1, 0, k_uptime_get()));
+    k_msleep(1);
+    zassert_ok(dp_invalidate_acquired_device(2, -ETIMEDOUT, k_uptime_get()));
+    struct dp_point_state state;
+    zassert_ok(dp_read(target.key, &state));
+    zassert_equal(state.value.words[0], 99);
+    zassert_equal(state.quality & 0xff, DP_QUALITY_COMM_ERROR);
+    struct dp_point_update local = {.key = {1, 6}, .width = 1, .value.words = {22}};
+    zassert_ok(dp_params_set_values(&local, 1));
+    zassert_ok(dp_read(target.key, &state));
+    zassert_equal(state.quality & 0xff, DP_QUALITY_COMM_ERROR,
+                  "An unrelated local parameter commit cannot validate remote feedback");
+    zassert_ok(dp_params_sample(&live, 1, 0, 0));
+    zassert_ok(dp_read(target.key, &state));
+    zassert_equal(state.quality & 0xff, DP_QUALITY_COMM_ERROR);
+    zassert_ok(dp_params_reload());
+    zassert_ok(dp_params_sync_device(2));
+    zassert_equal(remote_setting, 42, "Feedback and offline invalidation never overwrite the saved target");
+#else
+    ztest_test_skip();
+#endif
+}
+
 ZTEST_SUITE(reference_services, NULL, setup, before, NULL, NULL);

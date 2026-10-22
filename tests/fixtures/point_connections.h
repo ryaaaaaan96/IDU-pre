@@ -12,6 +12,7 @@ static inline void fixture_connect_points(void)
     const struct co_data_callbacks callbacks = {
         .sample = dp_accept_samples,
         .initialize = dp_initialize_acquired_device,
+        .offline = dp_invalidate_acquired_device,
     };
     zassert_ok(co_set_data_callbacks(&callbacks));
 #if defined(CONFIG_DP_PARAMS)

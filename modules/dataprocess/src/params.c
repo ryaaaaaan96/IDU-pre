@@ -1,4 +1,5 @@
 #include <dataprocess/params.h>
+#include "acquisition_internal.h"
 #include "parameter_store.h"
 #include <dataprocess/reference_internal.h>
 #include <dataprocess/process.h>
@@ -209,10 +210,11 @@ static void stage_cache(void)
     k_mutex_unlock(&cache_lock);
 }
 
-static void commit_cache(uint32_t sequence)
+static void commit_cache(uint32_t sequence, const bool *selected)
 {
     k_mutex_lock(&cache_lock, K_FOREVER);
     for (size_t i = 0; i < param_count; ++i) {
+        if (selected && !selected[i]) { continue; }
         if ((status.flags & DP_PARAM_STORAGE_READY) ||
             (cache_initialized && !(PARAM_DEF(i)->param_flags & DP_PARAM_PERSIST))) {
             dp_reference_notify(PARAM_DEF(i), &cache[i].value, &staged[i]);
@@ -369,6 +371,13 @@ static int recover_locked(void)
         return err;
     }
     size_t count = intent[7];
+    bool selected[CONFIG_DP_PARAMS_MAX_COUNT] = {0};
+    uint16_t device = sys_get_le16(intent + 18), address = sys_get_le16(intent + 8);
+    for (size_t i = 0; i < param_count; ++i) {
+        const struct dp_point_cfg *p = PARAM_DEF(i);
+        selected[i] = (p->param_flags & DP_PARAM_FORWARD) && p->key.dev_id == device &&
+            p->write_address >= address && (uint32_t)p->write_address + p->width <= address + count;
+    }
     err = transport_read(sys_get_le16(intent + 18), sys_get_le16(intent + 8), actual, count);
     if (err) {
         return err < 0 ? err : -EIO;
@@ -408,7 +417,7 @@ static int recover_locked(void)
                 }
             }
         }
-        commit_cache(sequence);
+        commit_cache(sequence, selected);
     }
     err = nvs_delete(&fs, INTENT_ID);
     if (err < 0) {
@@ -416,7 +425,7 @@ static int recover_locked(void)
     }
     if (!is_new) {
         stage_cache(); /* Clear the uncertain quality without applying the candidate. */
-        commit_cache(status.sequence);
+        commit_cache(status.sequence, selected);
     }
     intent_length = 0;
     set_status(0, status.flags & ~DP_PARAM_PENDING);
@@ -508,7 +517,7 @@ static int load_locked(bool *incompatible)
     memcpy(staged, durable_stage, sizeof(staged));
     memcpy(durable, durable_stage, sizeof(durable));
     memset(dirty, 0, sizeof(dirty)); flush_at = 0;
-    commit_cache(sequence);
+    commit_cache(sequence, NULL);
     ssize_t len = nvs_read(&fs, INTENT_ID, intent, sizeof(intent));
     intent_length = 0;
     if (len != -ENOENT) {
@@ -570,7 +579,7 @@ int dp_params_init(const struct dp_equip_cfg *cfg, uint8_t area_id)
     for (size_t i = 0; i < param_count; ++i) {
         staged[i] = PARAM_DEF(i)->initial;
     }
-    commit_cache(0);
+    commit_cache(0, NULL);
     cache_initialized = true;
     err = mount_locked();
     if (err) {
@@ -682,7 +691,7 @@ static int apply_staged(const bool selected[CONFIG_DP_PARAMS_MAX_COUNT])
                 if (defer) { deferred[i] = staged[i]; flush_at = k_uptime_get() + 1000; }
             }
         }
-        commit_cache(sequence);
+        commit_cache(sequence, selected);
         return 0;
     }
     size_t count = end - begin;
@@ -711,7 +720,7 @@ static int apply_staged(const bool selected[CONFIG_DP_PARAMS_MAX_COUNT])
         int err = transport_write(dev_id, begin, new_wire, count);
         if (err) { return err < 0 ? err : -EIO; }
         if (operation_flags & DP_OP_NO_DM) { stage_cache(); }
-        commit_cache(sequence);
+        commit_cache(sequence, selected);
         return 0;
     }
     if (!(status.flags & DP_PARAM_STORAGE_READY)) { return -EROFS; }
@@ -949,7 +958,8 @@ int dp_params_sample(const struct dp_point_update *values, size_t count,
     k_mutex_lock(&cache_lock, K_FOREVER);
     for (size_t i = 0; i < count; ++i) {
         int n = index_of(values[i].key);
-        if (sampled_at <= cache[n].sampled_at) { continue; }
+        if (sampled_at <= cache[n].sampled_at ||
+            !dp_acquired_sample_current(values[i].key.dev_id, sampled_at)) { continue; }
         int err = values[i].error;
         uint16_t quality = err ? DP_QUALITY_COMM_ERROR : DP_QUALITY_GOOD;
         if (!err) {
@@ -968,4 +978,18 @@ int dp_params_sample(const struct dp_point_update *values, size_t count,
     k_mutex_unlock(&cache_lock);
     k_mutex_unlock(&transaction_lock);
     return 0;
+}
+
+void dp_params_invalidate_acquired_device(uint16_t dev, int error, int64_t observed_at)
+{
+    k_mutex_lock(&cache_lock, K_FOREVER);
+    for (size_t i = 0; i < param_count; ++i) {
+        const struct dp_point_cfg *p = PARAM_DEF(i);
+        if (p->key.dev_id != dev || !dp_acquired_key(equipment, p->key) ||
+            cache[i].sampled_at > observed_at) { continue; }
+        cache[i].quality = (cache[i].quality & DP_QUALITY_SIMULATED) | DP_QUALITY_COMM_ERROR;
+        cache[i].error = error;
+        ++cache[i].generation;
+    }
+    k_mutex_unlock(&cache_lock);
 }

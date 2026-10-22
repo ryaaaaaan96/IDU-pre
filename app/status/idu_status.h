@@ -23,6 +23,9 @@ struct idu_status {
     enum idu_status_phase fault_phase;
     int last_error;
     bool led_on;
+    /* Diagnostic degradation, independent of the local watchdog fault latch. */
+    uint16_t remote_offline, remote_initializing;
+    int storage_error;
 #ifdef CONFIG_BOOTLOADER_MCUBOOT
     struct idu_image_confirm image_confirm;
 #endif

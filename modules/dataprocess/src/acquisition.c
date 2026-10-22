@@ -1,4 +1,5 @@
 #include <dataprocess/acquisition.h>
+#include "acquisition_internal.h"
 #include <dataprocess/params.h>
 #if defined(CONFIG_DP_PROCESS)
 #include <dataprocess/process.h>
@@ -30,4 +31,18 @@ int dp_initialize_acquired_device(uint16_t dev_id)
     if (!err) { err = dp_params_sync_device(dev_id); }
 #endif
     return err;
+}
+
+bool dp_acquired_key(const struct dp_equip_cfg *cfg, struct dp_key key)
+{
+    for (size_t i = 0; i < cfg->collect_count; ++i) {
+        struct co_cfg scratch;
+        const struct co_cfg *poll = dp_config_collect(cfg, i, &scratch);
+        if (poll->dev_id != key.dev_id) { continue; }
+        for (size_t j = 0; j < poll->field_count; ++j) {
+            const struct co_field *f = &poll->fields[j];
+            if (f->sig_id == key.sig_id) { return true; }
+        }
+    }
+    return false;
 }

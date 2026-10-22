@@ -11,6 +11,7 @@ static struct {
     uint32_t replies;
 } devices[CONFIG_DP_MAX_DEVICES];
 static bool armed;
+static int (*offline_callback)(uint16_t, int, int64_t);
 K_MUTEX_DEFINE(state_lock);
 
 static int index_of(uint16_t dev)
@@ -22,8 +23,16 @@ static int index_of(uint16_t dev)
     return -1;
 }
 
-static void notify(const struct co_device_status *status)
+void co_state_set_offline_callback(int (*callback)(uint16_t, int, int64_t))
 {
+    offline_callback = callback;
+}
+
+static void notify(const struct co_device_status *status, int64_t offline_at)
+{
+    if (offline_at >= 0 && offline_callback) {
+        (void)offline_callback(status->dev_id, -ETIMEDOUT, offline_at);
+    }
     (void)zbus_chan_pub(&co_device_events, status, K_NO_WAIT);
 }
 
@@ -113,7 +122,7 @@ void co_state_record(uint16_t dev, int error, struct co_outcome outcome)
     }
     struct co_device_status event = *status;
     k_mutex_unlock(&state_lock);
-    notify(&event);
+    notify(&event, -1);
 }
 
 void co_state_schedule(uint16_t dev, struct co_schedule *schedule)
@@ -147,10 +156,11 @@ void co_state_tick(void)
         k_mutex_lock(&state_lock, K_FOREVER);
         bool expired = devices[i].policy && devices[i].status.state == CO_DEVICE_EXCEPTION &&
             k_uptime_get() - devices[i].exception_since >= devices[i].policy->exception_ms;
+        int64_t offline_at = expired ? k_uptime_get() : -1;
         if (expired) { offline(i); }
         struct co_device_status event = devices[i].status;
         k_mutex_unlock(&state_lock);
-        if (expired) { notify(&event); }
+        if (expired) { notify(&event, offline_at); }
     }
 }
 
@@ -161,6 +171,7 @@ void co_state_complete(uint16_t dev, const struct co_schedule *before,
     k_mutex_lock(&state_lock, K_FOREVER);
     int i = index_of(dev);
     if (i < 0) { k_mutex_unlock(&state_lock); return; }
+    bool was_offline = devices[i].status.state == CO_DEVICE_OFFLINE;
     enum co_device_online phase = before->state;
     if (outcome.missing && devices[i].replies != before->replies) {
         outcome.missing = false;
@@ -187,9 +198,10 @@ void co_state_complete(uint16_t dev, const struct co_schedule *before,
         devices[i].status.state = CO_DEVICE_EXCEPTION;
         devices[i].exception_since = k_uptime_get();
     }
+    int64_t offline_at = !was_offline && devices[i].status.state == CO_DEVICE_OFFLINE ? k_uptime_get() : -1;
     struct co_device_status event = devices[i].status;
     k_mutex_unlock(&state_lock);
-    notify(&event);
+    notify(&event, offline_at);
 }
 
 void co_state_initialized(uint16_t dev, int error)
@@ -197,6 +209,7 @@ void co_state_initialized(uint16_t dev, int error)
     k_mutex_lock(&state_lock, K_FOREVER);
     int i = index_of(dev);
     if (i < 0 || !devices[i].policy) { k_mutex_unlock(&state_lock); return; }
+    bool was_offline = devices[i].status.state == CO_DEVICE_OFFLINE;
     if (error) { devices[i].status.error = error; devices[i].status.last_error = error; }
     if (!error) { devices[i].status.state = CO_DEVICE_ONLINE; devices[i].cursor = SIZE_MAX; }
     else if (error == -ETIMEDOUT || error == -EBADMSG) { offline(i); }
@@ -205,7 +218,23 @@ void co_state_initialized(uint16_t dev, int error)
         devices[i].cursor = devices[i].first_init;
         devices[i].due = k_uptime_get() + devices[i].policy->probe_ms;
     }
+    int64_t offline_at = !was_offline && devices[i].status.state == CO_DEVICE_OFFLINE ? k_uptime_get() : -1;
     struct co_device_status event = devices[i].status;
     k_mutex_unlock(&state_lock);
-    notify(&event);
+    notify(&event, offline_at);
+}
+
+int co_clear_device_errors(uint16_t dev)
+{
+    if (k_is_in_isr()) { return -EWOULDBLOCK; }
+    k_mutex_lock(&state_lock, K_FOREVER);
+    int i = index_of(dev);
+    if (i >= 0) {
+        devices[i].status.error = 0;
+        devices[i].status.last_error = 0;
+        devices[i].status.successes = 0;
+        devices[i].status.failures = 0;
+    }
+    k_mutex_unlock(&state_lock);
+    return i < 0 ? -ENOENT : 0;
 }

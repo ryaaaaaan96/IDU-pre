@@ -26,6 +26,8 @@ static const struct dp_point_cfg points[] = {
     {.key = {11, 3}, .source = DP_SOURCE_MODBUS, .type = DP_U16, .width = 1, .maximum = UINT16_MAX},
     {.key = {10, 6}, .source = DP_SOURCE_MODBUS, .type = DP_WORDS, .width = 16},
     {.key = {10, 7}, .source = DP_SOURCE_MODBUS, .type = DP_WORDS, .width = 16},
+    {.key = {1, 9}, .source = DP_SOURCE_CONSTANT, .type = DP_U16, .width = 1,
+     .maximum = UINT16_MAX, .initial.words = {77}},
     {.key = {10, 8}, .source = DP_SOURCE_MODBUS, .type = DP_U16, .width = 1, .maximum = UINT16_MAX},
 };
 static const struct dp_device_cfg devices[] = {
@@ -61,6 +63,10 @@ static const struct co_cfg polls[] = {
      .fields = eighth, .field_count = 1},
 };
 static const struct dp_transmit_cfg maps[] = {
+    {.function = 4, .address = 1002, .count = 1, .key = {10, 2}},
+    {.function = 4, .address = 1003, .count = 1, .key = {11, 3}},
+    {.function = 4, .address = 1004, .count = 1, .key = {1, 9}},
+    {.function = 4, .address = 2000, .count = 16, .key = {10, 6}},
     {.function = 4, .address = 1000, .count = 1, .key = {10, 3}},
     {.function = 4, .address = 1001, .count = 1, .key = {10, 4}},
 };
@@ -84,7 +90,8 @@ static int transfer(void *user, uint16_t dev, struct modbus_adu *adu)
     struct request_event event = {.dev = dev, .address = address, .count = count, .at = k_uptime_get()};
     zassert_ok(k_msgq_put(&requests, &event, K_NO_WAIT));
     if (dev == atomic_get(&fault_device) && atomic_get(&timeout_peer) == 1) { return -ETIMEDOUT; }
-    if (dev == atomic_get(&fault_device) && atomic_get(&timeout_peer) == 2) {
+    if (dev == atomic_get(&fault_device) && (atomic_get(&timeout_peer) == 2 ||
+        (atomic_get(&timeout_peer) == 5 && address >= 200))) {
         adu->fc |= 0x80; adu->length = 1; adu->data[0] = MODBUS_EXC_ILLEGAL_DATA_ADDR;
         return 0;
     }
@@ -95,11 +102,45 @@ static int transfer(void *user, uint16_t dev, struct modbus_adu *adu)
     return 0;
 }
 
+static int server_iface, client_iface;
+static int north_request(int iface, const struct modbus_adu *adu, void *user)
+{
+    ARG_UNUSED(iface); ARG_UNUSED(user);
+    return modbus_raw_submit_rx(server_iface, adu);
+}
+static int north_response(int iface, const struct modbus_adu *adu, void *user)
+{
+    ARG_UNUSED(iface); ARG_UNUSED(user);
+    return modbus_raw_submit_rx(client_iface, adu);
+}
+
 static void *setup(void)
 {
     zassert_ok(dp_init_config(&equipment));
+    struct dp_point_batch old = {.source = DP_SOURCE_MODBUS, .count = 1,
+        .points = {{.key = {10, 2}, .width = 1, .value.words = {999}}}};
+    zassert_ok(dp_publish(&old, K_NO_WAIT));
+    k_msleep(2);
+    zassert_ok(dp_invalidate_acquired_device(10, -ETIMEDOUT, k_uptime_get()));
     fixture_start_dp();
+    zassert_ok(dp_wait_processed(old.ticket, K_SECONDS(1)));
+    struct dp_point_state state;
+    zassert_ok(dp_read((struct dp_key){10, 2}, &state));
+    zassert_equal(state.quality & 0xff, DP_QUALITY_COMM_ERROR);
+    zassert_not_equal(state.value.words[0], 999, "Queued stale samples cannot resurrect invalid data");
+    k_msleep(1);
     fixture_connect_points();
+    server_iface = modbus_iface_get_by_name("RAW_0");
+    client_iface = modbus_iface_get_by_name("RAW_1");
+    struct modbus_iface_param server = {.mode = MODBUS_MODE_RAW,
+        .server = {.unit_id = 16, .user_cb = tr_callbacks()},
+        .rawcb = {.raw_tx_cb = north_response}};
+    struct modbus_iface_param client = {.mode = MODBUS_MODE_RAW, .rx_timeout = 100000,
+        .rawcb = {.raw_tx_cb = north_request}};
+    zassert_ok(tr_attach(server_iface, NULL));
+    fixture_bind_tr(server_iface);
+    zassert_ok(tr_modbus_init_server(server_iface, server, NULL, true));
+    zassert_ok(modbus_init_client(client_iface, client));
     const struct co_bus_cfg bus = {.id = 0, .iface = -1, .transfer = transfer};
     zassert_ok(co_init_bus(&equipment, &bus));
     static const struct co_device_policy policy = {.retries = 2, .exception_ms = 50, .probe_ms = 80};
@@ -224,6 +265,11 @@ ZTEST(collect_state, test_d_timeout_anomaly_offline_probe_and_reinitialization)
     wait_state(10, CO_DEVICE_OFFLINE);
     zassert_ok(co_device_status(10, &status));
     zassert_false(status.online);
+    struct dp_point_state cached;
+    zassert_ok(dp_read((struct dp_key){10, 2}, &cached));
+    zassert_equal(cached.value.words[0], 110, "Offline keeps the last initialization sample");
+    zassert_equal(cached.quality & 0xff, DP_QUALITY_COMM_ERROR,
+                  "Offline invalidates even initialization-only acquired points");
     zassert_ok(co_device_status(11, &other_after));
     zassert_true(other_after.successes > other_before.successes);
     k_msgq_purge(&requests);
@@ -402,6 +448,81 @@ ZTEST(collect_state, test_k_initialization_sample_can_read_back_without_lock_cyc
     }
     zassert_true(readback);
     atomic_clear(&sample_readback_enabled);
+    enable_periodic(false);
+}
+
+ZTEST(collect_state, test_l_offline_north_exception_partial_recovery_and_diagnostic_clear)
+{
+    enable_periodic(true);
+    wait_state(10, CO_DEVICE_ONLINE);
+    atomic_set(&timeout_peer, 1);
+    wait_state(10, CO_DEVICE_OFFLINE);
+    uint16_t value;
+    zassert_equal(modbus_read_input_regs(client_iface, 16, 1002, &value, 1), MODBUS_EXC_ILLEGAL_DATA_ADDR);
+    zassert_ok(modbus_read_input_regs(client_iface, 16, 1003, &value, 1));
+    zassert_equal(value, 1000);
+    zassert_ok(modbus_read_input_regs(client_iface, 16, 1004, &value, 1));
+    zassert_equal(value, 77);
+    struct co_device_status status;
+    zassert_ok(co_clear_device_errors(10));
+    zassert_ok(co_device_status(10, &status));
+    zassert_equal(status.state, CO_DEVICE_OFFLINE);
+    zassert_false(status.online);
+    zassert_equal(status.error, 0);
+    zassert_equal(status.last_error, 0);
+    zassert_equal(status.successes, 0);
+    zassert_equal(status.failures, 0);
+    zassert_equal(co_clear_device_errors(999), -ENOENT);
+    struct dp_point_state cached;
+    zassert_ok(dp_read((struct dp_key){10, 2}, &cached));
+    zassert_equal(cached.quality & 0xff, DP_QUALITY_COMM_ERROR);
+    zassert_equal(cached.value.words[0], 110);
+    k_msgq_purge(&requests);
+    k_msleep(20);
+    struct request_event event;
+    while (!k_msgq_get(&requests, &event, K_NO_WAIT)) {
+        zassert_not_equal(event.dev, 10, "North reads and diagnostic clear must not trigger downstream reads");
+    }
+    atomic_set(&timeout_peer, 5); /* First initialization packet works, next packet has an exception. */
+    for (unsigned i = 0; i < 150; ++i) {
+        zassert_ok(dp_read((struct dp_key){10, 2}, &cached));
+        if ((cached.quality & 0xff) == DP_QUALITY_GOOD) { break; }
+        k_msleep(1);
+    }
+    zassert_equal(cached.quality & 0xff, DP_QUALITY_GOOD);
+    zassert_ok(modbus_read_input_regs(client_iface, 16, 1002, &value, 1));
+    zassert_equal(value, 110);
+    zassert_equal(modbus_read_input_regs(client_iface, 16, 2000, &value, 1), MODBUS_EXC_ILLEGAL_DATA_ADDR);
+    zassert_ok(dp_read((struct dp_key){10, 6}, &cached));
+    zassert_equal(cached.value.words[0], 2000);
+    zassert_not_equal(cached.quality & 0xff, DP_QUALITY_GOOD);
+    atomic_clear(&timeout_peer);
+    wait_state(10, CO_DEVICE_ONLINE);
+    zassert_ok(co_device_status(10, &status));
+    zassert_not_equal(status.last_error, 0, "Success retains historical errors");
+    zassert_ok(modbus_read_input_regs(client_iface, 16, 2000, &value, 1));
+    zassert_equal(value, 2000);
+    enable_periodic(false);
+}
+
+ZTEST(collect_state, test_m_concurrent_diagnostic_clear_preserves_control_state)
+{
+    enable_periodic(true);
+    wait_state(10, CO_DEVICE_ONLINE);
+    atomic_set(&timeout_peer, 2);
+    for (unsigned i = 0; i < 30; ++i) {
+        zassert_ok(co_clear_device_errors(10));
+        struct co_device_status status;
+        zassert_ok(co_device_status(10, &status));
+        zassert_equal(status.dev_id, 10);
+        zassert_equal(status.state, CO_DEVICE_ONLINE);
+        zassert_true(status.error == 0 || status.error == MODBUS_EXC_ILLEGAL_DATA_ADDR);
+        k_msleep(1);
+    }
+    struct co_device_status other;
+    zassert_ok(co_device_status(11, &other));
+    zassert_true(other.successes > 0, "Clearing one device never clears another device's records");
+    atomic_clear(&timeout_peer);
     enable_periodic(false);
 }
 

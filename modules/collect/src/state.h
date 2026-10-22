@@ -14,6 +14,7 @@ struct co_schedule {
 };
 void co_state_bind(const struct dp_equip_cfg *cfg, uint8_t bus, bool simulated);
 void co_state_arm(void);
+void co_state_set_offline_callback(int (*callback)(uint16_t, int, int64_t));
 int co_state_get(uint16_t dev, struct co_device_status *status);
 void co_state_record(uint16_t dev, int error, struct co_outcome outcome);
 void co_state_schedule(uint16_t dev, struct co_schedule *schedule);

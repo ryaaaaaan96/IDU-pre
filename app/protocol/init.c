@@ -1,5 +1,6 @@
 #include "inc/protocol.h"
 #include "tasks.h"
+#include "status/idu_status.h"
 #include <collect/collect.h>
 #include <dataprocess/acquisition.h>
 #include <dataprocess/params.h>
@@ -16,6 +17,7 @@ static int connect_point_services(void)
     static const struct co_data_callbacks callbacks = {
         .sample = dp_accept_samples,
         .initialize = dp_initialize_acquired_device,
+        .offline = dp_invalidate_acquired_device,
     };
     int err = co_set_data_callbacks(&callbacks);
 #if defined(CONFIG_DP_PARAMS)
@@ -98,4 +100,23 @@ int idu_protocol_init(void)
         idu_co_tasks_start();
     }
     return err;
+}
+
+void idu_protocol_update_status(struct idu_status *status)
+{
+    if (!status) { return; }
+    status->remote_offline = 0;
+    status->remote_initializing = 0;
+    const struct dp_equip_cfg *config = dp_config();
+    if (config) {
+        for (size_t i = 0; i < config->device_count; ++i) {
+            struct co_device_status remote;
+            if (co_device_status(config->devices[i].dev_id, &remote)) { continue; }
+            status->remote_offline += remote.state == CO_DEVICE_OFFLINE;
+            status->remote_initializing += remote.state == CO_DEVICE_INITIALIZING;
+        }
+    }
+    struct dp_param_status parameters;
+    dp_params_get_status(&parameters);
+    status->storage_error = (parameters.flags & DP_PARAM_STORAGE_READY) ? 0 : parameters.error;
 }

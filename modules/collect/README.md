@@ -27,3 +27,8 @@
 自动初始化只读取初始化组，不重放业务 INIT 或已保存的下发目标；显式 `co_initialize_device()` 仍执行注册的初始化后处理。
 显式读写不自动重试，错误仍记录，但失败不驱动自动轮询状态。有效异常应答证明通信存在，不代表数据可用。
 状态的 `state` 表达采集阶段，`online` 单独记录通信是否已确认；`last_error` 在成功后保留，`error` 表示最近操作结果。
+
+应用可将 `dp_invalidate_acquired_device` 注册到 `co_data_callbacks.offline`，由真实掉线转换触发，
+保留最后数值、使该设备所有采集点通信失效，并隔离排队旧样本；各点成功采样后才恢复。
+该回调不持 CO 状态或物理事务锁。`co_device_status()` 返回一致 RAM 快照，
+`co_clear_device_errors()` 仅清错误与请求计数，不改变阶段、探测时间、质量或触发通信。
