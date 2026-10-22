@@ -1,4 +1,5 @@
 #include <collect/collect.h>
+#include "state.h"
 #include "../protocols/modbus/client.h"
 #include <collect_lib.h>
 #include <dataprocess/reference_internal.h>
@@ -29,7 +30,6 @@ struct bus_state {
 };
 static struct bus_state buses[CONFIG_CO_MAX_BUSES];
 static const struct dp_equip_cfg *equipment;
-static struct co_device_status statuses[CONFIG_DP_MAX_DEVICES];
 static int64_t next_poll[CONFIG_DP_POINTS_MAX_POLLS];
 static bool disabled[CONFIG_DP_POINTS_MAX_POLLS];
 static bool started;
@@ -68,26 +68,11 @@ static struct bus_state *bus_for(uint16_t dev_id)
     return bus->ready ? bus : NULL;
 }
 
-static void record_status(uint16_t dev_id, int err)
-{
-    int i = device_index(dev_id);
-    if (i < 0) { return; }
-    k_mutex_lock(&schedule_lock, K_FOREVER);
-    struct co_device_status *s = &statuses[i];
-    s->dev_id = dev_id;
-    s->bus_id = equipment->devices[i].bus_id;
-    s->simulated = buses[s->bus_id].cfg.simulated;
-    s->error = err;
-    s->state = !err ? CO_DEVICE_ONLINE : err > 0 ? CO_DEVICE_EXCEPTION : CO_DEVICE_OFFLINE;
-    if (!err) { ++s->successes; s->last_success = k_uptime_get(); }
-    else { ++s->failures; }
-    struct co_device_status event = *s;
-    k_mutex_unlock(&schedule_lock);
-    zbus_chan_pub(&co_device_events, &event, K_NO_WAIT);
-}
 
-int co_transfer_mode(uint16_t dev_id, enum co_port_mode mode, struct modbus_adu *adu)
+static int exchange(uint16_t dev_id, enum co_port_mode mode, struct modbus_adu *adu,
+                     struct co_outcome *outcome)
 {
+    *outcome = (struct co_outcome){0};
     struct bus_state *bus = bus_for(dev_id);
     int d = device_index(dev_id);
     if (!bus || !adu || (unsigned)mode >= CO_PORT_SLEEP || adu->length > sizeof(adu->data)) { return -EINVAL; }
@@ -99,14 +84,30 @@ int co_transfer_mode(uint16_t dev_id, enum co_port_mode mode, struct modbus_adu 
     }
     adu->unit_id = equipment->devices[d].unit_id;
     uint8_t fc = adu->fc;
+    uint16_t address = adu->length >= 4 ? sys_get_be16(adu->data) : 0;
+    uint16_t value = adu->length >= 4 ? sys_get_be16(adu->data + 2) : 0;
     int err = bus->cfg.transfer ? bus->cfg.transfer(bus->cfg.user, dev_id, adu) :
                                   co_modbus_transfer(bus->cfg.iface, dev_id, adu);
     if (!err && adu->unit_id != equipment->devices[d].unit_id) { err = -EBADMSG; }
     if (!err && adu->fc == (fc | 0x80) && adu->length == 1 && adu->data[0]) { err = adu->data[0]; }
     else if (!err && (adu->fc != fc || adu->unit_id != equipment->devices[d].unit_id ||
                      adu->length > sizeof(adu->data))) { err = -EBADMSG; }
+    if (!err && (fc == 3 || fc == 4) &&
+        (adu->length != 1U + value * 2U || adu->data[0] != value * 2U)) { err = -EBADMSG; }
+    if (!err && (fc == 6 || fc == 16) &&
+        (adu->length != 4 || sys_get_be16(adu->data) != address ||
+         sys_get_be16(adu->data + 2) != value)) { err = -EBADMSG; }
     k_mutex_unlock(&bus->lock);
-    record_status(dev_id, err);
+    outcome->replied = err >= 0;
+    outcome->missing = err == -ETIMEDOUT || err == -EBADMSG;
+    return err;
+}
+
+int co_transfer_mode(uint16_t dev_id, enum co_port_mode mode, struct modbus_adu *adu)
+{
+    struct co_outcome outcome;
+    int err = exchange(dev_id, mode, adu, &outcome);
+    co_state_record(dev_id, err, outcome);
     return err;
 }
 
@@ -115,18 +116,25 @@ int co_transfer(uint16_t dev_id, struct modbus_adu *adu)
     return co_transfer_mode(dev_id, CO_PORT_POLL, adu);
 }
 
-int co_read(uint16_t dev_id, uint8_t fc, uint16_t address, uint16_t *words, size_t count)
+static int read_registers(uint16_t dev_id, uint8_t fc, uint16_t address, uint16_t *words, size_t count,
+                           struct co_outcome *outcome, bool record)
 {
     if (!words || !count || count > CO_MAX_REGS || 1 + count * 2 > sizeof(((struct modbus_adu *)0)->data) || (fc != 3 && fc != 4) ||
         (uint32_t)address + count > 65536) { return -EINVAL; }
     struct modbus_adu adu = {.fc = fc, .length = 4};
     sys_put_be16(address, adu.data); sys_put_be16(count, adu.data + 2);
-    int err = co_transfer(dev_id, &adu);
-    if (!err && (adu.length != 1 + count * 2 || adu.data[0] != count * 2)) { err = -EBADMSG; record_status(dev_id, err); }
+    int err = exchange(dev_id, CO_PORT_POLL, &adu, outcome);
     if (!err) {
         for (size_t i = 0; i < count; ++i) { words[i] = sys_get_be16(adu.data + 1 + 2 * i); }
     }
+    if (record) { co_state_record(dev_id, err, *outcome); }
     return err;
+}
+
+int co_read(uint16_t dev_id, uint8_t fc, uint16_t address, uint16_t *words, size_t count)
+{
+    struct co_outcome outcome = {0};
+    return read_registers(dev_id, fc, address, words, count, &outcome, true);
 }
 
 int co_write(uint16_t dev_id, uint16_t address, const uint16_t *words, size_t count)
@@ -139,9 +147,9 @@ int co_write(uint16_t dev_id, uint16_t address, const uint16_t *words, size_t co
         adu.data[4] = count * 2;
         for (size_t i = 0; i < count; ++i) { sys_put_be16(words[i], adu.data + 5 + i * 2); }
     }
-    int err = co_transfer(dev_id, &adu);
-    if (!err && (adu.length != 4 || sys_get_be16(adu.data) != address ||
-        sys_get_be16(adu.data + 2) != (count == 1 ? words[0] : count))) { record_status(dev_id, -EBADMSG); return -EBADMSG; }
+    struct co_outcome outcome;
+    int err = exchange(dev_id, CO_PORT_POLL, &adu, &outcome);
+    co_state_record(dev_id, err, outcome);
     return err;
 }
 
@@ -212,6 +220,7 @@ int co_init_bus(const struct dp_equip_cfg *cfg, const struct co_bus_cfg *config)
     k_sem_init(&bus->wake, 0, 1);
     bus->cfg = *config; bus->mode = CO_PORT_POLL; bus->ready = true;
     zbus_chan_set_msg_sub_pool(&co_device_events, &device_event_pool);
+    co_state_bind(cfg, config->id, config->simulated);
     return 0;
 }
 
@@ -221,7 +230,7 @@ int co_init(const struct dp_equip_cfg *cfg, int iface, bool simulated)
     return co_init_bus(cfg, &bus);
 }
 
-static int collect_request(const struct co_cfg *cfg, bool sync)
+static int collect_request(const struct co_cfg *cfg, bool sync, struct co_outcome *outcome)
 {
     if (!data_callbacks.sample) { return -ENOTCONN; }
     struct bus_state *bus = bus_for(cfg->dev_id);
@@ -235,9 +244,10 @@ static int collect_request(const struct co_cfg *cfg, bool sync)
               !bus->cfg.read_model ? -ENOTSUP :
               bus->cfg.read_model(bus->cfg.user, cfg->dev_id, cfg->model_id, cfg->address, registers, cfg->count);
         k_mutex_unlock(&bus->lock);
-        record_status(cfg->dev_id, err);
+        *outcome = (struct co_outcome){.replied = err >= 0,
+            .missing = err == -ETIMEDOUT || err == -EBADMSG};
     } else {
-        err = co_read(cfg->dev_id, cfg->function, cfg->address, registers, cfg->count);
+        err = read_registers(cfg->dev_id, cfg->function, cfg->address, registers, cfg->count, outcome, false);
     }
     struct dp_point_batch batch = {.source = DP_SOURCE_MODBUS,
         .flags = bus->cfg.simulated ? DP_QUALITY_SIMULATED : 0, .count = cfg->field_count};
@@ -252,21 +262,25 @@ static int collect_request(const struct co_cfg *cfg, bool sync)
         }
     }
     int publish = data_callbacks.sample(&batch, sync);
-    return publish ? publish : err;
+    int result = publish ? publish : err;
+    co_state_record(cfg->dev_id, result, *outcome);
+    return result;
 }
 
 static int collect_poll(size_t block, bool sync)
 {
     if (!equipment || block >= equipment->collect_count) { return -EINVAL; }
     struct co_cfg scratch;
-    return collect_request(dp_config_collect(equipment, block, &scratch), sync);
+    struct co_outcome outcome = {0};
+    return collect_request(dp_config_collect(equipment, block, &scratch), sync, &outcome);
 }
 
 /* Build a bounded request on the caller's stack; immutable rows stay in ROM.
  * Explicit co_poll keeps its one-row contract. Scheduled/initialization reads
  * combine adjacent compatible rows and report how many deadlines were served.
  */
-static int collect_group(size_t first, bool sync, bool due_only, size_t *rows)
+static int collect_group(size_t first, bool sync, bool due_only, size_t *rows,
+                          uint8_t retries, struct co_outcome *outcome)
 {
     struct co_cfg scratch;
     struct co_cfg request = *dp_config_collect(equipment, first, &scratch);
@@ -295,7 +309,11 @@ static int collect_group(size_t first, bool sync, bool due_only, size_t *rows)
         ++*rows;
     }
     k_mutex_unlock(&schedule_lock);
-    return collect_request(&request, sync);
+    for (unsigned attempt = 0; ; ++attempt) {
+        *outcome = (struct co_outcome){0};
+        int err = collect_request(&request, sync, outcome);
+        if (!outcome->missing || attempt >= retries) { return err; }
+    }
 }
 
 int co_poll(size_t block) { return collect_poll(block, false); }
@@ -418,12 +436,7 @@ int co_enable_poll(size_t block, bool enabled)
 
 int co_device_status(uint16_t dev_id, struct co_device_status *status)
 {
-    int i = device_index(dev_id);
-    if (i < 0 || !status) { return -EINVAL; }
-    k_mutex_lock(&schedule_lock, K_FOREVER); *status = statuses[i]; status->dev_id = dev_id;
-    status->bus_id = equipment->devices[i].bus_id;
-    status->simulated = buses[status->bus_id].cfg.simulated;
-    k_mutex_unlock(&schedule_lock); return 0;
+    return co_state_get(dev_id, status);
 }
 
 int co_initialize_device(uint16_t dev_id)
@@ -448,11 +461,15 @@ int co_initialize_device(uint16_t dev_id)
         const struct co_cfg *poll = dp_config_collect(equipment, i, &scratch);
         if (poll->dev_id == dev_id && poll->init_only) {
             size_t rows;
-            err = collect_group(i, true, false, &rows);
+            struct co_schedule schedule;
+            struct co_outcome outcome;
+            co_state_schedule(dev_id, &schedule);
+            err = collect_group(i, true, false, &rows, schedule.retries, &outcome);
             i += rows - 1;
         }
     }
     if (!err && data_callbacks.initialize) { err = data_callbacks.initialize(dev_id); }
+    co_state_initialized(dev_id, err);
     k_mutex_lock(&bus->lock, K_FOREVER);
     k_mutex_lock(&schedule_lock, K_FOREVER);
     bus->init_owner = NULL; bus->mode = old;
@@ -519,6 +536,7 @@ void co_bus_task(void *arg, void *b, void *c)
     bus->running = true;
     k_mutex_unlock(&schedule_lock);
     while (true) {
+        co_state_tick();
         int poll = -1, queued = -1; int64_t best = INT64_MIN, now = k_uptime_get();
         int64_t deadline = INT64_MAX;
         struct queued_request job;
@@ -535,12 +553,22 @@ void co_bus_task(void *arg, void *b, void *c)
             for (size_t i = 0; i < equipment->collect_count; ++i) {
                 struct co_cfg p_scratch;
                 const struct co_cfg *p = dp_config_collect(equipment, i, &p_scratch);
-                if (disabled[i] || p->init_only || bus_for(p->dev_id) != bus) { continue; }
-                if (now < next_poll[i]) {
-                    deadline = MIN(deadline, next_poll[i]);
-                    continue;
+                if (bus_for(p->dev_id) != bus) { continue; }
+                struct co_schedule schedule;
+                co_state_schedule(p->dev_id, &schedule);
+                int64_t due = next_poll[i];
+                if (schedule.managed && (schedule.state == CO_DEVICE_INITIALIZING ||
+                                          schedule.state == CO_DEVICE_OFFLINE)) {
+                    if (i != schedule.cursor) { continue; }
+                    due = schedule.due;
+                } else {
+                    if (schedule.managed && schedule.state == CO_DEVICE_EXCEPTION) {
+                        deadline = MIN(deadline, schedule.due);
+                    }
+                    if (disabled[i] || p->init_only) { continue; }
                 }
-                int64_t score = now - next_poll[i] + p->priority * 1000;
+                if (now < due) { deadline = MIN(deadline, due); continue; }
+                int64_t score = now - due + p->priority * 1000;
                 if (score > best) { best = score; poll = i; queued = -1; }
             }
         }
@@ -550,15 +578,36 @@ void co_bus_task(void *arg, void *b, void *c)
             int err = co_transfer_mode(job.request.dev_id, job.request.mode, &job.request.adu);
             job.done(&job.request, err, job.user);
         } else if (poll >= 0) {
-            size_t rows = 1;
-            k_mutex_lock(&bus->lock, K_FOREVER);
-            if (bus->mode == CO_PORT_POLL) { collect_group(poll, false, true, &rows); }
-            k_mutex_unlock(&bus->lock);
-            k_mutex_lock(&schedule_lock, K_FOREVER);
             struct co_cfg scratch;
             const struct co_cfg *cfg = dp_config_collect(equipment, poll, &scratch);
-            int64_t next = k_uptime_get() + cfg->period_ms;
+            uint16_t dev = cfg->dev_id;
+            uint32_t period = cfg->period_ms;
+            struct co_schedule before;
+            co_state_schedule(dev, &before);
+            bool initializing = before.managed &&
+                (before.state == CO_DEVICE_INITIALIZING || before.state == CO_DEVICE_OFFLINE);
+            struct co_outcome outcome = {0};
+            size_t rows = 1;
+            k_mutex_lock(&bus->lock, K_FOREVER);
+            bool running = bus->mode == CO_PORT_POLL;
+            k_mutex_unlock(&bus->lock);
+            /* exchange() serializes each physical transaction. Never retain
+             * the bus lock while waiting for DP SAMPLE/business completion. */
+            int err = running ? collect_group(poll, initializing, !initializing, &rows,
+                                              before.retries, &outcome) : -EBUSY;
+            if (!running) { continue; }
+            co_state_complete(dev, &before, poll, rows, err, outcome);
+            struct co_schedule after;
+            co_state_schedule(dev, &after);
+            k_mutex_lock(&schedule_lock, K_FOREVER);
+            int64_t next = k_uptime_get() + period;
             for (size_t i = 0; i < rows; ++i) { next_poll[poll + i] = next; }
+            if (initializing && after.state == CO_DEVICE_ONLINE) {
+                for (size_t i = 0; i < equipment->collect_count; ++i) {
+                    const struct co_cfg *p = dp_config_collect(equipment, i, &scratch);
+                    if (p->dev_id == dev) { next_poll[i] = k_uptime_get(); }
+                }
+            }
             k_mutex_unlock(&schedule_lock);
         } else {
             /* Updates give a latched semaphore after changing the schedule.
@@ -579,6 +628,7 @@ int co_start(void)
     for (size_t i = 0; i < equipment->device_count; ++i) {
         if (!bus_for(equipment->devices[i].dev_id)) { return -ENODEV; }
     }
+    co_state_arm();
     started = true;
     return 0;
 }
@@ -686,7 +736,7 @@ int co_anlysis_mb_pkg(uint8_t dev, uint16_t address, uint8_t *frame, uint16_t le
     }
     if (crc || frame[0] != equipment->devices[device].unit_id) { return -EBADMSG; }
     if ((frame[1] == 0x83 || frame[1] == 0x84) && length == 5 && frame[2]) {
-        record_status(dev, frame[2]); return -EIO;
+        co_state_record(dev, frame[2], (struct co_outcome){.replied = true}); return -EIO;
     }
     if ((frame[1] != 3 && frame[1] != 4) || !frame[2] || frame[2] % 2 ||
         length != 5U + frame[2] || (uint32_t)address + frame[2] / 2 > 65536) { return -EBADMSG; }
@@ -713,7 +763,7 @@ int co_anlysis_mb_pkg(uint8_t dev, uint16_t address, uint8_t *frame, uint16_t le
     }
     if (!batch.count) { return -ENOENT; }
     int err = data_callbacks.sample ? data_callbacks.sample(&batch, false) : -ENOTCONN;
-    if (!err) { record_status(dev, 0); }
+    if (!err) { co_state_record(dev, 0, (struct co_outcome){.replied = true}); }
     return err;
 }
 

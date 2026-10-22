@@ -242,9 +242,11 @@ ZTEST(points, test_modules_multibus_modes_state_and_initialization)
     bus_fault = -ETIMEDOUT;
     zassert_equal(co_read(20, 3, 40000, &word, 1), -ETIMEDOUT);
     struct co_device_status status; zassert_ok(co_device_status(20, &status));
-    zassert_equal(status.state, CO_DEVICE_OFFLINE);
+    zassert_equal(status.state, CO_DEVICE_ONLINE);
+    zassert_equal(status.last_error, -ETIMEDOUT);
     bus_fault = 2; zassert_equal(co_read(20, 3, 40000, &word, 1), 2);
-    zassert_ok(co_device_status(20, &status)); zassert_equal(status.state, CO_DEVICE_EXCEPTION);
+    zassert_ok(co_device_status(20, &status)); zassert_equal(status.state, CO_DEVICE_ONLINE);
+    zassert_equal(status.last_error, 2);
     bus_fault = 0; bus_value = 44;
     zassert_ok(co_initialize_device(20)); zassert_equal(bus_value, 222);
     zassert_ok(co_simulator_set_register(&idu_collect_simulator, 4,8152,0x27));

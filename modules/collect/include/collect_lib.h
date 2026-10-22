@@ -8,6 +8,7 @@
 typedef enum { SET_PRI_L1 = 1, SET_PRI_L2 = 2, SET_PRI_L3 = 3 } CO_SET_PRI;
 typedef enum {
     CO_DEV_UNKNOWN = 0, CO_DEV_OFFLINE = 1, CO_DEV_ONLINE = 2, CO_DEV_EXCEPTION = 3,
+    CO_DEV_INITIALIZING = 4,
 } CO_DEV_ONLIE;
 typedef enum { SCAN_PRI_LOW = 0, SCAN_PRI_HIGH = 1 } CO_SCAN_PRI;
 /* Table metadata values; declaration does not enable unsupported FC17. */

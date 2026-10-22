@@ -52,6 +52,14 @@ int idu_protocol_init(void)
         return iface;
     }
     err = co_init_bus(config, &idu_collect_bus);
+    static const struct co_device_policy policy = {
+        .retries = CONFIG_IDU_COLLECT_RETRIES,
+        .exception_ms = CONFIG_IDU_COLLECT_EXCEPTION_MS,
+        .probe_ms = CONFIG_IDU_COLLECT_PROBE_MS,
+    };
+    for (size_t i = 0; !err && i < config->device_count; ++i) {
+        err = co_set_device_policy(config->devices[i].dev_id, &policy);
+    }
     if (err) {
         return err;
     }

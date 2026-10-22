@@ -6,8 +6,19 @@
 #include <zephyr/sys/byteorder.h>
 #include <errno.h>
 
+static atomic_t sample_readback_enabled;
+static int sample_readback(struct dp_process_ctx *ctx, struct dp_key key)
+{
+    ARG_UNUSED(key);
+    if (ctx->request->operation != DP_OP_SAMPLE || !atomic_get(&sample_readback_enabled)) { return 0; }
+    uint16_t word;
+    int err = co_read(11, 4, 400, &word, 1);
+    return err ? err : word == 4000 ? 0 : -EIO;
+}
+
 static const struct dp_point_cfg points[] = {
-    {.key = {10, 1}, .source = DP_SOURCE_MODBUS, .type = DP_U16, .width = 1, .maximum = UINT16_MAX},
+    {.key = {10, 1}, .source = DP_SOURCE_MODBUS, .type = DP_U16, .width = 1,
+     .maximum = UINT16_MAX, .handler = sample_readback},
     {.key = {10, 2}, .source = DP_SOURCE_MODBUS, .type = DP_U16, .width = 1, .maximum = UINT16_MAX},
     {.key = {10, 3}, .source = DP_SOURCE_MODBUS, .type = DP_U16, .width = 1, .maximum = UINT16_MAX},
     {.key = {10, 4}, .source = DP_SOURCE_MODBUS, .type = DP_U16, .width = 1, .maximum = UINT16_MAX},
@@ -59,19 +70,28 @@ static const struct dp_equip_cfg equipment = {
     .collect = polls, .collect_count = ARRAY_SIZE(polls),
     .transmit = maps, .transmit_count = ARRAY_SIZE(maps),
 };
-struct request_event { uint16_t dev, address, count; };
-K_MSGQ_DEFINE(requests, sizeof(struct request_event), 32, 4);
+struct request_event { uint16_t dev, address, count; int64_t at; };
+K_MSGQ_DEFINE(requests, sizeof(struct request_event), 128, 4);
+static atomic_t timeout_peer;
+static atomic_t fault_device = ATOMIC_INIT(10);
 
 static int transfer(void *user, uint16_t dev, struct modbus_adu *adu)
 {
     ARG_UNUSED(user);
     uint16_t address = sys_get_be16(adu->data);
     uint16_t count = sys_get_be16(adu->data + 2);
-    struct request_event event = {.dev = dev, .address = address, .count = count};
+    if (dev == atomic_get(&fault_device) && atomic_get(&timeout_peer) == 3) { return -EBUSY; }
+    struct request_event event = {.dev = dev, .address = address, .count = count, .at = k_uptime_get()};
     zassert_ok(k_msgq_put(&requests, &event, K_NO_WAIT));
+    if (dev == atomic_get(&fault_device) && atomic_get(&timeout_peer) == 1) { return -ETIMEDOUT; }
+    if (dev == atomic_get(&fault_device) && atomic_get(&timeout_peer) == 2) {
+        adu->fc |= 0x80; adu->length = 1; adu->data[0] = MODBUS_EXC_ILLEGAL_DATA_ADDR;
+        return 0;
+    }
     adu->data[0] = count * 2;
     adu->length = 1 + count * 2;
     for (size_t i = 0; i < count; ++i) { sys_put_be16((address + i) * 10, adu->data + 1 + i * 2); }
+    if (dev == atomic_get(&fault_device) && atomic_get(&timeout_peer) == 4) { ++adu->data[0]; }
     return 0;
 }
 
@@ -82,6 +102,10 @@ static void *setup(void)
     fixture_connect_points();
     const struct co_bus_cfg bus = {.id = 0, .iface = -1, .transfer = transfer};
     zassert_ok(co_init_bus(&equipment, &bus));
+    static const struct co_device_policy policy = {.retries = 2, .exception_ms = 50, .probe_ms = 80};
+    static const struct co_device_policy second_policy = {.retries = 0, .exception_ms = 30, .probe_ms = 40};
+    zassert_ok(co_set_device_policy(10, &policy));
+    zassert_ok(co_set_device_policy(11, &second_policy));
     return NULL;
 }
 
@@ -138,6 +162,247 @@ ZTEST(collect_state, test_b_periodic_groups_preserve_gaps_and_device_identity)
     }
     zassert_equal(state.quality, DP_QUALITY_GOOD);
     zassert_equal(state.value.words[0], 1010);
+}
+
+static void wait_state(uint16_t dev, enum co_device_online wanted)
+{
+    for (unsigned i = 0; i < 500; ++i) {
+        struct co_device_status status;
+        zassert_ok(co_device_status(dev, &status));
+        if (status.state == wanted) { return; }
+        k_msleep(1);
+    }
+    zassert_unreachable("Device %u did not reach state %u", dev, wanted);
+}
+
+ZTEST(collect_state, test_c_explicit_timeout_does_not_change_device_state)
+{
+    int err = co_start();
+    zassert_true(!err || err == -EALREADY);
+    fixture_start_co();
+    for (size_t i = 0; i < ARRAY_SIZE(polls); ++i) { zassert_ok(co_enable_poll(i, true)); }
+    wait_state(10, CO_DEVICE_ONLINE);
+    for (size_t i = 0; i < ARRAY_SIZE(polls); ++i) { zassert_ok(co_enable_poll(i, false)); }
+    k_msgq_purge(&requests);
+    atomic_set(&timeout_peer, 1);
+    uint16_t value = 7;
+    zassert_equal(co_write(10, 40000, &value, 1), -ETIMEDOUT);
+    struct co_device_status status;
+    zassert_ok(co_device_status(10, &status));
+    zassert_equal(status.state, CO_DEVICE_ONLINE,
+                  "An explicit write timeout must not drive the polling state machine");
+    struct request_event event;
+    zassert_ok(k_msgq_get(&requests, &event, K_NO_WAIT));
+    zassert_equal(event.address, 40000);
+    zassert_not_equal(k_msgq_get(&requests, &event, K_NO_WAIT), 0);
+    atomic_clear(&timeout_peer);
+}
+
+static void enable_periodic(bool enabled)
+{
+    int err = co_start();
+    zassert_true(!err || err == -EALREADY);
+    fixture_start_co();
+    for (size_t i = 0; i < ARRAY_SIZE(polls); ++i) { zassert_ok(co_enable_poll(i, enabled)); }
+}
+
+ZTEST(collect_state, test_d_timeout_anomaly_offline_probe_and_reinitialization)
+{
+    enable_periodic(true);
+    wait_state(10, CO_DEVICE_ONLINE);
+    k_msgq_purge(&requests);
+    struct co_device_status other_before, other_after, status;
+    zassert_ok(co_device_status(11, &other_before));
+    atomic_set(&timeout_peer, 1);
+    wait_state(10, CO_DEVICE_EXCEPTION);
+    struct request_event event;
+    unsigned attempts = 0;
+    while (!k_msgq_get(&requests, &event, K_NO_WAIT)) {
+        if (event.dev == 10 && event.address == 100) { ++attempts; }
+    }
+    zassert_equal(attempts, 3, "One send plus two configured retries");
+    wait_state(10, CO_DEVICE_OFFLINE);
+    zassert_ok(co_device_status(10, &status));
+    zassert_false(status.online);
+    zassert_ok(co_device_status(11, &other_after));
+    zassert_true(other_after.successes > other_before.successes);
+    k_msgq_purge(&requests);
+    k_msleep(30);
+    while (!k_msgq_get(&requests, &event, K_NO_WAIT)) { zassert_not_equal(event.dev, 10); }
+    k_msleep(60);
+    attempts = 0;
+    while (!k_msgq_get(&requests, &event, K_NO_WAIT)) {
+        if (event.dev == 10) {
+            zassert_equal(event.address, 10, "Offline probes send only the first initialization packet");
+            ++attempts;
+        }
+    }
+    zassert_equal(attempts, 3);
+    atomic_clear(&timeout_peer);
+    wait_state(10, CO_DEVICE_ONLINE);
+    unsigned init_first = 0, init_middle = 0, init_last = 0;
+    while (!k_msgq_get(&requests, &event, K_NO_WAIT)) {
+        if (event.dev != 10) { continue; }
+        init_first += event.address == 10;
+        init_middle += event.address == 200;
+        init_last += event.address == 232;
+    }
+    zassert_equal(init_first, 1);
+    zassert_equal(init_middle, 1);
+    zassert_equal(init_last, 1);
+    enable_periodic(false);
+}
+
+ZTEST(collect_state, test_e_valid_exception_keeps_normal_communication)
+{
+    enable_periodic(true);
+    wait_state(10, CO_DEVICE_ONLINE);
+    k_msgq_purge(&requests);
+    atomic_set(&timeout_peer, 2);
+    k_msleep(60);
+    struct co_device_status status;
+    zassert_ok(co_device_status(10, &status));
+    zassert_equal(status.state, CO_DEVICE_ONLINE);
+    zassert_true(status.online);
+    zassert_equal(status.last_error, MODBUS_EXC_ILLEGAL_DATA_ADDR);
+    struct request_event event;
+    int64_t last = -100;
+    while (!k_msgq_get(&requests, &event, K_NO_WAIT)) {
+        if (event.dev == 10 && event.address == 100) {
+            zassert_true(event.at - last >= 20, "Valid exception responses must not cause retransmission");
+            last = event.at;
+        }
+    }
+    atomic_clear(&timeout_peer);
+    enable_periodic(false);
+}
+
+ZTEST(collect_state, test_f_initialization_exception_stops_and_timeout_drops_directly)
+{
+    enable_periodic(true);
+    wait_state(10, CO_DEVICE_ONLINE);
+    atomic_set(&timeout_peer, 1);
+    wait_state(10, CO_DEVICE_OFFLINE);
+    k_msgq_purge(&requests);
+    atomic_set(&timeout_peer, 2);
+    wait_state(10, CO_DEVICE_INITIALIZING);
+    k_msleep(60);
+    struct co_device_status status;
+    zassert_ok(co_device_status(10, &status));
+    zassert_true(status.online);
+    zassert_equal(status.state, CO_DEVICE_INITIALIZING);
+    struct request_event event;
+    unsigned attempts = 0;
+    while (!k_msgq_get(&requests, &event, K_NO_WAIT)) {
+        if (event.dev == 10) { zassert_equal(event.address, 10); ++attempts; }
+    }
+    zassert_equal(attempts, 1);
+    atomic_set(&timeout_peer, 1);
+    wait_state(10, CO_DEVICE_OFFLINE);
+    int64_t last_send = -100;
+    attempts = 0;
+    while (!k_msgq_get(&requests, &event, K_NO_WAIT)) {
+        if (event.dev == 10) { last_send = event.at; ++attempts; }
+    }
+    zassert_equal(attempts, 3);
+    zassert_true(k_uptime_get() - last_send < 50,
+                  "Initialization exhaustion must bypass the normal anomaly grace time");
+    atomic_clear(&timeout_peer);
+    wait_state(10, CO_DEVICE_ONLINE);
+    enable_periodic(false);
+}
+
+ZTEST(collect_state, test_g_local_busy_does_not_count_as_missing_reply)
+{
+    enable_periodic(true);
+    wait_state(10, CO_DEVICE_ONLINE);
+    k_msgq_purge(&requests);
+    atomic_set(&timeout_peer, 3);
+    k_msleep(90);
+    struct co_device_status status;
+    zassert_ok(co_device_status(10, &status));
+    zassert_equal(status.state, CO_DEVICE_ONLINE);
+    struct request_event event;
+    while (!k_msgq_get(&requests, &event, K_NO_WAIT)) { zassert_not_equal(event.dev, 10); }
+    atomic_clear(&timeout_peer);
+    enable_periodic(false);
+}
+
+ZTEST(collect_state, test_h_short_anomaly_recovery_does_not_repeat_initialization)
+{
+    enable_periodic(true);
+    wait_state(10, CO_DEVICE_ONLINE);
+    atomic_set(&timeout_peer, 1);
+    wait_state(10, CO_DEVICE_EXCEPTION);
+    atomic_clear(&timeout_peer);
+    k_msgq_purge(&requests);
+    wait_state(10, CO_DEVICE_ONLINE);
+    struct request_event event;
+    while (!k_msgq_get(&requests, &event, K_NO_WAIT)) {
+        if (event.dev == 10) { zassert_true(event.address == 100 || event.address == 103); }
+    }
+    enable_periodic(false);
+}
+
+ZTEST(collect_state, test_i_no_initialization_group_recovers_on_valid_exception)
+{
+    enable_periodic(true);
+    wait_state(11, CO_DEVICE_ONLINE);
+    atomic_set(&fault_device, 11);
+    atomic_set(&timeout_peer, 1);
+    wait_state(11, CO_DEVICE_OFFLINE);
+    k_msgq_purge(&requests);
+    k_msleep(45);
+    struct request_event event;
+    unsigned attempts = 0;
+    while (!k_msgq_get(&requests, &event, K_NO_WAIT)) {
+        if (event.dev == 11) { zassert_equal(event.address, 100); ++attempts; }
+    }
+    zassert_equal(attempts, 1, "The second device has its own zero-retry policy");
+    atomic_set(&timeout_peer, 2);
+    wait_state(11, CO_DEVICE_ONLINE);
+    struct co_device_status status;
+    zassert_ok(co_device_status(11, &status));
+    zassert_true(status.online);
+    zassert_equal(status.last_error, MODBUS_EXC_ILLEGAL_DATA_ADDR);
+    atomic_clear(&timeout_peer);
+    atomic_set(&fault_device, 10);
+    enable_periodic(false);
+}
+
+ZTEST(collect_state, test_j_malformed_payload_records_one_final_result)
+{
+    k_msgq_purge(&requests);
+    struct co_device_status before, after;
+    zassert_ok(co_device_status(10, &before));
+    struct modbus_adu adu = {.fc = 4, .length = 4};
+    sys_put_be16(100, adu.data); sys_put_be16(1, adu.data + 2);
+    atomic_set(&timeout_peer, 4);
+    zassert_equal(co_transfer(10, &adu), -EBADMSG);
+    atomic_clear(&timeout_peer);
+    zassert_ok(co_device_status(10, &after));
+    zassert_equal(after.successes, before.successes);
+    zassert_equal(after.failures, before.failures + 1);
+}
+
+ZTEST(collect_state, test_k_initialization_sample_can_read_back_without_lock_cycle)
+{
+    enable_periodic(true);
+    wait_state(10, CO_DEVICE_ONLINE);
+    atomic_set(&timeout_peer, 1);
+    wait_state(10, CO_DEVICE_OFFLINE);
+    k_msgq_purge(&requests);
+    atomic_set(&sample_readback_enabled, 1);
+    atomic_clear(&timeout_peer);
+    wait_state(10, CO_DEVICE_ONLINE);
+    struct request_event event;
+    bool readback = false;
+    while (!k_msgq_get(&requests, &event, K_NO_WAIT)) {
+        readback |= event.dev == 11 && event.address == 400;
+    }
+    zassert_true(readback);
+    atomic_clear(&sample_readback_enabled);
+    enable_periodic(false);
 }
 
 ZTEST_SUITE(collect_state, NULL, setup, NULL, NULL, NULL);

@@ -11,6 +11,21 @@ config IDU_FORWARD_UNIT
     default 16
     range 1 247
 
+config IDU_COLLECT_RETRIES
+    int "Extra automatic acquisition attempts"
+    default 2
+    range 0 16
+
+config IDU_COLLECT_EXCEPTION_MS
+    int "Maximum response anomaly duration (ms)"
+    default 3000
+    range 1 3600000
+
+config IDU_COLLECT_PROBE_MS
+    int "Offline discovery interval (ms)"
+    default 5000
+    range 1 3600000
+
 config IDU_PROTOCOL_SERVICE_PERIOD_MS
     int "Communication maintenance interval (ms)"
     default 100

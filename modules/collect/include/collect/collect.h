@@ -6,7 +6,7 @@
 enum co_port_mode { CO_PORT_POLL, CO_PORT_INIT, CO_PORT_UPDATE,
                      CO_PORT_IV, CO_PORT_FAULT, CO_PORT_PASSTHROUGH, CO_PORT_SLEEP };
 enum co_device_online { CO_DEVICE_UNKNOWN, CO_DEVICE_OFFLINE,
-                         CO_DEVICE_ONLINE, CO_DEVICE_EXCEPTION };
+                         CO_DEVICE_ONLINE, CO_DEVICE_EXCEPTION, CO_DEVICE_INITIALIZING };
 struct co_device_status {
     uint16_t dev_id;
     uint8_t bus_id;
@@ -15,7 +15,19 @@ struct co_device_status {
     int error;
     uint32_t successes, failures;
     int64_t last_success;
+    bool online; /* A valid response was seen; initialization may still fail. */
+    int last_error; /* History, retained across subsequent successful operations. */
+    int64_t last_response;
 };
+struct co_device_policy {
+    uint8_t retries; /* Extra automatic attempts after the initial send. */
+    uint32_t exception_ms;
+    uint32_t probe_ms;
+};
+/* Startup-only immutable policy, one per managed device. No policy leaves
+ * explicit/manual acquisition available without automatic device discovery.
+ */
+int co_set_device_policy(uint16_t dev_id, const struct co_device_policy *policy);
 /* 使用应用传输回调时没有 Zephyr 接口；其他可选后端均默认关闭。 */
 #define CO_BUS_DEFAULT_IFACE (-1)
 #define CO_BUS_DEFAULT_SIMULATED false
@@ -42,6 +54,9 @@ struct co_bus_cfg {
  */
 struct co_data_callbacks {
     int (*sample)(struct dp_point_batch *batch, bool sync);
+    /* Explicit co_initialize_device completion only. Automatic discovery reads
+     * its configured packets without replaying business INIT or saved writes.
+     */
     int (*initialize)(uint16_t dev_id);
 };
 int co_set_data_callbacks(const struct co_data_callbacks *callbacks);

@@ -108,6 +108,7 @@ int co_init_bus(const struct dp_equip_cfg *config, const struct co_bus_cfg *bus)
     zassert_equal_ptr(bus, &idu_collect_bus);
     return service(COLLECT_INIT);
 }
+int co_set_device_policy(uint16_t dev, const struct co_device_policy *policy) { return 0; }
 int dp_params_init(const struct dp_equip_cfg *config, uint8_t area_id)
 {
     zassert_equal_ptr(config, &point_config);
