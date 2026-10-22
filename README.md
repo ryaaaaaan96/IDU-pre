@@ -5,7 +5,8 @@ Modbus 采集与转发、NVS 参数持久化及 MCUboot 升级。
 点表链路由 `dataprocess`、`collect`、`transmit` 提供，其他通用能力见[模块列表](modules/README.md)。
 当前按同线性能联调配置：北向转发和南向周期采集共用 USART2 / RS485。
 内置模拟从机已移到 `tests/fixtures/`，产品固件不再编译模拟设备。
-南向从机地址仍为 1，IDU 拨码须使用不同地址（例如 2）；北向普通读仍读取 DP 缓存。
+南向站号为 1、2，北向在 `.conf` 以 `CONFIG_IDU_FORWARD_UNIT=16` 初始化固定；同线冲突在启动时拒绝。
+拨码输入仍是本地测点；北向普通读读取 DP 缓存。
 [`vport`](modules/vport/README.md) 用于两个逻辑口的完整报文收发；
 CO/TR 各自的[RAW 适配](docs/communication-ports.md)通过通用端口收发完整报文，
 实际串口继续复用 Zephyr 的 RTU 组帧和 DE 控制。绑定、收发编排回调和注册入口集中在 `app/protocol/ports.c`。

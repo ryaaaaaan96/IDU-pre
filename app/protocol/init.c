@@ -42,6 +42,12 @@ int idu_protocol_init(void)
 
     const struct dp_equip_cfg *config = dp_config();
 
+    /* 当前采集总线和北向入口共用一条 RS485，冲突必须在开放端口前拒绝。 */
+    for (size_t i = 0; i < config->device_count; ++i) {
+        if (config->devices[i].bus_id == idu_collect_bus.id &&
+            config->devices[i].unit_id == CONFIG_IDU_FORWARD_UNIT) { return -EADDRINUSE; }
+    }
+
     /* 参数恢复可能读取下游设备，必须先注册所有采集总线。 */
     err = connect_point_services();
     if (!err) { err = idu_ports_init(); }

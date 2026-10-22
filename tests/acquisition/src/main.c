@@ -33,7 +33,7 @@ static struct idu_status acquisition;
 static int previous_startup_service;
 static uint16_t parameter_flags;
 static unsigned workers_started;
-static const struct dp_device_cfg remote_device[] = {{.dev_id = 10}};
+static struct dp_device_cfg remote_device[] = {{.dev_id = 10, .unit_id = 1}};
 static const struct dp_equip_cfg point_config = {.devices = remote_device, .device_count = 1};
 static enum co_device_online remote_state;
 const struct co_bus_cfg idu_collect_bus = {0};
@@ -218,6 +218,7 @@ static void reset(void)
     parameter_flags = DP_PARAM_STORAGE_READY;
     workers_started = 0;
     remote_state = CO_DEVICE_ONLINE;
+    remote_device[0].unit_id = 1;
 }
 
 static void before(void *fixture)
@@ -436,6 +437,16 @@ ZTEST(acquisition, test_remote_outage_is_diagnostic_and_keeps_watchdog_progress)
     zassert_equal(acquisition.remote_offline, 0);
     zassert_equal(acquisition.remote_initializing, 1);
     zassert_equal(kicks, 2);
+}
+
+ZTEST(acquisition, test_shared_wire_station_conflict_fails_before_ports_or_workers)
+{
+    remote_device[0].unit_id = CONFIG_IDU_FORWARD_UNIT;
+    zassert_equal(idu_startup(&acquisition), -EADDRINUSE);
+    zassert_equal(calls[NETWORK_INIT], 0);
+    zassert_equal(calls[TASKS_PREPARE], 0);
+    zassert_equal(calls[FORWARD_INIT], 0);
+    zassert_equal(workers_started, 0);
 }
 
 ZTEST_SUITE(acquisition, NULL, NULL, before, NULL, NULL);

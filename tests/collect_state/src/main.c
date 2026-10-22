@@ -27,6 +27,8 @@ static const struct dp_point_cfg points[] = {
     {.key = {10, 6}, .source = DP_SOURCE_MODBUS, .type = DP_WORDS, .width = 16},
     {.key = {10, 7}, .source = DP_SOURCE_MODBUS, .type = DP_WORDS, .width = 16},
 #if defined(CONFIG_DP_PARAMS)
+    {.key = {10, 10}, .source = DP_SOURCE_PARAMETER, .type = DP_U16, .width = 1,
+     .maximum = 100, .write_address = 401, .param_flags = DP_PARAM_WRITE | DP_PARAM_FORWARD},
     {.key = {1, 10}, .source = DP_SOURCE_PARAMETER, .type = DP_U16, .width = 1,
      .maximum = 100, .initial.words = {25},
      .param_flags = DP_PARAM_WRITE | DP_PARAM_PERSIST},
@@ -70,6 +72,7 @@ static const struct co_cfg polls[] = {
 };
 static const struct dp_transmit_cfg maps[] = {
 #if defined(CONFIG_DP_PARAMS)
+    {.function = 3, .address = 3001, .count = 1, .key = {10, 10}},
     {.function = 3, .address = 3000, .count = 1, .key = {1, 10}},
 #endif
     {.function = 4, .address = 1005, .count = 1, .key = {1, 11}},
@@ -105,6 +108,8 @@ static int transfer(void *user, uint16_t dev, struct modbus_adu *adu)
         adu->fc |= 0x80; adu->length = 1; adu->data[0] = MODBUS_EXC_ILLEGAL_DATA_ADDR;
         return 0;
     }
+    if (adu->fc == 6) { return 0; }
+    if (adu->fc == 16) { adu->length = 4; return 0; }
     adu->data[0] = count * 2;
     adu->length = 1 + count * 2;
     for (size_t i = 0; i < count; ++i) { sys_put_be16((address + i) * 10, adu->data + 1 + i * 2); }
@@ -113,6 +118,10 @@ static int transfer(void *user, uint16_t dev, struct modbus_adu *adu)
 }
 
 static int server_iface, client_iface;
+static int north_write(uint16_t address, const uint16_t *words, size_t count)
+{
+    return tr_write(server_iface, address, words, count);
+}
 static int north_request(int iface, const struct modbus_adu *adu, void *user)
 {
     ARG_UNUSED(iface); ARG_UNUSED(user);
@@ -152,7 +161,7 @@ static void *setup(void)
         .rawcb = {.raw_tx_cb = north_request}};
     zassert_ok(tr_attach(server_iface, NULL));
     fixture_bind_tr(server_iface);
-    zassert_ok(tr_modbus_init_server(server_iface, server, NULL, true));
+    zassert_ok(tr_modbus_init_server(server_iface, server, north_write, true));
     zassert_ok(modbus_init_client(client_iface, client));
     const struct co_bus_cfg bus = {.id = 0, .iface = -1, .transfer = transfer};
     zassert_ok(co_init_bus(&equipment, &bus));
@@ -561,15 +570,26 @@ ZTEST(collect_state, test_n_storage_failure_preserves_acquisition_and_rejects_pe
     zassert_equal(value, 1000);
     zassert_ok(modbus_read_holding_regs(client_iface, 16, 3000, &value, 1));
     zassert_equal(value, 25);
-    zassert_not_equal(modbus_write_holding_reg(client_iface, 16, 3000, 42), 0);
+    zassert_equal(modbus_write_holding_reg(client_iface, 16, 3000, 42), MODBUS_EXC_SERVER_DEVICE_FAILURE);
     zassert_ok(modbus_read_holding_regs(client_iface, 16, 3000, &value, 1));
     zassert_equal(value, 25);
     struct dp_point_update update = {.key = {1, 10}, .width = 1, .value.words = {42}};
     zassert_equal(dp_params_set_values(&update, 1), -EROFS);
     struct request_event event;
+    k_msgq_purge(&requests);
+    zassert_ok(modbus_write_holding_reg(client_iface, 16, 3001, 7));
+    atomic_set(&timeout_peer, 1);
+    wait_state(10, CO_DEVICE_OFFLINE);
+    atomic_clear(&timeout_peer);
+    wait_state(10, CO_DEVICE_ONLINE);
+    unsigned commands = 0;
     while (!k_msgq_get(&requests, &event, K_NO_WAIT)) {
-        zassert_not_equal(event.address, 400, "No downstream persistent side effect without storage");
+        if (event.address == 401) {
+            zassert_equal(event.dev, 10);
+            ++commands;
+        }
     }
+    zassert_equal(commands, 1, "North command is sent once, never replayed by offline recovery");
     zassert_equal(dp_params_prepare_reboot(), -EROFS, "The same failure must still block IAP commit");
     struct dp_param_status status;
     dp_params_get_status(&status);

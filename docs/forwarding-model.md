@@ -8,15 +8,14 @@
 | 概念 | 当前来源 | 含义 |
 | --- | --- | --- |
 | 逻辑设备 ID | `IDU_DEV_LOCAL`、`IDU_DEV_REMOTE_IO` | DP 中数据归属的身份 |
-| 北向 Modbus 站号 | `sample.address` → `tr_forward_service()` | 上位主站访问本机的 unit ID |
+| 北向 Modbus 站号 | `CONFIG_IDU_FORWARD_UNIT` → `tr_forward_init()` | 上位主站访问本机的 unit ID |
 | 北向寄存器地址 | 转发行 `.reg_addr`，配合 `.reg_type` | 本机对外协议中的位置 |
 | 南向 Modbus 站号 | 采集设备的 `.coll_addr` | CO 访问远端设备的 unit ID |
 | 南向寄存器地址 | 采集行 `.reg_addr` | 远端设备协议中的位置 |
 
-北向站号当前来自 GPIO 地址输入加偏移，采集周期将其传给服务：
-[`idu_inputs_sample()`](../modules/gpio/src/idu_inputs.c)、
-[`idu_acquisition_cycle()`](../app/acquisition/acquisition.c)、
-[`tr_forward_service()`](../modules/transmit/protocols/modbus/forward.c)。
+北向站号在初始化由 `.conf` 的 `CONFIG_IDU_FORWARD_UNIT` 确定；
+[`tasks.c`](../app/protocol/tasks.c) 将该站号交给 `tr_forward_init()`，之后维护仍使用同一站号。
+GPIO 地址输入继续作为本地测点，不触发运行期改号。当前同线南向冲突在开放端口前拒绝。
 挂表设备的 `.dev_id` 或 `.coll_addr` 都不会自动成为北向站号。
 
 [`tables/transmit.c`](../app/protocol/tables/transmit.c) 中的 `.dev_id / .sig_id`
@@ -46,9 +45,9 @@ FC04/10000 读取远端设备 10 的 DI；两者可以共享同一信号 ID。
   新产品 DP 配置不含转发表，旧 `dp_params_write_registers(mapping, address, words, count)` 必须显式传入映射视图，不再承担产品地址解析；
   业务使用键式参数接口，协议使用 `tr_write()`。
 
-运行期 `tr_forward_service()` 根据配置的逻辑口找到应用登记的 RAW 接口，
-内部管理现有服务生命周期及恢复；北向站号由拨码传入，不复制到静态配置。
-当前产品仍只保留一个采集总线和一个转发线程栈。
+初始化 `tr_forward_init()` 根据配置的逻辑口找到应用登记的 RAW 接口；
+运行期 `tr_forward_service()` 仅维护已初始化服务及恢复。北向站号由应用初始化固定。
+当前产品创建一条 CO 线程以及一组 TR 接收/配置队列，线程栈由应用显式配置。
 
 ## 参考工程已核实的虚拟转发设备
 
@@ -142,7 +141,7 @@ static const struct tr_forward_cfg forwarding_devices[] = {
 例如北向 10000 → `(10, IDU_SIG_DI)`，10001 → `(10, IDU_SIG_CURRENT_1)`，
 8152 → `(IDU_DEV_LOCAL, IDU_SIG_DI)`。北向数据不额外复制一份。
 
-北向站号继续沿用当前拨码输入 `sample.address`，在运行时传给 TR，因此没有在静态结构中重复保存 unit_id。
+北向站号由应用初始化配置传给 TR，不随后续拨码采样改变；配置结构仍不重复保存 unit_id。
 采集总线与北向逻辑口仍由应用 ports 编排到当前同一 RS485；配置分开不增加物理多主仲裁能力。
 示例仅描述当前 Modbus/RS485；未来 CAN 标识及分帧规则不在本轮提前加入字段。
 
