@@ -165,6 +165,7 @@ void dp_params_get_status(struct dp_param_status *status)
 {
     *status = (struct dp_param_status){
         .flags = boot_ready ? parameter_flags : 0,
+        .error = errors[PARAMS_INIT],
     };
 }
 bool dp_healthy(uint32_t max_idle_ms)
@@ -404,6 +405,7 @@ ZTEST(acquisition, test_storage_failure_keeps_sampling_without_confirmation)
     zassert_equal(calls[COLLECT_START], 1);
     zassert_ok(idu_acquisition_cycle(&acquisition));
     zassert_false(checkpoint_ready);
+    zassert_equal(acquisition.storage_error, -EIO);
     zassert_equal(kicks, 1);
 }
 

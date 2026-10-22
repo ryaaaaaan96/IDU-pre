@@ -296,6 +296,11 @@ ZTEST(iap, test_d_save_and_boot_request_failures)
     freeze_error = -EBUSY; full_receive();
     zassert_equal(word(20103), 0); wait_state(6); zassert_equal(pending_calls, 0); zassert_false(frozen);
 #endif
+#ifndef CONFIG_IAP_CONFIGURED
+    freeze_error = -EROFS; full_receive();
+    zassert_equal(word(20103), 0); wait_state(6); zassert_equal(pending_calls, 0);
+    zassert_false(frozen); zassert_equal(k_sem_take(&rebooted, K_NO_WAIT), -EBUSY);
+#endif
     freeze_error = 0; pending_error = -EIO; full_receive();
     zassert_equal(word(20103), 0); wait_state(6); zassert_equal(pending_calls, 1); zassert_false(frozen);
     pending_error = 0;

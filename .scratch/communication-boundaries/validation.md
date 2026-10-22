@@ -70,3 +70,12 @@
 - reference_services-params 12 项通过：保存目标 42、采集反馈 99、掉线失效、无关本地写后仍失效、重新加载与显式同步仍为 42。
 - 参数提交限定为本次选中项，避免写其他参数时批量恢复失效质量；没有改变 NVS 格式或保存目标。
 - acquisition 15 项、shared_rs485 7 项通过。应用状态新增远端掉线/初始化数量，远端故障仍正常采样和喂狗。
+
+## 09：存储故障降级与 IAP 保护
+
+- collect_state-storage-fault 14 项通过：真实参数模块打开不存在的分区返回 ENOENT；同一装配仍处理本地采样、南向周期采集和北向完整请求。
+- 北向持久写失败，读回仍为默认值 25；直接持久写与 prepare_reboot 均返回 EROFS，未假报保存成功。
+- acquisition 15 项通过，存储错误进入应用诊断，仍采样/喂狗，不能确认试运行镜像。
+- IAP 的实际接收流程在 prepare_reboot 返回 EROFS 后进入错误态，不提交 MCUboot 请求、不重启；既有 boot request 错误测试继续通过。
+- parameter_records 11 个独立进程阶段全部通过：write/add/remove/readd/collision/verify/seed_error/range_change/type_change/width_change/obsolete。
+- 没有改变 NVS 键、记录版本、意图日志、参数区或 IAPv3 线协议；存储降级不等于允许绕过升级保存保护。

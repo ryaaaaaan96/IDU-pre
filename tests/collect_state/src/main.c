@@ -26,6 +26,12 @@ static const struct dp_point_cfg points[] = {
     {.key = {11, 3}, .source = DP_SOURCE_MODBUS, .type = DP_U16, .width = 1, .maximum = UINT16_MAX},
     {.key = {10, 6}, .source = DP_SOURCE_MODBUS, .type = DP_WORDS, .width = 16},
     {.key = {10, 7}, .source = DP_SOURCE_MODBUS, .type = DP_WORDS, .width = 16},
+#if defined(CONFIG_DP_PARAMS)
+    {.key = {1, 10}, .source = DP_SOURCE_PARAMETER, .type = DP_U16, .width = 1,
+     .maximum = 100, .initial.words = {25},
+     .param_flags = DP_PARAM_WRITE | DP_PARAM_PERSIST},
+#endif
+    {.key = {1, 11}, .source = DP_SOURCE_LOCAL, .type = DP_U16, .width = 1, .maximum = 100},
     {.key = {1, 9}, .source = DP_SOURCE_CONSTANT, .type = DP_U16, .width = 1,
      .maximum = UINT16_MAX, .initial.words = {77}},
     {.key = {10, 8}, .source = DP_SOURCE_MODBUS, .type = DP_U16, .width = 1, .maximum = UINT16_MAX},
@@ -63,6 +69,10 @@ static const struct co_cfg polls[] = {
      .fields = eighth, .field_count = 1},
 };
 static const struct dp_transmit_cfg maps[] = {
+#if defined(CONFIG_DP_PARAMS)
+    {.function = 3, .address = 3000, .count = 1, .key = {1, 10}},
+#endif
+    {.function = 4, .address = 1005, .count = 1, .key = {1, 11}},
     {.function = 4, .address = 1002, .count = 1, .key = {10, 2}},
     {.function = 4, .address = 1003, .count = 1, .key = {11, 3}},
     {.function = 4, .address = 1004, .count = 1, .key = {1, 9}},
@@ -130,6 +140,9 @@ static void *setup(void)
     zassert_not_equal(state.value.words[0], 999, "Queued stale samples cannot resurrect invalid data");
     k_msleep(1);
     fixture_connect_points();
+#if defined(CONFIG_DP_PARAMS)
+    zassert_equal(dp_params_init(&equipment, 255), -ENOENT, "Inject an unavailable parameter partition");
+#endif
     server_iface = modbus_iface_get_by_name("RAW_0");
     client_iface = modbus_iface_get_by_name("RAW_1");
     struct modbus_iface_param server = {.mode = MODBUS_MODE_RAW,
@@ -524,6 +537,51 @@ ZTEST(collect_state, test_m_concurrent_diagnostic_clear_preserves_control_state)
     zassert_true(other.successes > 0, "Clearing one device never clears another device's records");
     atomic_clear(&timeout_peer);
     enable_periodic(false);
+}
+
+ZTEST(collect_state, test_n_storage_failure_preserves_acquisition_and_rejects_persistent_write)
+{
+#if defined(CONFIG_DP_PARAMS)
+    enable_periodic(true);
+    wait_state(10, CO_DEVICE_ONLINE);
+    struct dp_point_state ready;
+    for (unsigned i = 0; i < 50; ++i) {
+        zassert_ok(dp_read((struct dp_key){10, 3}, &ready));
+        if ((ready.quality & 0xff) == DP_QUALITY_GOOD) { break; }
+        k_msleep(1);
+    }
+    zassert_equal(ready.quality & 0xff, DP_QUALITY_GOOD);
+    uint16_t local = 88, value;
+    uint32_t ticket;
+    zassert_ok(dp_submit_sig_value((struct dp_key){1, 11}, &local, 1, K_MSEC(20), &ticket));
+    zassert_ok(dp_wait_processed(ticket, K_SECONDS(1)));
+    zassert_ok(modbus_read_input_regs(client_iface, 16, 1005, &value, 1));
+    zassert_equal(value, 88);
+    zassert_ok(modbus_read_input_regs(client_iface, 16, 1000, &value, 1));
+    zassert_equal(value, 1000);
+    zassert_ok(modbus_read_holding_regs(client_iface, 16, 3000, &value, 1));
+    zassert_equal(value, 25);
+    zassert_not_equal(modbus_write_holding_reg(client_iface, 16, 3000, 42), 0);
+    zassert_ok(modbus_read_holding_regs(client_iface, 16, 3000, &value, 1));
+    zassert_equal(value, 25);
+    struct dp_point_update update = {.key = {1, 10}, .width = 1, .value.words = {42}};
+    zassert_equal(dp_params_set_values(&update, 1), -EROFS);
+    struct request_event event;
+    while (!k_msgq_get(&requests, &event, K_NO_WAIT)) {
+        zassert_not_equal(event.address, 400, "No downstream persistent side effect without storage");
+    }
+    zassert_equal(dp_params_prepare_reboot(), -EROFS, "The same failure must still block IAP commit");
+    struct dp_param_status status;
+    dp_params_get_status(&status);
+    zassert_false(status.flags & DP_PARAM_STORAGE_READY);
+    zassert_not_equal(status.error, 0);
+    k_msleep(25);
+    zassert_ok(modbus_read_input_regs(client_iface, 16, 1000, &value, 1));
+    zassert_equal(value, 1000);
+    enable_periodic(false);
+#else
+    ztest_test_skip();
+#endif
 }
 
 ZTEST_SUITE(collect_state, NULL, setup, NULL, NULL, NULL);
