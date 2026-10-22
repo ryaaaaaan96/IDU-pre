@@ -1,3 +1,4 @@
+#include "../../fixtures/point_connections.h"
 #include <collect/collect.h>
 #include <collect/port.h>
 #include <dataprocess/process.h>
@@ -151,6 +152,7 @@ static void *setup(void)
     invalid_bus.id = CONFIG_CO_MAX_BUSES;
     zassert_equal(co_init_bus(&equipment, &invalid_bus), -EINVAL);
     /* Neither rejection reserves a worker or installs the invalid equipment. */
+    fixture_connect_points();
     zassert_ok(co_init_bus(&equipment, &bus));
     zassert_ok(co_enable_poll(0, false));
     set_mode(CO_PORT_SLEEP);

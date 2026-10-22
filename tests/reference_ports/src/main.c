@@ -1,3 +1,4 @@
+#include "../../fixtures/point_connections.h"
 #include <collect_lib.h>
 #include <transmit_lib.h>
 #include <zephyr/sys/atomic.h>
@@ -145,6 +146,7 @@ static void *setup(void)
     zassert_ok(dp_init_config(&equipment));
     const struct co_bus_cfg bus = {.id = 0, .iface = -1, .transfer = transfer,
                                    .initialize = initialize};
+    fixture_connect_points();
     zassert_ok(co_init_bus(&equipment, &bus));
     for (size_t i = 0; i < ARRAY_SIZE(polls); ++i) { zassert_ok(co_enable_poll(i, false)); }
     zassert_ok(co_start());

@@ -1,3 +1,4 @@
+#include "../../fixtures/point_connections.h"
 #include "simulation.h"
 #include "protocol/inc/protocol.h"
 #include <collect/simulator.h>
@@ -146,6 +147,7 @@ void module_add_points(struct dp_equip_cfg *cfg, struct dp_point_cfg *points,
 void module_bus_init(const struct dp_equip_cfg *cfg)
 {
     struct co_bus_cfg bus = {.id = 1, .iface = -1, .simulated = false, .transfer = second_bus};
+    fixture_connect_points();
     zassert_ok(co_init_bus(cfg, &bus));
     for (size_t i = 0; i < cfg->collect_count; ++i) { zassert_ok(co_enable_poll(i, false)); }
     zassert_ok(co_start());

@@ -1,3 +1,4 @@
+#include "../../fixtures/point_connections.h"
 #include <transmit/server.h>
 #include "simulation.h"
 #include "protocol/inc/protocol.h"
@@ -178,6 +179,7 @@ static void *setup(void)
     zassert_ok(idu_ports_init());
     south_client = co_port_open(&idu_collect_port);
     zassert_true(south_client >= 0);
+    fixture_connect_points();
     zassert_ok(co_init(&test_cfg, south_client, true));
     module_bus_init(&test_cfg);
     zassert_ok(dp_params_init(&test_cfg, DT_FIXED_PARTITION_ID(DT_ALIAS(idu_settings))));

@@ -36,6 +36,18 @@ struct co_bus_cfg {
                        uint16_t offset, uint16_t *words, size_t count);
     void *user;
 };
+/* Application wires the data consumer explicitly. Callbacks are copied before
+ * starting workers; sample must copy/accept the batch before returning.
+ * sync requests completion and quality validation for initialization samples.
+ */
+struct co_data_callbacks {
+    int (*sample)(struct dp_point_batch *batch, bool sync);
+    int (*initialize)(uint16_t dev_id);
+};
+int co_set_data_callbacks(const struct co_data_callbacks *callbacks);
+struct dp_params_transport;
+/* Optional ready-to-register synchronous downstream parameter adapter. */
+const struct dp_params_transport *co_parameter_transport(void);
 struct co_request {
     uint32_t id;
     uint16_t dev_id;

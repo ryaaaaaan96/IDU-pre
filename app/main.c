@@ -31,7 +31,8 @@ static int start_points(void)
     const struct dp_equip_cfg *config = dp_config();
 
     /* 参数恢复可能读取下游设备，必须先注册所有采集总线。 */
-    err = idu_ports_init();
+    err = idu_connect_point_services();
+    if (!err) { err = idu_ports_init(); }
     if (err) {
         return err;
     }

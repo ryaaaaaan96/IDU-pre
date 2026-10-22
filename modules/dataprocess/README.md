@@ -127,8 +127,9 @@ int err = dp_process_start(&plan);
 只使用本地参数时不需要下游后端。采集模块或应用可在初始化前调用
 `dp_params_set_transport()` 注入 read/write/simulated 回调和 user 指针；
 注册结构被复制，同一组回调重复注册成功，初始化后替换后端返回 `-EBUSY`。
-若同时使用 collect 和自定义参数后端，应先完成全部 `co_init_bus()`，再注册
-自定义后端，最后调用 `dp_params_init()`，避免被采集初始化的默认注册覆盖。
+`co_init_bus()` 不再注册参数后端；应用显式选用
+`co_parameter_transport()` 或自定义后端并交给 `dp_params_set_transport()`，再初始化参数。
+参数初始化后，采集总线登记不会替换应用已经选定的参数后端。
 
 回调处理设备键对应的下发。非持久命令只需 write，持久设定值还需 read。读写可阻塞在所属传输线程上，但不能
 重入参数引擎。缺少后端时远端写入在建立持久化意图前返回 `-ENODEV`，

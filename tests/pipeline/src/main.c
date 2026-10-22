@@ -4,6 +4,7 @@
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/ztest.h>
 #include <errno.h>
+#include "../../fixtures/point_connections.h"
 
 BUILD_ASSERT(!IS_ENABLED(CONFIG_DP_PARAMS));
 BUILD_ASSERT(!IS_ENABLED(CONFIG_FLASH));
@@ -136,6 +137,9 @@ static void *setup(void)
         .id = 0, .iface = -1, .simulated = true, .transfer = transfer,
     };
     zassert_ok(co_init_bus(&equipment, &bus));
+    zassert_equal(co_poll(0), -ENOTCONN,
+                  "Collection must not implicitly publish into DP");
+    fixture_connect_points();
 #if defined(CONFIG_TR_MODBUS_ADAPTER)
     server_iface = modbus_iface_get_by_name("RAW_0");
     client_iface = modbus_iface_get_by_name("RAW_1");

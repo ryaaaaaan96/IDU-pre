@@ -3,6 +3,7 @@ if(CONFIG_DATAPROCESS)
   zephyr_library()
   zephyr_library_sources(
     src/configuration.c
+    src/acquisition.c
     src/points.c
     src/data_process.c
     src/reference_config.c

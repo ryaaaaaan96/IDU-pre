@@ -1,3 +1,4 @@
+#include "../../fixtures/point_connections.h"
 #include "protocol/inc/protocol.h"
 #include "protocol/inc/signal_ids.h"
 #include <collect/collect.h>
@@ -108,6 +109,7 @@ static void *setup(void)
     zassert_ok(idu_register_point_tables()); zassert_ok(dp_init());
     zassert_ok(idu_ports_init()); zassert_ok(idu_ports_init());
     zassert_true(co_port_open(&idu_collect_port) >= 0);
+    fixture_connect_points();
     zassert_ok(co_init_bus(dp_config(), &idu_collect_bus));
     /* 本套件不测试跨进程恢复，每次从空存储开始，避免复用旧固件的 schema。 */
     const struct flash_area *area;

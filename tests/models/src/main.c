@@ -1,3 +1,4 @@
+#include "../../fixtures/point_connections.h"
 #include "model_fixture.h"
 #include <collect/collect.h>
 #include <transmit/transmit.h>
@@ -64,6 +65,7 @@ static void *setup(void)
             .id = i, .iface = -1, .simulated = i == 0,
             .transfer = transfer, .user = &peers[i],
         };
+        fixture_connect_points();
         zassert_ok(co_init_bus(&cfg, &bus));
     }
     return NULL;

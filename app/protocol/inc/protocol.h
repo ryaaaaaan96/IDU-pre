@@ -7,6 +7,8 @@
 
 /* 注册产品点表回调；随后由调用者执行通用模块 dp_init()。 */
 int idu_register_point_tables(void);
+/* 显式连接采集样本、初始化处理及同步参数下发，先于参数加载。 */
+int idu_connect_point_services(void);
 const DEV_TABLE_S *idu_device_table(void);
 uint16_t idu_device_count(void);
 struct tr_forward_cfg;

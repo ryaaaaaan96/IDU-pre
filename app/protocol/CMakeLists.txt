@@ -7,3 +7,7 @@ target_sources(app PRIVATE
   tables/transmit.c
 )
 target_sources_ifdef(CONFIG_IDU_IAPV3 app PRIVATE tables/segments.c)
+
+if(CONFIG_COLLECT)
+  target_sources(app PRIVATE connections.c)
+endif()

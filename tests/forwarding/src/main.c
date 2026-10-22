@@ -1,3 +1,4 @@
+#include "../../fixtures/point_connections.h"
 #include "simulation.h"
 #include "protocol/inc/protocol.h"
 #include <collect/port.h>
@@ -168,6 +169,7 @@ static void *setup(void)
     const struct dp_equip_cfg *cfg = dp_config();
     zassert_ok(idu_ports_init());
     int south = co_port_open(&idu_collect_port); zassert_true(south >= 0);
+    fixture_connect_points();
     zassert_ok(co_init(cfg, south, true));
     zassert_ok(dp_params_init(cfg, storage->fa_id));
     zassert_ok(dp_process_init_device(0));

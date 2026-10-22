@@ -35,6 +35,15 @@ static struct co_device_status statuses[CONFIG_DP_MAX_DEVICES];
 static int64_t next_poll[CONFIG_DP_POINTS_MAX_POLLS];
 static bool disabled[CONFIG_DP_POINTS_MAX_POLLS];
 static bool started;
+static struct co_data_callbacks data_callbacks;
+
+int co_set_data_callbacks(const struct co_data_callbacks *callbacks)
+{
+    if (k_is_in_isr()) { return -EWOULDBLOCK; }
+    if (started) { return -EBUSY; }
+    data_callbacks = callbacks ? *callbacks : (struct co_data_callbacks){0};
+    return 0;
+}
 static CO_PORT_PF_PROC init_callbacks[CONFIG_CO_MAX_BUSES];
 static CO_SET_VALUE_TRANS_CB value_transform;
 static struct k_spinlock reference_callbacks_lock;
@@ -161,6 +170,19 @@ static bool parameter_simulated(void *user, uint16_t dev_id)
 }
 #endif
 
+const struct dp_params_transport *co_parameter_transport(void)
+{
+#if defined(CONFIG_DP_PARAMS)
+    static const struct dp_params_transport transport = {
+        .read = parameter_read, .write = parameter_write,
+        .simulated = parameter_simulated, .user = NULL,
+    };
+    return &transport;
+#else
+    return NULL;
+#endif
+}
+
 int co_init_bus(const struct dp_equip_cfg *cfg, const struct co_bus_cfg *config)
 {
     if (!config || config->id >= ARRAY_SIZE(buses) || (!config->transfer && !config->read_model && config->iface < 0) ||
@@ -186,16 +208,6 @@ int co_init_bus(const struct dp_equip_cfg *cfg, const struct co_bus_cfg *config)
     for (size_t i = 0; i < ARRAY_SIZE(buses); ++i) {
         if (buses[i].ready && config->iface >= 0 && buses[i].cfg.iface == config->iface) { return -EEXIST; }
     }
-#if defined(CONFIG_DP_PARAMS)
-    const struct dp_params_transport transport = {
-        .read = parameter_read, .write = parameter_write,
-        .simulated = parameter_simulated,
-    };
-    err = dp_params_set_transport(&transport);
-    if (err) { return err; }
-#endif
-    err = dp_para_reg_set_func(co_dp_fast_set);
-    if (err) { return err; }
     equipment = cfg;
     struct bus_state *bus = &buses[config->id];
     k_mutex_init(&bus->lock);
@@ -213,6 +225,7 @@ int co_init(const struct dp_equip_cfg *cfg, int iface, bool simulated)
 
 static int collect_poll(size_t block, bool sync)
 {
+    if (!data_callbacks.sample) { return -ENOTCONN; }
     if (!equipment || block >= equipment->collect_count) { return -EINVAL; }
     struct co_cfg cfg_scratch;
     const struct co_cfg *cfg = dp_config_collect(equipment, block, &cfg_scratch);
@@ -243,15 +256,8 @@ static int collect_poll(size_t block, bool sync)
             }
         }
     }
-    int publish = dp_publish(&batch, K_MSEC(20));
-    if (publish || err || !sync) { return publish ? publish : err; }
-    err = dp_wait_processed(batch.ticket, K_SECONDS(1));
-    for (size_t i = 0; !err && i < batch.count; ++i) {
-        struct dp_point_state state;
-        err = dp_read(batch.points[i].key, &state);
-        if (!err && (state.quality & 0xff) != DP_QUALITY_GOOD) { err = state.error ? state.error : -EIO; }
-    }
-    return err;
+    int publish = data_callbacks.sample(&batch, sync);
+    return publish ? publish : err;
 }
 
 int co_poll(size_t block) { return collect_poll(block, false); }
@@ -404,12 +410,7 @@ int co_initialize_device(uint16_t dev_id)
         const struct co_cfg *poll = dp_config_collect(equipment, i, &scratch);
         if (poll->dev_id == dev_id && poll->init_only) { err = collect_poll(i, true); }
     }
-#if defined(CONFIG_DP_PROCESS)
-    if (!err) { err = dp_process_init_device(dev_id); }
-#endif
-#if defined(CONFIG_DP_PARAMS)
-    if (!err) { err = dp_params_sync_device(dev_id); }
-#endif
+    if (!err && data_callbacks.initialize) { err = data_callbacks.initialize(dev_id); }
     k_mutex_lock(&bus->lock, K_FOREVER);
     k_mutex_lock(&schedule_lock, K_FOREVER);
     bus->init_owner = NULL; bus->mode = old;
@@ -668,7 +669,7 @@ int co_anlysis_mb_pkg(uint8_t dev, uint16_t address, uint8_t *frame, uint16_t le
         }
     }
     if (!batch.count) { return -ENOENT; }
-    int err = dp_publish(&batch, K_MSEC(20));
+    int err = data_callbacks.sample ? data_callbacks.sample(&batch, false) : -ENOTCONN;
     if (!err) { record_status(dev, 0); }
     return err;
 }

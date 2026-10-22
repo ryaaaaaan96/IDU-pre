@@ -1,3 +1,4 @@
+#include "../../fixtures/point_connections.h"
 #include <collect/collect.h>
 #include <collect/port.h>
 #include <collect/modbus.h>
@@ -84,6 +85,7 @@ static void *setup(void)
     zassert_ok(co_modbus_port_bind(1, "RAW_0", &io));
     int iface = co_port_open(&port);
     zassert_true(iface >= 0);
+    fixture_connect_points();
     zassert_ok(co_init(&equipment, iface, false));
     return NULL;
 }
