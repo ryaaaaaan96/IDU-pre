@@ -3,6 +3,9 @@
 状态：已接受，2026-10-21。替代 [ADR 0002](0002-process-point-callbacks.md)
 第 5 项的全局完整 ADU 扩展选择；状态和命令回调的决定继续有效。
 
+2026-10-22：[ADR 0006](0006-separate-forwarding-devices.md) 已接受将协议段改归独立虚拟转发设备配置，
+替代下文的数据设备挂载选择；对应运行实现尚待实施。段匹配、变长报文、错误不回退和广播约定继续有效。
+
 参考平台把 `MB_TABLE_SEG_T` 挂到设备的 `PRO_ADDR_SLAVE`，IAP 只是其中一个回调。
 IDU 采用同样的三字段段表和设备关联，通过 Iterable Sections 保存在 Flash；
 回调使用 Zephyr 完整 ADU，应用明确选择设备和广播策略，删除独立 `extension` 入口。
