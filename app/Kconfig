@@ -10,6 +10,9 @@ config IDU_FORWARD_UNIT
     int "Northbound Modbus unit selected at initialization"
     default 16
     range 1 247
+    help
+      The legacy IAPv3 receiver ignores station 247. IDU rejects this station
+      during product configuration when IDU_IAPV3 is enabled.
 
 config IDU_COLLECT_RETRIES
     int "Extra automatic acquisition attempts"

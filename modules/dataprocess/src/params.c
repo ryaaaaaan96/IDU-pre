@@ -172,6 +172,8 @@ static void set_status(int error, uint16_t flags)
     k_mutex_lock(&cache_lock, K_FOREVER);
     status.error = error;
     status.flags = flags;
+    if (flags & DP_PARAM_STORAGE_READY) { status.storage_error = 0; }
+    else if (error) { status.storage_error = error; }
     k_mutex_unlock(&cache_lock);
 }
 

@@ -16,8 +16,10 @@
 
 struct dp_param_status {
     uint32_t sequence;
-    int error;
+    int error; /* Most recent operation result, independent of storage health. */
     uint16_t flags;
+    /* Storage unavailable cause; cleared only after storage is ready again. */
+    int storage_error;
 };
 
 /* Application-supplied access to downstream commands and absolute settings.

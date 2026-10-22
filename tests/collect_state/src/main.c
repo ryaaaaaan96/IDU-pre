@@ -578,6 +578,11 @@ ZTEST(collect_state, test_n_storage_failure_preserves_acquisition_and_rejects_pe
     struct request_event event;
     k_msgq_purge(&requests);
     zassert_ok(modbus_write_holding_reg(client_iface, 16, 3001, 7));
+    struct dp_param_status operation;
+    dp_params_get_status(&operation);
+    zassert_equal(operation.error, 0, "Last operation succeeded independently of storage");
+    zassert_false(operation.flags & DP_PARAM_STORAGE_READY);
+    zassert_equal(operation.storage_error, -ENOENT, "Success must retain the unavailable partition error");
     atomic_set(&timeout_peer, 1);
     wait_state(10, CO_DEVICE_OFFLINE);
     atomic_clear(&timeout_peer);

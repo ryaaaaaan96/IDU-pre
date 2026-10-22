@@ -259,9 +259,16 @@ ZTEST(points, test_parameters_no_downstream_write_without_durable_intent)
                   MODBUS_EXC_SERVER_DEVICE_FAILURE);
     zassert_equal(co_simulator_write_count(&idu_collect_simulator), count);
     zassert_false(param_status().flags & DP_PARAM_STORAGE_READY);
+    zassert_equal(param_status().storage_error, -EIO);
+    const struct dp_point_update local = {.key = {1, 31100}, .width = 1, .value.words = {33}};
+    zassert_ok(dp_params_apply(&local, 1, DP_OP_NO_STORE | DP_OP_NO_COLLECT));
+    zassert_equal(param_status().error, 0);
+    zassert_equal(param_status().storage_error, -EIO, "Volatile success cannot clear an active Flash fault");
     zassert_equal(read_word(31500), 100);
     bytes_before_failure = -1;
     zassert_ok(dp_params_reload());
+    zassert_true(param_status().flags & DP_PARAM_STORAGE_READY);
+    zassert_equal(param_status().storage_error, 0, "Successful storage reload clears the persistent fault");
     zassert_ok(dp_params_recover());
 }
 

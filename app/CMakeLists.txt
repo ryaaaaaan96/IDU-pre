@@ -11,6 +11,12 @@ foreach(feature IN LISTS idu_required)
   endif()
 endforeach()
 
+# The legacy IAP receiver intentionally ignores unit 247. Reject that product
+# combination before opening services, while keeping non-IAP station 247 usable.
+if(CONFIG_IDU_IAPV3 AND CONFIG_IDU_FORWARD_UNIT EQUAL 247)
+  message(FATAL_ERROR "IDU-pre IAPv3 does not support CONFIG_IDU_FORWARD_UNIT=247")
+endif()
+
 target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_sources(app PRIVATE main.c protocol/ports.c)
 add_subdirectory(protocol)

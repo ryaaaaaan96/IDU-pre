@@ -150,6 +150,10 @@ NVS 使用版本 2 的单参数记录，以 `(dev_id, sig_id)` 独立索引，�
 `CONFIG_DP_PARAMS_TRANSACTION_BYTES` 控制临时批量载荷，替代旧 SNAPSHOT_BYTES。
 存储格式不兼容时自动清空所配置的参数分区，记录警告并恢复当前默认值，设置
 `DP_PARAM_STORAGE_RESET`；不保留、解析或迁移旧快照正文。Flash I/O 错误则报错停写。
+`dp_param_status.error` 表示最近一次参数操作结果；`storage_error` 独立记录存储不可用原因。
+成功的非持久操作不会清除存储故障，只有存储重新就绪（如成功 reload）才清除；
+应用可直接用该字段报告降级状态。该字段只在 RAM/API 状态中，不改变 NVS 记录或协议寄存器布局。
+
 同类型长度变化可由既有 mismatch 回调转换；拒绝则重新初始化。范围失败不自动擦除。
 详见[记录布局与恢复边界](../../docs/point-tables.md#参数下发与持久化)。
 关闭参数后端时参数点配置被拒绝，`dp_process_save_reboot()` 返回 `-ENOTSUP`。

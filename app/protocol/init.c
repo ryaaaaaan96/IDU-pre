@@ -124,5 +124,5 @@ void idu_protocol_update_status(struct idu_status *status)
     }
     struct dp_param_status parameters;
     dp_params_get_status(&parameters);
-    status->storage_error = (parameters.flags & DP_PARAM_STORAGE_READY) ? 0 : parameters.error;
+    status->storage_error = parameters.storage_error;
 }

@@ -94,6 +94,17 @@ class ApplicationRequirements(unittest.TestCase):
         result = self.configure(CO_SIMULATOR='n', CO_MODEL_SIMULATOR='n')
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_iapv3_rejects_silent_station_247(self):
+        result = self.configure(IDU_IAPV3='y', IDU_FORWARD_UNIT='247')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('IAPv3 does not support CONFIG_IDU_FORWARD_UNIT=247', result.stderr)
+
+    def test_station_restriction_only_applies_to_iapv3_247(self):
+        for iapv3, station in (('n', '247'), ('y', '246'), ('y', '16')):
+            with self.subTest(iapv3=iapv3, station=station):
+                result = self.configure(IDU_IAPV3=iapv3, IDU_FORWARD_UNIT=station)
+                self.assertEqual(result.returncode, 0, result.stderr)
+
 
 if __name__ == '__main__':
     unittest.main()

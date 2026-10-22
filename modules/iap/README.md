@@ -61,6 +61,9 @@ IDU 的 [`app/main.c`](../../app/main.c) 直接调用 `iap_start()`，
 初始化成功后再次启动返回 `-EALREADY`。不提供运行中停机／重新配置接口。
 应用健康确认仍由 [`app/status/image_confirm.c`](../../app/status/image_confirm.c) 执行，不属于上传协议。
 
+IDU 启用 IAPv3 时，`CONFIG_IDU_FORWARD_UNIT=247` 在产品配置阶段被明确拒绝，
+因为旧接收器对 247 静默；这项校验保留原升级线协议。关闭 IAPv3 后普通转发可使用站号 247。
+
 ## 保持的协议和限制
 
 旧寄存器 20049–20104、1 KiB 分包、乱序补包、重复包一致性校验、广播静默、

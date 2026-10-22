@@ -32,6 +32,7 @@ static struct idu_snapshot published;
 static struct idu_status acquisition;
 static int previous_startup_service;
 static uint16_t parameter_flags;
+static int parameter_storage_error;
 static unsigned workers_started;
 static struct dp_device_cfg remote_device[] = {{.dev_id = 10, .unit_id = 1}};
 static const struct dp_equip_cfg point_config = {.devices = remote_device, .device_count = 1};
@@ -122,7 +123,8 @@ int dp_params_init(const struct dp_equip_cfg *config, uint8_t area_id)
 {
     zassert_equal_ptr(config, &point_config);
     zassert_equal(area_id, DT_FIXED_PARTITION_ID(DT_ALIAS(idu_settings)));
-    return service(PARAMS_INIT);
+    parameter_storage_error = service(PARAMS_INIT);
+    return parameter_storage_error;
 }
 int dp_params_recover(void) { return service(PARAMS_RECOVER); }
 int dp_process_start(const struct dp_process_plan *plan)
@@ -166,6 +168,7 @@ void dp_params_get_status(struct dp_param_status *status)
     *status = (struct dp_param_status){
         .flags = boot_ready ? parameter_flags : 0,
         .error = errors[PARAMS_INIT],
+        .storage_error = (parameter_flags & DP_PARAM_STORAGE_READY) ? 0 : parameter_storage_error,
     };
 }
 bool dp_healthy(uint32_t max_idle_ms)
@@ -216,6 +219,7 @@ static void reset(void)
     indicator_on = false;
     previous_startup_service = -1;
     parameter_flags = DP_PARAM_STORAGE_READY;
+    parameter_storage_error = 0;
     workers_started = 0;
     remote_state = CO_DEVICE_ONLINE;
     remote_device[0].unit_id = 1;
@@ -447,6 +451,24 @@ ZTEST(acquisition, test_shared_wire_station_conflict_fails_before_ports_or_worke
     zassert_equal(calls[TASKS_PREPARE], 0);
     zassert_equal(calls[FORWARD_INIT], 0);
     zassert_equal(workers_started, 0);
+}
+
+ZTEST(acquisition, test_storage_fault_survives_successful_operation_until_storage_recovers)
+{
+    errors[PARAMS_INIT] = -EIO;
+    parameter_flags = 0;
+    zassert_ok(idu_startup(&acquisition));
+    zassert_ok(idu_acquisition_cycle(&acquisition));
+    zassert_equal(acquisition.storage_error, -EIO);
+    errors[PARAMS_INIT] = 0; /* The most recent parameter operation now succeeded. */
+    zassert_ok(idu_acquisition_cycle(&acquisition));
+    zassert_equal(acquisition.storage_error, -EIO);
+    zassert_false(checkpoint_ready);
+    zassert_equal(kicks, 2);
+    parameter_flags = DP_PARAM_STORAGE_READY;
+    zassert_ok(idu_acquisition_cycle(&acquisition));
+    zassert_equal(acquisition.storage_error, 0);
+    zassert_true(checkpoint_ready);
 }
 
 ZTEST_SUITE(acquisition, NULL, NULL, before, NULL, NULL);
