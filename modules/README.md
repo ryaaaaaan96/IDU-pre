@@ -525,5 +525,4 @@ The native `tr_bind_mapping(port, view)` API selects an immutable `dp_equip_cfg`
 It validates before publishing. Once any explicit mapping exists, unbound interfaces fail instead of
 using the legacy global mapping. The context-free `tr_read_register()` rejects ambiguous use with
 `-ENOTUNIQ`; callbacks use the active request interface. Product writes resolve addresses in TR
-and pass keys into DP. `dp_params_write_registers()` remains only for legacy single-global-map consumers;
-it cannot resolve product forwarding addresses. No NVS format or stable data key changes are involved.
+and pass keys into DP. `dp_params_write_registers(mapping, address, words, count)` now requires an explicitly selected immutable mapping view; it cannot borrow a TR entry. Legacy consumers pass their own view. No NVS format or stable data key changes are involved.

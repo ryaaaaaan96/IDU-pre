@@ -1,12 +1,15 @@
 #include <dataprocess/points.h>
 #include <transmit/transmit.h>
 #include <transmit/forward.h>
+#include <transmit/modbus.h>
 #include <dataprocess/table_registry.h>
 #include <platform_callback.h>
 #include <dataprocess/params.h>
 #include <zephyr/storage/flash_map.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/ztest.h>
+#include <stdlib.h>
+#include <string.h>
 
 static int client, servers[3], target;
 static const DM_SIG_CFG_S process[] = {
@@ -43,6 +46,15 @@ static const STRUCT_SECTION_ITERABLE(dp_registered_table, second_map) = {
     .id = 4, .type = PRO_MB_SLAVE, .rows = &maps[3], .count = 3};
 static const STRUCT_SECTION_ITERABLE(dp_registered_table, remote_points) = {
     .id = 5, .type = PRO_DATA_PROCESS, .rows = remote_process, .count = ARRAY_SIZE(remote_process)};
+static const MB_TABLE_CELL_T invalid_maps[] = {
+    {.reg_type = 4, .reg_addr = 100, .reg_num = 1, .dev_id = 10, .sig_id = 1},
+    {.reg_type = 4, .reg_addr = 100, .reg_num = 1, .dev_id = 11, .sig_id = 1},
+    {.reg_type = 4, .reg_addr = 100, .reg_num = 1, .dev_id = 99, .sig_id = 1},
+};
+static const STRUCT_SECTION_ITERABLE(dp_registered_table, duplicate_map) = {
+    .id = 7, .type = PRO_MB_SLAVE, .rows = invalid_maps, .count = 2};
+static const STRUCT_SECTION_ITERABLE(dp_registered_table, missing_source_map) = {
+    .id = 8, .type = PRO_MB_SLAVE, .rows = &invalid_maps[2], .count = 1};
 static const struct data_device_cfg data_devices[] = {
     {.dev_id = 1, .process_table = 1, .collect_table = 0},
     {.dev_id = 10, .process_table = 5, .collect_table = 2, .collect_port = 0, .collect_addr = 1},
@@ -98,19 +110,45 @@ static int response(int iface, const struct modbus_adu *adu, void *user)
     ARG_UNUSED(iface); ARG_UNUSED(user);
     return modbus_raw_submit_rx(client, adu);
 }
+static int disconnected_send(void *user, uint16_t port,
+                               const struct vport_source *destination,
+                               const struct vport_frame *frame, k_timeout_t timeout)
+{
+    ARG_UNUSED(user); ARG_UNUSED(port); ARG_UNUSED(destination);
+    ARG_UNUSED(frame); ARG_UNUSED(timeout);
+    return -ENOTCONN;
+}
 static void *setup(void)
 {
-    zassert_ok(dp_data_device_bind(data_devices, ARRAY_SIZE(data_devices), devices));
+    const char *phase = getenv("IDU_BINDING_PHASE");
+    bool legacy = phase && !strcmp(phase, "legacy_write");
+    if (legacy) {
+        /* Previous product shape: local data owns the northbound map. */
+        const struct dp_device_binding old_bindings[] = {
+            {.dev_id = 1, .tables = {{1, PRO_DATA_PROCESS}, {3, PRO_MB_SLAVE}}},
+            {.dev_id = 10, .port = 0, .coll_addr = 1,
+             .tables = {{5, PRO_DATA_PROCESS}, {2, PRO_MB_MASTER}}},
+            {.dev_id = 11, .port = 0, .coll_addr = 2,
+             .tables = {{5, PRO_DATA_PROCESS}, {2, PRO_MB_MASTER}}},
+        };
+        zassert_ok(dp_table_registry_bind(old_bindings, ARRAY_SIZE(old_bindings), devices));
+    } else {
+        zassert_ok(dp_data_device_bind(data_devices, ARRAY_SIZE(data_devices), devices));
+    }
     pltcb_reg_cfg_get_dev_tbl(get_devices); pltcb_reg_cfg_get_dev_num(get_count);
     zassert_ok(dp_init());
     const struct dp_params_transport transport = {.read = south_read, .write = south_write};
     zassert_ok(dp_params_set_transport(&transport));
     zassert_ok(dp_params_init(dp_config(), DT_FIXED_PARTITION_ID(DT_NODELABEL(storage_partition))));
+    if (legacy) { return NULL; }
     uint16_t values[] = {111, 222};
     for (size_t i = 0; i < 2; ++i) {
         zassert_ok(dp_set_sig_value(10 + i, 1, sizeof(values[i]), (uint8_t *)&values[i]));
     }
     client = modbus_iface_get_by_name("RAW_0");
+    static const struct vport_io io = {.send = disconnected_send,
+        .mtu = CONFIG_MODBUS_BUFFER_SIZE};
+    zassert_ok(tr_modbus_port_bind(1, "RAW_0", &io));
     servers[0] = modbus_iface_get_by_name("RAW_1");
     servers[1] = modbus_iface_get_by_name("RAW_2");
     servers[2] = modbus_iface_get_by_name("RAW_3");
@@ -118,6 +156,10 @@ static void *setup(void)
     invalid.transmit_table = 999;
     zassert_equal(tr_forward_attach(servers[0], &invalid), -ENOENT);
     invalid.transmit_table = 1;
+    zassert_equal(tr_forward_attach(servers[0], &invalid), -EINVAL);
+    invalid.transmit_table = 7;
+    zassert_equal(tr_forward_attach(servers[0], &invalid), -EEXIST);
+    invalid.transmit_table = 8;
     zassert_equal(tr_forward_attach(servers[0], &invalid), -EINVAL);
     for (size_t i = 0; i < ARRAY_SIZE(servers); ++i) {
         int err = tr_forward_attach(servers[i], &forwarding[i]);
@@ -160,6 +202,10 @@ ZTEST(forwarding_devices, test_writes_use_selected_data_identity_and_persist)
     target = 0;
     zassert_ok(modbus_write_holding_reg(client, 7, 200, 123));
     zassert_equal(south_values[0][0], 123); zassert_equal(south_values[1][0], 0);
+    unsigned before = south_writes[0];
+    uint16_t mixed[] = {321, 99};
+    zassert_not_equal(modbus_write_holding_regs(client, 7, 200, mixed, 2), 0);
+    zassert_equal(south_writes[0], before); zassert_equal(south_values[0][0], 123);
     target = 1;
     zassert_ok(modbus_write_holding_reg(client, 7, 200, 456));
     zassert_equal(south_values[0][0], 123); zassert_equal(south_values[1][0], 456);
@@ -200,5 +246,45 @@ ZTEST(forwarding_devices, test_protocol_segments_belong_to_selected_entry)
     zassert_ok(modbus_raw_submit_rx(servers[1], &rx));
     zassert_equal(k_sem_take(&segment_done, K_MSEC(10)), -EAGAIN);
     zassert_equal(segment_calls, calls + 2);
+}
+ZTEST(forwarding_devices, test_parameter_address_write_requires_explicit_mapping)
+{
+    uint16_t value = 123;
+    unsigned before = south_writes[0] + south_writes[1];
+    zassert_equal(dp_params_write_registers(NULL, 200, &value, 1), -EINVAL);
+    /* Data-only DP has no northbound address map; never borrow a TR entry. */
+    zassert_equal(dp_params_write_registers(dp_config(), 200, &value, 1), -ENOENT);
+    zassert_equal(south_writes[0] + south_writes[1], before);
+}
+ZTEST(forwarding_devices, test_service_rejects_different_bound_interface)
+{
+    /* Existing forward 1 was attached to RAW_1, but its logical port resolves
+     * to RAW_0 here. Reject before allocating or configuring another server. */
+    zassert_equal(tr_forward_service(&forwarding[0], 7), -EEXIST);
+    target = 0;
+    uint16_t value;
+    zassert_ok(modbus_read_input_regs(client, 7, 100, &value, 1)); zassert_equal(value, 111);
+}
+ZTEST(forwarding_devices, test_binding_migration_reboot_probe)
+{
+    const char *phase = getenv("IDU_BINDING_PHASE");
+    if (!phase) { ztest_test_skip(); return; }
+    if (!strcmp(phase, "legacy_write")) {
+        struct dp_point_update value = {.key = {10, 2}, .width = 1, .value.words = {123}};
+        zassert_ok(dp_params_set_values(&value, 1));
+        value.key.dev_id = 11; value.value.words[0] = 456;
+        zassert_ok(dp_params_set_values(&value, 1));
+        zassert_ok(dp_params_flush());
+        return;
+    }
+    zassert_equal(strcmp(phase, "verify"), 0);
+    uint16_t word; target = 0;
+    zassert_ok(modbus_read_holding_regs(client, 7, 200, &word, 1)); zassert_equal(word, 123);
+    target = 1;
+    zassert_ok(modbus_read_holding_regs(client, 7, 200, &word, 1)); zassert_equal(word, 456);
+    struct dp_param_status status; dp_params_get_status(&status);
+    zassert_true(status.flags & DP_PARAM_STORAGE_READY);
+    zassert_false(status.flags & DP_PARAM_STORAGE_RESET);
+    zassert_equal(south_writes[0] + south_writes[1], 0);
 }
 ZTEST_SUITE(forwarding_devices, NULL, setup, NULL, NULL, NULL);

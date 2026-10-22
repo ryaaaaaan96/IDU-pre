@@ -288,9 +288,9 @@ ZTEST(points, test_parameters_torn_flash_write_keeps_whole_batch)
     /* Fail each possible byte in the journal, individual records, CRC, and metadata,
      * plus successful writes. Repeated iterations also exercise NVS GC. */
     for (int cut = 0; cut < 256; ++cut) {
-        zassert_ok(dp_params_write_registers(31000, baseline, 9));
+        zassert_ok(dp_params_write_registers(dp_config(), 31000, baseline, 9));
         bytes_before_failure = cut;
-        int err = dp_params_write_registers(31000, request, 9);
+        int err = dp_params_write_registers(dp_config(), 31000, request, 9);
         bytes_before_failure = -1;
         zassert_true(err == 0 || err == -EIO, "cut=%d error=%d", cut, err);
         zassert_ok(dp_params_reload(), "cut=%d", cut);

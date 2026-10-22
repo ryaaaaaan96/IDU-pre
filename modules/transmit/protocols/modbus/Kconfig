@@ -21,11 +21,12 @@ config TR_STACK_SIZE
       plus any architecture alignment or guard requirements.
 
 config TR_PORTS
-    int "Independent forwarding workqueues"
+    int "Maximum forwarding entries / isolated workqueues"
     default 1
     range 1 4
     help
-      Number of statically reserved isolated forwarding workers and stacks.
+      Maximum immutable forwarding mapping bindings. When TR_MODBUS_ADAPTER
+      is enabled, also reserves this many isolated forwarding workers/stacks.
       Unused slots still reserve RAM. This is separate from the number of
       interfaces bound to the Modbus virtual-port transport.
 

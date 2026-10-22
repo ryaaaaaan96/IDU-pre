@@ -86,7 +86,13 @@ int tr_forward_service(const struct tr_forward_cfg *config, uint8_t unit)
     int err = 0;
     bool attached = false;
     for (size_t i = 0; i < ARRAY_SIZE(entries); ++i) {
-        attached |= entries[i].config == config;
+        if (entries[i].config != config) { continue; }
+        if (entries[i].iface != iface) {
+            k_mutex_unlock(&forwarding_lock);
+            return -EEXIST;
+        }
+        attached = true;
+        break;
     }
     if (!attached) { err = attach(iface, config); }
     if (err) { k_mutex_unlock(&forwarding_lock); return err; }

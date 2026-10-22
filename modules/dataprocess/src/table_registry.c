@@ -12,11 +12,9 @@ static const struct dp_registered_table *find_table(
     return NULL;
 }
 
-int dp_table_bind(const struct dp_device_binding *devices, size_t count,
-                  const struct dp_registered_table *tables, size_t table_count,
-                  DEV_TABLE_S *output)
+static int validate_tables(const struct dp_registered_table *tables, size_t table_count)
 {
-    if (!devices || !count || !tables || !table_count || !output) { return -EINVAL; }
+    if (!tables || !table_count) { return -EINVAL; }
     for (size_t i = 0; i < table_count; ++i) {
         const struct dp_registered_table *t = &tables[i];
         if (!t->id || !t->rows || !t->count || t->count > UINT16_MAX ||
@@ -27,6 +25,16 @@ int dp_table_bind(const struct dp_device_binding *devices, size_t count,
             if (tables[j].id == t->id) { return -EEXIST; }
         }
     }
+    return 0;
+}
+
+int dp_table_bind(const struct dp_device_binding *devices, size_t count,
+                  const struct dp_registered_table *tables, size_t table_count,
+                  DEV_TABLE_S *output)
+{
+    if (!devices || !count || !tables || !table_count || !output) { return -EINVAL; }
+    int err = validate_tables(tables, table_count);
+    if (err) { return err; }
     for (size_t i = 0; i < count; ++i) {
         const struct dp_device_binding *d = &devices[i];
         if (!d->dev_id || !d->tables[0].id ||
@@ -77,15 +85,13 @@ int dp_table_registry_find(uint16_t id, uint16_t type,
 {
     if (!id || !table) { return -EINVAL; }
     *table = NULL;
-    STRUCT_SECTION_FOREACH(dp_registered_table, entry) {
-        if (!entry->id || !entry->rows || !entry->count || entry->count > UINT16_MAX) {
-            return -EINVAL;
-        }
-        STRUCT_SECTION_FOREACH(dp_registered_table, other) {
-            if (entry != other && entry->id == other->id) { return -EEXIST; }
-        }
-        if (entry->id == id) { *table = entry; }
-    }
+    STRUCT_SECTION_START_EXTERN(dp_registered_table);
+    size_t count;
+    STRUCT_SECTION_COUNT(dp_registered_table, &count);
+    const struct dp_registered_table *tables = STRUCT_SECTION_START(dp_registered_table);
+    int err = validate_tables(tables, count);
+    if (err) { return err; }
+    *table = find_table(tables, count, id);
     if (!*table) { return -ENOENT; }
     return (*table)->type == type ? 0 : -EINVAL;
 }

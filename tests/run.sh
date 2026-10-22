@@ -53,6 +53,13 @@ for suite in adc io vport communication shared_rs485 simulator pipeline models c
         "applications/IDU-pre/tests/$suite" -d "$test_dir/$suite"
     if [[ "$suite" == forwarding_devices ]]; then
         timeout 30s "$test_dir/$suite/zephyr/zephyr.exe" -flash_in_ram
+        # Persist with the old combined binding; boot with separate forward entries.
+        rm -f -- "$flash_test_file"
+        flash_test_file="$(mktemp "$workspace_dir/$test_dir/binding-reboot.XXXXXX")"
+        for phase in legacy_write verify; do
+            env IDU_BINDING_PHASE="$phase" timeout 30s "$test_dir/$suite/zephyr/zephyr.exe" \
+                -flash="$flash_test_file" -test=forwarding_devices::test_binding_migration_reboot_probe
+        done
     else
         timeout 30s "$test_dir/$suite/zephyr/zephyr.exe"
     fi

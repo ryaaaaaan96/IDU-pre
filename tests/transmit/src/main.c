@@ -38,13 +38,18 @@ int __wrap_modbus_init_server(int iface, struct modbus_iface_param param)
 static const struct dp_point_cfg points[] = {
     {.key = {1, 1}, .source = DP_SOURCE_CONSTANT, .type = DP_U16,
      .width = 1, .maximum = UINT16_MAX, .initial.words = {2222}},
+    {.key = {1, 2}, .source = DP_SOURCE_CONSTANT, .type = DP_U32,
+     .width = 2, .maximum = UINT32_MAX, .initial.words = {0x1234, 0x5678}},
 };
 static const struct dp_transmit_cfg maps[] = {
     {.function = 4, .address = 100, .count = 1, .key = {1, 1}},
+    {.function = 4, .address = 300, .count = 2, .key = {1, 2}},
+    {.function = 4, .address = 301, .count = 1, .key = {1, 2}},
 };
 static const struct dp_equip_cfg equipment = {
     .points = points, .point_count = ARRAY_SIZE(points),
     .transmit = maps, .transmit_count = ARRAY_SIZE(maps),
+    .exact_overlapping_reads = true,
 };
 
 static int request_tx(int iface, const struct modbus_adu *adu, void *user)
@@ -382,4 +387,13 @@ ZTEST(transmit, test_duplicate_initialization_preserves_active_writer)
     zassert_ok(modbus_write_holding_reg(client, 8, 100, 8));
 }
 
+ZTEST(transmit, test_legacy_register_getter_rejects_overlapping_word)
+{
+    uint16_t words[2];
+    zassert_ok(tr_read(0, 4, 300, words, 2));
+    zassert_equal(words[0], 0x1234); zassert_equal(words[1], 0x5678);
+    zassert_ok(tr_read(0, 4, 301, words, 1)); /* Exact complete-point selection. */
+    zassert_equal(words[0], 0x1234);
+    zassert_equal(tr_read_register(4, 301, words), -ERANGE);
+}
 ZTEST_SUITE(transmit, NULL, setup, before, NULL, NULL);

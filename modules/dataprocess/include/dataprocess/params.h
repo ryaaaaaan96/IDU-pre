@@ -64,7 +64,10 @@ int dp_params_apply(const struct dp_point_update *values, size_t count, uint8_t 
 /* Business worker flushes deferred values after the debounce deadline. */
 int dp_params_flush_due(void);
 int dp_params_sync_device(uint16_t dev_id);
-int dp_params_write_registers(uint16_t address, const uint16_t *words, size_t count);
+/* Legacy address writer: caller must explicitly select an immutable mapping
+ * view. Product protocols use TR; business code should prefer key-based writes. */
+int dp_params_write_registers(const struct dp_equip_cfg *mapping, uint16_t address,
+                               const uint16_t *words, size_t count);
 int dp_params_restore(uint16_t dev_id);
 int dp_params_flush(void);
 /* Atomically flush and reject new writes until reboot (or cancellation). */

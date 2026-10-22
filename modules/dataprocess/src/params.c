@@ -784,9 +784,10 @@ int dp_params_set_values(const struct dp_point_update *values, size_t count)
     return dp_params_apply(values, count, 0);
 }
 
-int dp_params_write_registers(uint16_t address, const uint16_t *words, size_t count)
+int dp_params_write_registers(const struct dp_equip_cfg *mapping, uint16_t address,
+                               const uint16_t *words, size_t count)
 {
-    if (!words || !count || count > DP_TRANSFER_WORDS || (uint32_t)address + count > 65536) {
+    if (!mapping || !words || !count || count > DP_TRANSFER_WORDS || (uint32_t)address + count > 65536) {
         return -EINVAL;
     }
     int err = begin_transaction(false);
@@ -798,8 +799,9 @@ int dp_params_write_registers(uint16_t address, const uint16_t *words, size_t co
     while (offset < count) {
         const struct dp_transmit_cfg *map = NULL;
         struct dp_transmit_cfg t_scratch;
-        for (size_t i = 0; i < equipment->transmit_count; ++i) {
-            const struct dp_transmit_cfg *t = dp_config_transmit(equipment, i, &t_scratch);
+        for (size_t i = 0; i < mapping->transmit_count; ++i) {
+            const struct dp_transmit_cfg *t = dp_config_transmit(mapping, i, &t_scratch);
+            if (!t) { return end_transaction(-EINVAL); }
             if (t->function == 3 && t->address == address + offset && t->kind == DP_MAP_VALUE) {
                 map = t;
                 break;

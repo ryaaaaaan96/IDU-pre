@@ -167,8 +167,9 @@ Flash 或总线操作；校验变换后的数值也再次检查范围。
   事务 handler；北向整点写入由 `tr_write()` 解析映射后进入该流程。
 - `dp_params_set_values()`：按 `{dev_id,sig_id}` 批量设置的底层参数接口，
   执行权限、校验和持久化事务，但绕过业务 handler。
-- `dp_params_write_registers()`：按 FC03 映射调用底层参数事务，绕过业务
-  handler；正常北向 FC06/16 使用 transmit 的 `tr_write()`。
+- `dp_params_write_registers(mapping, address, words, count)`：显式选择不可变 FC03 映射视图，
+  调用底层参数事务，绕过业务 handler；不隐式借用其他入口的地址表。
+  正常北向 FC06/16 使用 transmit 的 `tr_write()`，产品 DP 数据目录不再保存北向映射。
 - `dp_params_restore(dev_id)`：只恢复标记 RESTORE 的点，经过同样的下发与保存路径。
 - `dp_params_flush()`：同步保存持久目标值，包括待提交的延后保存值。
   普通持久写同步保存；`DP_OP_DEFER` / `DP_PARAM_DEFER_STORE` 使用 1 s 防抖，

@@ -123,10 +123,10 @@ ZTEST(table_registry, test_invalid_bindings_leave_output_untouched)
 ZTEST(table_registry, test_volatile_command_does_not_read_or_store)
 {
     uint16_t command = 23;
-    zassert_ok(dp_params_write_registers(200, &command, 1));
+    zassert_ok(dp_params_write_registers(dp_config(), 200, &command, 1));
     zassert_equal(writes, 1); zassert_equal(reads, 0); zassert_equal(flash_writes, 0);
     zassert_equal(value(2), command);
-    zassert_ok(dp_params_write_registers(200, &command, 1));
+    zassert_ok(dp_params_write_registers(dp_config(), 200, &command, 1));
     zassert_equal(writes, 2); /* Identical commands still execute once per request. */
     zassert_ok(dp_params_reload());
     zassert_equal(value(2), 0); /* Not restored from NVS. */
@@ -136,7 +136,7 @@ ZTEST(table_registry, test_failed_command_preserves_cache_without_replay)
 {
     uint16_t command = 44, old = value(2), remote_before = remote[0];
     write_error = -ETIMEDOUT;
-    zassert_equal(dp_params_write_registers(200, &command, 1), -ETIMEDOUT);
+    zassert_equal(dp_params_write_registers(dp_config(), 200, &command, 1), -ETIMEDOUT);
     zassert_equal(value(2), old);
     zassert_equal(writes, 1); zassert_equal(reads, 0); zassert_equal(flash_writes, 0);
     write_error = 0;
@@ -155,7 +155,7 @@ ZTEST(table_registry, test_poll_feedback_neither_writes_nor_persists)
     zassert_equal(value(3), 59);
     zassert_equal(writes, 0); zassert_equal(flash_writes, 0);
     uint16_t command = 61;
-    zassert_ok(dp_params_write_registers(201, &command, 1));
+    zassert_ok(dp_params_write_registers(dp_config(), 201, &command, 1));
     zassert_equal(remote[1], 61);
     zassert_ok(dp_params_sample(batch.points, 1, 0, batch.sampled_at));
     zassert_equal(value(3), 61); /* An old queued sample cannot undo a write. */
@@ -163,7 +163,7 @@ ZTEST(table_registry, test_poll_feedback_neither_writes_nor_persists)
 ZTEST(table_registry, test_persistent_feedback_does_not_replace_saved_setting)
 {
     uint16_t setting = 72;
-    zassert_ok(dp_params_write_registers(202, &setting, 1));
+    zassert_ok(dp_params_write_registers(dp_config(), 202, &setting, 1));
     zassert_true(flash_writes > 0); zassert_true(reads >= 2);
     k_sleep(K_MSEC(1));
     struct dp_point_update sample = {.key = {1, 4}, .width = 1, .value.words = {73}};
@@ -179,16 +179,16 @@ ZTEST(table_registry, test_persistent_feedback_does_not_replace_saved_setting)
 ZTEST(table_registry, test_mixed_durability_rejected_before_io)
 {
     uint16_t mixed[] = {81, 82};
-    zassert_equal(dp_params_write_registers(201, mixed, 2), -EXDEV);
+    zassert_equal(dp_params_write_registers(dp_config(), 201, mixed, 2), -EXDEV);
     zassert_equal(writes, 0); zassert_equal(reads, 0); zassert_equal(flash_writes, 0);
 }
 ZTEST(table_registry, test_volatile_write_survives_storage_failure)
 {
     uint16_t setting = value(1) + 1;
     flash_failure = true;
-    zassert_not_equal(dp_params_write_registers(100, &setting, 1), 0);
+    zassert_not_equal(dp_params_write_registers(dp_config(), 100, &setting, 1), 0);
     flash_writes = 0;
-    zassert_ok(dp_params_write_registers(200, &setting, 1));
+    zassert_ok(dp_params_write_registers(dp_config(), 200, &setting, 1));
     zassert_equal(flash_writes, 0); zassert_equal(writes, 1);
     zassert_equal(dp_params_flush(), -EROFS);
     flash_failure = false;

@@ -43,7 +43,7 @@ FC04/10000 读取远端设备 10 的 DI；两者可以共享同一信号 ID。
 - 未绑定接口不借用其他入口。无上下文的 `tr_read_register()` 在多个显式绑定存在时
   返回 `-ENOTUNIQ`；实际 Modbus 回调使用当前请求接口。
 - 原生/旧参考表消费者未登记任何显式映射时，仍可使用其单一全局映射。
-  新产品 DP 配置不含转发表，旧 `dp_params_write_registers()` 不再承担产品地址解析；
+  新产品 DP 配置不含转发表，旧 `dp_params_write_registers(mapping, address, words, count)` 必须显式传入映射视图，不再承担产品地址解析；
   业务使用键式参数接口，协议使用 `tr_write()`。
 
 运行期 `tr_forward_service()` 根据配置的逻辑口找到应用登记的 RAW 接口，
@@ -156,7 +156,7 @@ static const struct tr_forward_cfg forwarding_devices[] = {
 数据仍归原数据设备；各转发设备独立选择转发表，并在读、写、协议段和冲突校验中保持隔离。
 
 - [正式规格](../.scratch/forwarding-devices/spec.md) 包含用户故事、实施决定、测试与排除项。
-- [实施任务](../.scratch/forwarding-devices/issues/01-separate-data-and-forwarding.md) 已标记 ready-for-agent。
+- [实施任务](../.scratch/forwarding-devices/issues/01-separate-data-and-forwarding.md) 已完成；[验证记录](../.scratch/forwarding-devices/validation.md)记录构建、测试及资源变化。
 - 实施结果与验证记录见关联任务；实板时序、运行时栈余量和 NOR 掉电仍需实测。
 
 同一物理口多站号接收分派不纳入本轮；继续沿用每个北向逻辑口一个活动入口及既有同线事务仲裁。

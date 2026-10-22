@@ -1,4 +1,4 @@
-Status: claimed
+Status: resolved
 Labels: ready-for-agent
 Blocked by: 05, 06
 Type: task
@@ -14,4 +14,10 @@ Type: task
 
 ## 验证记录
 
-待执行。
+完成产品调用者、文档和项目约定迁移；完整回归及固件构建、验签、导出通过。
+资源增加 IDU Flash 840 B / 静态 RAM 176 B，线程栈数量不变。
+详见[验证记录](../validation.md)与[审查记录](../review.md)。
+
+## Answer
+
+已完成；未执行实板时序、栈余量和 NOR 实物掉电测试。

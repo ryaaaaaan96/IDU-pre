@@ -57,6 +57,7 @@ static const struct dp_equip_cfg *mapping_config(uint16_t port)
 
 int tr_read_register(uint8_t function, uint16_t address, uint16_t *value)
 {
+    if (!value || !dp_config()) { return -EINVAL; }
     int port = -1;
 #if defined(CONFIG_TR_MODBUS_ADAPTER)
     port = tr_modbus_request_iface();
@@ -68,7 +69,21 @@ int tr_read_register(uint8_t function, uint16_t address, uint16_t *value)
             port = mappings[i].port;
         }
     }
-    int err = tr_read(port < 0 ? 0 : port, function, address, value, 1);
+    uint16_t selected = port < 0 ? 0 : port;
+    const struct dp_equip_cfg *cfg = mapping_config(selected);
+    /* The legacy single-word getter rejects every overlapping word. Bulk
+     * tr_read() retains its separate exact-complete-point compatibility. */
+    if (cfg && cfg->exact_overlapping_reads) {
+        size_t matches = 0;
+        for (size_t i = 0; i < cfg->transmit_count; ++i) {
+            struct dp_transmit_cfg scratch;
+            const struct dp_transmit_cfg *map = dp_config_transmit(cfg, i, &scratch);
+            if (map->function == function && address >= map->address &&
+                (uint32_t)address < (uint32_t)map->address + map->count &&
+                ++matches > 1) { return -ERANGE; }
+        }
+    }
+    int err = tr_read(selected, function, address, value, 1);
     return err == -ENOENT ? -ENOTSUP : err == -ENOTSUP ? -EIO : err;
 }
 
