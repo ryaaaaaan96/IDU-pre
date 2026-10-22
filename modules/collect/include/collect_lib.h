@@ -13,6 +13,7 @@ typedef enum { SCAN_PRI_LOW = 0, SCAN_PRI_HIGH = 1 } CO_SCAN_PRI;
 /* Table metadata values; declaration does not enable unsupported FC17. */
 typedef enum {
     FLAG_FRAME = 1, FLAG_0x03_W_0x06 = 2, FLAG_0x03_w_0x10 = 4, FLAG_0x17_W_CODE = 8,
+    FLAG_INITIALIZE = CO_TABLE_INIT,
 } CO_TABLE_FLAG;
 
 /* 采集表可选字段的编译期默认值；周期和读写目标由应用明确配置。 */

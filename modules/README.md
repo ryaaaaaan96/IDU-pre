@@ -63,8 +63,9 @@ to the module that interprets the table: `DP_POINT_DEFAULT_*` in
 These are compile-time field constants, not whole-row macros or runtime templates.
 Required addresses, IDs, widths and protocol choices remain explicit product values.
 Modbus acquisition rows set `uint16_t period_ms` directly in milliseconds; no cycle
-encoding or conversion callback is registered. Zero means initialization-only for
-read-only points and command-only for `FLAG_COLLECT` destinations. UPP model cycle
+encoding or conversion callback is registered. Initialization reads explicitly set
+`FLAG_INITIALIZE`; zero alone disables periodic acquisition. Unmarked zero-period
+`FLAG_COLLECT` destinations are command-only. UPP model cycle
 conversion remains a separate API.
 
 The same convention applies to device bindings and startup plans (`DP_DEVICE_DEFAULT_*`,

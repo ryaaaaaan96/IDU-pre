@@ -394,7 +394,7 @@ static int reference_point(const struct dp_equip_cfg *cfg, size_t index,
                 if (row->sig_id != signal->sig_id) { continue; }
                 if (signal->sig_flag & FLAG_COLLECT) {
                     if (forwarded || row->reg_type != 3 || row->reg_num != p->width ||
-                        (row->flag & ~7U) || row->data_type || row->scan_pri ||
+                        (row->flag & ~(7U | CO_TABLE_INIT)) || row->data_type || row->scan_pri ||
                         !(row->flag & (p->width == 1 ? 2 : 4))) {
                         return -ENOTSUP;
                     }
@@ -403,7 +403,7 @@ static int reference_point(const struct dp_equip_cfg *cfg, size_t index,
                     err = word_order(row->byte_order, &p->write_order);
                     if (err) { return err; }
                     forwarded = true;
-                    acquired |= row->period_ms != 0;
+                    acquired |= row->period_ms != 0 || (row->flag & CO_TABLE_INIT);
                 } else { acquired = true; }
             }
         } else if (group->proto_type == PRO_UPP_MASTER) {
@@ -441,19 +441,19 @@ static int reference_collect(const struct dp_equip_cfg *cfg, size_t index,
                 for (size_t i = 0; i < group->sig_num; ++i) {
                     const MODBUS_RTU_TABLE_S *row = &rows[i];
                     const DM_SIG_CFG_S *sig = signal_row(dev, row->sig_id);
-                    if (sig && (sig->sig_flag & FLAG_COLLECT) && !row->period_ms) { continue; }
+                    if (!row->period_ms && !(row->flag & CO_TABLE_INIT)) { continue; }
                     if (index) { --index; continue; }
                     if (!sig || row->reg_num != (sig->sig_size + 1U) / 2U ||
                         (row->reg_type != 3 && row->reg_type != 4)) { return -EINVAL; }
                     /* Each row is an exact request, so FRAME already holds. */
-                    if ((row->flag & ((sig->sig_flag & FLAG_COLLECT) ? ~7U : ~1U)) ||
+                    if ((row->flag & ~(((sig->sig_flag & FLAG_COLLECT) ? 7U : 1U) | CO_TABLE_INIT)) ||
                         row->data_type || row->scan_pri) { return -ENOTSUP; }
                     *poll = (struct co_cfg){.dev_id = dev->dev_id,
                         .function = row->reg_type, .address = row->reg_addr,
                         .count = row->reg_num, .priority = row->priority,
                         .field_count = 1};
                     poll->period_ms = row->period_ms;
-                    poll->init_only = poll->period_ms == 0;
+                    poll->init_only = (row->flag & CO_TABLE_INIT) != 0;
                     poll->reference_field = (struct co_field){.sig_id = row->sig_id,
                         .width = row->reg_num};
                     poll->fields = &poll->reference_field;
@@ -581,7 +581,7 @@ static int compile_tables(void)
             for (size_t i = 0; i < group->sig_num; ++i) {
                 const DM_SIG_CFG_S *sig = signal_row(dev, rows[i].sig_id);
                 if (!sig) { return -ENOENT; }
-                if (!(sig->sig_flag & FLAG_COLLECT) || rows[i].period_ms) { ++compiled.collect_count; }
+                if (rows[i].period_ms || (rows[i].flag & CO_TABLE_INIT)) { ++compiled.collect_count; }
             }
         }
         if (has_collect) {

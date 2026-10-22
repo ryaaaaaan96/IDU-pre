@@ -89,10 +89,10 @@ transmit 的 `TR_TABLE_DEFAULT_BYTE_ORDER`。这些是编译期字段常量，�
 
 - `.period_ms = CONFIG_IDU_COLLECT_PERIOD_MS`：使用 `.conf` 配置的周期，目前为 500 ms。
 - `.period_ms = 2000`：该行独立按 2000 ms 采集。
-- `.period_ms = 0`：不周期轮询；只读点初始化采集，带 `FLAG_COLLECT` 的下发点仅按指令写入。
+- `.period_ms = 0`：不周期轮询；初始化读必须同时设置 `.flag = FLAG_INITIALIZE`，仅下发点不加该标记。
 
 `CONFIG_IDU_COLLECT_PERIOD_MS` 在 `prj.conf` 手动配置，不按固件类型覆盖。
-协议号和南向地址的周期为 0，只在初始化时采集。北向普通读访问 DP 缓存。
+协议号和南向地址显式标记初始化且周期为 0，每次上线时采集一次。北向普通读访问 DP 缓存。
 本地模拟量仍使用现有电流换算（0.01 A）；改为电压单位需同步业务换算和协议约定。
 
 ## 设置回调、读取回调和地址段
@@ -130,7 +130,7 @@ transmit 的 `TR_TABLE_DEFAULT_BYTE_ORDER`。这些是编译期字段常量，�
 - `FLAG_PERSISTENCE`：将参数保存到 NVS。低频配置使用 `FLAG_PERSISTENCE_SYNC` 或
   `FLAG_RT_STORE`，成功回复前保存；未设置这两个标志时，保留原有延后保存语义。
 - 带 `FLAG_COLLECT` 的 Modbus 行，period_ms 为 0 为仅下发，非零同时周期采集；
-  普通只读行的 period_ms 为 0 保留初始化采集语义。`flag` 明确声明允许的写功能码。
+  初始化读由独立 `FLAG_INITIALIZE` 标记，周期 0 本身不表示初始化。`flag` 的写入位明确声明允许的写功能码。
 
 不持久化的下发只发送一次，不要求前置读回，不写意图日志，失败不更新缓存，重启不重放。
 持久化下发保留“记录意图—写设备—读回确认—保存”的原事务；不确定状态通过读回恢复。

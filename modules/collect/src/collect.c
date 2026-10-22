@@ -221,12 +221,9 @@ int co_init(const struct dp_equip_cfg *cfg, int iface, bool simulated)
     return co_init_bus(cfg, &bus);
 }
 
-static int collect_poll(size_t block, bool sync)
+static int collect_request(const struct co_cfg *cfg, bool sync)
 {
     if (!data_callbacks.sample) { return -ENOTCONN; }
-    if (!equipment || block >= equipment->collect_count) { return -EINVAL; }
-    struct co_cfg cfg_scratch;
-    const struct co_cfg *cfg = dp_config_collect(equipment, block, &cfg_scratch);
     struct bus_state *bus = bus_for(cfg->dev_id);
     if (!bus) { return -ENODEV; }
     uint16_t registers[CO_MAX_REGS];
@@ -256,6 +253,49 @@ static int collect_poll(size_t block, bool sync)
     }
     int publish = data_callbacks.sample(&batch, sync);
     return publish ? publish : err;
+}
+
+static int collect_poll(size_t block, bool sync)
+{
+    if (!equipment || block >= equipment->collect_count) { return -EINVAL; }
+    struct co_cfg scratch;
+    return collect_request(dp_config_collect(equipment, block, &scratch), sync);
+}
+
+/* Build a bounded request on the caller's stack; immutable rows stay in ROM.
+ * Explicit co_poll keeps its one-row contract. Scheduled/initialization reads
+ * combine adjacent compatible rows and report how many deadlines were served.
+ */
+static int collect_group(size_t first, bool sync, bool due_only, size_t *rows)
+{
+    struct co_cfg scratch;
+    struct co_cfg request = *dp_config_collect(equipment, first, &scratch);
+    struct co_field fields[DP_BATCH_POINTS];
+    memcpy(fields, request.fields, request.field_count * sizeof(*fields));
+    request.fields = fields;
+    *rows = 1;
+    k_mutex_lock(&schedule_lock, K_FOREVER);
+    int64_t now = k_uptime_get();
+    for (size_t i = first + 1; !request.model_protocol && i < equipment->collect_count; ++i) {
+        const struct co_cfg *next = dp_config_collect(equipment, i, &scratch);
+        if (next->model_protocol || next->dev_id != request.dev_id ||
+            next->function != request.function || next->init_only != request.init_only ||
+            next->period_ms != request.period_ms || next->priority != request.priority ||
+            (uint32_t)request.address + request.count != next->address ||
+            request.count + next->count > CO_MAX_REGS ||
+            1U + (request.count + next->count) * 2U > sizeof(((struct modbus_adu *)0)->data) ||
+            request.field_count + next->field_count > ARRAY_SIZE(fields) ||
+            (due_only && (disabled[i] || next_poll[i] > now))) { break; }
+        for (size_t f = 0; f < next->field_count; ++f) {
+            struct co_field *field = &fields[request.field_count++];
+            *field = next->fields[f];
+            field->offset += request.count;
+        }
+        request.count += next->count;
+        ++*rows;
+    }
+    k_mutex_unlock(&schedule_lock);
+    return collect_request(&request, sync);
 }
 
 int co_poll(size_t block) { return collect_poll(block, false); }
@@ -406,7 +446,11 @@ int co_initialize_device(uint16_t dev_id)
     for (size_t i = 0; !err && i < equipment->collect_count; ++i) {
         struct co_cfg scratch;
         const struct co_cfg *poll = dp_config_collect(equipment, i, &scratch);
-        if (poll->dev_id == dev_id && poll->init_only) { err = collect_poll(i, true); }
+        if (poll->dev_id == dev_id && poll->init_only) {
+            size_t rows;
+            err = collect_group(i, true, false, &rows);
+            i += rows - 1;
+        }
     }
     if (!err && data_callbacks.initialize) { err = data_callbacks.initialize(dev_id); }
     k_mutex_lock(&bus->lock, K_FOREVER);
@@ -506,13 +550,15 @@ void co_bus_task(void *arg, void *b, void *c)
             int err = co_transfer_mode(job.request.dev_id, job.request.mode, &job.request.adu);
             job.done(&job.request, err, job.user);
         } else if (poll >= 0) {
+            size_t rows = 1;
             k_mutex_lock(&bus->lock, K_FOREVER);
-            if (bus->mode == CO_PORT_POLL) { co_poll(poll); }
+            if (bus->mode == CO_PORT_POLL) { collect_group(poll, false, true, &rows); }
             k_mutex_unlock(&bus->lock);
             k_mutex_lock(&schedule_lock, K_FOREVER);
             struct co_cfg scratch;
             const struct co_cfg *cfg = dp_config_collect(equipment, poll, &scratch);
-            next_poll[poll] = k_uptime_get() + cfg->period_ms;
+            int64_t next = k_uptime_get() + cfg->period_ms;
+            for (size_t i = 0; i < rows; ++i) { next_poll[poll + i] = next; }
             k_mutex_unlock(&schedule_lock);
         } else {
             /* Updates give a latched semaphore after changing the schedule.

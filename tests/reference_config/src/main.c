@@ -179,9 +179,13 @@ ZTEST(reference_configuration, test_original_tables_validate_before_initializati
     /* No application conversion is registered: each Modbus row carries its
      * actual interval, including 60 seconds and the 16-bit maximum. */
     const struct dp_equip_cfg *prepared;
+    acquisition[0].period_ms = 0;
+    zassert_ok(dp_reference_prepare(&prepared));
+    zassert_equal(prepared->collect_count, 0, "Zero alone must not select initialization");
     const uint16_t intervals[] = {0, 1, 500, 8000, 60000, UINT16_MAX};
     for (size_t i = 0; i < ARRAY_SIZE(intervals); ++i) {
         acquisition[0].period_ms = intervals[i];
+        acquisition[0].flag = intervals[i] ? 0 : CO_TABLE_INIT;
         zassert_ok(dp_reference_prepare(&prepared));
         struct co_cfg scratch;
         const struct co_cfg *poll = dp_config_collect(prepared, 0, &scratch);
@@ -190,6 +194,7 @@ ZTEST(reference_configuration, test_original_tables_validate_before_initializati
         zassert_equal(poll->init_only, intervals[i] == 0);
     }
     acquisition[0].period_ms = 8000;
+    acquisition[0].flag = 0;
 
     /* A model table uses a registry pointer and a total field count. */
     UPP_M_MOD_DATA model_field = {.sig_id = 10, .mod_data_offset = 20,

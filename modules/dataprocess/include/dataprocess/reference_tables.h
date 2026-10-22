@@ -72,12 +72,15 @@ typedef struct init_set_s {
     DM_PF_SIG_PROC function;
 } INIT_DATA_SET_S;
 
+/* CO-owned table phase flag, shared with the immutable reference reader. */
+#define CO_TABLE_INIT 0x10U
+
 typedef struct {
     uint16_t sig_id;
     uint16_t reg_addr;
     uint8_t reg_num;
     uint8_t reg_type;
-    /* 毫秒范围 0–65535；0：只读点初始化采集，FLAG_COLLECT 点仅下发。 */
+    /* 毫秒范围 0–65535；初始化须显式设置 CO_TABLE_INIT，不由 0 推断。 */
     uint16_t period_ms;
     uint8_t flag;
     uint8_t priority : 2;
