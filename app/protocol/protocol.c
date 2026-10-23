@@ -43,7 +43,10 @@ const DEV_TABLE_S *protocol_device_table(void)
     return devices;
 }
 
-uint16_t protocol_device_count(void) { return ARRAY_SIZE(devices); }
+uint16_t protocol_device_count(void) 
+{ 
+    return ARRAY_SIZE(devices); 
+}
 
 /* 应用只登记配置回调；通用校验、执行视图及数据池初始化由 dp_init() 完成。
  * 在启动 DP、采集和转发线程之前调用，运行期不得重新注册。
