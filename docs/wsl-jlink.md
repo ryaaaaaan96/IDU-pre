@@ -434,6 +434,13 @@ west attach -d build/IDU-pre/mcuboot-iapv3/IDU-pre -r jlink \
 
 ## 6. 本板断点与外部看门狗
 
+当前 `prj.conf` 临时设置 `CONFIG_APP_DEBUG_SKIP_WATCHDOG=y`：应用跳过外部
+看门狗和任务监控初始化，也跳过对应的健康检查与故障停喂调用，便于单步。
+PC13 保持 MCUboot 早期设置的浮空状态，不恢复输出。需重新构建、下载并从
+MCUboot 复位启动后生效；此配置不会主动禁用旧固件已经启用的看门狗。
+调试结束后将该配置改为 `n` 并重新构建、下载，以恢复看门狗保护。
+以下限制适用于恢复看门狗初始化后的固件。
+
 本板 PC13 每 10 ms 翻转喂外部看门狗。CPU 被 J-Link halt 后，内核定时器也无法正常执行，不能继续提供边沿。
 关闭片内 watchdog 的 debug-freeze 选项不能自动暂停板外芯片。
 MCUboot 早期将 PC13 浮空以禁用外狗，应用 `status_init()` 又恢复输出；因此在应用运行后长时间断点可能持续复位。

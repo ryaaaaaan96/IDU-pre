@@ -1,6 +1,14 @@
 config DP_TABLE_REGISTRY
     default y if DP_REFERENCE_TABLES
 
+config APP_DEBUG_SKIP_WATCHDOG
+    bool "Skip application watchdog initialization for debugging"
+    help
+      Leave the external watchdog feed GPIO in the state established by
+      MCUboot, which floats PC13 on this board. Do not start physical feeding
+      or task deadline monitoring, and skip watchdog health checks.
+      Disable this option to restore normal watchdog protection.
+
 config IDU_COLLECT_PERIOD_MS
     int "Southbound sample polling period (ms)"
     default 500

@@ -35,7 +35,8 @@ struct application_status {
  * Fast acquisition phases only record progress; LED policy lives in status.c.
  * Faults retain their first phase/error and cannot be cleared without reset.
  */
-/* Initializes status, LED and watchdog. The application enters STATUS_RUN
+/* Initializes status, LED and (unless APP_DEBUG_SKIP_WATCHDOG) watchdog.
+ * The application enters STATUS_RUN
  * after all startup services succeed. */
 int status_init(struct application_status *status);
 void status_set_phase(struct application_status *status, enum status_phase phase);

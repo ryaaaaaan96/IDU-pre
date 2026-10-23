@@ -46,9 +46,12 @@ int status_init(struct application_status *status)
         return -EALREADY;
     }
     status->phase = STATUS_STARTING;
-    int err = watchdog_init(&monitor, &watchdog);
+    int err = 0;
 
-    if (!err) { err = status_tasks_init(&monitor); }
+    if (!IS_ENABLED(CONFIG_APP_DEBUG_SKIP_WATCHDOG)) {
+        err = watchdog_init(&monitor, &watchdog);
+        if (!err) { err = status_tasks_init(&monitor); }
+    }
 
     if (!err && !led_is_ready_dt(&run_led)) {
         err = -ENODEV;
@@ -81,7 +84,7 @@ int status_progress(struct application_status *status)
     }
     /* 当前每次健康采样翻转一次；后续状态闪烁策略在此实现。 */
     int err = set_run_led(status, !status->led_on);
-    if (!err) {
+    if (!err && !IS_ENABLED(CONFIG_APP_DEBUG_SKIP_WATCHDOG)) {
         err = watchdog_error(&monitor);
     }
 #ifdef CONFIG_BOOTLOADER_MCUBOOT
@@ -101,7 +104,9 @@ void status_fail(struct application_status *status, enum status_phase phase, int
     status->fault_phase = phase;
     status->last_error = error;
     status->phase = STATUS_FAULT_LOCKED;
-    status_tasks_stop(&monitor);
+    if (!IS_ENABLED(CONFIG_APP_DEBUG_SKIP_WATCHDOG)) {
+        status_tasks_stop(&monitor);
+    }
     /* Best effort fault indication must not replace the original failure. */
     if (led_is_ready_dt(&run_led)) {
         (void)set_run_led(status, true);
