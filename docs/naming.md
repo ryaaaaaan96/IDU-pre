@@ -16,12 +16,15 @@
 | 样本与整机状态 | `struct acquisition_sample`、`struct application_status` |
 | 测点业务 | `points_publish_snapshot()`、`points_parameter_command()`、`points_parameter_status()` |
 | 工程换算 | `engineering_current_from_raw()` |
-| 健康与镜像确认 | `status_*()`、`image_confirm_checkpoint()` |
+| 健康与镜像确认 | `status_init()`、`status_*()`、`image_confirm_checkpoint()` |
 
 头文件与职责一致，例如 `acquisition/acquisition.h`、`process/points.h`、
 `status/status.h`、`status/image_confirm/image_confirm.h`。
 设备、信号、点表及逻辑口分别使用 `DEVICE_*`、`SIGNAL_*`、`TABLE_*`、`PORT_*` 等前缀。
 日志来源使用 `app_main`、`app_protocol`、`app_acquisition`、`image_confirm`。
+
+整机初始化期间处于 `STATUS_STARTING`；所有启动服务成功后进入 `STATUS_RUN`。
+每轮采样、发布和健康检查完成后回到 `STATUS_RUN`；失败则保留故障阶段并锁定。
 
 ## 模块与产品配置
 

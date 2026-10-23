@@ -16,7 +16,7 @@
   提供芯片接入；PLL 来源、bypass、倍频与 APB 分频由板级 DTS 指定，
   HAL 输入频率由同一设备树生成。IDU 引脚与 Flash 分区仍由板及产品配置决定。
   MCUboot 的 PC13 浮空操作在 [板级早期钩子](../boards/idu/idu_pre/board.c) 中，
-  于 SoC 时钟初始化后、设备初始化和镜像交换前执行；应用由 `status_start()` 启用喂狗。
+  于 SoC 时钟初始化后、设备初始化和镜像交换前执行；应用由 `status_init()` 启用喂狗。
   应用和 MCUboot 都在该钩子释放 JTAG、保留 SWD，供 PA15 用作 RS485 DE。
 - 根据旧链接脚本暂按 512 KB Flash、128 KB SRAM 设置。
   **仍需核对 MCU 完整型号后缀对应的容量和封装**。

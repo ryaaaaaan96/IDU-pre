@@ -10,7 +10,7 @@
 enum status_phase {
     STATUS_UNCONFIGURED,
     STATUS_STARTING,
-    STATUS_WAITING,
+    STATUS_RUN, /* Initialization complete; acquisition cycles may start. */
     STATUS_SAMPLING,
     STATUS_PUBLISHING,
     STATUS_SERVICING_COMMUNICATION,
@@ -35,7 +35,9 @@ struct application_status {
  * Fast acquisition phases only record progress; LED policy lives in status.c.
  * Faults retain their first phase/error and cannot be cleared without reset.
  */
-int status_start(struct application_status *status);
+/* Initializes status, LED and watchdog. The application enters STATUS_RUN
+ * after all startup services succeed. */
+int status_init(struct application_status *status);
 void status_set_phase(struct application_status *status, enum status_phase phase);
 int status_progress(struct application_status *status);
 void status_fail(struct application_status *status, enum status_phase phase, int error);

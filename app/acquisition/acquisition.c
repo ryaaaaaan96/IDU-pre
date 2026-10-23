@@ -24,7 +24,7 @@ int acquisition_cycle(struct application_status *status)
     if (!status) {
         return -EINVAL;
     }
-    if (status->phase != STATUS_WAITING) {
+    if (status->phase != STATUS_RUN) {
         return -EACCES;
     }
 
@@ -61,7 +61,7 @@ int acquisition_cycle(struct application_status *status)
     if (err) {
         return lock_fault(status, status->phase, err);
     }
-    status_set_phase(status, STATUS_WAITING);
+    status_set_phase(status, STATUS_RUN);
     LOG_DBG("Address=%u DI=0x%04x", sample.address, sample.di);
     return 0;
 }

@@ -37,7 +37,7 @@ static int set_run_led(struct application_status *status, bool on)
     return err;
 }
 
-int status_start(struct application_status *status)
+int status_init(struct application_status *status)
 {
     if (!status) {
         return -EINVAL;

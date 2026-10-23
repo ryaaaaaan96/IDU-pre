@@ -265,8 +265,10 @@ ZTEST(acquisition, test_failed_forwarding_never_starts_acquisition)
 ZTEST(acquisition, test_success_publishes_complete_sample_and_checks_trial_health)
 {
     zassert_ok(application_startup(&acquisition));
+    zassert_equal(acquisition.phase, STATUS_RUN);
     zassert_equal(workers_started, 3);
     zassert_ok(acquisition_cycle(&acquisition));
+    zassert_equal(acquisition.phase, STATUS_RUN);
     zassert_true(published.valid);
     zassert_equal(published.di, 0x1234);
     zassert_equal(published.address, 7);
@@ -280,7 +282,7 @@ ZTEST(acquisition, test_success_publishes_complete_sample_and_checks_trial_healt
     boot_ready = false;
     zassert_ok(acquisition_cycle(&acquisition));
     zassert_false(checkpoint_ready);
-    zassert_equal(acquisition.phase, STATUS_WAITING);
+    zassert_equal(acquisition.phase, STATUS_RUN);
 }
 
 ZTEST(acquisition, test_failed_acquisition_publishes_invalid_quality_and_preserves_error)
@@ -368,7 +370,7 @@ ZTEST(acquisition, test_status_retains_original_fault_despite_indicator_failure)
     errors[SAMPLE] = -EIO;
     zassert_equal(acquisition_cycle(&acquisition), -EIO);
     status_fail(&acquisition, STATUS_CHECKING_HEALTH, -ETIMEDOUT);
-    status_set_phase(&acquisition, STATUS_WAITING);
+    status_set_phase(&acquisition, STATUS_RUN);
     zassert_equal(acquisition.phase, STATUS_FAULT_LOCKED);
     zassert_equal(acquisition.fault_phase, STATUS_SAMPLING);
     zassert_equal(acquisition.last_error, -EIO);

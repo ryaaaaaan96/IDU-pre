@@ -20,7 +20,7 @@ int application_startup(struct application_status *status)
         return -EALREADY;
     }
 
-    int err = status_start(status);
+    int err = status_init(status);
 
     if (!err) {
         err = acquisition_inputs_init();
@@ -39,7 +39,7 @@ int application_startup(struct application_status *status)
         return err;
     }
 
-    status_set_phase(status, STATUS_WAITING);
+    status_set_phase(status, STATUS_RUN);
     return 0;
 }
 
