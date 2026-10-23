@@ -12,6 +12,41 @@
 
 LOG_MODULE_REGISTER(app_protocol, LOG_LEVEL_INF);
 
+static enum co_device_online reported_states[CONFIG_DP_MAX_DEVICES];
+
+static const char *device_state_name(enum co_device_online state)
+{
+    switch (state) {
+    case CO_DEVICE_OFFLINE: return "offline";
+    case CO_DEVICE_ONLINE: return "online";
+    case CO_DEVICE_EXCEPTION: return "exception";
+    case CO_DEVICE_INITIALIZING: return "initializing";
+    default: return "unknown";
+    }
+}
+
+static void device_state_changed(const struct zbus_channel *channel)
+{
+    const struct co_device_status *status = zbus_chan_const_msg(channel);
+    const struct dp_equip_cfg *config = dp_config();
+    if (!config) { return; }
+    /* The channel serializes listener calls. Counters and repeated errors
+     * remain queryable, but only a device state transition prints a line. */
+    for (size_t i = 0; i < config->device_count; ++i) {
+        if (config->devices[i].dev_id != status->dev_id) { continue; }
+        if (reported_states[i] != status->state) {
+            LOG_INF("Device %u: %s -> %s (error %d)", status->dev_id,
+                    device_state_name(reported_states[i]),
+                    device_state_name(status->state), status->error);
+            reported_states[i] = status->state;
+        }
+        break;
+    }
+}
+
+ZBUS_LISTENER_DEFINE(protocol_device_log, device_state_changed);
+ZBUS_CHAN_ADD_OBS(co_device_events, protocol_device_log, 0);
+
 static int connect_point_services(void)
 {
     static const struct co_data_callbacks callbacks = {

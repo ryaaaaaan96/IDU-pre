@@ -46,6 +46,10 @@ for name in EXPECTED_SHA256:
             "\tif (err < 0) { mb_raw_rx_end(ctx); return err; }\n\treturn 0;")
         source = replace_once(source, "\tctx->rx_adu.fc = adu->fc;", "\tctx->rx_adu.fc = adu->fc;\n\tctx->rx_adu.crc = adu->crc;")
     if name == "modbus_core.c":
+        # Ordinary missing peers are reported by application state transitions;
+        # retain per-attempt detail at debug level without flooding the console.
+        source = replace_once(source, 'LOG_WRN("Client wait-for-RX timeout");',
+                              'LOG_DBG("Client wait-for-RX timeout");')
         source = replace_once(source, "static void modbus_rx_handler", '#include "core_io.h"\n\nstatic void modbus_rx_handler')
         source = replace_once(source, "\tif (ctx->client == true) {",
             "\tif (mb_serial_dispatch(ctx)) { return; }\n"

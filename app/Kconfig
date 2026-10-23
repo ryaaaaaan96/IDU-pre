@@ -36,6 +36,10 @@ config IDU_COLLECT_PROBE_MS
     int "Offline discovery interval (ms)"
     default 5000
     range 1 3600000
+    help
+      Delay after an offline discovery attempt before probing again.
+      Each offline probe sends the first initialization or polling packet
+      once, without the retries used during initialization and normal polling.
 
 config IDU_PROTOCOL_SERVICE_PERIOD_MS
     int "Communication maintenance interval (ms)"

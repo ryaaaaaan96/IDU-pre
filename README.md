@@ -36,7 +36,7 @@ J-Link GDB Server 界面可直接加载 `scripts/gd32e505vet6.JLinkScript`；Lin
 ## 串口调试命令
 
 默认 IAPv3 固件在 USART0（PA9 TX / PA10 RX，115200 8N1、无流控）启用
-Zephyr Shell，提示符为 `debug:~$ `。以文本模式发送命令并以回车结束：
+Zephyr Shell，提示符为 `AIDC:~$ `。以文本模式发送命令并以回车结束：
 
 ```text
 help
@@ -53,6 +53,12 @@ device list
 GDB 的 `p`、`bt` 等命令仍在主机 GDB 中执行。
 可选 `--smp-uart` 固件将 USART0 RX 交给专用 SMP 升级传输，因此关闭串口 Shell 后端；
 该方案仍输出 UART 日志。USART2 RS485 的采集和转发配置不受影响。
+
+离线设备每个探测周期仅发送一包，不执行正常采集的额外重试。
+当前 `prj.conf` 的 `CONFIG_IDU_COLLECT_PROBE_MS=30000` 设置离线探测间隔为
+30 秒，从上次失败探测结束时计时；应用也可通过每设备的 `co_device_policy.probe_ms`
+指定不同间隔。正常初始化和轮询仍使用 `CONFIG_IDU_COLLECT_RETRIES`。
+终端只在设备状态变化时记录一次，反复探测超时不重复打印掉线日志。
 
 ## 阅读文档
 

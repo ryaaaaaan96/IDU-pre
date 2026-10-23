@@ -614,8 +614,11 @@ void co_bus_task(void *arg, void *b, void *c)
             k_mutex_unlock(&bus->lock);
             /* exchange() serializes each physical transaction. Never retain
              * the bus lock while waiting for DP SAMPLE/business completion. */
+            /* Offline discovery is one low-rate probe, not a retry burst.
+             * Once reachable, subsequent initialization uses its normal budget. */
+            uint8_t retries = before.state == CO_DEVICE_OFFLINE ? 0 : before.retries;
             int err = running ? collect_group(poll, initializing, !initializing, &rows,
-                                              before.retries, &outcome) : -EBUSY;
+                                              retries, &outcome) : -EBUSY;
             if (!running) { continue; }
             co_state_complete(dev, &before, poll, rows, err, outcome);
             struct co_schedule after;

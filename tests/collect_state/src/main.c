@@ -299,13 +299,25 @@ ZTEST(collect_state, test_d_timeout_anomaly_offline_probe_and_reinitialization)
     while (!k_msgq_get(&requests, &event, K_NO_WAIT)) { zassert_not_equal(event.dev, 10); }
     k_msleep(60);
     attempts = 0;
+    int64_t first_probe_at = 0;
     while (!k_msgq_get(&requests, &event, K_NO_WAIT)) {
         if (event.dev == 10) {
             zassert_equal(event.address, 10, "Offline probes send only the first initialization packet");
+            first_probe_at = event.at;
             ++attempts;
         }
     }
-    zassert_equal(attempts, 3);
+    zassert_equal(attempts, 1, "An offline probe sends once without automatic retries");
+    k_msleep(80);
+    attempts = 0;
+    while (!k_msgq_get(&requests, &event, K_NO_WAIT)) {
+        if (event.dev != 10) { continue; }
+        zassert_equal(event.address, 10);
+        zassert_true(event.at - first_probe_at >= 80,
+                     "Offline discovery respects the configured probe interval");
+        ++attempts;
+    }
+    zassert_equal(attempts, 1, "The next discovery period still sends only one probe");
     atomic_clear(&timeout_peer);
     wait_state(10, CO_DEVICE_ONLINE);
     unsigned init_first = 0, init_middle = 0, init_last = 0;

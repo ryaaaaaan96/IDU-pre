@@ -20,9 +20,9 @@ struct co_device_status {
     int64_t last_response;
 };
 struct co_device_policy {
-    uint8_t retries; /* Extra automatic attempts after the initial send. */
+    uint8_t retries; /* Extra initialization/poll attempts; offline probes never retry. */
     uint32_t exception_ms;
-    uint32_t probe_ms;
+    uint32_t probe_ms; /* Delay from the end of an offline probe to the next one. */
 };
 /* Startup-only immutable policy, one per managed device. No policy leaves
  * explicit/manual acquisition available without automatic device discovery.
