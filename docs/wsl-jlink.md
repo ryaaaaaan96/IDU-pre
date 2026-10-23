@@ -16,6 +16,58 @@ Windows JLinkGDBServerCL.exe
        GD32E505VET7 / IDU
 ```
 
+## 使用项目脚本
+
+两个入口统一放在应用的 `scripts/` 目录：
+
+- [debug.sh](../scripts/debug.sh)：Linux/WSL 运行 Arm GDB，连接现有 Windows 服务。
+- [debug-server.ps1](../scripts/debug-server.ps1)：Windows 启动 J-Link GDB Server，自动加载 Zephyr RTOS 插件。
+
+在应用目录下，先在 Windows PowerShell 启动服务；器件名须按下文的设备选择器核对：
+
+```powershell
+# 先预览，再去掉 -DryRun 启动；此处只示例已确认通用映射的情况。
+.\scripts\debug-server.ps1 -Device GD32E505VE -DryRun
+.\scripts\debug-server.ps1 -Device GD32E505VE
+```
+
+Windows 安装目录自动从 PATH、注册表或 Program Files 下定位，也可显式填写：
+
+```powershell
+.\scripts\debug-server.ps1 -Device GD32E505VE -JLinkDir 'C:\Program Files\SEGGER\JLink_V878' -Port 2331 -Speed 1000
+```
+
+默认允许远程连接，用于 NAT WSL；mirrored 模式可增加 `-LocalhostOnly`。
+多只探针可增加 `-SerialNumber`。脚本不改防火墙，按下文限制为当前 WSL 来源。
+若执行策略阻止从 WSL 路径运行脚本，可仅对本次进程执行：
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\debug-server.ps1 -Device GD32E505VE
+```
+
+再在 Linux/WSL 的应用目录执行（从工作区根目录运行时，在脚本前加 `applications/IDU-pre/`）：
+
+```bash
+# NAT：替换为实际 Windows 主机地址。
+./scripts/debug.sh --host 172.30.96.1 --dry-run
+./scripts/debug.sh --host 172.30.96.1
+# mirrored：默认连接 127.0.0.1。
+./scripts/debug.sh
+```
+
+Linux 默认使用当前 MCUboot + IAPv3 应用构建，读取其 `.config` 识别 ELF 名称，读取 `CMakeCache.txt` 定位本次工具链 GDB；必要时用 PATH 中的 Arm GDB。
+相对路径参数以工作区根目录为准，脚本可从任意当前目录调用。例如选择 MCUboot 符号或其他产物：
+
+```bash
+./scripts/debug.sh --host 172.30.96.1 --build-dir build/IDU-pre/mcuboot-iapv3/mcuboot
+./scripts/debug.sh --host 172.30.96.1 --elf /path/with\ spaces/application.elf --gdb /path/to/arm-none-eabi-gdb
+./scripts/debug.sh --help
+```
+
+两端端口必须一致。Linux 默认执行 `target remote` 与 `monitor halt`，使用 `-nx` 跳过 GDB 初始化文件，不构建、不下载、不复位；`--` 后可追加 GDB 参数。
+Windows 端保留寄存器、不主动复位，但启动后会 halt；长期暂停仍须处理下文的外部看门狗。
+脚本已做 Bash 参数/路径验证及 Windows PowerShell 5.1 语法与 DryRun 验证，未连接探针或实板。
+
 ## 已核实的本机条件
 
 - 用户确认 MCU 为 **GD32E505VET7**。官方数据手册表 2-1、6-1 对应 512 KB Flash、128 KB SRAM、LQFP100，T7 为 -40…+105°C 温度档。[GD32E505 Rev2.3](https://www.gd32mcu.com/data/documents/datasheet/GD32E505xx_Datasheet_Rev2.3.pdf)
