@@ -10,12 +10,13 @@ add_subdirectory(${IDU_APP}/app/protocol app_cfg)
 add_subdirectory(${IDU_APP}/app/process point_process)
 
 target_sources(app PRIVATE src/parameters.c)
+target_sources(app PRIVATE src/storage_fault.c)
 
 target_sources(app PRIVATE src/modules.c)
 
 # Inject one backend initialization failure to verify serial rollback.
 zephyr_ld_options(-Wl,--wrap=modbus_init_server)
-# Fault the external NVS delete operation after a durable downstream commit.
-zephyr_ld_options(-Wl,--wrap=nvs_delete)
+# Inject parameter faults at named steps on the external NVS boundary only.
+zephyr_ld_options(-Wl,--wrap=nvs_mount -Wl,--wrap=nvs_write -Wl,--wrap=nvs_delete)
 
 add_subdirectory(${IDU_APP}/tests/fixtures fixtures)

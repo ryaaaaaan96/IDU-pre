@@ -1,5 +1,6 @@
 #include <dataprocess/point_parameters.h>
 #include <platform_callback.h>
+#include "storage_fault.h"
 #include "simulation.h"
 #include "protocol/inc/protocol.h"
 #include <collect/simulator.h>
@@ -17,22 +18,14 @@
 #include <zephyr/kvss/nvs.h>
 #include <zephyr/modbus/modbus.h>
 #include <zephyr/storage/flash_map.h>
+#include <zephyr/sys/atomic.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/ztest.h>
 
 extern int north_client;
 static int bytes_before_failure = -1;
 static bool fail_after_downstream;
-static bool fail_deletes;
-
-int __real_nvs_delete(struct nvs_fs *fs, uint16_t id);
-int __wrap_nvs_delete(struct nvs_fs *fs, uint16_t id)
-{
-    /* ID 2 is the downstream intent in the existing NVS record format.
-     * Leave value-commit journal cleanup working so failure lands after save.
-     */
-    return fail_deletes && id == 2 ? -EIO : __real_nvs_delete(fs, id);
-}
+static atomic_t flash_fault_hits;
 static unsigned writes_at_start;
 static const struct flash_area *storage;
 
@@ -42,6 +35,7 @@ static int inject_failure(const struct device *dev, off_t offset, uint8_t data)
     ARG_UNUSED(offset);
     if ((fail_after_downstream && co_simulator_write_count(&idu_collect_simulator) > writes_at_start) ||
         bytes_before_failure == 0) {
+        atomic_inc(&flash_fault_hits);
         return -EIO;
     }
     if (bytes_before_failure > 0) {
@@ -51,6 +45,11 @@ static int inject_failure(const struct device *dev, off_t offset, uint8_t data)
 }
 
 static const struct flash_simulator_cb flash_callbacks = {.write_byte = inject_failure};
+
+void parameter_after(void)
+{
+    storage_fault_finish();
+}
 
 static struct dp_param_status param_status(void)
 {
@@ -72,7 +71,8 @@ void parameter_before(void)
     flash_simulator_set_callbacks(flash_area_get_device(storage), &flash_callbacks);
     bytes_before_failure = -1;
     fail_after_downstream = false;
-    fail_deletes = false;
+    atomic_clear(&flash_fault_hits);
+    storage_fault_reset(storage);
     co_simulator_set_write_fault(&idu_collect_simulator, CO_SIMULATOR_WRITE_OK);
     co_simulator_set_online(&idu_collect_simulator, true);
     if (getenv("IDU_REBOOT_PHASE")) {
@@ -265,9 +265,10 @@ ZTEST(points, test_parameters_ambiguous_readback_never_replays)
 ZTEST(points, test_parameters_no_downstream_write_without_durable_intent)
 {
     unsigned count = co_simulator_write_count(&idu_collect_simulator);
-    bytes_before_failure = 0;
-    zassert_equal(modbus_write_holding_reg(north_client, 16, 31500, 987),
-                  MODBUS_EXC_SERVER_DEVICE_FAILURE);
+    storage_fault_arm(STORAGE_FAULT_INTENT_WRITE);
+    int err = modbus_write_holding_reg(north_client, 16, 31500, 987);
+    storage_fault_finish();
+    zassert_equal(err, MODBUS_EXC_SERVER_DEVICE_FAILURE);
     zassert_equal(co_simulator_write_count(&idu_collect_simulator), count);
     zassert_false(param_status().flags & DP_PARAM_STORAGE_READY);
     zassert_equal(param_status().storage_error, -EIO);
@@ -276,33 +277,74 @@ ZTEST(points, test_parameters_no_downstream_write_without_durable_intent)
     zassert_equal(param_status().error, 0);
     zassert_equal(param_status().storage_error, -EIO, "Volatile success cannot clear an active Flash fault");
     zassert_equal(read_word(31500), 100);
-    bytes_before_failure = -1;
     zassert_ok(dp_params_reload());
     zassert_true(param_status().flags & DP_PARAM_STORAGE_READY);
     zassert_equal(param_status().storage_error, 0, "Successful storage reload clears the persistent fault");
     zassert_ok(dp_params_recover());
 }
 
-ZTEST(points, test_parameters_delete_failure_latches_storage_fault_until_reload)
+static void check_downstream_storage_fault(enum storage_fault_stage stage)
 {
     unsigned writes = co_simulator_write_count(&idu_collect_simulator);
-    fail_deletes = true;
-    zassert_equal(modbus_write_holding_reg(north_client, 16, 31500, 678),
-                  MODBUS_EXC_SERVER_DEVICE_FAILURE);
+    storage_fault_arm(stage);
+    int err = modbus_write_holding_reg(north_client, 16, 31500, 678);
+    storage_fault_finish();
+    zassert_equal(err, MODBUS_EXC_SERVER_DEVICE_FAILURE);
     struct dp_param_status status = param_status();
-    zassert_equal(status.storage_error, -EIO, "Intent deletion is a storage failure too");
+    zassert_equal(status.storage_error, -EIO);
     zassert_false(status.flags & DP_PARAM_STORAGE_READY);
     zassert_true(status.flags & DP_PARAM_PENDING);
     zassert_equal(co_simulator_write_count(&idu_collect_simulator), writes + 1);
-    fail_deletes = false;
     zassert_ok(dp_params_reload());
     zassert_equal(param_status().storage_error, 0);
     zassert_true(param_status().flags & DP_PARAM_PENDING);
     zassert_ok(dp_params_recover());
     zassert_false(param_status().flags & DP_PARAM_PENDING);
     zassert_equal(read_word(31500), 678);
+    zassert_ok(dp_params_reload());
+    zassert_equal(read_word(31500), 678, "Recovered value must remain durable");
     zassert_equal(co_simulator_write_count(&idu_collect_simulator), writes + 1,
                   "Storage recovery must not replay the downstream write");
+}
+
+ZTEST(points, test_parameters_delete_failure_latches_storage_fault_until_reload)
+{
+    check_downstream_storage_fault(STORAGE_FAULT_INTENT_DELETE);
+}
+
+ZTEST(points, test_parameters_commit_write_failure_recovers_without_replay)
+{
+    check_downstream_storage_fault(STORAGE_FAULT_COMMIT_WRITE);
+}
+
+ZTEST(points, test_parameters_value_write_failure_recovers_without_replay)
+{
+    check_downstream_storage_fault(STORAGE_FAULT_VALUE_WRITE);
+}
+
+ZTEST(points, test_parameters_meta_write_failure_recovers_without_replay)
+{
+    check_downstream_storage_fault(STORAGE_FAULT_META_WRITE);
+}
+
+ZTEST(points, test_parameters_commit_delete_failure_recovers_without_replay)
+{
+    check_downstream_storage_fault(STORAGE_FAULT_COMMIT_DELETE);
+}
+
+ZTEST(points, test_parameters_mount_fault_is_reported_and_recovers)
+{
+    zassert_ok(modbus_write_holding_reg(north_client, 16, 31000, 750));
+    storage_fault_arm(STORAGE_FAULT_MOUNT);
+    int err = dp_params_reload();
+    storage_fault_finish();
+    zassert_equal(err, -EIO);
+    zassert_equal(param_status().storage_error, -EIO);
+    zassert_false(param_status().flags & DP_PARAM_STORAGE_READY);
+    zassert_ok(dp_params_reload());
+    zassert_equal(param_status().storage_error, 0);
+    zassert_true(param_status().flags & DP_PARAM_STORAGE_READY);
+    zassert_equal(read_word(31000), 750);
 }
 
 ZTEST(points, test_parameters_power_loss_after_downstream_before_commit)
@@ -311,6 +353,7 @@ ZTEST(points, test_parameters_power_loss_after_downstream_before_commit)
     fail_after_downstream = true;
     zassert_equal(modbus_write_holding_reg(north_client, 16, 31500, 987),
                   MODBUS_EXC_SERVER_DEVICE_FAILURE);
+    zassert_true(atomic_get(&flash_fault_hits) > 0, "Flash write fault was not reached");
     zassert_true(param_status().flags & DP_PARAM_PENDING);
     fail_after_downstream = false;
     zassert_ok(dp_params_reload());
@@ -329,10 +372,15 @@ ZTEST(points, test_parameters_torn_flash_write_keeps_whole_batch)
      * plus successful writes. Repeated iterations also exercise NVS GC. */
     for (int cut = 0; cut < 256; ++cut) {
         zassert_ok(dp_params_write_registers(dp_config(), 31000, baseline, 9));
+        atomic_clear(&flash_fault_hits);
         bytes_before_failure = cut;
         int err = dp_params_write_registers(dp_config(), 31000, request, 9);
         bytes_before_failure = -1;
         zassert_true(err == 0 || err == -EIO, "cut=%d error=%d", cut, err);
+        if (err == -EIO) {
+            zassert_true(atomic_get(&flash_fault_hits) > 0,
+                         "cut=%d returned EIO before the byte fault", cut);
+        }
         zassert_ok(dp_params_reload(), "cut=%d", cut);
         uint16_t result[9];
         zassert_ok(modbus_read_holding_regs(north_client, 16, 31000, result, 9));
@@ -536,10 +584,10 @@ ZTEST(points,test_parameters_failed_save_cannot_reboot)
     struct dp_point_update update={.key={1,31100},.width=1,.value.words={61}};
     zassert_ok(dp_params_apply(&update,1,DP_OP_DEFER));
     unsigned count=module_reboot_count();
-    bytes_before_failure=0;
+    storage_fault_arm(STORAGE_FAULT_COMMIT_WRITE);
     zassert_ok(dp_process_save_reboot(100)); k_sleep(K_MSEC(150));
+    storage_fault_finish();
     zassert_equal(module_reboot_count(),count);
     zassert_false(param_status().flags & DP_PARAM_STORAGE_READY);
-    bytes_before_failure=-1;
     zassert_ok(dp_params_reload());
 }

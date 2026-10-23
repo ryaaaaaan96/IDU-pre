@@ -66,6 +66,34 @@ build/IDU-pre/tests/reference_services/zephyr/zephyr.exe -flash_in_ram
 本地测点直接通过现用点表验证；工程换算由 `tests/test_engineering.c` 验证。
 RAW 回环和 native Flash 不能替代真实串口电气时序、NOR 掉电或 MCUboot 实际交换。
 
+## 参数存储故障注入
+
+`tests/points/src/storage_fault.h` 提供按步骤选择的单次 NVS 故障：
+
+| 选择值 | 注入位置 |
+| --- | --- |
+| `STORAGE_FAULT_MOUNT` | 挂载参数分区 |
+| `STORAGE_FAULT_INTENT_WRITE` | 南向下发前写意图记录 |
+| `STORAGE_FAULT_COMMIT_WRITE` | 写入参数批量提交日志 |
+| `STORAGE_FAULT_VALUE_WRITE` | 写入独立参数值 |
+| `STORAGE_FAULT_META_WRITE` | 写入参数元数据 |
+| `STORAGE_FAULT_COMMIT_DELETE` | 删除参数批量提交日志 |
+| `STORAGE_FAULT_INTENT_DELETE` | 删除已完成的南向意图记录 |
+
+每例先调用 `storage_fault_arm(stage)`，执行完整 Modbus 请求或 DP 公开接口，
+再调用 `storage_fault_finish()` 检查目标步骤确实命中一次，随后断言业务结果。
+目标未命中时直接失败；较早的其他错误不能代替选定步骤。套件的 after 钩子也会检查
+尚未结束的注入，防止遗漏显式 finish。命中后只返回一次 `-EIO`，后续操作继续走真实 NVS。
+
+夹具通过链接包装外部 `nvs_mount`、`nvs_write`、`nvs_delete`，仅匹配参数分区的
+Flash 设备和起始地址，不包含 DP 私有头文件。现有格式的记录 ID 集中在夹具中：
+意图 2、元数据 3、提交日志 4，参数值为从 `0x100` 开始的 1024 个槽。
+存储格式调整时同步核对这些定位条件；产品不编译夹具，也不增加故障接口。
+
+原有逐字节撕裂写和下发后写入中断测试继续使用 Flash simulator 的字节回调，
+并检查字节故障实际触发；逐字节扫描中成功完成的写入不要求触发故障。
+这两类验证分别覆盖事务步骤错误和底层部分写入，恢复均通过公开参数读取检查。
+
 ## 可选互操作与镜像检查
 
 ```bash

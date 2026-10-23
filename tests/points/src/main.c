@@ -206,6 +206,7 @@ static void *setup(void)
 }
 
 void parameter_before(void);
+void parameter_after(void);
 
 static void before(void *fixture)
 {
@@ -497,7 +498,13 @@ ZTEST(points, test_configuration_validation)
     zassert_equal(dp_init_config(app_cfg), -EALREADY);
 }
 
-ZTEST_SUITE(points, NULL, setup, before, NULL, NULL);
+static void after(void *fixture)
+{
+    ARG_UNUSED(fixture);
+    parameter_after();
+}
+
+ZTEST_SUITE(points, NULL, setup, before, after, NULL);
 
 static K_SEM_DEFINE(config_done,0,1);
 static int config_error;
