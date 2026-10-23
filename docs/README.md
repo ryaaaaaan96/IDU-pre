@@ -10,6 +10,7 @@
 | 配置代码跳转 | [VS Code 与 clangd](editor.md) | Sysbuild 应用编译数据库、后台索引及编辑器参数 |
 | 调整启动程序配置 | [MCUboot 配置目录](../bootloader/README.md) | 本板启动配置、分区及与应用升级代码的边界 |
 | 核对硬件 | [硬件与板级适配](hardware.md) | 时钟、引脚、Flash、看门狗和已实现行为 |
+| 在 WSL 调试实板 | [Windows J-Link 远程调试](wsl-jlink.md) | Windows USB/GDB Server、WSL GDB、签名烧录与断点限制 |
 | 调整代码命名或采样配置 | [命名与采样边界](naming.md) | 职责前缀、通用采样、产品配置与兼容范围 |
 | 理解框架 | [采集、处理与转发架构](collect-process-transmit.md) | 模块职责、数据流、Zephyr 调度、初始化顺序 |
 | 使用任务健康监控 | [多任务看门狗方案](task-watchdog.md) | 已实施；显式登记、永久休眠、复位与 RAM 诊断，现有任务尚未接入 |
