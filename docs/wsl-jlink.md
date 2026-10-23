@@ -31,11 +31,21 @@ Windows JLinkGDBServerCL.exe
 | J-Link Script File | 选择 `gd32e505vet6.JLinkScript` |
 | GDB Port | `2331` |
 | Localhost only | NAT WSL 取消勾选；mirrored WSL 可勾选 |
-| RTOS Plugin | `C:\Program Files\SEGGER\JLink_V878\GDBServer\RTOSPlugin_Zephyr.dll` |
 | Init regs on start | 关闭，保留寄存器现场 |
 
 加载位置是 **J-Link Script File**，不是 **GDBInit file**。前者使用 C 风格回调，后者是 GDB Server 的远程命令文件，两者语法和用途不同。
-本文件的 `ConfigTargetSettings()` 指定 VET6、SWD 与小端模式；TCP 端口、远程访问及 RTOS 插件属于主机服务器设置，仍在界面配置。
+本文件的 `ConfigTargetSettings()` 指定 VET6、SWD 与小端模式；TCP 端口和远程访问属于主机服务器设置。
+RTOS 插件通过服务器的 `-rtos` 启动参数加载，不能把它当作所有 GUI 版本都提供的输入框，也不能放进 `.JLinkScript`。
+
+不使用 Python 启动脚本时，可以创建 Windows 快捷方式，在“目标”中填写以下整行，之后双击它打开 GUI：
+
+```text
+"C:\Program Files\SEGGER\JLink_V878\JLinkGDBServer.exe" -rtos "C:\Program Files\SEGGER\JLink_V878\GDBServer\RTOSPlugin_Zephyr.dll"
+```
+
+没有传 `-device`，因此仍可在启动配置对话框中选择 VET6、SWD、速度和 J-Link Script File。
+这里打开的是 GUI 版 `JLinkGDBServer.exe`，不是命令行版 `JLinkGDBServerCL.exe`。
+插件只负责让 GDB 查看 Zephyr 线程；普通断点、单步、寄存器查看可以先不加载它。
 保留默认连接/复位流程，文件不执行目标寄存器读写、下载、擦除或外部看门狗停用。
 来源：[SEGGER Script File API](https://kb.segger.com/J-Link_script_files)、[GDB Server 参数与界面](https://kb.segger.com/J-Link_GDB_Server)。
 

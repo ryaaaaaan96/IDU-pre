@@ -1,7 +1,7 @@
 /* Load with J-Link GDB Server's J-Link Script File option.
  * Device: GD32E505VET6, interface: SWD, endianness: little.
- * Set speed (1000 kHz), TCP port (2331), remote access and the Zephyr
- * RTOS plugin in the GDB Server GUI; these are separate server settings.
+ * Set speed (1000 kHz), TCP port (2331) and remote access in the GUI.
+ * Load the Zephyr RTOS plugin with the GDB Server's -rtos startup argument.
  * The built-in device connection and reset sequences remain in use.
  */
 
