@@ -1,0 +1,9 @@
+# Sysbuild keeps the application database below the top-level build directory.
+# Paths here are relative to this file, including when VS Code opens the West workspace.
+CompileFlags:
+  CompilationDatabase: ../../build/IDU-pre/mcuboot-iapv3/IDU-pre
+  # GCC options unsupported by clangd; real build commands remain unchanged.
+  Remove:
+    - -fno-printf-return-value
+    - -mfp16-format=*
+    - -fno-reorder-functions
