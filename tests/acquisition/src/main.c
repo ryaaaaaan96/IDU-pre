@@ -389,11 +389,20 @@ ZTEST(acquisition, test_led_tracks_startup_healthy_cycles_and_fault)
     zassert_true(indicator_on);
     zassert_true(acquisition.led_on);
     zassert_ok(acquisition_cycle(&acquisition));
+    zassert_true(indicator_on); /* Sampling no longer determines blink speed. */
+    k_sleep(K_MSEC(STATUS_LED_HALF_PERIOD_MS));
+    zassert_ok(status_led_update(&acquisition));
     zassert_false(indicator_on);
     zassert_false(acquisition.led_on);
     zassert_ok(acquisition_cycle(&acquisition));
+    zassert_false(indicator_on);
+    k_sleep(K_MSEC(STATUS_LED_HALF_PERIOD_MS));
+    zassert_ok(status_led_update(&acquisition));
     zassert_true(indicator_on);
     status_fail(&acquisition, STATUS_SAMPLING, -EIO);
+    zassert_true(indicator_on);
+    k_sleep(K_MSEC(STATUS_LED_HALF_PERIOD_MS));
+    zassert_equal(status_led_update(&acquisition), -EACCES);
     zassert_true(indicator_on);
     zassert_equal(stops, 1);
 }

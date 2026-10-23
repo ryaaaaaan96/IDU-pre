@@ -7,6 +7,9 @@
 #include "status/image_confirm/image_confirm.h"
 #endif
 
+/* main services the indicator at this cadence, independently of sampling. */
+#define STATUS_LED_HALF_PERIOD_MS 100
+
 enum status_phase {
     STATUS_UNCONFIGURED,
     STATUS_STARTING,
@@ -23,6 +26,7 @@ struct application_status {
     enum status_phase fault_phase;
     int last_error;
     bool led_on;
+    int64_t next_led_toggle_ms;
     /* Diagnostic degradation, independent of the local watchdog fault latch. */
     uint16_t remote_offline, remote_initializing;
     int storage_error;
@@ -40,6 +44,7 @@ struct application_status {
  * after all startup services succeed. */
 int status_init(struct application_status *status);
 void status_set_phase(struct application_status *status, enum status_phase phase);
+int status_led_update(struct application_status *status);
 int status_progress(struct application_status *status);
 void status_fail(struct application_status *status, enum status_phase phase, int error);
 

@@ -70,8 +70,25 @@ void status_set_phase(struct application_status *status, enum status_phase phase
     if (status && status->phase != STATUS_UNCONFIGURED &&
         status->phase != STATUS_FAULT_LOCKED &&
         phase > STATUS_STARTING && phase < STATUS_FAULT_LOCKED) {
+        if (status->phase == STATUS_STARTING && phase == STATUS_RUN) {
+            status->next_led_toggle_ms = k_uptime_get() + STATUS_LED_HALF_PERIOD_MS;
+        }
         status->phase = phase;
     }
+}
+
+int status_led_update(struct application_status *status)
+{
+    if (!status) { return -EINVAL; }
+    if (status->phase < STATUS_RUN || status->phase >= STATUS_FAULT_LOCKED) { return -EACCES; }
+    int64_t now = k_uptime_get();
+    bool due = now >= status->next_led_toggle_ms;
+    int err = set_run_led(status, due ? !status->led_on : status->led_on);
+
+    if (!err && due) {
+        status->next_led_toggle_ms = now + STATUS_LED_HALF_PERIOD_MS;
+    }
+    return err;
 }
 
 int status_progress(struct application_status *status)
@@ -82,8 +99,8 @@ int status_progress(struct application_status *status)
     if (status->phase != STATUS_CHECKING_HEALTH) {
         return -EACCES;
     }
-    /* 当前每次健康采样翻转一次；后续状态闪烁策略在此实现。 */
-    int err = set_run_led(status, !status->led_on);
+    /* 灯按独立节奏推进，健康检查仍及时反馈输出错误。 */
+    int err = status_led_update(status);
     if (!err && !IS_ENABLED(CONFIG_APP_DEBUG_SKIP_WATCHDOG)) {
         err = watchdog_error(&monitor);
     }

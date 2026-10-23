@@ -58,10 +58,18 @@ int main(void)
         if (err) {
             return err;
         }
-        int64_t delay = next_sample - k_uptime_get();
+        while (true) {
+            int64_t delay = next_sample - k_uptime_get();
 
-        if (delay > 0) {
-            k_sleep(K_MSEC(delay));
+            if (delay <= 0) { break; }
+            err = status_led_update(&status);
+            if (err) {
+                status_fail(&status, STATUS_CHECKING_HEALTH, err);
+                LOG_ERR("Run LED update failed: %d", err);
+                return err;
+            }
+            delay = MIN(next_sample, status.next_led_toggle_ms) - k_uptime_get();
+            if (delay > 0) { k_sleep(K_MSEC(delay)); }
         }
     }
 }
