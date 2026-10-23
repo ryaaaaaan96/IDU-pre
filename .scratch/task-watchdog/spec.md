@@ -1,5 +1,5 @@
 Status: accepted
-Labels: ready-for-agent
+Labels: implemented
 Blocked by: None
 
 # status 统一编排的显式登记多任务看门狗
@@ -121,8 +121,8 @@ Blocked by: None
 
 ## Further Notes
 
-- 本规格发布到项目本地 Markdown 任务跟踪目录，标签为 ready-for-agent；不创建远端 Issue，不推送。
+- 本规格发布到项目本地 Markdown 任务跟踪目录，实施后标签改为 implemented；不创建远端 Issue，不推送。
 - 用户最后明确选择 RAM 诊断、不提供跨重启保存，替代讨论中对“RAM 暂时不保存”的短暂误读。
-- 当前代码尚未实现本规格。取消旧隐式活性约束是落实零登记规则的必要修改，不代表本轮替现有任务增加监控。
+- 本规格已按三个任务实施并完成桌面验收，见[验收记录](validation.md)及[两轴审查](review.md)。取消旧隐式活性约束是落实零登记规则的必要修改，不代表本轮替现有任务增加监控。
 - 后续任务接入时，再逐项确定期限、正常空闲检查点、工作队列探针及升级/存储长操作预算。
 - 依据：[已确认方案](../../docs/task-watchdog.md)、[ADR 0009](../../docs/adr/0009-opt-in-task-watchdog.md)、[边界讨论](discussion.md)。
