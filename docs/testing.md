@@ -18,6 +18,14 @@ AIDC 产品代码、专用测试及导入工具已移除；下方日期章节保
 [验证记录](../.scratch/responsibility-naming/validation.md)。ADC 套件额外覆盖非产品通道布局、
 调用者缓冲区边界、仅模拟/仅数字采样以及失败时的整体无效语义。
 
+## 任务看门狗验收
+
+`task_watchdog` 从公开 status 接口驱动真实 Zephyr Task Watchdog 与 GPIO 喂狗实现。
+每个场景使用全新 native 进程，覆盖登记、漏喂、永久休眠、恢复、容量和一致快照。
+GPIO 设备与系统复位在外部边界替换，复位替身在 ISR 中通过 native 退出保持不返回契约；
+不会在 ISR 睡眠或向产品添加清故障接口。完整入口自动运行这些场景。
+单独运行可构建 `tests/task_watchdog` 后调用其 `run.py`，传入 native 可执行文件。
+
 ## 运行测试
 
 从 West 工作区根目录执行：

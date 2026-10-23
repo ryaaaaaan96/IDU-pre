@@ -36,6 +36,7 @@ FUNC_NORETURN void __wrap_sys_reboot(int type)
         fault.error == -ETIMEDOUT && fault.feed_error == -ECANCELED &&
         !strcmp(fault.task.name, "silent") && (task.flags & STATUS_TASK_FAULT) &&
         status_feed(expected) == -ECANCELED &&
+        status_sleep_forever(expected) == -ECANCELED &&
         status_register(&extra, &config) == -ECANCELED &&
         !status_fault_get(&after) && after.occurred_ms == fault.occurred_ms;
     printk("WATCHDOG_RESET_%s\n", ok ? "PASS" : "FAIL");
@@ -130,5 +131,125 @@ ZTEST(task_watchdog, test_explicit_fault_stays_stopped_with_no_task_fault)
     zassert_equal(status_register(&extra, &config), -ECANCELED);
     struct status_fault_snapshot fault;
     zassert_equal(status_fault_get(&fault), -ENOENT);
+}
+ZTEST(task_watchdog, test_permanent_sleep_and_explicit_reregistration)
+{
+    struct status_task_config config = {.name = "sample", .timeout_ms = 100};
+    zassert_ok(status_register(&first, &config));
+    k_sleep(K_MSEC(30));
+    zassert_ok(status_feed(&first));
+    struct status_task_snapshot before, sleeping, resumed;
+    zassert_ok(status_task_get(&first, &before));
+    zassert_ok(status_sleep_forever(&first));
+    zassert_ok(status_sleep_forever(&first));
+    zassert_equal(status_feed(&first), -EACCES);
+    zassert_ok(status_task_get(&first, &sleeping));
+    zassert_equal(sleeping.flags, STATUS_TASK_SLEEP_FOREVER);
+    zassert_equal(sleeping.last_feed_ms, before.last_feed_ms);
+    atomic_val_t edges_before = atomic_get(&edges);
+    k_sleep(K_MSEC(250));
+    zassert_true(atomic_get(&edges) > edges_before);
+    config.name = "resumed"; config.timeout_ms = 200;
+    zassert_ok(status_register(&first, &config));
+    zassert_ok(status_task_get(&first, &resumed));
+    zassert_str_equal(resumed.name, "resumed");
+    zassert_equal(resumed.timeout_ms, 200);
+    zassert_equal(resumed.flags, STATUS_TASK_ACTIVE);
+    zassert_true(resumed.last_feed_ms > sleeping.last_feed_ms);
+    k_sleep(K_MSEC(120));
+    zassert_ok(status_feed(&first));
+    zassert_ok(status_sleep_forever(&first));
+}
+ZTEST(task_watchdog, test_failed_resume_preserves_sleep_and_reused_channels)
+{
+    struct status_task_config config = {.name = "sleeping", .timeout_ms = 100};
+    zassert_ok(status_register(&first, &config));
+    zassert_ok(status_sleep_forever(&first));
+    config.name = "peer"; config.timeout_ms = 1000;
+    zassert_ok(status_register(&second, &config));
+    zassert_ok(status_register(&extra, &config));
+    config.name = "resume"; config.timeout_ms = 300;
+    zassert_equal(status_register(&first, &config), -ENOMEM);
+    struct status_task_snapshot state;
+    zassert_ok(status_task_get(&first, &state));
+    zassert_str_equal(state.name, "sleeping");
+    zassert_equal(state.timeout_ms, 100);
+    zassert_equal(state.flags, STATUS_TASK_SLEEP_FOREVER);
+    zassert_equal(status_feed(&first), -EACCES);
+    zassert_ok(status_sleep_forever(&second));
+    zassert_ok(status_register(&first, &config));
+    zassert_equal(status_feed(&second), -EACCES);
+    k_sleep(K_MSEC(180));
+    zassert_ok(status_feed(&first));
+    zassert_ok(status_feed(&extra));
+    zassert_ok(status_sleep_forever(&first));
+    zassert_ok(status_sleep_forever(&extra));
+    atomic_val_t before = atomic_get(&edges);
+    k_sleep(K_MSEC(1100));
+    zassert_true(atomic_get(&edges) > before);
+}
+ZTEST(task_watchdog, test_resumed_deadline_stops_and_reboots)
+{
+    struct status_task_config config = {.name = "old", .timeout_ms = 1000};
+    zassert_ok(status_register(&first, &config));
+    zassert_ok(status_sleep_forever(&first));
+    config.name = "peer";
+    zassert_ok(status_register(&second, &config));
+    config.name = "silent"; config.timeout_ms = 100;
+    zassert_ok(status_register(&first, &config));
+    expected = &first;
+    k_sleep(K_MSEC(300));
+    zassert_unreachable("Resumed task did not time out");
+}
+ZTEST(task_watchdog, test_sleep_does_not_protect_peer_stops_and_reboots)
+{
+    struct status_task_config config = {.name = "sleeping", .timeout_ms = 100};
+    zassert_ok(status_register(&second, &config));
+    zassert_ok(status_sleep_forever(&second));
+    config.name = "silent"; config.timeout_ms = 150;
+    zassert_ok(status_register(&first, &config));
+    expected = &first;
+    k_sleep(K_MSEC(300));
+    zassert_unreachable("Peer task did not time out");
+}
+
+static struct k_thread worker;
+K_THREAD_STACK_DEFINE(worker_stack, 2048);
+K_SEM_DEFINE(worker_done, 0, 1);
+static void change_registration(void *a, void *b, void *c)
+{
+    ARG_UNUSED(a); ARG_UNUSED(b); ARG_UNUSED(c);
+    for (int i = 0; i < 40; ++i) {
+        const struct status_task_config config = {
+            .name = i % 2 ? "slow" : "fast", .timeout_ms = i % 2 ? 600 : 300,
+        };
+        zassert_ok(status_sleep_forever(&first));
+        zassert_ok(status_register(&first, &config));
+        zassert_ok(status_feed(&first));
+        k_sleep(K_MSEC(1));
+    }
+    zassert_ok(status_sleep_forever(&first));
+    k_sem_give(&worker_done);
+}
+ZTEST(task_watchdog, test_concurrent_snapshots_are_consistent)
+{
+    const struct status_task_config config = {.name = "fast", .timeout_ms = 300};
+    zassert_ok(status_register(&first, &config));
+    k_thread_create(&worker, worker_stack, K_THREAD_STACK_SIZEOF(worker_stack),
+                    change_registration, NULL, NULL, NULL, 5, 0, K_NO_WAIT);
+    int64_t deadline = k_uptime_get() + 1500;
+    unsigned snapshots = 0;
+    while (k_sem_take(&worker_done, K_NO_WAIT)) {
+        struct status_task_snapshot state;
+        zassert_ok(status_task_get(&first, &state));
+        zassert_true((!strcmp(state.name, "fast") && state.timeout_ms == 300) ||
+                     (!strcmp(state.name, "slow") && state.timeout_ms == 600));
+        zassert_true(state.flags == STATUS_TASK_ACTIVE || state.flags == STATUS_TASK_SLEEP_FOREVER);
+        zassert_true(k_uptime_get() < deadline);
+        ++snapshots;
+        k_sleep(K_MSEC(1));
+    }
+    zassert_ok(k_thread_join(&worker, K_MSEC(100)));
+    zassert_true(snapshots > 0);
 }
 ZTEST_SUITE(task_watchdog, NULL, setup, NULL, NULL, NULL);

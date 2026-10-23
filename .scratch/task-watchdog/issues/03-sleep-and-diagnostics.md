@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: claimed
 Labels: ready-for-agent
 Blocked by: 02：显式登记、心跳与超时复位
 

@@ -69,7 +69,9 @@ int status_register(struct status_task *task, const struct status_task_config *c
     }
     k_spinlock_key_t key = k_spin_lock(&lock);
     int err = service_error();
-    if (!err && task->registered) { err = -EALREADY; }
+    if (!err && task->registered && (task->state.flags & STATUS_TASK_ACTIVE)) {
+        err = -EALREADY;
+    }
     if (!err) {
         int64_t now = k_uptime_get();
         int64_t due = k_uptime_ticks() + k_ms_to_ticks_ceil64(config->timeout_ms);
@@ -130,5 +132,29 @@ int status_fault_get(struct status_fault_snapshot *snapshot)
     int err = fault_valid ? 0 : -ENOENT;
     if (!err) { *snapshot = fault; snapshot->feed_error = watchdog_error(physical); }
     k_spin_unlock(&lock, key);
+    return err;
+}
+
+int status_sleep_forever(struct status_task *task)
+{
+    if (!task) { return -EINVAL; }
+    k_spinlock_key_t key = k_spin_lock(&lock);
+    int err = service_error();
+    bool reset = false;
+    if (!err && !task->registered) { err = -EACCES; }
+    if (!err && (task->state.flags & STATUS_TASK_ACTIVE)) {
+        if (k_uptime_ticks() >= task->deadline_ticks) {
+            reset = trip(task);
+            err = -ETIMEDOUT;
+        } else {
+            err = task_wdt_delete(task->channel);
+            if (!err) {
+                task->state.flags = STATUS_TASK_SLEEP_FOREVER;
+                task->channel = -1;
+            }
+        }
+    }
+    k_spin_unlock(&lock, key);
+    if (reset) { sys_reboot(SYS_REBOOT_COLD); }
     return err;
 }

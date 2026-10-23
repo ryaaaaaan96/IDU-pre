@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #define STATUS_TASK_ACTIVE UINT32_C(1)
+#define STATUS_TASK_SLEEP_FOREVER UINT32_C(2)
 #define STATUS_TASK_FAULT UINT32_C(4)
 
 struct status_task_config {
@@ -33,8 +34,15 @@ struct status_fault_snapshot {
 };
 /* Configuration values are copied; the task and name remain caller-owned.
  * Register/feed are thread APIs. Snapshot queries are also ISR-safe. */
+/* Register immediately starts the deadline. Active duplicates return -EALREADY;
+ * exhaustion returns -ENOMEM. Failures leave the context unchanged. A global
+ * latched failure rejects register/feed/sleep with -ECANCELED until reset. */
 int status_register(struct status_task *task, const struct status_task_config *config);
 int status_feed(struct status_task *task);
+/* Cancel this channel only, keep STATUS_TASK_SLEEP_FOREVER and diagnostic
+ * values. Idempotent; status_feed cannot resume it. Register again to resume. */
+int status_sleep_forever(struct status_task *task);
+/* -ENOENT if never registered / no task fault. No query mutates state. */
 int status_task_get(const struct status_task *task, struct status_task_snapshot *snapshot);
 int status_fault_get(struct status_fault_snapshot *snapshot);
 

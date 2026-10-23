@@ -1,12 +1,13 @@
 # 按需登记的多任务看门狗
 
-状态：设计已确认，[正式规格](../.scratch/task-watchdog/spec.md)已发布，正在分阶段实施。讨论记录见[边界问答](../.scratch/task-watchdog/discussion.md)，
-决策见 [ADR 0009](adr/0009-opt-in-task-watchdog.md)。本页描述目标行为，零登记路径已解除旧隐式活性限制；任务登记与永久休眠能力正在实施。
+状态：功能代码已实现，完整回归与代码审查进行中。依据[正式规格](../.scratch/task-watchdog/spec.md)、
+[边界问答](../.scratch/task-watchdog/discussion.md)与 [ADR 0009](adr/0009-opt-in-task-watchdog.md)。
+本轮没有给现有业务任务登记；监控仅由调用者显式启用。
 
 ## 管理职责
 
 `app/status` 统一编排任务监控、RAM 诊断、故障锁存及重启动作。
-多通道超时检测优先使用当前 Zephyr 的 Task Watchdog，GPIO 喂狗继续由底层模块执行。
+多通道超时检测使用当前 Zephyr 的 Task Watchdog，GPIO 喂狗继续由底层模块执行。
 任务通过 `status` 接口显式登记和报告进展；通用模块后续通过应用注册的健康回调接入，保持与产品头文件分离。
 
 GPIO 喂狗周期与任务超时时间分别配置。任务期限由调用者在登记时传入，
@@ -25,7 +26,7 @@ GPIO 喂狗周期与任务超时时间分别配置。任务期限由调用者在
 
 底层保持定期 GPIO 边沿输出；`status` 决定何时停止。
 没有活动登记项时仍允许正常喂狗，因此旧主循环 1500 ms 进展超时和应用中隐式的 DP 活性检查，
-不能继续作为未登记任务的看门狗约束。实现时移除或解耦这些隐式监控路径。
+不能继续作为未登记任务的看门狗约束。这些隐式监控路径已解除。
 明确的初始化失败、GPIO 故障等既有整机故障策略仍可锁存故障并停喂。
 远端设备离线保持 ADR 0008 的业务降级语义，不直接判定任务失去响应。
 
@@ -60,7 +61,7 @@ stateDiagram-v2
 
 ## 接口形态
 
-计划在 `app/status/task_watchdog/` 内提供能力，接口围绕显式登记、心跳、永久休眠和查询组织：
+`app/status/task_watchdog/` 提供能力，接口围绕显式登记、心跳、永久休眠和查询组织：
 
 ```c
 status_register(&task, &config); /* 配置包含常驻名称和允许的最大心跳间隔。 */
@@ -70,7 +71,16 @@ status_register(&task, &config); /* 永久休眠后的恢复。 */
 ```
 
 调用者持有常驻的任务上下文和名称，检查登记结果；底层通道编号由 `status` 管理。
-接口具体声明在实施规格中落实，休眠标志及登记失败语义保持本页约定。
+公开头文件为 `status/task_watchdog/task_watchdog.h`。任务配置包含 `name` 和 `timeout_ms`，
+任务上下文只需零初始化一次，其字段由接口维护；配置值被复制，但名称必须保持有效。
+`status_task_get()` 返回任务快照，`status_fault_get()` 返回首个故障及物理后端错误。
+两种查询均不改变状态，也可在 ISR 中使用；没有相应记录时返回 `-ENOENT`。
+登记、心跳与休眠成功调用限线程上下文；全局故障后返回 `-ECANCELED`，活动重复登记返回
+`-EALREADY`，容量不足返回 `-ENOMEM`，休眠或未登记对象的心跳返回 `-EACCES`。
+
+当前 `.conf` 手动启用 `CONFIG_TASK_WDT=y`、`CONFIG_TASK_WDT_CHANNELS=2`，
+并关闭 `CONFIG_TASK_WDT_HW_FALLBACK`。两个槽是容量，不是两个已登记任务；扩展时手动调整。
+底层 GPIO 后端通过 `watchdog_error()` 查询状态，不再通过进展通知刷新单一主循环期限。
 
 ## 诊断与故障处理
 
