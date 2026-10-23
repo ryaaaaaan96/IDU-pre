@@ -16,6 +16,38 @@ Windows JLinkGDBServerCL.exe
        GD32E505VET6 / IDU
 ```
 
+## 直接在 J-Link GDB Server GUI 加载
+
+使用 [gd32e505vet6.JLinkScript](../scripts/gd32e505vet6.JLinkScript)，无需启动 Python 或 PowerShell 脚本。
+将文件复制到 Windows 可访问的位置，例如 `C:\Users\81966\Documents\gd32e505vet6.JLinkScript`。
+
+在 Windows **J-Link GDB Server** 的目标配置界面设置：
+
+| 项目 | 设置 |
+| --- | --- |
+| Device | `GD32E505VET6` |
+| Target Interface | `SWD` |
+| Speed | `1000 kHz` |
+| J-Link Script File | 选择 `gd32e505vet6.JLinkScript` |
+| GDB Port | `2331` |
+| Localhost only | NAT WSL 取消勾选；mirrored WSL 可勾选 |
+| RTOS Plugin | `C:\Program Files\SEGGER\JLink_V878\GDBServer\RTOSPlugin_Zephyr.dll` |
+| Init regs on start | 关闭，保留寄存器现场 |
+
+加载位置是 **J-Link Script File**，不是 **GDBInit file**。前者使用 C 风格回调，后者是 GDB Server 的远程命令文件，两者语法和用途不同。
+本文件的 `ConfigTargetSettings()` 指定 VET6、SWD 与小端模式；TCP 端口、远程访问及 RTOS 插件属于主机服务器设置，仍在界面配置。
+保留默认连接/复位流程，文件不执行目标寄存器读写、下载、擦除或外部看门狗停用。
+来源：[SEGGER Script File API](https://kb.segger.com/J-Link_script_files)、[GDB Server 参数与界面](https://kb.segger.com/J-Link_GDB_Server)。
+
+启动 Server，出现等待 GDB 客户端连接的状态后，在 WSL 应用目录运行：
+
+```bash
+./scripts/debug.sh --host <Windows主机IPv4>
+```
+
+mirrored 模式可直接 `./scripts/debug.sh`。查看 Zephyr 线程仍需用下文的 `CONFIG_DEBUG_THREAD_INFO=y` 构建对应固件；断点与外部看门狗限制也仍适用。
+文件已按官方回调和受限 C 语法核对；未进行 J-Link 实际加载或实板连接验证。
+
 ## 使用项目脚本
 
 两个入口统一放在应用的 `scripts/` 目录：

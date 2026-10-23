@@ -30,7 +30,7 @@ bash applications/IDU-pre/tests/run.sh
 `./scripts/build.sh --mcuboot --iapv3`，产物位于 `build/hex/IDU-pre-mcuboot-iapv3/`。
 `./scripts/build.sh` 默认构建同一套 MCUboot + IAPv3 固件；旧 BOOT 构建入口已删除。
 配置选项、签名密钥、分区和首次安装步骤见[构建与升级](docs/build-and-upgrade.md)。
-远程调试入口位于 `scripts/debug.sh`（Linux GDB）和 `scripts/debug-server.py`（Windows J-Link Server）；参数及线程调试见 [WSL/J-Link 方案](docs/wsl-jlink.md)。
+J-Link GDB Server 界面可直接加载 `scripts/gd32e505vet6.JLinkScript`；Linux 端使用 `scripts/debug.sh`，Windows 自动启动入口保留为 `scripts/debug-server.py`。设置及线程调试见 [WSL/J-Link 方案](docs/wsl-jlink.md)。
 
 ## 阅读文档
 
@@ -113,7 +113,8 @@ IDU-pre/
 └── scripts/             # 构建与远程调试入口
     ├── build.sh
     ├── debug.sh
-    └── debug-server.py
+    ├── debug-server.py
+    └── gd32e505vet6.JLinkScript
 ```
 
 运行和构建不依赖旧工程或预编译 `plateform.lib`。重新导入和可选互操作测试

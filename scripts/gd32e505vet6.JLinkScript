@@ -1,0 +1,18 @@
+/* Load with J-Link GDB Server's J-Link Script File option.
+ * Device: GD32E505VET6, interface: SWD, endianness: little.
+ * Set speed (1000 kHz), TCP port (2331), remote access and the Zephyr
+ * RTOS plugin in the GDB Server GUI; these are separate server settings.
+ * The built-in device connection and reset sequences remain in use.
+ */
+
+int ConfigTargetSettings(void) {
+    int result;
+
+    result = JLINK_SetDevice("GD32E505VET6");
+    if (result < 0) {
+        return result;
+    }
+    JLINK_SelectTIF(JLINK_TIF_SWD);
+    JLINK_TargetEndianness = JLINK_TARGET_ENDIANNESS_I_LITTLE_D_LITTLE;
+    return 0;
+}
