@@ -41,6 +41,5 @@ int status_init(struct application_status *status);
 void status_set_phase(struct application_status *status, enum status_phase phase);
 int status_progress(struct application_status *status);
 void status_fail(struct application_status *status, enum status_phase phase, int error);
-uint32_t status_timeout_ms(void);
 
 #endif

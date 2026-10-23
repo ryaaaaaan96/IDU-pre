@@ -22,10 +22,11 @@ int startup(struct application_status *status);
 enum service { WATCHDOG_INIT, LED_START, INPUTS_INIT, IAP_INIT, TABLES_INIT, DP_INIT, DATA_BIND, TASKS_PREPARE,
                NETWORK_INIT, PORT_OPEN, COLLECT_INIT, PARAMS_INIT, PARAMS_RECOVER,
                PROCESS_INIT, REFERENCE_INIT, COLLECT_START, FORWARD_INIT,
-               SAMPLE, PUBLISH, PROTOCOL, LED, CHECKPOINT, WATCHDOG_PROGRESS, SERVICES };
+               SAMPLE, PUBLISH, PROTOCOL, LED, CHECKPOINT, WATCHDOG_CHECK, SERVICES };
 static int errors[SERVICES];
-static unsigned calls[SERVICES], kicks, stops;
+static unsigned calls[SERVICES], checks, stops;
 static bool healthy, boot_ready, checkpoint_ready;
+static unsigned dp_health_checks;
 static int led_set_error;
 static bool indicator_on;
 static struct acquisition_sample published;
@@ -65,7 +66,7 @@ static int service(enum service service)
         [PROTOCOL] = STATUS_SERVICING_COMMUNICATION,
         [LED] = STATUS_CHECKING_HEALTH,
         [CHECKPOINT] = STATUS_CHECKING_HEALTH,
-        [WATCHDOG_PROGRESS] = STATUS_CHECKING_HEALTH,
+        [WATCHDOG_CHECK] = STATUS_CHECKING_HEALTH,
     };
     zassert_equal(acquisition.phase, phases[service]);
     if (service <= FORWARD_INIT) {
@@ -137,7 +138,7 @@ int co_polling_init(void) { return service(COLLECT_START); }
 uint16_t points_sample_period_ms(void) { return 500; }
 int iap_init(void) { return service(IAP_INIT); }
 int protocol_forwarding_init(void) { return service(FORWARD_INIT); }
-int watchdog_progress(struct watchdog *monitor) { ++kicks; return service(WATCHDOG_PROGRESS); }
+int watchdog_error(struct watchdog *monitor) { ++checks; return service(WATCHDOG_CHECK); }
 void watchdog_stop(struct watchdog *monitor) { ++stops; }
 
 static int output_led(bool on)
@@ -173,7 +174,8 @@ void dp_params_get_status(struct dp_param_status *status)
 }
 bool dp_healthy(uint32_t max_idle_ms)
 {
-    zassert_equal(max_idle_ms, 1500);
+    ++dp_health_checks;
+    ARG_UNUSED(max_idle_ms);
     return healthy;
 }
 
@@ -212,8 +214,9 @@ static void reset(void)
     memset(calls, 0, sizeof(calls));
     acquisition = (struct application_status){0};
     published = (struct acquisition_sample){0};
-    kicks = stops = 0;
+    checks = stops = 0;
     healthy = boot_ready = true;
+    dp_health_checks = 0;
     checkpoint_ready = false;
     led_set_error = 0;
     indicator_on = false;
@@ -248,7 +251,7 @@ ZTEST(acquisition, test_startup_failure_stops_before_later_services)
             zassert_equal(calls[s], s <= failed ? 1 : 0);
         }
         zassert_equal(stops, 1);
-        zassert_equal(kicks, 0);
+        zassert_equal(checks, 0);
         zassert_equal(acquisition_cycle(&acquisition), -EACCES);
         zassert_equal(startup(&acquisition), -EALREADY);
     }
@@ -275,7 +278,7 @@ ZTEST(acquisition, test_success_publishes_complete_sample_and_checks_trial_healt
     for (size_t i = 0; i < SAMPLE_ANALOG_COUNT; ++i) {
         zassert_equal(published.raw[i], 100 + i);
     }
-    zassert_equal(kicks, 1);
+    zassert_equal(checks, 1);
     zassert_equal(stops, 0);
     zassert_equal(calls[CHECKPOINT], 1);
     zassert_true(checkpoint_ready);
@@ -297,7 +300,7 @@ ZTEST(acquisition, test_failed_acquisition_publishes_invalid_quality_and_preserv
     zassert_equal(acquisition.last_error, -ENODEV);
     zassert_equal(calls[PROTOCOL], 0);
     zassert_equal(calls[CHECKPOINT], 0);
-    zassert_equal(kicks, 0);
+    zassert_equal(checks, 0);
     zassert_equal(stops, 1);
 }
 
@@ -309,7 +312,7 @@ ZTEST(acquisition, test_cycle_errors_cannot_feed_or_confirm_and_stop_is_terminal
         zassert_ok(startup(&acquisition));
         errors[failures[i]] = -EIO;
         zassert_equal(acquisition_cycle(&acquisition), -EIO);
-        zassert_equal(kicks, 0);
+        zassert_equal(checks, 0);
         zassert_equal(calls[CHECKPOINT], 0);
         zassert_equal(stops, 1);
         zassert_equal(acquisition.fault_phase, failures[i] == PUBLISH ?
@@ -320,15 +323,14 @@ ZTEST(acquisition, test_cycle_errors_cannot_feed_or_confirm_and_stop_is_terminal
     }
 }
 
-ZTEST(acquisition, test_stalled_processing_stops_before_protocol_and_confirmation)
+ZTEST(acquisition, test_unregistered_dp_has_no_implicit_deadline)
 {
     zassert_ok(startup(&acquisition));
     healthy = false;
-    zassert_equal(acquisition_cycle(&acquisition), -ETIMEDOUT);
-    zassert_equal(calls[PROTOCOL], 0);
-    zassert_equal(calls[CHECKPOINT], 0);
-    zassert_equal(kicks, 0);
-    zassert_equal(stops, 1);
+    zassert_ok(acquisition_cycle(&acquisition));
+    zassert_equal(dp_health_checks, 0);
+    zassert_equal(stops, 0);
+    zassert_equal(acquisition.phase, STATUS_RUN);
 }
 
 ZTEST(acquisition, test_confirmation_failure_stops_watchdog)
@@ -341,11 +343,11 @@ ZTEST(acquisition, test_confirmation_failure_stops_watchdog)
     zassert_equal(acquisition_cycle(&acquisition), -EACCES);
 }
 
-ZTEST(acquisition, test_expired_watchdog_prevents_trial_confirmation)
+ZTEST(acquisition, test_gpio_watchdog_error_prevents_trial_confirmation)
 {
     zassert_ok(startup(&acquisition));
-    errors[WATCHDOG_PROGRESS] = -ETIMEDOUT;
-    zassert_equal(acquisition_cycle(&acquisition), -ETIMEDOUT);
+    errors[WATCHDOG_CHECK] = -EIO;
+    zassert_equal(acquisition_cycle(&acquisition), -EIO);
     zassert_equal(acquisition.fault_phase, STATUS_CHECKING_HEALTH);
     zassert_equal(calls[CHECKPOINT], 0);
     zassert_equal(stops, 1);
@@ -413,7 +415,7 @@ ZTEST(acquisition, test_storage_failure_keeps_sampling_without_confirmation)
     zassert_ok(acquisition_cycle(&acquisition));
     zassert_false(checkpoint_ready);
     zassert_equal(acquisition.storage_error, -EIO);
-    zassert_equal(kicks, 1);
+    zassert_equal(checks, 1);
 }
 
 ZTEST(acquisition, test_pending_recovery_prevents_confirmation_until_resolved)
@@ -436,13 +438,13 @@ ZTEST(acquisition, test_remote_outage_is_diagnostic_and_keeps_watchdog_progress)
     remote_state = CO_DEVICE_OFFLINE;
     zassert_ok(acquisition_cycle(&acquisition));
     zassert_equal(acquisition.remote_offline, 1);
-    zassert_equal(kicks, 1);
+    zassert_equal(checks, 1);
     zassert_equal(stops, 0);
     remote_state = CO_DEVICE_INITIALIZING;
     zassert_ok(acquisition_cycle(&acquisition));
     zassert_equal(acquisition.remote_offline, 0);
     zassert_equal(acquisition.remote_initializing, 1);
-    zassert_equal(kicks, 2);
+    zassert_equal(checks, 2);
 }
 
 ZTEST(acquisition, test_shared_wire_station_conflict_fails_before_ports_or_workers)
@@ -466,7 +468,7 @@ ZTEST(acquisition, test_storage_fault_survives_successful_operation_until_storag
     zassert_ok(acquisition_cycle(&acquisition));
     zassert_equal(acquisition.storage_error, -EIO);
     zassert_false(checkpoint_ready);
-    zassert_equal(kicks, 2);
+    zassert_equal(checks, 2);
     parameter_flags = DP_PARAM_STORAGE_READY;
     zassert_ok(acquisition_cycle(&acquisition));
     zassert_equal(acquisition.storage_error, 0);

@@ -10,7 +10,6 @@ static const struct led_dt_spec run_led = LED_DT_SPEC_GET(DT_ALIAS(led0));
 static const struct watchdog_config watchdog = {
     .feed = GPIO_DT_SPEC_GET(DT_NODELABEL(idu_io), watchdog_gpios),
     .feed_interval_ms = DT_PROP(DT_NODELABEL(idu_io), watchdog_feed_ms),
-    .progress_timeout_ms = DT_PROP(DT_NODELABEL(idu_io), watchdog_health_ms),
 };
 static struct watchdog monitor;
 
@@ -80,7 +79,7 @@ int status_progress(struct application_status *status)
     /* 当前每次健康采样翻转一次；后续状态闪烁策略在此实现。 */
     int err = set_run_led(status, !status->led_on);
     if (!err) {
-        err = watchdog_progress(&monitor);
+        err = watchdog_error(&monitor);
     }
 #ifdef CONFIG_BOOTLOADER_MCUBOOT
     if (!err) {
@@ -104,9 +103,4 @@ void status_fail(struct application_status *status, enum status_phase phase, int
     if (led_is_ready_dt(&run_led)) {
         (void)set_run_led(status, true);
     }
-}
-
-uint32_t status_timeout_ms(void)
-{
-    return watchdog.progress_timeout_ms;
 }

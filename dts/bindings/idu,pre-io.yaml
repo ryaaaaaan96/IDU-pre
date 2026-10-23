@@ -31,6 +31,3 @@ properties:
   watchdog-feed-ms:
     type: int
     required: true
-  watchdog-health-ms:
-    type: int
-    required: true

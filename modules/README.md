@@ -23,7 +23,7 @@ compatibility.
 | `analog_input` | `analog_input/analog_input.h` | Configured ADC channel groups, software averaging and ordered raw samples |
 | `gpio` | `gpio/digital_io.h` | Configured digital input groups |
 | [`input_sampler`](input_sampler/README.md) | `input_sampler/input_sampler.h` | Caller-configured analog/digital sampling with caller-owned buffers |
-| `watchdog` | `watchdog/watchdog.h` | Per-instance progress-gated GPIO feeding for external watchdogs |
+| `watchdog` | `watchdog/watchdog.h` | Periodic GPIO feeding and terminal stop for external watchdogs |
 | [`vport`](vport/README.md) | `vport/vport.h` | Generic complete-message callbacks, ownership isolation and per-port send serialization |
 | `dataprocess` | `data_process.h`, `platform_callback.h`, `dataprocess/{points,process,params}.h` | Shared data contracts/store, `dp_*` processing, optional NVS |
 | `collect` | `collect_lib.h`, `collect/{collect,port,simulator,model_simulator}.h` | `co_*` acquisition, bus scheduling, client initialization and optional simulation |
@@ -216,14 +216,13 @@ active bits in LSB-first or MSB-first order, leaving the caller's result unchang
 on failure. Pins are sampled sequentially. The implementation now lives in
 `gpio`, retaining its existing public GPIO API.
 
-`watchdog_init()` uses a configured on-chip GPIO and kernel timer. The
-GPIO must support nonblocking ISR-safe toggles. `watchdog_progress()` reports
-completed business work; missing progress or a GPIO failure permanently stops
-feeding. Late progress cannot revive an expired monitor. `watchdog_stop()`
-keeps the GPIO driven at its last level, allowing the external watchdog to reset
-the system. Do not reuse a started instance until reset. Startup is serialized;
-progress and stop synchronize with timer callbacks. This service preserves the
-existing edge-fed external watchdog behavior without assuming a particular IC.
+`watchdog_init()` starts periodic feeding on a configured on-chip GPIO using a
+kernel timer. GPIO toggles must be nonblocking and ISR-safe. `watchdog_error()`
+queries the current error without changing the feed cadence; `watchdog_stop()`
+permanently stops feeding and keeps the pin driven at its last level. GPIO errors
+also latch and stop feeding. Initialization is serialized, query/stop synchronize
+with timer callbacks. Task deadline policy belongs to application status, not to
+this physical backend. No particular external watchdog IC is assumed.
 
 `input_sampler_init()` initializes configured input groups and
 `input_sampler_read()` fills caller-owned buffers. It supports optional analog

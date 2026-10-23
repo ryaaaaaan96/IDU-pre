@@ -75,7 +75,6 @@
                         <&gpiod 11 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
         watchdog-gpios = <&gpioc 13 GPIO_ACTIVE_HIGH>;
         watchdog-feed-ms = <10>;
-        watchdog-health-ms = <1500>;
     };
 
     soc {

@@ -50,9 +50,9 @@ static const struct gpio_dt_spec pins[] = {
 static struct watchdog monitors[2];
 static const struct watchdog_config watchdogs[] = {
     {.feed = {.port = DEVICE_GET(test_gpio), .pin = 0},
-     .feed_interval_ms = 5, .progress_timeout_ms = 30},
+     .feed_interval_ms = 5},
     {.feed = {.port = DEVICE_GET(test_gpio), .pin = 1},
-     .feed_interval_ms = 5, .progress_timeout_ms = 60},
+     .feed_interval_ms = 5},
 };
 
 static void before(void *fixture)
@@ -130,12 +130,21 @@ ZTEST(io_modules, test_gpio_full_32_bit_group)
     zassert_equal(value, 0x80000001);
 }
 
+ZTEST(io_modules, test_no_registration_keeps_feeding_past_old_deadline)
+{
+    zassert_ok(watchdog_init(&monitors[0], &watchdogs[0]));
+    k_sleep(K_MSEC(80));
+    atomic_val_t before = atomic_get(&toggles[0]);
+    k_sleep(K_MSEC(20));
+    zassert_true(atomic_get(&toggles[0]) > before);
+}
+
 ZTEST(io_modules, test_watchdog_feeds_until_explicit_stop_and_keeps_pin_driven)
 {
     zassert_ok(watchdog_init(&monitors[0], &watchdogs[0]));
     for (int i = 0; i < 6; ++i) {
         k_sleep(K_MSEC(10));
-        zassert_ok(watchdog_progress(&monitors[0]));
+        zassert_ok(watchdog_error(&monitors[0]));
     }
     zassert_true(atomic_get(&toggles[0]) > 0);
     watchdog_stop(&monitors[0]);
@@ -143,32 +152,20 @@ ZTEST(io_modules, test_watchdog_feeds_until_explicit_stop_and_keeps_pin_driven)
     k_sleep(K_MSEC(15));
     zassert_equal(atomic_get(&toggles[0]), stopped);
     zassert_true(output_flags[0] & GPIO_OUTPUT);
-    zassert_equal(watchdog_progress(&monitors[0]), -ECANCELED);
+    zassert_equal(watchdog_error(&monitors[0]), -ECANCELED);
     zassert_equal(watchdog_init(&monitors[0], &watchdogs[0]), -EALREADY);
 }
 
-ZTEST(io_modules, test_timeout_is_terminal_and_other_instance_keeps_feeding)
+ZTEST(io_modules, test_stopping_one_instance_does_not_stop_another)
 {
     zassert_ok(watchdog_init(&monitors[0], &watchdogs[0]));
     zassert_ok(watchdog_init(&monitors[1], &watchdogs[1]));
-    k_sleep(K_MSEC(40));
-    zassert_equal(watchdog_progress(&monitors[0]), -ETIMEDOUT);
-    zassert_ok(watchdog_progress(&monitors[1]));
-    atomic_val_t stopped = atomic_get(&toggles[0]);
-    atomic_val_t active = atomic_get(&toggles[1]);
-    k_sleep(K_MSEC(15));
-    zassert_equal(atomic_get(&toggles[0]), stopped);
-    zassert_true(atomic_get(&toggles[1]) > active);
-    zassert_equal(watchdog_progress(&monitors[0]), -ETIMEDOUT);
-}
-
-ZTEST(io_modules, test_late_progress_cannot_hide_a_delayed_timer)
-{
-    zassert_ok(watchdog_init(&monitors[0], &watchdogs[0]));
-    k_timer_stop(&monitors[0].timer); /* Simulate a timer that has not checked the deadline. */
-    k_sleep(K_MSEC(35));
-    zassert_equal(watchdog_progress(&monitors[0]), -ETIMEDOUT);
+    watchdog_stop(&monitors[0]);
+    k_sleep(K_MSEC(80));
     zassert_equal(atomic_get(&toggles[0]), 0);
+    zassert_true(atomic_get(&toggles[1]) > 0);
+    zassert_equal(watchdog_error(&monitors[0]), -ECANCELED);
+    zassert_ok(watchdog_error(&monitors[1]));
 }
 
 ZTEST(io_modules, test_gpio_feed_failure_latches_and_does_not_resume)
@@ -176,11 +173,11 @@ ZTEST(io_modules, test_gpio_feed_failure_latches_and_does_not_resume)
     zassert_ok(watchdog_init(&monitors[0], &watchdogs[0]));
     atomic_set(&toggle_error, -EIO);
     k_sleep(K_MSEC(10));
-    zassert_equal(watchdog_progress(&monitors[0]), -EIO);
+    zassert_equal(watchdog_error(&monitors[0]), -EIO);
     atomic_clear(&toggle_error);
     k_sleep(K_MSEC(10));
     zassert_equal(atomic_get(&toggles[0]), 0);
-    zassert_equal(watchdog_progress(&monitors[0]), -EIO);
+    zassert_equal(watchdog_error(&monitors[0]), -EIO);
 }
 
 ZTEST(io_modules, test_watchdog_invalid_configuration_and_startup_failure)
@@ -188,12 +185,10 @@ ZTEST(io_modules, test_watchdog_invalid_configuration_and_startup_failure)
     struct watchdog_config config = watchdogs[0];
     config.feed_interval_ms = 0;
     zassert_equal(watchdog_init(&monitors[0], &config), -EINVAL);
-    config.feed_interval_ms = config.progress_timeout_ms;
-    zassert_equal(watchdog_init(&monitors[0], &config), -EINVAL);
     config = watchdogs[0];
     config.feed.pin = 32;
     zassert_equal(watchdog_init(&monitors[0], &config), -EINVAL);
-    zassert_equal(watchdog_progress(&monitors[0]), -EACCES);
+    zassert_equal(watchdog_error(&monitors[0]), -EACCES);
     atomic_set(&configure_error, -EIO);
     zassert_equal(watchdog_init(&monitors[0], &watchdogs[0]), -EIO);
     k_sleep(K_MSEC(10));

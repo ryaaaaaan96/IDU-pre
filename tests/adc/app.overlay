@@ -15,7 +15,6 @@
                         <&gpio0 19 GPIO_ACTIVE_LOW>, <&gpio0 20 GPIO_ACTIVE_LOW>;
         watchdog-gpios = <&gpio0 21 GPIO_ACTIVE_HIGH>;
         watchdog-feed-ms = <10>;
-        watchdog-health-ms = <1500>;
         io-channels = <&adc0 13>, <&adc0 0>, <&adc0 1>, <&adc0 2>,
                       <&adc0 3>, <&adc0 4>, <&adc0 11>, <&adc0 12>;
     };

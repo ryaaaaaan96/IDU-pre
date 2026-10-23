@@ -45,10 +45,6 @@ int acquisition_cycle(struct application_status *status)
         return lock_fault(status, status->phase, publish_err);
     }
 
-    status_set_phase(status, STATUS_CHECKING_HEALTH);
-    if (!dp_healthy(status_timeout_ms())) {
-        return lock_fault(status, status->phase, -ETIMEDOUT);
-    }
     status_set_phase(status, STATUS_SERVICING_COMMUNICATION);
     protocol_update_status(status);
     err = protocol_error();
