@@ -21,29 +21,33 @@ Windows JLinkGDBServerCL.exe
 两个入口统一放在应用的 `scripts/` 目录：
 
 - [debug.sh](../scripts/debug.sh)：Linux/WSL 运行 Arm GDB，连接现有 Windows 服务。
-- [debug-server.ps1](../scripts/debug-server.ps1)：Windows 启动 J-Link GDB Server，自动加载 Zephyr RTOS 插件。
+- [debug-server.py](../scripts/debug-server.py)：Windows Python 启动 J-Link GDB Server，自动加载 Zephyr RTOS 插件。
 
-在应用目录下，先在 Windows PowerShell 启动服务；器件名须按下文的设备选择器核对：
+在应用目录下，先在 Windows PowerShell 或命令提示符中执行：
 
 ```powershell
-# 先预览，再去掉 -DryRun 启动；此处只示例已确认通用映射的情况。
-.\scripts\debug-server.ps1 -Device GD32E505VE -DryRun
-.\scripts\debug-server.ps1 -Device GD32E505VE
+py .\scripts\debug-server.py
+```
+
+默认器件为用户确认的 `GD32E505VET7`，端口 2331、SWD 1000 kHz，自动查找 J-Link。无需交互输入；默认值也集中在脚本顶部，可手动修改。
+脚本不会自动替换器件名。若当前 J-Link 不识别完整型号，按下文先核对通用映射，再用 `--device` 覆盖。
+若需要直接指定并预览参数，可执行（下面仅示例已确认通用映射的情况）：
+
+```powershell
+py .\scripts\debug-server.py --device GD32E505VE --dry-run
+py .\scripts\debug-server.py --device GD32E505VE
 ```
 
 Windows 安装目录自动从 PATH、注册表或 Program Files 下定位，也可显式填写：
 
 ```powershell
-.\scripts\debug-server.ps1 -Device GD32E505VE -JLinkDir 'C:\Program Files\SEGGER\JLink_V878' -Port 2331 -Speed 1000
+py .\scripts\debug-server.py --device GD32E505VE --jlink-dir 'C:\Program Files\SEGGER\JLink_V878' --port 2331 --speed 1000
 ```
 
-默认允许远程连接，用于 NAT WSL；mirrored 模式可增加 `-LocalhostOnly`。
-多只探针可增加 `-SerialNumber`。脚本不改防火墙，按下文限制为当前 WSL 来源。
-若执行策略阻止从 WSL 路径运行脚本，可仅对本次进程执行：
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\debug-server.ps1 -Device GD32E505VE
-```
+默认允许远程连接，用于 NAT WSL；mirrored 模式可增加 `--localhost-only`。
+多只探针可增加 `--serial`，帮助使用 `--help`。脚本不改防火墙，按下文限制为当前 WSL 来源。
+需要 Windows Python；若没有 `py` 启动器，可用 Windows 的 `python` 命令替代，无需 PowerShell 执行策略设置。
+WSL Python 只允许 `--dry-run` 检查参数，实际服务必须由 Windows Python 启动。
 
 再在 Linux/WSL 的应用目录执行（从工作区根目录运行时，在脚本前加 `applications/IDU-pre/`）：
 
@@ -66,7 +70,7 @@ Linux 默认使用当前 MCUboot + IAPv3 应用构建，读取其 `.config` 识�
 
 两端端口必须一致。Linux 默认执行 `target remote` 与 `monitor halt`，使用 `-nx` 跳过 GDB 初始化文件，不构建、不下载、不复位；`--` 后可追加 GDB 参数。
 Windows 端保留寄存器、不主动复位，但启动后会 halt；长期暂停仍须处理下文的外部看门狗。
-脚本已做 Bash 参数/路径验证及 Windows PowerShell 5.1 语法与 DryRun 验证，未连接探针或实板。
+脚本已做 Bash 参数/路径验证及 Windows Python DryRun 验证，未连接探针或实板。
 
 ## 已核实的本机条件
 
