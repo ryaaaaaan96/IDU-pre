@@ -8,6 +8,18 @@ AIDC 产品代码、专用测试及导入工具已移除；下方日期章节保
 其中的旧构建命令和文件路径不再作为当前操作入口。
 当前构建入口为 `./applications/IDU-pre/scripts/build.sh`（从工作区根目录运行）；旧记录中的根目录 `build.sh` 已移入 `scripts/`。
 
+## 2026-10-23 串口 Shell 调试入口
+
+默认 IAPv3 配置启用 USART0 Shell，采用 2048 B 线程栈、精简 Shell、内核和
+设备命令，并开启系统堆统计。最终配置确认使用 Shell 日志后端，普通 UART 日志
+后端关闭；ELF 确认包含 uptime、版本、线程列表、栈使用、堆统计和设备列表处理函数。
+应用资源为 Flash 146104 B、RAM 119508 B（91.18%）。
+
+IAPv3 和 SMP UART 的 MCUboot 联合构建、签名校验均通过。SMP 配置保留专用
+UART 接收，关闭串口 Shell 后端，最终配置确认普通 UART 日志输出仍启用。
+日志位于工作区 `build/IDU-pre/shell-build.log`、`shell-smp-build.log`。
+未执行实板命令输入、日志并发或栈高水位验证；使用方法见根 README。
+
 ## 2026-10-23 修正 E505 HAL 分支与时钟
 
 以正常运行的 `GD32E505_Firmware` 的源码及生成编译参数核对，使用

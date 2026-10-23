@@ -33,6 +33,27 @@ bash applications/IDU-pre/tests/run.sh
 Linux 独立烧录使用 `./scripts/flash.sh --host <Windows主机IPv4>`，连接已有 J-Link GDB Server，完整擦写内部 Flash 并安装 factory HEX，成功后复位运行并退出；可先加 `--dry-run` 预览。
 J-Link GDB Server 界面可直接加载 `scripts/gd32e505vet6.JLinkScript`；Linux 端使用 `scripts/debug.sh`（默认下载签名 HEX、使用 ELF 符号，`--attach` 只连接），Windows 自动启动入口保留为 `scripts/debug-server.py`。设置及线程调试见 [WSL/J-Link 方案](docs/wsl-jlink.md)。
 
+## 串口调试命令
+
+默认 IAPv3 固件在 USART0（PA9 TX / PA10 RX，115200 8N1、无流控）启用
+Zephyr Shell，提示符为 `debug:~$ `。以文本模式发送命令并以回车结束：
+
+```text
+help
+kernel version
+kernel uptime
+kernel thread list
+kernel thread stacks
+kernel heap
+device list
+```
+
+日志通过 Shell 后端共用调试口，避免两个日志后端重复输出。
+`kernel heap` 查看共享系统堆占用，`kernel thread stacks` 查看线程栈使用估计。
+GDB 的 `p`、`bt` 等命令仍在主机 GDB 中执行。
+可选 `--smp-uart` 固件将 USART0 RX 交给专用 SMP 升级传输，因此关闭串口 Shell 后端；
+该方案仍输出 UART 日志。USART2 RS485 的采集和转发配置不受影响。
+
 ## 阅读文档
 
 完整导航见 [docs/README.md](docs/README.md)。

@@ -31,6 +31,7 @@
         zephyr,flash = &flash0;
         zephyr,flash-controller = &fmc;
         zephyr,console = &usart0;
+        zephyr,shell-uart = &usart0;
         zephyr,code-partition = &slot0_partition;
     };
 
