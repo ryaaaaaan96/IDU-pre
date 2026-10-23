@@ -28,6 +28,9 @@ config CO_STACK_SIZE
       Stack size used by applications creating a bus worker, including
       acquisition backend callbacks. The application declares stacks only for
       its configured execution contexts; collect does not allocate stacks.
+      Size this for the complete backend call chain. In particular, large
+      MODBUS_BUFFER_SIZE values increase stack-local ADU and RAW frame buffers;
+      the default does not guarantee enough space for every transport setup.
 
 config CO_VPORT
     bool "Complete-message ports through vport"

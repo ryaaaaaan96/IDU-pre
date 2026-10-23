@@ -457,6 +457,20 @@ MCUboot 早期将 PC13 浮空以禁用外狗，应用 `status_init()` 又恢复�
 也不要为了断点在故障路径长期代喂，或随意写寄存器后让正式固件一直失去外狗保护。
 参见[板级钩子](../boards/idu/idu_pre/board.c)、[任务看门狗](task-watchdog.md)。
 
+### 栈故障现场
+
+`arch_system_halt(reason=2)` 表示 `K_ERR_STACK_CHK_FAIL`。先保留现场，使用
+`bt`、`p _kernel.cpus[0].current->stack_info` 和 `info registers msp psp`
+确认线程及栈边界；需要重现时在 `z_arm_fatal_error` 设置硬件断点并读取 `*esf`。
+UsageFault 处理函数会清除 UFSR，因此在最终停机循环读到 CFSR 为零，不能排除已处理的栈异常。
+
+本次实板回溯定位到采集 RAW `send()` 的栈申请：可写栈起点 `0x2000f4e0`，
+故障时 PSP 为 `0x2000f5a8`，距下界只剩 200 B；该函数入口随后申请 1140 B。
+当前 Arm 编译配置的 `-fstack-usage` 报告中，调用链至 RAW `send()` 已累计约
+4992 B，尚未包含后续 vport/串口发送及额外运行余量。`prj.conf` 已把采集栈从
+4096 B 手动调整为 8192 B，保留硬件栈保护和现有 1100 B 协议能力；重新下载后需
+验证初始化采集、周期轮询与正常/超时收发。该调整不代表串口乱码已经解决。
+
 ## 7. 常见问题
 
 | 现象 | 优先检查 |
