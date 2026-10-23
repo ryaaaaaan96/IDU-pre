@@ -49,3 +49,9 @@ CCACHE_DISABLE=1 ./applications/IDU-pre/build.sh
 尚未执行实板 GPIO 波形、停喂后外狗复位、软件冷复位及 MCUboot PC13 交接验证。
 当前 GPIO 封装不是原生 Zephyr watchdog device，不宣称具备 Task Watchdog 原生硬件 fallback 的全部能力。
 现有业务任务的实际登记和心跳检查点留待后续单独确定。
+
+## 配置依赖简化
+
+产品 Kconfig 的 `IDU_PRE` 自动选择 `TASK_WDT`，已删除产品 `prj.conf` 中重复的启用项；通道容量仍手动配置。
+调整后 8 项构建配置测试及当前固件构建、签名和导出通过，生成 `.config` 中 `CONFIG_TASK_WDT=y`，原生硬件 fallback 关闭。
+Flash/RAM 占用保持上述数值。未改动运行逻辑，本次未重复完整回归。

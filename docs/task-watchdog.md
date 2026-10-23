@@ -78,8 +78,9 @@ status_register(&task, &config); /* 永久休眠后的恢复。 */
 登记、心跳与休眠成功调用限线程上下文；全局故障后返回 `-ECANCELED`，活动重复登记返回
 `-EALREADY`，容量不足返回 `-ENOMEM`，休眠或未登记对象的心跳返回 `-EACCES`。
 
-当前 `.conf` 手动启用 `CONFIG_TASK_WDT=y`、`CONFIG_TASK_WDT_CHANNELS=2`，
-并关闭 `CONFIG_TASK_WDT_HW_FALLBACK`。两个槽是容量，不是两个已登记任务；扩展时手动调整。
+产品 Kconfig 通过 `IDU_PRE` 自动选择 `TASK_WDT`，无需在产品 `.conf` 再写 `CONFIG_TASK_WDT=y`。
+`.conf` 仅手动设置 `CONFIG_TASK_WDT_CHANNELS=2`，并关闭 `CONFIG_TASK_WDT_HW_FALLBACK`。
+两个槽是容量，不是两个已登记任务；扩展时手动调整。独立 status 测试不加载产品 Kconfig，仍自行启用该依赖。
 底层 GPIO 后端通过 `watchdog_error()` 查询状态，不再通过进展通知刷新单一主循环期限。
 
 ## 诊断与故障处理

@@ -6,6 +6,7 @@ rsource "app/Kconfig"
 config IDU_PRE
     bool
     default y
+    select TASK_WDT
     select COLLECT if DATAPROCESS
     select TRANSMIT if DATAPROCESS
     select DP_PROCESS if DATAPROCESS
