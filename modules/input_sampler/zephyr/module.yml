@@ -1,0 +1,4 @@
+name: input_sampler
+build:
+  cmake: .
+  kconfig: Kconfig

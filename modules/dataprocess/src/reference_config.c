@@ -308,7 +308,7 @@ static int point_values(uint8_t dev, const DM_SIG_CFG_S *signal, struct dp_point
     bool restore;
     int err = parameter_values(parameter_country, dev, signal, &defaults, &restore);
     if (err) { return err; }
-    /* 旧消费者可以继续提供完整默认/范围回调；IDU 直接使用行内配置。 */
+    /* 旧消费者可以继续提供完整默认/范围回调；应用可以直接使用行内配置。 */
     bool recover_default = false;
     if (get_range) {
         if (country_override || parameter_country != DP_COUNTRY_COMMON) { return -EINVAL; }

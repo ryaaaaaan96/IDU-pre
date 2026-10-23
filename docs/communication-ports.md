@@ -32,8 +32,8 @@ vport 不建立另一套 RX 队列或工作线程。输入回调必须同步消�
 
 | 虚拟口 | 协议接口 | 应用选择的实际通道 |
 | --- | --- | --- |
-| `IDU_PORT_FORWARD`（1） | `RAW_1` 服务端 | `idu-forward` 对应 USART2 / RS485 |
-| `IDU_PORT_ACQUISITION`（2） | `RAW_0` 客户端 | 与北向共用 USART2 / RS485 |
+| `PORT_FORWARD`（1） | `RAW_1` 服务端 | `idu-forward` 对应 USART2 / RS485 |
+| `PORT_ACQUISITION`（2） | `RAW_0` 客户端 | 与北向共用 USART2 / RS485 |
 
 设备表 `DEV_TABLE_S.port` 仍表示采集总线编号，不能直接改为虚拟口编号。
 `source.link/peer` 是应用定义的不透明信息，`source.dev_id` 是明确的逻辑设备 ID，
@@ -41,7 +41,7 @@ vport 不建立另一套 RX 队列或工作线程。输入回调必须同步消�
 `destination->dev_id` 编排实际链路；vport 只传递，不查询设备表。
 服务端响应保留原请求的全部来源信息；采集侧校验链路、对端及当前事务的设备 ID。
 
-`idu_ports_init()` 用 `co_modbus_port_bind()` / `tr_modbus_port_bind()` 注册常驻
+`protocol_ports_init()` 用 `co_modbus_port_bind()` / `tr_modbus_port_bind()` 注册常驻
 配置，再通过 `mb_serial_open()` 准备实际串口。`co_port_open()` 和
 `tr_forward_init()` 按逻辑口显式装配，再由应用维护任务调用 `tr_forward_service()` / 内部 `tr_server_service()` 管理已初始化的协议生命周期；RAW 发送回调由各自协议适配安装。
 重复注册同一配置允许重试，替换配置、跨模块抢占同一虚拟口均被拒绝。
@@ -53,7 +53,7 @@ vport 不建立另一套 RX 队列或工作线程。输入回调必须同步消�
 ## 同一条 RS485 的编排
 
 `ports.c` 只打开一个物理串口，CO 的 `RAW_0` 与 TR 的 `RAW_1` 共用发送回调。
-`idu_collect_bus.transfer(user, dev_id, adu)` 包装公开的
+`protocol_collect_bus.transfer(user, dev_id, adu)` 包装公开的
 `co_modbus_transfer(iface, dev_id, adu)`，持有链路锁直到
 收到应答、异常或超时；北向响应使用同一把锁，不能插入未结束的南向事务。
 接收回调根据当前南向请求的地址、功能码及响应长度/写回显分流。

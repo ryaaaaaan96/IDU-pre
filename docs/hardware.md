@@ -16,7 +16,7 @@
   提供芯片接入；PLL 来源、bypass、倍频与 APB 分频由板级 DTS 指定，
   HAL 输入频率由同一设备树生成。IDU 引脚与 Flash 分区仍由板及产品配置决定。
   MCUboot 的 PC13 浮空操作在 [板级早期钩子](../boards/idu/idu_pre/board.c) 中，
-  于 SoC 时钟初始化后、设备初始化和镜像交换前执行；应用由 `idu_status_start()` 启用喂狗。
+  于 SoC 时钟初始化后、设备初始化和镜像交换前执行；应用由 `status_start()` 启用喂狗。
   应用和 MCUboot 都在该钩子释放 JTAG、保留 SWD，供 PA15 用作 RS485 DE。
 - 根据旧链接脚本暂按 512 KB Flash、128 KB SRAM 设置。
   **仍需核对 MCU 完整型号后缀对应的容量和封装**。
@@ -82,8 +82,9 @@ PD8 为最高位。寄存器 DI bit0 对应 DI1，bit15 对应 DI16。
 - 本地采样通过 DP 模块的 `dp_submit_sig_value()` / `dp_submit_sig_values()` 设置，
   IDU 只负责采样字段到信号的映射，整份快照一次批量提交。成功表示已入队；
   需要等待时使用返回的 ticket 调用 `dp_wait_processed()`，再读取质量与错误。
-  `modules/gpio` 的 `idu_inputs_sample()` 是统一采样入口，只返回原始值，映射由 `app/process/points.c` 完成；
-  引脚、通道和时序来自 DTS，平均数来自 Kconfig，模块不绑定测点。
+  `app/acquisition/config.c` 将硬件配置交给 `modules/input_sampler`，
+  应用入口 `acquisition_inputs_sample()` 返回原始样本并解释拨码地址，映射由 `app/process/points.c` 完成；
+  引脚、通道和时序来自 DTS，平均数来自应用 Kconfig，模块不绑定产品节点或测点。
 - LED 由 `app/status/status.c` 直接调用 Zephyr `gpio-leds` 驱动，状态与显示策略归
   `app/status/`；启动和故障常亮，正常采样完成时翻转。后续按业务需要在 status
   中增加闪烁编码，当前不保留独立 LED 模块或定时闪烁任务。

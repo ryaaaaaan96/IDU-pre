@@ -1,7 +1,7 @@
 /* Legacy engineering conversion, shared by process callbacks and tests. */
 #include "process/engineering.h"
 
-uint16_t idu_current_from_raw(uint16_t raw)
+uint16_t engineering_current_from_raw(uint16_t raw)
 {
     /* Legacy: raw / 4096 * 3.3 / 0.24 * 50 * 100.
      * Saturate values exceeding the 16-bit register instead of wrapping.

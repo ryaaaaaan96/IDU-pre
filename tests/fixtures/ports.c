@@ -11,14 +11,14 @@ static int send(void *user, uint16_t port, const struct vport_source *source,
 {
     ARG_UNUSED(user); ARG_UNUSED(timeout);
     return co_simulator_port_send(&idu_collect_simulator,
-        port == IDU_PORT_ACQUISITION ? SIMULATED_DEVICE : IDU_PORT_ACQUISITION,
-        source, frame, port == IDU_PORT_ACQUISITION);
+        port == PORT_ACQUISITION ? SIMULATED_DEVICE : PORT_ACQUISITION,
+        source, frame, port == PORT_ACQUISITION);
 }
 static const struct vport_io io = {
-    .send = send, .mtu = CONFIG_MODBUS_BUFFER_SIZE, .destination = {.link = IDU_LINK_RS485},
+    .send = send, .mtu = CONFIG_MODBUS_BUFFER_SIZE, .destination = {.link = LINK_RS485},
 };
-int idu_ports_init(void)
+int protocol_ports_init(void)
 {
-    int err = co_modbus_port_bind(IDU_PORT_ACQUISITION, "RAW_0", &io);
+    int err = co_modbus_port_bind(PORT_ACQUISITION, "RAW_0", &io);
     return err ? err : tr_modbus_port_bind(SIMULATED_DEVICE, "RAW_1", &io);
 }

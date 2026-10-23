@@ -8,9 +8,9 @@
 #include <collect/simulator.h>
 #include <transmit/registers.h>
 #include <platform_callback.h>
-#include "process/idu_process.h"
+#include "process/points.h"
 #include "protocol/inc/signal_ids.h"
-#include <gpio/idu_inputs.h>
+#include <acquisition/sample.h>
 #include "process/engineering.h"
 #include <collect/collect.h>
 #include <dataprocess/params.h>
@@ -32,16 +32,16 @@ ZBUS_CHAN_DECLARE(dp_samples_chan);
 
 ZTEST(points, test_product_port_registration_is_idempotent)
 {
-    zassert_ok(idu_ports_init());
-    zassert_ok(idu_ports_init());
+    zassert_ok(protocol_ports_init());
+    zassert_ok(protocol_ports_init());
 }
 
-static const struct dp_key remote_di = {IDU_DEV_REMOTE_IO, IDU_SIG_DI};
-static const struct dp_key local_di = {IDU_DEV_LOCAL, IDU_SIG_DI};
+static const struct dp_key remote_di = {DEVICE_REMOTE_IO, SIGNAL_DI};
+static const struct dp_key local_di = {DEVICE_LOCAL, SIGNAL_DI};
 static struct dp_equip_cfg test_cfg;
 static struct dp_point_cfg test_points[CONFIG_DP_POINTS_MAX_POINTS];
 static struct dp_transmit_cfg test_transmit[80];
-static struct idu_snapshot local_sample;
+static struct acquisition_sample local_sample;
 int north_client;
 static int north_server;
 static int south_client;
@@ -79,7 +79,7 @@ static void poll_block(size_t block, int expected)
 static void poll_signal(uint16_t sig, int expected)
 {
     for (size_t i = 0; i < test_cfg.collect_count; ++i) {
-        if (test_cfg.collect[i].dev_id == IDU_DEV_REMOTE_IO &&
+        if (test_cfg.collect[i].dev_id == DEVICE_REMOTE_IO &&
             test_cfg.collect[i].fields[0].sig_id == sig) {
             poll_block(i, expected);
             return;
@@ -127,7 +127,7 @@ static const struct dp_equip_cfg *app_cfg;
 
 static void *setup(void)
 {
-    zassert_ok(idu_register_point_tables());
+    zassert_ok(protocol_register_point_tables());
     zassert_ok(dp_reference_prepare(&app_cfg));
     zassert_not_null(app_cfg);
     test_cfg = *app_cfg;
@@ -157,7 +157,7 @@ static void *setup(void)
         .param_flags = DP_PARAM_PERSIST, /* Readable, immutable, not restorable. */
     };
     const struct dp_registered_table *mapping;
-    zassert_ok(dp_table_registry_find(idu_forwarding.transmit_table, PRO_MB_SLAVE, &mapping));
+    zassert_ok(dp_table_registry_find(protocol_forwarding.transmit_table, PRO_MB_SLAVE, &mapping));
     for (size_t i = 0; i < mapping->count; ++i) {
         zassert_ok(dp_transmit_from_reference(&((const MB_TABLE_CELL_T *)mapping->rows)[i],
                                                &test_transmit[i]));
@@ -178,8 +178,8 @@ static void *setup(void)
     uint16_t initial;
     zassert_equal(tr_read_register(4, 10000, &initial), -EIO);
     zassert_equal(tr_read_register(4, 8149, &initial), -EIO);
-    zassert_ok(idu_ports_init());
-    south_client = co_port_open(&idu_collect_port);
+    zassert_ok(protocol_ports_init());
+    south_client = co_port_open(&protocol_collect_port);
     zassert_true(south_client >= 0);
     fixture_connect_points();
     zassert_ok(co_init(&test_cfg, south_client, true));
@@ -222,16 +222,15 @@ static void before(void *fixture)
     }
     for (size_t i = 0; i < test_cfg.collect_count; ++i) {
         /* 本套件只有设备 10 的模拟从机；双设备真实收发由 shared_rs485 覆盖。 */
-        if (test_cfg.collect[i].dev_id != IDU_DEV_REMOTE_IO) { continue; }
+        if (test_cfg.collect[i].dev_id != DEVICE_REMOTE_IO) { continue; }
         poll_block(i, 0);
     }
-    local_sample = (struct idu_snapshot){.di = 0xa55a, .address = 16, .valid = true};
-    for (unsigned i = 0; i < IDU_ANALOG_COUNT; ++i) {
+    local_sample = (struct acquisition_sample){.di = 0xa55a, .address = 16, .valid = true};
+    for (unsigned i = 0; i < SAMPLE_ANALOG_COUNT; ++i) {
         local_sample.raw[i] = i == 7 ? 4095 : i * 256;
-        local_sample.current[i] = idu_current_from_raw(local_sample.raw[i]);
     }
     uint32_t old = state_of(local_di).generation;
-    zassert_ok(idu_snapshot_publish(&local_sample));
+    zassert_ok(points_publish_snapshot(&local_sample));
     wait_after(local_di, old);
 }
 
@@ -239,12 +238,14 @@ ZTEST(points, test_local_point_registers)
 {
     uint16_t wire[15];
     zassert_ok(modbus_read_input_regs(north_client, 16, 8149, wire, 4));
-    zassert_equal(wire[0], IDU_DEVICE_TYPE);
-    zassert_equal(wire[1], IDU_PROTOCOL_VERSION & 0xffff);
-    zassert_equal(wire[2], IDU_PROTOCOL_VERSION >> 16);
+    zassert_equal(wire[0], DEVICE_TYPE);
+    zassert_equal(wire[1], PROTOCOL_VERSION & 0xffff);
+    zassert_equal(wire[2], PROTOCOL_VERSION >> 16);
     zassert_equal(wire[3], local_sample.di);
     zassert_ok(modbus_read_input_regs(north_client, 16, 8163, wire, 8));
-    for (size_t i = 0; i < 8; ++i) { zassert_equal(wire[i], local_sample.current[i]); }
+    for (size_t i = 0; i < SAMPLE_ANALOG_COUNT; ++i) {
+        zassert_equal(wire[i], engineering_current_from_raw(local_sample.raw[i]));
+    }
     zassert_ok(modbus_read_input_regs(north_client, 16, 2504, wire, 1));
     zassert_equal(wire[0], 0x5347);
     zassert_ok(modbus_read_input_regs(north_client, 16, 2581, wire, 15));
@@ -310,10 +311,10 @@ ZTEST(points, test_reference_tables_do_not_enable_age_expiry)
 
 ZTEST(points, test_application_conversion_and_remote_range_rejection)
 {
-    struct dp_key key = {IDU_DEV_LOCAL, IDU_SIG_CURRENT_1};
+    struct dp_key key = {DEVICE_LOCAL, SIGNAL_CURRENT_1};
     uint32_t old = state_of(key).generation;
     local_sample.raw[0] = 4096;
-    zassert_ok(idu_snapshot_publish(&local_sample));
+    zassert_ok(points_publish_snapshot(&local_sample));
     wait_after(key, old);
     zassert_equal(state_of(key).quality, DP_QUALITY_COMM_ERROR);
     zassert_equal(state_of(key).error, -ERANGE);
@@ -321,14 +322,14 @@ ZTEST(points, test_application_conversion_and_remote_range_rejection)
     zassert_equal(tr_read_register(4, 8163, &value), -EIO);
     old = state_of(key).generation;
     local_sample.raw[0] = 2048;
-    zassert_ok(idu_snapshot_publish(&local_sample));
+    zassert_ok(points_publish_snapshot(&local_sample));
     wait_after(key, old);
     zassert_ok(tr_read_register(4, 8163, &value));
     zassert_equal(value, 34375);
     /* A syntactically successful Modbus reply may still violate point range. */
     zassert_ok(co_simulator_set_register(&idu_collect_simulator, 3, 30459, 0));
-    poll_signal(IDU_SIG_ADDRESS, 0);
-    key = (struct dp_key){IDU_DEV_REMOTE_IO, IDU_SIG_ADDRESS};
+    poll_signal(SIGNAL_ADDRESS, 0);
+    key = (struct dp_key){DEVICE_REMOTE_IO, SIGNAL_ADDRESS};
     zassert_equal(state_of(key).quality, DP_QUALITY_SIMULATED | DP_QUALITY_BAD_VALUE);
 }
 
@@ -351,7 +352,7 @@ ZTEST(points, test_signed_values_and_word_order)
     zassert_equal(wire[2], 0x3344);
     zassert_ok(co_simulator_set_register(&idu_collect_simulator, 4, 8150, 0x3344));
     zassert_ok(co_simulator_set_register(&idu_collect_simulator, 4, 8151, 0x1122));
-    poll_signal(IDU_SIG_PROTOCOL, 0);
+    poll_signal(SIGNAL_PROTOCOL, 0);
     zassert_ok(modbus_read_input_regs(north_client, 16, 10010, wire, 2));
     zassert_equal(wire[0], 0x3344);
     zassert_equal(wire[1], 0x1122);
@@ -362,7 +363,7 @@ ZTEST(points, test_invalid_batch_cannot_partially_update_store)
     struct dp_point_batch batch = {
         .source = DP_SOURCE_LOCAL, .count = 2,
         .points = {
-            {.key = {IDU_DEV_LOCAL, IDU_SIG_DI}, .width = 1, .value.words = {0}},
+            {.key = {DEVICE_LOCAL, SIGNAL_DI}, .width = 1, .value.words = {0}},
             {.key = {99, 123}, .width = 1},
         },
     };
@@ -374,10 +375,10 @@ ZTEST(points, test_invalid_batch_cannot_partially_update_store)
     batch.source = DP_SOURCE_MODBUS;
     zassert_equal(dp_publish(&batch, K_NO_WAIT), -EINVAL);
     batch.source = DP_SOURCE_LOCAL;
-    batch.points[0].key.sig_id = IDU_SIG_SAMPLE_PERIOD; /* Telemetry cannot write parameters. */
+    batch.points[0].key.sig_id = SIGNAL_SAMPLE_PERIOD; /* Telemetry cannot write parameters. */
     zassert_equal(dp_publish(&batch, K_NO_WAIT), -EINVAL);
     uint8_t identity[2] = {0};
-    zassert_equal(dp_set_sig_value(IDU_DEV_LOCAL, 8149, sizeof(identity), identity), -EACCES);
+    zassert_equal(dp_set_sig_value(DEVICE_LOCAL, 8149, sizeof(identity), identity), -EACCES);
     k_msleep(2);
     zassert_equal(state_of(local_di).generation, old.generation);
     zassert_equal(state_of(local_di).value.words[0], old.value.words[0]);
@@ -387,7 +388,7 @@ ZTEST(points, test_burst_messages_are_processed_individually)
 {
     struct dp_point_batch batch = {
         .source = DP_SOURCE_LOCAL, .count = 1,
-        .points = {{.key = {IDU_DEV_LOCAL, IDU_SIG_DI}, .width = 1}},
+        .points = {{.key = {DEVICE_LOCAL, SIGNAL_DI}, .width = 1}},
     };
     uint32_t old = state_of(local_di).generation;
     for (unsigned i = 0; i < 20; ++i) {
@@ -420,7 +421,7 @@ ZTEST(points, test_queue_full_returns_error_and_recovers)
 {
     struct dp_point_batch batch = {
         .source = DP_SOURCE_LOCAL, .count = 1,
-        .points = {{.key = {IDU_DEV_LOCAL, IDU_SIG_DI}, .width = 1}},
+        .points = {{.key = {DEVICE_LOCAL, SIGNAL_DI}, .width = 1}},
     };
     uint32_t old = state_of(local_di).generation;
     int results[CONFIG_DP_POINTS_QUEUE_DEPTH + 1];
@@ -449,7 +450,7 @@ ZTEST(points, test_positive_modbus_exception_invalidates_sample)
 {
     struct dp_point_batch batch = {
         .source = DP_SOURCE_MODBUS, .flags = DP_QUALITY_SIMULATED, .count = 1,
-        .points = {{.key = {IDU_DEV_REMOTE_IO, IDU_SIG_DI}, .width = 1,
+        .points = {{.key = {DEVICE_REMOTE_IO, SIGNAL_DI}, .width = 1,
                     .error = MODBUS_EXC_ILLEGAL_DATA_ADDR}},
     };
     uint32_t old = state_of(remote_di).generation;

@@ -103,17 +103,17 @@ static void request(uint8_t fc, uint16_t address, uint16_t count_or_value)
 }
 static void local_address(uint16_t address)
 {
-    zassert_ok(dp_set_sig_value(IDU_DEV_LOCAL, IDU_SIG_ADDRESS, sizeof(address), (uint8_t *)&address));
+    zassert_ok(dp_set_sig_value(DEVICE_LOCAL, SIGNAL_ADDRESS, sizeof(address), (uint8_t *)&address));
 }
 static void *setup(void)
 {
     k_work_init_delayable(&respond, respond_work);
     uart_emul_callback_tx_data_ready_set(uart, transmitted, NULL);
-    zassert_ok(idu_register_point_tables()); zassert_ok(dp_init()); fixture_start_dp();
-    zassert_ok(idu_ports_init()); zassert_ok(idu_ports_init());
-    zassert_true(co_port_open(&idu_collect_port) >= 0);
+    zassert_ok(protocol_register_point_tables()); zassert_ok(dp_init()); fixture_start_dp();
+    zassert_ok(protocol_ports_init()); zassert_ok(protocol_ports_init());
+    zassert_true(co_port_open(&protocol_collect_port) >= 0);
     fixture_connect_points();
-    zassert_ok(co_init_bus(dp_config(), &idu_collect_bus));
+    zassert_ok(co_init_bus(dp_config(), &protocol_collect_bus));
     /* 本套件不测试跨进程恢复，每次从空存储开始，避免复用旧固件的 schema。 */
     const struct flash_area *area;
     zassert_ok(flash_area_open(DT_FIXED_PARTITION_ID(DT_ALIAS(idu_settings)), &area));
@@ -122,11 +122,11 @@ static void *setup(void)
     zassert_ok(dp_params_init(dp_config(), DT_FIXED_PARTITION_ID(DT_ALIAS(idu_settings))));
     /* Startup recovery can access the downstream before the first GPIO sample. */
     uint16_t value;
-    zassert_ok(co_read(IDU_DEV_REMOTE_IO, 4, 8152, &value, 1));
+    zassert_ok(co_read(DEVICE_REMOTE_IO, 4, 8152, &value, 1));
     zassert_ok(dp_process_init_device(0));
     local_address(16);
     fixture_bind_tr(modbus_iface_get_by_name("RAW_1"));
-    zassert_ok(tr_forward_init(&idu_forwarding, 16));
+    zassert_ok(tr_forward_init(&protocol_forwarding, 16));
     return NULL;
 }
 ZTEST(shared_rs485, test_collection_and_cached_north_read)
@@ -134,7 +134,7 @@ ZTEST(shared_rs485, test_collection_and_cached_north_read)
     zassert_ok(co_poll(0));
     struct dp_point_state state;
     for (int i = 0; i < 100; ++i) {
-        zassert_ok(dp_read((struct dp_key){IDU_DEV_REMOTE_IO, IDU_SIG_DI}, &state));
+        zassert_ok(dp_read((struct dp_key){DEVICE_REMOTE_IO, SIGNAL_DI}, &state));
         if (state.quality == DP_QUALITY_GOOD) { break; }
         k_msleep(1);
     }
@@ -148,17 +148,17 @@ ZTEST(shared_rs485, test_collection_and_cached_north_read)
 }
 ZTEST(shared_rs485, test_two_devices_share_tables_but_keep_independent_values)
 {
-    zassert_equal(idu_device_count(), 3);
+    zassert_equal(protocol_device_count(), 3);
     zassert_equal(dp_config()->device_count, 2);
     for (size_t i = 0; i < dp_config()->collect_count; ++i) {
         struct co_cfg scratch;
         const struct co_cfg *poll = dp_config_collect(dp_config(), i, &scratch);
-        if (poll->fields[0].sig_id == IDU_SIG_DI) { zassert_ok(co_poll(i)); }
+        if (poll->fields[0].sig_id == SIGNAL_DI) { zassert_ok(co_poll(i)); }
     }
     struct dp_point_state first, second;
     for (int i = 0; i < 100; ++i) {
-        zassert_ok(dp_read((struct dp_key){10, IDU_SIG_DI}, &first));
-        zassert_ok(dp_read((struct dp_key){11, IDU_SIG_DI}, &second));
+        zassert_ok(dp_read((struct dp_key){10, SIGNAL_DI}, &first));
+        zassert_ok(dp_read((struct dp_key){11, SIGNAL_DI}, &second));
         if (first.quality == DP_QUALITY_GOOD && second.quality == DP_QUALITY_GOOD) { break; }
         k_msleep(1);
     }
@@ -182,10 +182,10 @@ ZTEST(shared_rs485, test_timeouts_malformed_and_exception_responses_release_bus)
     uint16_t value;
     for (int f = NO_REPLY; f <= EXCEPTION; ++f) {
         atomic_set(&fault, f);
-        int err = co_read(IDU_DEV_REMOTE_IO, 4, 8152, &value, 1);
+        int err = co_read(DEVICE_REMOTE_IO, 4, 8152, &value, 1);
         zassert_equal(err, f == EXCEPTION ? MODBUS_EXC_ILLEGAL_DATA_ADDR : -ETIMEDOUT, "fault=%d err=%d", f, err);
         atomic_set(&fault, NORMAL);
-        zassert_ok(co_read(IDU_DEV_REMOTE_IO, 4, 8152, &value, 1));
+        zassert_ok(co_read(DEVICE_REMOTE_IO, 4, 8152, &value, 1));
         zassert_equal(value, 0x55aa);
         request(3, 31000, 1); zassert_equal(reply[1], 3);
     }
@@ -194,17 +194,17 @@ ZTEST(shared_rs485, test_gpio_address_does_not_change_initialized_station)
 {
     local_address(1);
     uint16_t value;
-    zassert_ok(co_read(IDU_DEV_REMOTE_IO, 4, 8152, &value, 1));
+    zassert_ok(co_read(DEVICE_REMOTE_IO, 4, 8152, &value, 1));
     request(3, 31000, 1);
     zassert_equal(reply[0], 16);
     local_address(16);
-    zassert_ok(co_read(IDU_DEV_REMOTE_IO, 4, 8152, &value, 1));
+    zassert_ok(co_read(DEVICE_REMOTE_IO, 4, 8152, &value, 1));
 }
 ZTEST(shared_rs485, test_north_request_during_collection_is_not_a_slave_response)
 {
     uint16_t value;
     k_sem_reset(&north_done); atomic_set(&fault, NORTH_REQUEST);
-    zassert_equal(co_read(IDU_DEV_REMOTE_IO, 4, 8152, &value, 1), -ETIMEDOUT);
+    zassert_equal(co_read(DEVICE_REMOTE_IO, 4, 8152, &value, 1), -ETIMEDOUT);
     zassert_equal(k_sem_count_get(&north_done), 0);
     atomic_set(&fault, NORMAL);
     request(3, 31000, 1); zassert_equal(reply[1], 3);
@@ -213,14 +213,14 @@ ZTEST(shared_rs485, test_z_periodic_worker_updates_cache_on_the_shared_wire)
 {
     struct co_device_status before, after;
     struct co_device_status second_before, second_after;
-    zassert_ok(co_device_status(IDU_DEV_REMOTE_IO, &before));
-    zassert_ok(co_device_status(IDU_DEV_REMOTE_IO + 1, &second_before));
+    zassert_ok(co_device_status(DEVICE_REMOTE_IO, &before));
+    zassert_ok(co_device_status(DEVICE_REMOTE_IO + 1, &second_before));
     zassert_ok(co_start()); fixture_start_co();
     k_msleep(1200);
     /* Wait for the active poll to finish before disabling periodic traffic. */
     zassert_ok(co_set_port_mode(0, MODE_TRAN, 500));
-    zassert_ok(co_device_status(IDU_DEV_REMOTE_IO, &after));
-    zassert_ok(co_device_status(IDU_DEV_REMOTE_IO + 1, &second_after));
+    zassert_ok(co_device_status(DEVICE_REMOTE_IO, &after));
+    zassert_ok(co_device_status(DEVICE_REMOTE_IO + 1, &second_after));
     /* 每台三个周期测点，两个设备都应完成多于一轮；不能用全局采集项数比较单台统计。 */
     zassert_true(after.successes > before.successes + 3);
     zassert_true(second_after.successes > second_before.successes + 3);

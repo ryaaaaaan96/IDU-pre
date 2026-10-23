@@ -1,6 +1,6 @@
 #include "inc/protocol.h"
 #include "tasks.h"
-#include "status/idu_status.h"
+#include "status/status.h"
 #include <collect/collect.h>
 #include <dataprocess/acquisition.h>
 #include <dataprocess/params.h>
@@ -10,7 +10,7 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/storage/flash_map.h>
 
-LOG_MODULE_REGISTER(idu_protocol, LOG_LEVEL_INF);
+LOG_MODULE_REGISTER(app_protocol, LOG_LEVEL_INF);
 
 static int connect_point_services(void)
 {
@@ -24,14 +24,14 @@ static int connect_point_services(void)
     if (!err) { err = dp_params_set_transport(co_parameter_transport()); }
 #endif
     if (!err) { err = dp_para_reg_set_func(co_dp_fast_set); }
-    if (!err) { err = idu_dp_tasks_prepare(); }
-    if (!err) { err = idu_co_tasks_prepare(); }
+    if (!err) { err = protocol_dp_tasks_prepare(); }
+    if (!err) { err = protocol_co_tasks_prepare(); }
     return err;
 }
 
-int idu_protocol_init(void)
+int protocol_init(void)
 {
-    int err = idu_register_point_tables();
+    int err = protocol_register_point_tables();
 
     if (!err) {
         err = dp_init();
@@ -44,22 +44,22 @@ int idu_protocol_init(void)
 
     /* 当前采集总线和北向入口共用一条 RS485，冲突必须在开放端口前拒绝。 */
     for (size_t i = 0; i < config->device_count; ++i) {
-        if (config->devices[i].bus_id == idu_collect_bus.id &&
+        if (config->devices[i].bus_id == protocol_collect_bus.id &&
             config->devices[i].unit_id == CONFIG_IDU_FORWARD_UNIT) { return -EADDRINUSE; }
     }
 
     /* 参数恢复可能读取下游设备，必须先注册所有采集总线。 */
     err = connect_point_services();
-    if (!err) { err = idu_ports_init(); }
+    if (!err) { err = protocol_ports_init(); }
     if (err) {
         return err;
     }
-    int iface = co_port_open(&idu_collect_port);
+    int iface = co_port_open(&protocol_collect_port);
 
     if (iface < 0) {
         return iface;
     }
-    err = co_init_bus(config, &idu_collect_bus);
+    err = co_init_bus(config, &protocol_collect_bus);
     static const struct co_device_policy policy = {
         .retries = CONFIG_IDU_COLLECT_RETRIES,
         .exception_ms = CONFIG_IDU_COLLECT_EXCEPTION_MS,
@@ -100,15 +100,15 @@ int idu_protocol_init(void)
     if (!err) {
         err = co_start();
     }
-    if (!err) { err = idu_start_forwarding(); }
+    if (!err) { err = protocol_start_forwarding(); }
     if (!err) {
-        idu_dp_tasks_start();
-        idu_co_tasks_start();
+        protocol_dp_tasks_start();
+        protocol_co_tasks_start();
     }
     return err;
 }
 
-void idu_protocol_update_status(struct idu_status *status)
+void protocol_update_status(struct application_status *status)
 {
     if (!status) { return; }
     status->remote_offline = 0;

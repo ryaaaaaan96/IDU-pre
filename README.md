@@ -40,6 +40,7 @@ bash applications/IDU-pre/tests/run.sh
 | 了解模块职责、数据流与初始化顺序 | [架构设计](docs/collect-process-transmit.md) |
 | 新增设备、测点或导入原表 | [点表维护指南](app/protocol/README.md) |
 | 查询寄存器、质量和参数事务规则 | [点表与寄存器](docs/point-tables.md) |
+| 调整函数、文件和硬件配置 | [命名与采样边界](docs/naming.md) |
 | 使用通用模块/API | [模块接口](modules/README.md)、[DP 使用说明](modules/dataprocess/README.md) |
 | 迁移参考平台调用 | [接口覆盖、差异与 Flash/RAM 分工](docs/reference-platform.md) |
 | 构建、签名、使用 SMP 或 IAPv3 | [构建与升级](docs/build-and-upgrade.md) |
@@ -59,10 +60,10 @@ app/main.c                         启动顺序、采样周期与休眠
        └─ status/status.c          业务阶段、故障、LED 和试运行确认条件
 ```
 
-`main.c` 中的 `idu_startup()` 显式组织状态与输入初始化、点表注册、端口和总线
-建立、参数恢复、INIT 和采集启动。启动成功后按周期调用 `idu_acquisition_cycle()`；
+`main.c` 中的 `application_startup()` 显式组织状态与输入初始化、点表注册、端口和总线
+建立、参数恢复、INIT 和采集启动。启动成功后按周期调用 `acquisition_cycle()`；
 不再设置独立的 startup 文件或设备服务兼容入口。
-`app/status/idu_status.h` 定义业务阶段，启动或采集失败时保留最初故障、停止喂狗，
+`app/status/status.h` 定义业务阶段，启动或采集失败时保留最初故障、停止喂狗，
 并拒绝继续执行。MCUboot 确认条件由 `status` 检查 Flash 和参数事务状态，
 持续健康窗口由 `status/image_confirm/image_confirm.c` 判断。
 
@@ -83,7 +84,7 @@ app/main.c                         启动顺序、采样周期与休眠
 
 引脚、极性、ADC 通道顺序、DI/拨码位序、地址偏移和喂狗时序由板级 DTS 配置，
 平均次数由 `CONFIG_IDU_ADC_AVERAGE_COUNT` 配置。业务层统一通过
-`idu_inputs_sample()` 获取快照；输入模块不认识点号，也不自动写 DP。
+`acquisition_inputs_sample()` 获取快照；`acquisition/config.c` 将设备树配置交给通用 `input_sampler`，模块不认识点号，也不自动写 DP。
 采样字段到测点的映射由 `process/points.c` 完成，点表定义仍在 `app/protocol/`。
 
 LED 操作直接放在 `app/status/status.c`，通过 Zephyr LED API 控制：
@@ -118,7 +119,7 @@ IDU-pre/
 
 应用以 `app/` 为头文件搜索根。采集、状态、处理头
 分别与实现放在 `app/acquisition/`、`app/status/`、`app/process/`；对外配置契约在 `app/protocol/inc/`，内部头文件在 `app/protocol/` 根目录；
-跨功能引用使用 `"status/idu_status.h"` 等路径；采样使用 `<gpio/idu_inputs.h>`；IAP 使用 `<iap/iap.h>`、`<iap/sgz.h>`。
+跨功能引用使用 `"status/status.h"` 等路径；采样使用 `<acquisition/sample.h>`；IAP 使用 `<iap/iap.h>`、`<iap/sgz.h>`。
 通用模块继续保留各自的公开 `include/`，由 Zephyr 模块机制导出。
 
 `app/` 根目录只保留 `main.c`、`CMakeLists.txt` 和 `Kconfig`。
@@ -127,13 +128,14 @@ IDU-pre/
 
 | 接口 | 职责 |
 | --- | --- |
-| `acquisition/idu_acquisition.h` | 每周期采样、发布、转发及健康检查 |
-| `status/idu_status.h` | 业务阶段、故障状态、LED 策略及健康进度 |
-| `<gpio/idu_inputs.h>` | 模块提供的 IDU 统一原始采样接口及快照 |
-| `status/image_confirm/idu_image_confirm.h` | MCUboot 试运行健康确认 |
+| `acquisition/acquisition.h` | 每周期采样、发布、转发及健康检查 |
+| `status/status.h` | 业务阶段、故障状态、LED 策略及健康进度 |
+| `acquisition/sample.h` | 应用原始采样快照及产品采样入口 |
+| `<input_sampler/input_sampler.h>` | 由配置和调用者缓冲区驱动的通用组合采样 |
+| `status/image_confirm/image_confirm.h` | MCUboot 试运行健康确认 |
 | `process/engineering.h` | 仅依赖标准 C 的工程量换算，可用于主机测试 |
-| `process/idu_process.h` | 采样发布、周期参数及测点业务回调 |
-| `protocol/inc/protocol.h` | 点表注册、`idu_ports_init()` 注册入口及常驻配置声明 |
+| `process/points.h` | 采样发布、周期参数及测点业务回调 |
+| `protocol/inc/protocol.h` | 点表注册、`protocol_ports_init()` 注册入口及常驻配置声明 |
 | `<transmit/server.h>` | 每端口启动、配置更新及健康维护 |
 | `<transmit/registers.h>` | 参数寄存器服务及完整 ADU 扩展 |
 | `<collect/port.h>`、`<collect/modbus.h>` | 采集端口初始化及同步 Modbus 事务 |

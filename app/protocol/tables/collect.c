@@ -3,9 +3,9 @@
 #include "signal_ids.h"
 #include <zephyr/sys/util.h>
 
-static const MODBUS_RTU_TABLE_S idu_mvio_collect[] = {
+static const MODBUS_RTU_TABLE_S remote_collect_table[] = {
     {
-        .sig_id = IDU_SIG_DI,
+        .sig_id = SIGNAL_DI,
         .reg_addr = 8152,
         .reg_num = 1,
         .reg_type = 4,
@@ -17,7 +17,7 @@ static const MODBUS_RTU_TABLE_S idu_mvio_collect[] = {
         .scan_pri = CO_TABLE_DEFAULT_SCAN_PRIORITY,
     },
     {
-        .sig_id = IDU_SIG_CURRENT_1 + 0,
+        .sig_id = SIGNAL_CURRENT_1 + 0,
         .reg_addr = 8163,
         .reg_num = 1,
         .reg_type = 4,
@@ -29,7 +29,7 @@ static const MODBUS_RTU_TABLE_S idu_mvio_collect[] = {
         .scan_pri = CO_TABLE_DEFAULT_SCAN_PRIORITY,
     },
     {
-        .sig_id = IDU_SIG_CURRENT_1 + 1,
+        .sig_id = SIGNAL_CURRENT_1 + 1,
         .reg_addr = 8164,
         .reg_num = 1,
         .reg_type = 4,
@@ -41,7 +41,7 @@ static const MODBUS_RTU_TABLE_S idu_mvio_collect[] = {
         .scan_pri = CO_TABLE_DEFAULT_SCAN_PRIORITY,
     },
     {
-        .sig_id = IDU_SIG_PROTOCOL,
+        .sig_id = SIGNAL_PROTOCOL,
         .reg_addr = 8150,
         .reg_num = 2,
         .reg_type = 4,
@@ -53,7 +53,7 @@ static const MODBUS_RTU_TABLE_S idu_mvio_collect[] = {
         .scan_pri = CO_TABLE_DEFAULT_SCAN_PRIORITY,
     },
     {
-        .sig_id = IDU_SIG_ADDRESS,
+        .sig_id = SIGNAL_ADDRESS,
         .reg_addr = 30459,
         .reg_num = 1,
         .reg_type = 3,
@@ -66,7 +66,7 @@ static const MODBUS_RTU_TABLE_S idu_mvio_collect[] = {
     },
     /* FLAG_COLLECT 处理点的下发目标，仍保留显式读写标志。 */
     {
-        .sig_id = IDU_SIG_REMOTE_SETPOINT,
+        .sig_id = SIGNAL_REMOTE_SETPOINT,
         .reg_addr = 40000,
         .reg_num = 1,
         .reg_type = 3,
@@ -78,7 +78,7 @@ static const MODBUS_RTU_TABLE_S idu_mvio_collect[] = {
         .scan_pri = CO_TABLE_DEFAULT_SCAN_PRIORITY,
     },
     {
-        .sig_id = IDU_SIG_REMOTE_OFFSET,
+        .sig_id = SIGNAL_REMOTE_OFFSET,
         .reg_addr = 40001,
         .reg_num = 2,
         .reg_type = 3,
@@ -92,6 +92,6 @@ static const MODBUS_RTU_TABLE_S idu_mvio_collect[] = {
 };
 
 static const STRUCT_SECTION_ITERABLE(dp_registered_table, collect_table) = {
-    .id = IDU_TABLE_COLLECT, .type = PRO_MB_MASTER,
-    .rows = idu_mvio_collect, .count = ARRAY_SIZE(idu_mvio_collect),
+    .id = TABLE_COLLECT, .type = PRO_MB_MASTER,
+    .rows = remote_collect_table, .count = ARRAY_SIZE(remote_collect_table),
 };

@@ -7,7 +7,7 @@
 
 | 概念 | 当前来源 | 含义 |
 | --- | --- | --- |
-| 逻辑设备 ID | `IDU_DEV_LOCAL`、`IDU_DEV_REMOTE_IO` | DP 中数据归属的身份 |
+| 逻辑设备 ID | `DEVICE_LOCAL`、`DEVICE_REMOTE_IO` | DP 中数据归属的身份 |
 | 北向 Modbus 站号 | `CONFIG_IDU_FORWARD_UNIT` → `tr_forward_init()` | 上位主站访问本机的 unit ID |
 | 北向寄存器地址 | 转发行 `.reg_addr`，配合 `.reg_type` | 本机对外协议中的位置 |
 | 南向 Modbus 站号 | 采集设备的 `.coll_addr` | CO 访问远端设备的 unit ID |
@@ -101,23 +101,23 @@ struct tr_forward_cfg {
 
 static const struct data_device_cfg data_devices[] = {
     {
-        .dev_id = IDU_DEV_LOCAL,
-        .process_table = IDU_TABLE_LOCAL_PROCESS,
+        .dev_id = DEVICE_LOCAL,
+        .process_table = TABLE_LOCAL_PROCESS,
         .collect_table = 0,
         .collect_port = 0,
         .collect_addr = 0,
     },
     {
         .dev_id = 10,
-        .process_table = IDU_TABLE_REMOTE_PROCESS,
-        .collect_table = IDU_TABLE_COLLECT,
+        .process_table = TABLE_REMOTE_PROCESS,
+        .collect_table = TABLE_COLLECT,
         .collect_port = 0,
         .collect_addr = 1,
     },
     {
         .dev_id = 11,
-        .process_table = IDU_TABLE_REMOTE_PROCESS,
-        .collect_table = IDU_TABLE_COLLECT,
+        .process_table = TABLE_REMOTE_PROCESS,
+        .collect_table = TABLE_COLLECT,
         .collect_port = 0,
         .collect_addr = 2,
     },
@@ -127,9 +127,9 @@ static const struct data_device_cfg data_devices[] = {
 static const struct tr_forward_cfg forwarding_devices[] = {
     {
         .forward_id = 1,
-        .port_id = IDU_PORT_FORWARD,
-        .transmit_table = IDU_TABLE_TRANSMIT,
-        .protocol_segments = IDU_TABLE_PROTOCOL_SEGMENTS,
+        .port_id = PORT_FORWARD,
+        .transmit_table = TABLE_TRANSMIT,
+        .protocol_segments = TABLE_PROTOCOL_SEGMENTS,
         .route_broadcast = true,
     },
 };
@@ -138,8 +138,8 @@ static const struct tr_forward_cfg forwarding_devices[] = {
 `collect_table=0` 时不解释该行的 collect_port/collect_addr，也不生成采集目标；
 本地采样仍由现有输入模块和业务映射写入 DP。两台远端共享 const 点表，仅各自保存运行状态。
 `forward_id` 不作为数据键调用 dp_set；转发表中的 dev_id 仍指向已有数据设备。
-例如北向 10000 → `(10, IDU_SIG_DI)`，10001 → `(10, IDU_SIG_CURRENT_1)`，
-8152 → `(IDU_DEV_LOCAL, IDU_SIG_DI)`。北向数据不额外复制一份。
+例如北向 10000 → `(10, SIGNAL_DI)`，10001 → `(10, SIGNAL_CURRENT_1)`，
+8152 → `(DEVICE_LOCAL, SIGNAL_DI)`。北向数据不额外复制一份。
 
 北向站号由应用初始化配置传给 TR，不随后续拨码采样改变；配置结构仍不重复保存 unit_id。
 采集总线与北向逻辑口仍由应用 ports 编排到当前同一 RS485；配置分开不增加物理多主仲裁能力。

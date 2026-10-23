@@ -112,7 +112,7 @@ IAP 保留保存参数失败时不继续升级提交或重启的约束。
 
 | 入口 | 调用方及作用 |
 | --- | --- |
-| `idu_protocol_init()` | main 调用；本地装配、存储加载/恢复、计划、转发初始化和统一任务放行。 |
+| `protocol_init()` | main 调用；本地装配、存储加载/恢复、计划、转发初始化和统一任务放行。 |
 | `dp_samples_task()` / `dp_business_task()` | 应用创建的样本和业务线程入口。 |
 | `co_set_data_callbacks()` | 应用注册 `dp_accept_samples`、显式初始化后处理和 `dp_invalidate_acquired_device`。 |
 | `dp_params_set_transport(co_parameter_transport())` | 显式绑定同步南向读写，须早于参数恢复。 |
@@ -120,7 +120,7 @@ IAP 保留保存参数失败时不继续升级提交或重启的约束。
 | `tr_modbus_bind_execution()` / `tr_forward_init()` | 绑定应用接收/配置队列，显式装配指定北向入口。 |
 | `tr_forward_service()` | 应用配置队列周期维护；未初始化返回 ENODEV。 |
 | `co_device_status()` / `co_clear_device_errors()` | 一致 RAM 快照 / 只清诊断和请求计数；清理不改变调度与质量。 |
-| `idu_protocol_update_status()` | 由本地采样线程接入远端阶段及存储降级，独立于本地维护故障锁存。 |
+| `protocol_update_status()` | 由本地采样线程接入远端阶段及存储降级，独立于本地维护故障锁存。 |
 
 北向站号 `CONFIG_IDU_FORWARD_UNIT=16`，南向站号 1、2，共用物理 RS485。
 自动采集额外重试 2 次，异常最长 3000 ms，掉线首包探测间隔 5000 ms；

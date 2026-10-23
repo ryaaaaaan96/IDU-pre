@@ -8,7 +8,7 @@
 #include <transmit/server.h>
 #include <transmit/registers.h>
 #include <transmit/forward.h>
-#include "process/idu_process.h"
+#include "process/points.h"
 #include "protocol/inc/signal_ids.h"
 #include <collect/message.h>
 #include <collect/collect.h>
@@ -113,7 +113,7 @@ static void completed(int iface, int err, void *user)
 static uint16_t saved(void)
 {
     struct dp_point_state state;
-    zassert_ok(dp_params_read((struct dp_key){1, IDU_SIG_SAVED_ADDRESS}, &state));
+    zassert_ok(dp_params_read((struct dp_key){1, SIGNAL_SAVED_ADDRESS}, &state));
     return state.value.words[0];
 }
 static void fresh_nvs(void)
@@ -159,18 +159,18 @@ static void write_incompatible_fixture(bool intent)
 
 static int attach_profile(void)
 {
-    return tr_forward_attach(server, &idu_forwarding);
+    return tr_forward_attach(server, &protocol_forwarding);
 }
 
 static void *setup(void)
 {
     zassert_ok(flash_area_open(DT_FIXED_PARTITION_ID(DT_ALIAS(idu_settings)), &storage));
     flash_simulator_set_callbacks(flash_area_get_device(storage), &flash_cb);
-    zassert_ok(idu_register_point_tables());
+    zassert_ok(protocol_register_point_tables());
     zassert_ok(dp_init()); fixture_start_dp();
     const struct dp_equip_cfg *cfg = dp_config();
-    zassert_ok(idu_ports_init());
-    int south = co_port_open(&idu_collect_port); zassert_true(south >= 0);
+    zassert_ok(protocol_ports_init());
+    int south = co_port_open(&protocol_collect_port); zassert_true(south >= 0);
     fixture_connect_points();
     zassert_ok(co_init(cfg, south, true));
     zassert_ok(dp_params_init(cfg, storage->fa_id));
@@ -195,8 +195,8 @@ static void before(void *fixture)
     zassert_ok(attach_profile());
     zassert_ok(co_simulator_set_register(&idu_collect_simulator, 3, 40000, 100));
     struct dp_point_batch batch = {.source = DP_SOURCE_LOCAL, .count = 2,
-        .points = {{.key = {1, IDU_SIG_ADDRESS}, .width = 1, .value.words = {16}},
-                   {.key = {1, IDU_SIG_DI}, .width = 1, .value.words = {0xa55a}}}};
+        .points = {{.key = {1, SIGNAL_ADDRESS}, .width = 1, .value.words = {16}},
+                   {.key = {1, SIGNAL_DI}, .width = 1, .value.words = {0xa55a}}}};
     zassert_ok(dp_publish(&batch, K_MSEC(20)));
     zassert_ok(dp_wait_processed(batch.ticket, K_MSEC(200)));
 }
@@ -233,7 +233,7 @@ ZTEST(forwarding, test_unmapped_registers_and_contiguous_reads)
     zassert_equal(modbus_write_holding_reg(client, 16, 39281, 0), MODBUS_EXC_ILLEGAL_DATA_ADDR);
     zassert_equal(modbus_read_input_regs(client, 16, 2513, words, 2), MODBUS_EXC_ILLEGAL_DATA_ADDR);
     zassert_ok(modbus_read_input_regs(client, 16, 8151, words, 2));
-    zassert_equal(words[0], IDU_PROTOCOL_VERSION >> 16); zassert_equal(words[1], 0xa55a);
+    zassert_equal(words[0], PROTOCOL_VERSION >> 16); zassert_equal(words[1], 0xa55a);
     zassert_ok(modbus_read_input_regs(client, 16, 2581, words, 1)); zassert_equal(words[0], 0x4944);
     zassert_ok(modbus_read_input_regs(client, 16, 2581, words, 15));
 }
@@ -247,9 +247,9 @@ ZTEST(forwarding, test_parameter_broadcasts_have_no_reply_or_side_effect)
     zassert_equal(saved(), 1);
     value = 800;
     zassert_equal(modbus_write_holding_regs(client, 0, 31000, &value, 1), -ETIMEDOUT);
-    zassert_equal(idu_sample_period_ms(), 500);
+    zassert_equal(points_sample_period_ms(), 500);
     zassert_ok(modbus_write_holding_reg(client, 16, 31000, 800));
-    zassert_equal(idu_sample_period_ms(), 800);
+    zassert_equal(points_sample_period_ms(), 800);
 }
 
 ZTEST(forwarding, test_malformed_and_unsupported_requests_return_exceptions)

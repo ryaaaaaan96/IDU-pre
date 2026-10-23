@@ -9,6 +9,7 @@
 | 构建或升级固件 | [构建、分区与升级](build-and-upgrade.md) | 配置选择、分区、产物、签名密钥、MCUboot/SMP/IAPv3 |
 | 调整启动程序配置 | [MCUboot 配置目录](../bootloader/README.md) | 本板启动配置、分区及与应用升级代码的边界 |
 | 核对硬件 | [硬件与板级适配](hardware.md) | 时钟、引脚、Flash、看门狗和已实现行为 |
+| 调整代码命名或采样配置 | [命名与采样边界](naming.md) | 职责前缀、通用采样、产品配置与兼容范围 |
 | 理解框架 | [采集、处理与转发架构](collect-process-transmit.md) | 模块职责、数据流、Zephyr 调度、初始化顺序 |
 | 维护点表 | [配置指南](../app/protocol/README.md) | 文件职责、新增设备/点、分散登记与参数配置 |
 | 规划多张转发表 | [转发表与北向服务](forwarding-model.md) | 挂表设备、数据来源、站号、寄存器地址及当前服务隔离限制 |

@@ -126,8 +126,8 @@ IDU 的处理表扩展 `DM_SIG_CFG_S`，内嵌 `DM_SIG_DATA_S data`，恢复及�
 状态和命令在处理表绑定，北向地址只在转发表维护，不再使用额外的
 `tr_status_register` / `tr_command` 配置结构。
 
-`idu_parameter_status()` 将 32000–32003 作为一个四字点，在读取时获取一次参数状态；
-`idu_parameter_command()` 处理 31090–31093，初始化/读取不触发业务动作。
+`points_parameter_status()` 将 32000–32003 作为一个四字点，在读取时获取一次参数状态；
+`points_parameter_command()` 处理 31090–31093，初始化/读取不触发业务动作。
 新增 `dp_defer_para_action()` 是 Zephyr 版本的事务扩展，不是原闭源平台的接口：
 回调登记动作，DP 完成所有回调和数值校验后执行，执行结果同步返回。
 它只支持单个本地非持久写点，不提交触发值，不支持混合或派生写入及重放。

@@ -139,7 +139,7 @@ void module_add_points(struct dp_equip_cfg *cfg, struct dp_point_cfg *points,
         maps[cfg->transmit_count++] = (struct dp_transmit_cfg){.function=4,.address=11300+2*order,
             .count=2,.key={1,11001},.order=order};
         maps[cfg->transmit_count++] = (struct dp_transmit_cfg){.function=3,.address=31600+2*order,
-            .count=2,.key={IDU_DEV_REMOTE_IO,IDU_SIG_REMOTE_OFFSET},.order=order};
+            .count=2,.key={DEVICE_REMOTE_IO,SIGNAL_REMOTE_OFFSET},.order=order};
     }
     maps[cfg->transmit_count++] = (struct dp_transmit_cfg){.function = 4, .address = 11202,
         .count = 1, .key = dynamic};
@@ -212,7 +212,7 @@ ZTEST(points, test_modules_parameter_operation_flags_and_deferred_store)
     struct dp_point_update update = {.key = {1,31100}, .width = 1, .value.words = {55}};
     zassert_ok(dp_params_apply(&update, 1, DP_OP_NO_STORE));
     zassert_equal(value(update.key), 55);
-    struct dp_point_update another = {.key = {1, IDU_SIG_SAMPLE_PERIOD}, .width = 1, .value.words = {600}};
+    struct dp_point_update another = {.key = {1, SIGNAL_SAMPLE_PERIOD}, .width = 1, .value.words = {600}};
     zassert_ok(dp_params_set_values(&another, 1));
     zassert_ok(dp_params_reload()); zassert_equal(value(update.key), 10);
     update.value.words[0] = 66;
@@ -237,7 +237,7 @@ ZTEST(points, test_modules_multibus_modes_state_and_initialization)
     zassert_ok(dp_params_set_values(&update, 1)); zassert_equal(bus_value, 222);
     zassert_ok(co_set_mode(1, CO_PORT_SLEEP));
     uint16_t word; zassert_equal(co_read(20, 3, 40000, &word, 1), -EBUSY);
-    zassert_ok(co_read(IDU_DEV_REMOTE_IO, 4, 8152, &word, 1)); /* other bus unaffected */
+    zassert_ok(co_read(DEVICE_REMOTE_IO, 4, 8152, &word, 1)); /* other bus unaffected */
     zassert_ok(co_set_mode(1, CO_PORT_POLL));
     bus_fault = -ETIMEDOUT;
     zassert_equal(co_read(20, 3, 40000, &word, 1), -ETIMEDOUT);
@@ -250,8 +250,8 @@ ZTEST(points, test_modules_multibus_modes_state_and_initialization)
     bus_fault = 0; bus_value = 44;
     zassert_ok(co_initialize_device(20)); zassert_equal(bus_value, 222);
     zassert_ok(co_simulator_set_register(&idu_collect_simulator, 4,8152,0x27));
-    zassert_ok(co_initialize_device(IDU_DEV_REMOTE_IO));
-    zassert_equal(value((struct dp_key){IDU_DEV_REMOTE_IO,IDU_SIG_DI}),0x27);
+    zassert_ok(co_initialize_device(DEVICE_REMOTE_IO));
+    zassert_equal(value((struct dp_key){DEVICE_REMOTE_IO,SIGNAL_DI}),0x27);
     zassert_ok(co_device_status(20, &status)); zassert_equal(status.state, CO_DEVICE_ONLINE);
 }
 
@@ -341,7 +341,7 @@ ZTEST(points, test_modules_four_orders_over_modbus)
         uint16_t canonical[2]={0x1234,0};
         for (int i=0;i<2;++i) { wire[i]=dp_order_word(canonical,2,i,order); }
         zassert_ok(modbus_write_holding_regs(north_client,16,31600+2*order,wire,2));
-        zassert_equal(value((struct dp_key){IDU_DEV_REMOTE_IO,IDU_SIG_REMOTE_OFFSET}),0x1234);
+        zassert_equal(value((struct dp_key){DEVICE_REMOTE_IO,SIGNAL_REMOTE_OFFSET}),0x1234);
     }
 }
 

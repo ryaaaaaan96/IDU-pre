@@ -31,7 +31,7 @@ DP 点值改为 Zephyr 系统堆按实际字数一次申请。当前配置见
   共享 const 配置不会让这些运行状态合并；32 台设备仍需 32 份状态。
   [来源：points.c 的 states/point_words](../modules/dataprocess/src/points.c#L14)、
   [collect.c 的 statuses/next_poll/disabled](../modules/collect/src/collect.c#L31)。
-- 共享的是同一套默认值，不会按实例自动改写。当前 `IDU_SIG_ADDRESS` 默认 1，
+- 共享的是同一套默认值，不会按实例自动改写。当前 `SIGNAL_ADDRESS` 默认 1，
   实例 `coll_addr=4` 不会让该测点默认值变成 4；初始化读取成功后才有真实采样。
   未采到时不能把默认 1 视为该实例的真实地址。实例特有默认值需另设明确机制，不能修改共享 const 行。
   [来源：远端 process 表](../app/protocol/tables/process.c#L324)、

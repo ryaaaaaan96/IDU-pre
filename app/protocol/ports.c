@@ -28,8 +28,8 @@ static int send(void *user, uint16_t port, const struct vport_source *destinatio
                  const struct vport_frame *frame, k_timeout_t timeout)
 {
     ARG_UNUSED(user);
-    if (destination->link != IDU_LINK_RS485 || destination->peer) { return -EACCES; }
-    if (port == IDU_PORT_ACQUISITION) {
+    if (destination->link != LINK_RS485 || destination->peer) { return -EACCES; }
+    if (port == PORT_ACQUISITION) {
         /* collect_transfer 持有完整事务锁，不能只锁住一次 UART 发送。 */
         k_spinlock_key_t key = k_spin_lock(&response_lock);
         bool owned = expected.active && expected.owner == k_current_get() &&
@@ -38,7 +38,7 @@ static int send(void *user, uint16_t port, const struct vport_source *destinatio
         if (!owned) { return -EACCES; }
         return mb_serial_send(serial, frame->data, frame->size, timeout);
     }
-    if (port != IDU_PORT_FORWARD) { return -ENOENT; }
+    if (port != PORT_FORWARD) { return -ENOENT; }
     k_timepoint_t deadline = sys_timepoint_calc(timeout);
     int err = k_mutex_lock(&wire_lock, sys_timepoint_timeout(deadline));
     if (err) { return err; }
@@ -52,7 +52,7 @@ static const struct vport_io io = {
     .complete = VPORT_IO_DEFAULT_COMPLETE,
     .user = VPORT_IO_DEFAULT_USER,
     .destination = {
-        .link = IDU_LINK_RS485,
+        .link = LINK_RS485,
         .dev_id = VPORT_SOURCE_DEFAULT_DEVICE,
         .peer = VPORT_SOURCE_DEFAULT_PEER,
     },
@@ -64,7 +64,7 @@ static int collect_transfer(void *user, uint16_t dev_id, struct modbus_adu *adu)
     ARG_UNUSED(user);
     if (!adu || adu->length < 4) { return -EINVAL; }
     const DEV_TABLE_S *device = dp_dev_get_from_devid(dev_id);
-    if (!device || device->port != idu_collect_bus.id || device->coll_addr != adu->unit_id) {
+    if (!device || device->port != protocol_collect_bus.id || device->coll_addr != adu->unit_id) {
         return -EINVAL;
     }
     /* 北向站号在本地初始化确定，后续 GPIO 样本不改变端口身份。 */
@@ -89,7 +89,7 @@ static int collect_transfer(void *user, uint16_t dev_id, struct modbus_adu *adu)
     return err;
 }
 
-const struct co_bus_cfg idu_collect_bus = {
+const struct co_bus_cfg protocol_collect_bus = {
     .id = 0,
     .iface = CO_BUS_DEFAULT_IFACE,
     .simulated = CO_BUS_DEFAULT_SIMULATED,
@@ -98,7 +98,7 @@ const struct co_bus_cfg idu_collect_bus = {
     .read_model = CO_BUS_DEFAULT_READ_MODEL,
     .user = CO_BUS_DEFAULT_USER,
 };
-const struct co_port_config idu_collect_port = {
+const struct co_port_config protocol_collect_port = {
     .iface_name = "RAW_0",
     .param = {
         .mode = MODBUS_MODE_RAW,
@@ -117,7 +117,7 @@ static int receive(void *user, const uint8_t *data, size_t size)
 {
     ARG_UNUSED(user);
     struct vport_source source = {
-        .link = IDU_LINK_RS485,
+        .link = LINK_RS485,
         .dev_id = VPORT_SOURCE_DEFAULT_DEVICE,
         .peer = VPORT_SOURCE_DEFAULT_PEER,
     };
@@ -137,25 +137,25 @@ static int receive(void *user, const uint8_t *data, size_t size)
         }
     } else { matches = false; }
     k_spin_unlock(&response_lock, key);
-    int err = collecting ? (matches ? co_port_input(IDU_PORT_ACQUISITION, &source, &frame) : -ENOMSG) :
-                           tr_port_input(IDU_PORT_FORWARD, &source, &frame);
+    int err = collecting ? (matches ? co_port_input(PORT_ACQUISITION, &source, &frame) : -ENOMSG) :
+                           tr_port_input(PORT_FORWARD, &source, &frame);
     /* RAW 输入已复制报文。共享口必须立即恢复 RX，允许北向写处理期间接收南向回复。 */
     mb_serial_release(serial);
     return err;
 }
 #endif
 
-int idu_ports_init(void)
+int protocol_ports_init(void)
 {
     if (k_is_in_isr()) { return -EWOULDBLOCK; }
     k_mutex_lock(&ports_lock, K_FOREVER);
-    int err = co_modbus_port_bind(IDU_PORT_ACQUISITION, "RAW_0", &io);
+    int err = co_modbus_port_bind(PORT_ACQUISITION, "RAW_0", &io);
     if (!err) {
         client = modbus_iface_get_by_name("RAW_0");
         if (client < 0) { err = client; }
     }
 #if DT_HAS_ALIAS(idu_forward)
-    if (!err) { err = tr_modbus_port_bind(IDU_PORT_FORWARD, "RAW_1", &io); }
+    if (!err) { err = tr_modbus_port_bind(PORT_FORWARD, "RAW_1", &io); }
     if (!err && serial < 0) {
         struct modbus_serial_param param = {
             .baud = DT_PROP(DT_PARENT(DT_ALIAS(idu_forward)), current_speed),

@@ -63,6 +63,12 @@ config IDU_SAMPLE_PERIOD_MS
     default 500
     range 100 1000
 
+config IDU_ADC_AVERAGE_COUNT
+    int "Samples averaged per product analog input"
+    depends on INPUT_SAMPLER
+    default 10
+    range 1 64
+
 config IDU_IAPV3
     bool "MV-IO IAPv3 AES/SGZ receiver"
     depends on BOOTLOADER_MCUBOOT && !MCUMGR_GRP_IMG

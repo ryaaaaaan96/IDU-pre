@@ -21,7 +21,8 @@ compatibility.
 | Module | Public headers | Responsibility |
 | --- | --- | --- |
 | `analog_input` | `analog_input/analog_input.h` | Configured ADC channel groups, software averaging and ordered raw samples |
-| `gpio` | `gpio/digital_io.h`, `gpio/idu_inputs.h` | Generic GPIO groups and optional IDU GPIO/ADC sampling profile |
+| `gpio` | `gpio/digital_io.h` | Configured digital input groups |
+| [`input_sampler`](input_sampler/README.md) | `input_sampler/input_sampler.h` | Caller-configured analog/digital sampling with caller-owned buffers |
 | `watchdog` | `watchdog/watchdog.h` | Per-instance progress-gated GPIO feeding for external watchdogs |
 | [`vport`](vport/README.md) | `vport/vport.h` | Generic complete-message callbacks, ownership isolation and per-port send serialization |
 | `dataprocess` | `data_process.h`, `platform_callback.h`, `dataprocess/{points,process,params}.h` | Shared data contracts/store, `dp_*` processing, optional NVS |
@@ -88,7 +89,7 @@ downstream forwarding is optional when `collect` is absent.
 
 Application startup lives in `app/main.c`; sample mapping and common callbacks
 live in `app/process/points.c`, with engineering conversion in
-`app/process/engineering.c`. `app/process/idu_process.h` exposes snapshot
+`app/process/engineering.c`. `app/process/points.h` exposes snapshot
 publication, sample-period access and business callbacks. Status and trial-image
 readiness belong to `app/status/`. There is no separate generic equipment module
 or legacy `idu_equipment_*` application API.
@@ -151,7 +152,7 @@ same bound interface: direct calls bypass the CO transaction lock.
 
 | Service | Module API | Product input |
 | --- | --- | --- |
-| Network registration | App `idu_ports_init()` calls `co_modbus_port_bind()` / `tr_modbus_port_bind()` | Logical IDs, application callbacks and physical serial endpoints |
+| Network registration | App `protocol_ports_init()` calls `co_modbus_port_bind()` / `tr_modbus_port_bind()` | Logical IDs, application callbacks and physical serial endpoints |
 | Forwarding lifecycle | `tr_forward_service()` | Independent forwarding identity, logical port, table IDs and broadcast policy; runtime unit |
 | Register dispatch | `tr_register_route()` / `tr_register_write()` | Optional `routes` address segments; ordinary values go through DP tables |
 | Point status and commands | `DM_SIG_CFG_S.pf_sig_proc` | SET callback; `FLAG_READ_CALLBACK` enables GET; `dp_defer_para_action()` for validated single-point actions |
@@ -191,8 +192,9 @@ The model simulator only supplies configured defaults; it is not a UPP transport
 
 Input/health modules can be enabled with `ANALOG_INPUT` (requires ADC),
 `DIGITAL_IO` and `WATCHDOG_MONITOR` (require GPIO). `gpio` contains the generic
-`digital_io_*` APIs and an optional `IDU_INPUTS` profile selecting both GPIO and
-analog services. Generic GPIO use does not require an ADC or IDU devicetree node.
+`digital_io_*` APIs. The independent `INPUT_SAMPLER` module combines GPIO and
+analog groups supplied by the caller. Generic GPIO use does not require an ADC
+or a product devicetree node.
 None of these services depend on point tables, Modbus or DP, or allocate heap memory.
 Each input group uses a caller-owned immutable configuration; each watchdog owns
 its timer and state. Physical device/channel configuration must be serialized by
@@ -223,13 +225,15 @@ the system. Do not reuse a started instance until reset. Startup is serialized;
 progress and stop synchronize with timer callbacks. This service preserves the
 existing edge-fed external watchdog behavior without assuming a particular IC.
 
-`gpio/src/idu_inputs.c` supplies the optional IDU profile. It binds the
-product `idu_io` devicetree node (using the application-owned `idu,pre-io` binding),
-`IDU_ADC_AVERAGE_COUNT`, 16 DI, four address switches and eight ADC inputs.
-It preserves the 12-bit/3.3 V electrical contract. `idu_inputs_sample()` returns
-logical DI/address and raw ADC values; it does not operate LEDs or watchdogs.
-`app/process/points.c` alone maps that sample into DP points. The generic GPIO
-and ADC APIs have no fixed IDU channel counts or electrical constraints.
+`input_sampler_init()` initializes configured input groups and
+`input_sampler_read()` fills caller-owned buffers. It supports optional analog
+input and any configured number of digital groups; output is valid only when the
+whole read succeeds. Capacity errors occur before sampling. No product node,
+channel count, voltage reference or address offset is embedded in the module.
+`app/acquisition/config.c` constructs descriptors from the product devicetree,
+checks the current conversion's 12-bit/3.3 V contract and interprets address bits.
+Its `acquisition_inputs_sample()` returns the application snapshot declared in
+`app/acquisition/sample.h`. `app/process/points.c` maps raw values into DP points.
 
 Application state, fault latching and state-to-LED policy live in `app/status/`.
 LED output directly uses Zephyr's LED API (`LED` / `LED_GPIO`); no application-owned
@@ -237,7 +241,7 @@ LED module or generic blink worker is retained.
 It also binds the external watchdog configuration and reports completed cycles.
 With MCUboot enabled, healthy progress invokes `status/image_confirm/image_confirm.c` to
 qualify and confirm the trial image. The confirmation state belongs to
-`idu_status`; acquisition only orchestrates sampling, publication and communication.
+`application_status`; acquisition only orchestrates sampling, publication and communication.
 Current policy is steady on during startup/fault and one toggle per successful
 sample; specific fault blink codes are intentionally left for product definition.
 Fast sampling/publication phases only update state.
@@ -269,7 +273,7 @@ handlers or read callbacks are rejected instead of silently ignoring them.
 `TR_MODBUS_ADAPTER` enables whole-PDU routing and isolated forwarding workers,
 and can be selected without `DP_PARAMS`. The full IDU-pre application selects it.
 Supply static `dp_equip_cfg` tables. IDU's `app/main.c` explicitly calls
-`idu_register_point_tables()` then `dp_init()`, creates
+`protocol_register_point_tables()` then `dp_init()`, creates
 the application acquisition interface, registers all buses
 through `co_init()` / `co_init_bus()`, then initializes and recovers parameters.
 The application decides whether a storage failure permits degraded operation.

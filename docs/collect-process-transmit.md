@@ -132,7 +132,7 @@ flowchart LR
 校验时被拒绝。无参数后端时 `dp_process_save_reboot()` 返回 `-ENOTSUP`。
 
 应用在 `app/main.c` 显式组织启动：注册点表 → `dp_init()` →
-`idu_ports_init()` → `co_port_open()` →
+`protocol_ports_init()` → `co_port_open()` →
 `co_init()` / `co_init_bus()` 注册全部总线 → `dp_params_init()` / 恢复参数 →
 `dp_process_start()` → `dp_reference_start()` → `co_start()`。参数存储失败后的降级策略由应用决定。
 首轮采样地址就绪后，调用 `tr_forward_service()` 按虚拟转发配置装配并维护转发接口；不使用 `SYS_INIT` 安排这些步骤。

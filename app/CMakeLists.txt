@@ -1,11 +1,11 @@
 # Fail during configuration if a required application service was disabled.
 # Modules remain independently optional for their other consumers and tests.
-set(idu_required
+set(required_services
   BOOTLOADER_MCUBOOT
   DATAPROCESS DP_PROCESS DP_REFERENCE_TABLES DP_TABLE_REGISTRY DP_PARAMS COLLECT CO_MODBUS_ADAPTER CO_MODBUS_RAW_PORT TRANSMIT
   TR_MODBUS_ADAPTER TR_MODBUS_RAW_PORT TR_SERVER_SERVICE TR_REGISTER_SERVICE
-  GPIO ADC ANALOG_INPUT DIGITAL_IO IDU_INPUTS LED WATCHDOG_MONITOR)
-foreach(feature IN LISTS idu_required)
+  GPIO ADC ANALOG_INPUT DIGITAL_IO INPUT_SAMPLER LED WATCHDOG_MONITOR)
+foreach(feature IN LISTS required_services)
   if(NOT CONFIG_${feature})
     message(FATAL_ERROR "IDU-pre requires CONFIG_${feature}=y")
   endif()

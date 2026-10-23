@@ -145,7 +145,7 @@ DI 和两路模拟量填写 CONFIG_IDU_COLLECT_PERIOD_MS；协议号、远程地
 直接使用默认 MCUboot + IAPv3 构建，不再选择 `collect-rtu.conf` 或虚拟后端。
 南向从机地址在 `protocol.c` 配置，当前为 1；IDU 拨码必须使用不同地址，例如 2。
 两端均通过 `idu-forward` 对应的 RS485 收发，USART0 继续输出日志。
-采集总线由 `main.c` 使用 `idu_collect_bus` 注册，事务锁和分流在 `ports.c`。
+采集总线由 `main.c` 使用 `protocol_collect_bus` 注册，事务锁和分流在 `ports.c`。
 北向普通读访问缓存，只有明确配置的参数下发经南向传输。
 
 本机锁不能控制外部主站；主站必须给周期采集及其回复留出总线窗口。

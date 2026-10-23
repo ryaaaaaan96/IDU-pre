@@ -1,18 +1,18 @@
-#include "status/image_confirm/idu_image_confirm.h"
+#include "status/image_confirm/image_confirm.h"
 #include <zephyr/ztest.h>
 
 static unsigned writes;
 static int write_error;
 static bool already_confirmed;
-static struct idu_image_confirm state;
+static struct image_confirm state;
 bool boot_is_img_confirmed(void) { return already_confirmed; }
 int boot_write_img_confirmed(void) { ++writes; return write_error; }
-#define checkpoint(now, healthy) idu_image_confirm_checkpoint(&state, now, healthy)
+#define checkpoint(now, healthy) image_confirm_checkpoint(&state, now, healthy)
 
 static void before(void *fixture)
 {
     ARG_UNUSED(fixture);
-    state = (struct idu_image_confirm){0};
+    state = (struct image_confirm){0};
     writes = 0; write_error = 0; already_confirmed = false;
 }
 

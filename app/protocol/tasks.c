@@ -15,14 +15,14 @@ static bool prepared;
 static struct k_thread collect;
 K_THREAD_STACK_DEFINE(collect_stack, CONFIG_CO_STACK_SIZE);
 static bool collect_prepared;
-static atomic_t protocol_error;
+static atomic_t maintenance_error;
 
-int idu_protocol_error(void)
+int protocol_error(void)
 {
-    return (int)atomic_get(&protocol_error);
+    return (int)atomic_get(&maintenance_error);
 }
 
-int idu_dp_tasks_prepare(void)
+int protocol_dp_tasks_prepare(void)
 {
     if (prepared) { return -EALREADY; }
     k_thread_create(&samples, sample_stack, K_THREAD_STACK_SIZEOF(sample_stack),
@@ -33,24 +33,24 @@ int idu_dp_tasks_prepare(void)
     return 0;
 }
 
-void idu_dp_tasks_start(void)
+void protocol_dp_tasks_start(void)
 {
     if (!prepared) { return; }
     k_thread_start(&samples);
     k_thread_start(&business);
 }
 
-int idu_co_tasks_prepare(void)
+int protocol_co_tasks_prepare(void)
 {
     if (collect_prepared) { return -EALREADY; }
     k_thread_create(&collect, collect_stack, K_THREAD_STACK_SIZEOF(collect_stack),
-                    co_bus_task, (void *)(uintptr_t)idu_collect_bus.id,
+                    co_bus_task, (void *)(uintptr_t)protocol_collect_bus.id,
                     NULL, NULL, 7, 0, K_FOREVER);
     collect_prepared = true;
     return 0;
 }
 
-void idu_co_tasks_start(void)
+void protocol_co_tasks_start(void)
 {
     if (collect_prepared) { k_thread_start(&collect); }
 }
@@ -66,16 +66,16 @@ static bool forwarding_prepared;
 static void maintain_forwarding(struct k_work *work)
 {
     ARG_UNUSED(work);
-    int err = tr_forward_service(&idu_forwarding, CONFIG_IDU_FORWARD_UNIT);
-    if (err) { atomic_cas(&protocol_error, 0, err); }
+    int err = tr_forward_service(&protocol_forwarding, CONFIG_IDU_FORWARD_UNIT);
+    if (err) { atomic_cas(&maintenance_error, 0, err); }
     k_work_reschedule_for_queue(&configuration_queue, &maintenance,
                                 K_MSEC(CONFIG_IDU_PROTOCOL_SERVICE_PERIOD_MS));
 }
 
-int idu_start_forwarding(void)
+int protocol_start_forwarding(void)
 {
     if (forwarding_started) { return -EALREADY; }
-    const char *name = tr_modbus_port_name(idu_forwarding.port_id);
+    const char *name = tr_modbus_port_name(protocol_forwarding.port_id);
     if (!name) { return -ENOTCONN; }
     int iface = modbus_iface_get_by_name(name);
     if (iface < 0) { return iface; }
@@ -92,7 +92,7 @@ int idu_start_forwarding(void)
         .configuration = &configuration_queue,
     };
     int err = tr_modbus_bind_execution(iface, &execution);
-    if (!err) { err = tr_forward_init(&idu_forwarding, CONFIG_IDU_FORWARD_UNIT); }
+    if (!err) { err = tr_forward_init(&protocol_forwarding, CONFIG_IDU_FORWARD_UNIT); }
     if (err) { return err; }
     forwarding_started = true;
     k_work_init_delayable(&maintenance, maintain_forwarding);

@@ -1,0 +1,5 @@
+if(CONFIG_INPUT_SAMPLER)
+  zephyr_library()
+  zephyr_include_directories(include)
+  zephyr_library_sources(src/input_sampler.c)
+endif()

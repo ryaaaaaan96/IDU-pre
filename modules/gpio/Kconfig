@@ -1,18 +1,3 @@
 config DIGITAL_IO
     bool "Configured GPIO input groups"
     depends on GPIO
-
-config IDU_INPUTS
-    bool "IDU GPIO and ADC sampling profile"
-    depends on GPIO && ADC
-    select DIGITAL_IO
-    select ANALOG_INPUT
-    help
-      Read the IDU input group described by the idu_io devicetree node.
-      Returns raw samples; point mapping and engineering conversion stay in the application.
-
-config IDU_ADC_AVERAGE_COUNT
-    int "Samples averaged per IDU analog input"
-    depends on IDU_INPUTS
-    default 10
-    range 1 64

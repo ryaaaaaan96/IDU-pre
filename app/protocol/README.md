@@ -29,7 +29,7 @@ protocol/
 `tables/transmit.c` 映射北向地址；`tables/segments.c` 通过独立转发入口的
 协议段配置绑定 IAPv3，`protocol.c` 选择数据设备、转发表和广播策略。
 参数 Flash 保存实现位于 DP 模块，升级暂存和验签位于 IAP 模块。
-`main.c` 启动硬件、状态和可选 IAP 后调用 `idu_protocol_init()`。
+`main.c` 启动硬件、状态和可选 IAP 后调用 `protocol_init()`。
 协议层完成本地装配后才放行采集和处理任务，不等待远端上线，不通过 SYS_INIT 隐藏业务依赖。
 本地采样只查询已锁存的协议维护故障，不承担首次转发启动或周期维护。
 
@@ -48,10 +48,10 @@ transmit 的 `TR_TABLE_DEFAULT_BYTE_ORDER`。这些是编译期字段常量，�
 
 数据设备使用 `data_device_cfg`，逐项声明 process、可选 collect、采集总线和南向站号。
 `collect_table=DP_DATA_DEFAULT_COLLECT_TABLE`（零）表示不生成采集目标，并忽略采集口和站号。
-`idu_register_point_tables()` 先调用 `dp_data_device_bind()`，再登记 pltcb 数据目录回调。
+`protocol_register_point_tables()` 先调用 `dp_data_device_bind()`，再登记 pltcb 数据目录回调。
 模块按表标识解析，不依赖链接顺序，缺表、错误类型、重复身份及非法采集关系明确失败。
 
-北向使用独立 `tr_forward_cfg idu_forwarding`，声明转发身份、逻辑口、普通转发表、可选协议段和广播策略。
+北向使用独立 `tr_forward_cfg protocol_forwarding`，声明转发身份、逻辑口、普通转发表、可选协议段和广播策略。
 缺省段标识和广播策略使用 TR 的 `TR_FORWARD_DEFAULT_*`，无需 process 或七槽占位。
 协议层先通过 `tr_forward_init()` 显式装配 RAW 服务，之后由应用维护任务调用 `tr_forward_service()`。
 接收和重配置队列由应用创建并绑定，`ports.c` 登记实际收发回调。
@@ -66,8 +66,8 @@ transmit 的 `TR_TABLE_DEFAULT_BYTE_ORDER`。这些是编译期字段常量，�
 两个北向入口可以复用地址映射不同数据，也能共用同一张表；普通读写及协议段均按入口选择。
 详细边界见[转发表与北向服务](../../docs/forwarding-model.md)。
 
-当前 `protocol.c` 的 `IDU_REMOTE_DEVICE` 宏只复用同型设备挂表结构；
-`LISTIFY(2, IDU_REMOTE_DEVICE, (,), 0, IDU_DEV_REMOTE_IO, 1)` 在预处理期展开为
+当前 `protocol.c` 的 `REMOTE_DEVICE_BINDING` 宏只复用同型设备挂表结构；
+`LISTIFY(2, REMOTE_DEVICE_BINDING, (,), 0, DEVICE_REMOTE_IO, 1)` 在预处理期展开为
 设备 10、11，南向站号 1、2，共用采集端口 0。调用旁逐项解释了全部参数。
 三张测点表仍逐字段填写，两个远端共享只读 process/collect 表，运行状态各自独立。
 北向转发表仍引用原来的设备 10，不自动新增设备 11 的北向寄存器。
@@ -104,12 +104,12 @@ transmit 的 `TR_TABLE_DEFAULT_BYTE_ORDER`。这些是编译期字段常量，�
 `dp_fast_para_get()` 才以 `DP_PARA_GET` 调用回调；`dp_get_sig_value()` 仍直接读缓存。
 该 readback 指按需读取回调，与南向持久参数写后的读回确认是两个机制。
 
-- 31090–31093：四个非持久命令点，回调 `idu_parameter_command()` 校验触发值，
+- 31090–31093：四个非持久命令点，回调 `points_parameter_command()` 校验触发值，
   用 `dp_defer_para_action()` 登记一次动作。只接受单点写入（FC06 或单字 FC16），
   DP 完成回调和范围校验后同步执行，执行完成才应答；不缓存命令触发值，不在 INIT/GET
   或重启时执行。一次请求不能包含其他命令、参数或派生写入，失败不会自动重试。
 - 32000–32003：一个 8 字节 `DATA_TYPE_U16ARRAY` 点，设置 `FLAG_READ_CALLBACK`，
-  回调 `idu_parameter_status()` 在 GET 时生成标志、错误、序号低字和高字。
+  回调 `points_parameter_status()` 在 GET 时生成标志、错误、序号低字和高字。
   完整读取或读取其中一部分都从同一次状态快照截取，SET 返回拒绝。
 - 普通值回调只校验、转换或输出候选值；恢复默认、保存等不可撤销动作通过 DP 延后动作
   接口登记，不直接在校验回调中执行 I/O。接口只接受单个本地非持久写点，不允许派生写入
@@ -154,7 +154,7 @@ transmit 的 `TR_TABLE_DEFAULT_BYTE_ORDER`。这些是编译期字段常量，�
 默认值、范围、类型和业务回调在同一行维护，例如：
 
 ```c
-{.sig_id = IDU_SIG_SAMPLE_PERIOD, .sig_size = 2,
+{.sig_id = SIGNAL_SAMPLE_PERIOD, .sig_size = 2,
  .sig_flag = FLAG_PERSISTENCE | FLAG_RT_STORE | FLAG_RANGE_CHECK,
  .data_type = DATA_TYPE_U16, .pf_sig_proc = DP_POINT_DEFAULT_CALLBACK,
  .data = {.def_value.u16 = 500, .min_value.u16 = 100, .max_value.u16 = 1000}},
@@ -177,7 +177,7 @@ transmit 的 `TR_TABLE_DEFAULT_BYTE_ORDER`。这些是编译期字段常量，�
 DM_SIG_DATA_S data;
 bool restore;
 int err = dp_point_parameters_get(DP_COUNTRY_COMMON,
-                                  IDU_DEV_LOCAL, IDU_SIG_SAMPLE_PERIOD,
+                                  DEVICE_LOCAL, SIGNAL_SAMPLE_PERIOD,
                                   &data, &restore);
 ```
 

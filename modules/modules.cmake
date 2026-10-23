@@ -4,6 +4,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/hardware.cmake)
 list(APPEND ZEPHYR_EXTRA_MODULES
   ${CMAKE_CURRENT_LIST_DIR}/analog_input
   ${CMAKE_CURRENT_LIST_DIR}/gpio
+  ${CMAKE_CURRENT_LIST_DIR}/input_sampler
   ${CMAKE_CURRENT_LIST_DIR}/watchdog
   ${CMAKE_CURRENT_LIST_DIR}/vport
   ${CMAKE_CURRENT_LIST_DIR}/dataprocess

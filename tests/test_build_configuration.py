@@ -62,7 +62,7 @@ class ApplicationRequirements(unittest.TestCase):
         'DATAPROCESS', 'DP_PROCESS', 'DP_REFERENCE_TABLES', 'DP_TABLE_REGISTRY', 'DP_PARAMS', 'COLLECT', 'CO_MODBUS_ADAPTER', 'CO_MODBUS_RAW_PORT',
         'TRANSMIT', 'TR_MODBUS_ADAPTER', 'TR_MODBUS_RAW_PORT', 'TR_SERVER_SERVICE',
         'TR_REGISTER_SERVICE', 'GPIO', 'ADC', 'ANALOG_INPUT', 'DIGITAL_IO',
-        'IDU_INPUTS', 'LED', 'WATCHDOG_MONITOR',
+        'INPUT_SAMPLER', 'LED', 'WATCHDOG_MONITOR',
     )
 
     def configure(self, **overrides):

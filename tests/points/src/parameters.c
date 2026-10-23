@@ -5,7 +5,7 @@
 #include "protocol/inc/protocol.h"
 #include <collect/simulator.h>
 #include <transmit/registers.h>
-#include "process/idu_process.h"
+#include "process/points.h"
 #include "protocol/inc/signal_ids.h"
 #include <dataprocess/params.h>
 #include <dataprocess/points.h>
@@ -80,8 +80,8 @@ void parameter_before(void)
     }
     zassert_ok(dp_params_reload());
     zassert_ok(dp_params_recover());
-    zassert_ok(dp_params_restore(IDU_DEV_LOCAL));
-    zassert_ok(dp_params_restore(IDU_DEV_REMOTE_IO));
+    zassert_ok(dp_params_restore(DEVICE_LOCAL));
+    zassert_ok(dp_params_restore(DEVICE_REMOTE_IO));
     zassert_ok(dp_params_restore(20));
 }
 
@@ -93,13 +93,13 @@ ZTEST(points, test_country_parameter_lookup_is_read_only)
     zassert_ok(modbus_write_holding_reg(north_client, 16, 31000, 750));
     uint32_t sequence = param_status().sequence;
     zassert_ok(dp_point_parameters_get(DP_COUNTRY_COMMON,
-        IDU_DEV_LOCAL, IDU_SIG_SAMPLE_PERIOD, &data, &restore));
+        DEVICE_LOCAL, SIGNAL_SAMPLE_PERIOD, &data, &restore));
     zassert_equal(data.def_value.u16, CONFIG_IDU_SAMPLE_PERIOD_MS);
     zassert_equal(data.min_value.u16, 100);
     zassert_equal(data.max_value.u16, 1000);
     zassert_true(restore);
     bool recover = true;
-    zassert_ok(pltcb_para_get_range_def(IDU_DEV_LOCAL, IDU_SIG_SAMPLE_PERIOD, &data, &recover));
+    zassert_ok(pltcb_para_get_range_def(DEVICE_LOCAL, SIGNAL_SAMPLE_PERIOD, &data, &recover));
     zassert_false(recover);
     zassert_equal(read_word(31000), 750);
     zassert_ok(dp_params_reload());
@@ -108,16 +108,16 @@ ZTEST(points, test_country_parameter_lookup_is_read_only)
 
     /* 型号参数保留有符号范围，数组初值保持原字序。 */
     zassert_ok(dp_point_parameters_get(DP_COUNTRY_COMMON,
-        IDU_DEV_REMOTE_IO, IDU_SIG_REMOTE_OFFSET, &data, &restore));
+        DEVICE_REMOTE_IO, SIGNAL_REMOTE_OFFSET, &data, &restore));
     zassert_equal(data.def_value.s32, 0);
     zassert_equal(data.min_value.s32, -100000);
     zassert_equal(data.max_value.s32, 100000);
     zassert_ok(dp_point_parameters_get(DP_COUNTRY_COMMON,
-        IDU_DEV_LOCAL, IDU_SIG_LABEL, &data, &restore));
+        DEVICE_LOCAL, SIGNAL_LABEL, &data, &restore));
     const uint16_t label[] = {0x4944, 0x552d, 0x7072, 0x6500, 0, 0, 0, 0};
     zassert_mem_equal(data.def_value.pst, label, sizeof(label));
     zassert_ok(dp_point_parameters_get(DP_COUNTRY_COMMON,
-        IDU_DEV_LOCAL, IDU_SIG_DI, &data, &restore));
+        DEVICE_LOCAL, SIGNAL_DI, &data, &restore));
     zassert_equal(data.def_value.u16, 0);
     zassert_equal(data.min_value.u16, 0);
     zassert_equal(data.max_value.u16, 0);
@@ -129,16 +129,16 @@ ZTEST(points, test_country_parameter_lookup_rejects_unknown_keys)
     DM_SIG_DATA_S original = data;
     bool restore = false;
 
-    zassert_equal(dp_point_parameters_get(UINT16_MAX, IDU_DEV_LOCAL,
-        IDU_SIG_SAMPLE_PERIOD, &data, &restore), -ENOTSUP);
+    zassert_equal(dp_point_parameters_get(UINT16_MAX, DEVICE_LOCAL,
+        SIGNAL_SAMPLE_PERIOD, &data, &restore), -ENOTSUP);
     zassert_equal(dp_point_parameters_get(DP_COUNTRY_COMMON, 257,
-        IDU_SIG_SAMPLE_PERIOD, &data, &restore), -ENOENT);
-    zassert_equal(dp_point_parameters_get(DP_COUNTRY_COMMON, IDU_DEV_LOCAL,
+        SIGNAL_SAMPLE_PERIOD, &data, &restore), -ENOENT);
+    zassert_equal(dp_point_parameters_get(DP_COUNTRY_COMMON, DEVICE_LOCAL,
         UINT16_MAX, &data, &restore), -ENOENT);
-    zassert_equal(dp_point_parameters_get(DP_COUNTRY_COMMON, IDU_DEV_LOCAL,
-        IDU_SIG_SAMPLE_PERIOD, NULL, &restore), -EINVAL);
-    zassert_equal(dp_point_parameters_get(DP_COUNTRY_COMMON, IDU_DEV_LOCAL,
-        IDU_SIG_SAMPLE_PERIOD, &data, NULL), -EINVAL);
+    zassert_equal(dp_point_parameters_get(DP_COUNTRY_COMMON, DEVICE_LOCAL,
+        SIGNAL_SAMPLE_PERIOD, NULL, &restore), -EINVAL);
+    zassert_equal(dp_point_parameters_get(DP_COUNTRY_COMMON, DEVICE_LOCAL,
+        SIGNAL_SAMPLE_PERIOD, &data, NULL), -EINVAL);
     zassert_equal(data.def_value.u32, original.def_value.u32);
     zassert_equal(data.min_value.u32, original.min_value.u32);
     zassert_equal(data.max_value.u32, original.max_value.u32);
@@ -148,7 +148,7 @@ ZTEST(points, test_country_parameter_lookup_rejects_unknown_keys)
 ZTEST(points, test_parameters_local_write_persists_and_applies)
 {
     zassert_ok(modbus_write_holding_reg(north_client, 16, 31000, 750));
-    zassert_equal(idu_sample_period_ms(), 750);
+    zassert_equal(points_sample_period_ms(), 750);
     zassert_equal(read_word(31000), 750);
     uint32_t sequence = param_status().sequence;
     zassert_ok(dp_params_reload());
@@ -417,11 +417,11 @@ ZTEST(points, test_parameters_restore_flush_and_broadcast)
 
 ZTEST(points, test_process_commands_do_not_latch_or_replay)
 {
-    const struct dp_key key = {IDU_DEV_LOCAL, IDU_SIG_RESTORE_LOCAL};
+    const struct dp_key key = {DEVICE_LOCAL, SIGNAL_RESTORE_LOCAL};
     struct dp_point_state before, after;
     zassert_ok(dp_read(key, &before));
     zassert_ok(modbus_write_holding_reg(north_client, 16, 31000, 750));
-    zassert_ok(dp_process_init_device(IDU_DEV_LOCAL));
+    zassert_ok(dp_process_init_device(DEVICE_LOCAL));
     zassert_equal(read_word(31000), 750);
     uint16_t ignored;
     zassert_equal(modbus_read_holding_regs(north_client, 16, 31090, &ignored, 1),
@@ -480,7 +480,7 @@ ZTEST(points, test_parameters_unknown_format_resets_settings)
 ZTEST(points, test_parameters_business_api_callbacks_and_permissions)
 {
     struct dp_point_update values[2] = {
-        {.key = {1, IDU_SIG_SAMPLE_PERIOD}, .width = 1, .value.words = {750}},
+        {.key = {1, SIGNAL_SAMPLE_PERIOD}, .width = 1, .value.words = {750}},
         {.key = {1, 31100}, .width = 1, .value.words = {42}},
     };
     zassert_equal(dp_params_set_values(values, 2), -ERANGE);
@@ -495,11 +495,11 @@ ZTEST(points, test_parameters_business_api_callbacks_and_permissions)
     zassert_equal(dp_params_set_values(values, 2), -EACCES);
     values[1].key = values[0].key;
     zassert_equal(dp_params_set_values(values, 2), -EINVAL);
-    values[1].key = (struct dp_key){IDU_DEV_REMOTE_IO, IDU_SIG_REMOTE_SETPOINT};
+    values[1].key = (struct dp_key){DEVICE_REMOTE_IO, SIGNAL_REMOTE_SETPOINT};
     unsigned count = co_simulator_write_count(&idu_collect_simulator);
     zassert_equal(dp_params_set_values(values, 2), -EXDEV); /* Mixed local/remote. */
     zassert_equal(co_simulator_write_count(&idu_collect_simulator), count);
-    zassert_ok(dp_params_restore(IDU_DEV_LOCAL));
+    zassert_ok(dp_params_restore(DEVICE_LOCAL));
     zassert_ok(dp_params_read((struct dp_key){1, 31100}, &state));
     zassert_equal(state.value.words[0], 10);
     zassert_ok(dp_params_read((struct dp_key){1, 31101}, &state));
@@ -517,8 +517,8 @@ ZTEST(points, test_parameters_corrupt_value_recovers_valid_history)
     unsigned corruptions = 0;
     for (size_t off = storage->fa_off; off + 16 <= storage->fa_off + storage->fa_size; ++off) {
         if (sys_get_le32(memory + off) == 0x56554449 &&
-            sys_get_le16(memory + off + 6) == IDU_DEV_LOCAL &&
-            sys_get_le16(memory + off + 8) == IDU_SIG_SAMPLE_PERIOD &&
+            sys_get_le16(memory + off + 6) == DEVICE_LOCAL &&
+            sys_get_le16(memory + off + 8) == SIGNAL_SAMPLE_PERIOD &&
             sys_get_le32(memory + off + 12) == seq) {
             memory[off + 12] ^= 0x80; /* Leave NVS metadata intact; data CRC must detect it. */
             ++corruptions;
@@ -569,7 +569,7 @@ ZTEST(points, test_parameters_upgrade_flush_freezes_transactions)
     zassert_ok(dp_params_prepare_reboot());
     update.value.words[0] = 88;
     zassert_equal(dp_params_apply(&update, 1, 0), -EBUSY);
-    zassert_equal(dp_params_restore(IDU_DEV_LOCAL), -EBUSY);
+    zassert_equal(dp_params_restore(DEVICE_LOCAL), -EBUSY);
     zassert_equal(dp_params_reload(), -EBUSY);
     dp_params_cancel_reboot();
     zassert_ok(dp_params_reload());
