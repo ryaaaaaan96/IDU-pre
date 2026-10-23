@@ -7,11 +7,12 @@
 - 用户确认 `io-interface-board` 已在这套实际硬件运行，它是 Zephyr 移植的硬件基准。
   下述上板检查针对 Zephyr 移植，不表示旧硬件方案未经验证。
 - 按用户最新说明，MCU 完整型号修正为 **GD32E505VET6**，外部输入为 **20 MHz 有源时钟**。
-- 启动使用 HXTAL bypass，PLL 为 `20 MHz / 2 * 18 = 180 MHz`，
+- 启动使用 HXTAL bypass，PLL 为 `20 MHz / 5 * 45 = 180 MHz`，
   AHB/APB2 为 180 MHz，APB1 为 90 MHz，ADC 时钟为 APB2 / 6 = 30 MHz。
 - Zephyr 4.4.2 没有 GD32E505 SoC 定义。本应用在 `modules/gd32e505/soc/gd/gd32e505/`
   补充 SoC 定义，复用上游 E50x CPU、GPIO、串口和 SPI 支持。
-  E505 使用 HAL 的 `GD32E50X_XD`，不再沿用旧工程的 `GD32E50X_CL`。
+  E505 使用 HAL 的 `GD32E50X_CL`，与已正常运行的 `GD32E505_Firmware` 工程一致。
+  CL 的 PLLMF 扩展位位于 CFG0 bit29，PREDV0 在 CFG1 配置，不能使用 XD 布局。
 - [GD32E505 模块](../modules/gd32e505/README.md) 通过 `soc_root` 向应用和 MCUboot
   提供芯片接入；PLL 来源、bypass、倍频与 APB 分频由板级 DTS 指定，
   HAL 输入频率由同一设备树生成。IDU 引脚与 Flash 分区仍由板及产品配置决定。
@@ -24,6 +25,34 @@
   检测。待验证的是 Zephyr SPI NOR 驱动的上电、JEDEC/SFDP 和写擦行为。
 - 代码中的引脚定义是 Zephyr 移植依据；参考目录未发现原理图。
   功能说明表中有旧的扩展 DI/DO 介绍，与当前代码不完全一致。
+
+### CL 分支修正与上板检查
+
+最初提交 `70a309c` 错选了 `GD32E50X_XD`，迁入硬件模块后继续沿用。
+旧检查只验证按同一套 HAL 定义计算的频率，没有验证芯片寄存器布局，因而编译通过。
+现在 MCUboot 与应用共用 CL 分支，并采用正常工程的 `20 MHz / 5 ×45` 路径。
+新增 bit29 布局断言，在旧 XD 配置下已确认编译失败。
+
+用户捕获的两组 `E0/00` 可通过接收端以发送端六倍波特率解码
+`01 04 1F D6 00 02 97 E7`、`02 04 1F D6 00 02 97 D4` 逐字节复现。
+同时存在 100 ms 超时约为 607 ms 的现象；这支持时钟偏差判断，但不是硬件实测频率。
+修正后需更新包含 MCUboot 的完整 factory 镜像，不能仅用应用升级来验证启动日志。
+`scripts/flash.sh` 会擦除内部 Flash 后烧录 factory 镜像，外部 SPI NOR 不擦除。
+
+上板使用 PA9 TX、PA10 RX、115200 8N1 检查两个镜像的启动横幅，
+并核对 PA9 单个位宽约为 8.68 µs。可用 GDB 只读检查：
+
+```gdb
+x/2wx 0x40021000
+x/wx 0x4002102c
+x/2wx 0x40013808
+x/2wx 0x40004808
+```
+
+依次为 RCU CTL/CFG0、CFG1、USART0 BAUD/CTL0、USART2 BAUD/CTL0。
+CFG1 的 PREDV0 低四位应为 4（除以 5），PLLPRESEL 和 PREDV0SEL 均为 0；
+16 倍过采样时 USART0 BAUD 应为 `0x61b`，USART2 BAUD 应为 `0x30d`。
+实际启动日志、采集时序及频率仍须在本板验收。
 
 ## 引脚映射
 

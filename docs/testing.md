@@ -8,6 +8,16 @@ AIDC 产品代码、专用测试及导入工具已移除；下方日期章节保
 其中的旧构建命令和文件路径不再作为当前操作入口。
 当前构建入口为 `./applications/IDU-pre/scripts/build.sh`（从工作区根目录运行）；旧记录中的根目录 `build.sh` 已移入 `scripts/`。
 
+## 2026-10-23 修正 E505 HAL 分支与时钟
+
+以正常运行的 `GD32E505_Firmware` 的源码及生成编译参数核对，使用
+`GD32E50X_CL`、20 MHz bypass、PREDV0 `/5`、PLL `×45`。
+先增加 PLLMF[4] bit29 断言，在原 XD 配置下运行时钟检查，确认因指定断言失败；
+修正后 `tests/clock/run.sh` 的 120 MHz、CPU 不匹配和 APB1 超频三项检查通过。
+MCUboot + IAPv3 联合构建与签名校验通过，factory HEX 已重新导出。
+日志为工作区 `build/IDU-pre/clock-hal-red.log`、`clock-hal-green.log` 和
+`clock-hal-build.log`。未执行实板烧录；检查步骤见[硬件说明](hardware.md)。
+
 ## 2026-10-23 大工作缓冲迁移到系统堆
 
 分配与所有权见[内存管理](memory-management.md)。覆盖 DP 样本和业务请求、

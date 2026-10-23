@@ -33,8 +33,9 @@ PLL 的 `clocks` 引用该输入，`hxtal-bypass` 表示有源输入，未设置
 CPU 节点的 `clock-frequency` 必须与计算结果一致；HAL 的 `HXTAL_VALUE`
 由同一 `hxtal` 节点生成。
 
-当前板仍使用 20 MHz bypass、PLL `/2 ×18`、AHB/APB2 180 MHz、APB1 90 MHz。
-支持边界为 HXTAL 4–32 MHz、预分频 1/2、整数倍频 2–63、PLL 输入 2–16 MHz、
+当前板使用 20 MHz bypass、PLL `/5 ×45`、AHB/APB2 180 MHz、APB1 90 MHz，
+与已在本板正常打印的 `GD32E505_Firmware` 工程配置一致。
+支持边界为 HXTAL 4–32 MHz、预分频 1–16、整数倍频 2–63、PLL 输入 2–16 MHz、
 输出/CPU 16–180 MHz，APB1 不超过 90 MHz，APB2 不超过 180 MHz。
 AHB 固定为 `/1`，APB 分频可选 1/2/4/8/16；不提供 IRC、PLL1/2 或 USB 时钟方案。
 不合法的倍频、总线超频和 CPU 频率不一致会在构建时被拒绝。
@@ -74,7 +75,8 @@ PC13 外部看门狗归 [`board.c`](../../boards/idu/idu_pre/board.c)，
 板级选择 `BOARD_EARLY_INIT_HOOK`，在 SoC 初始化之后、`PRE_KERNEL_1`
 之前释放 JTAG、保留 SWD；仅 MCUboot 将 PC13 设为浮空。
 应用通过 `modules/watchdog` 按产品设备树配置启动外部喂狗。
-保留 `GD32E50X_XD` 和 FMC 字对齐编程兼容定义。
+使用 `GD32E50X_CL`，保留 FMC 字对齐编程兼容定义。
+启动代码断言 PLLMF[4] 位于 bit29，拒绝误选 XD 的 bit27 寄存器布局。
 
 `sysbuild/` 保留标准入口，镜像和分区策略在 `bootloader/`。
 自定义 MCUboot overlay 会被保留；调用者需自行包含必要的启动分区布局。

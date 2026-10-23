@@ -15,3 +15,8 @@ CCACHE_DISABLE=1 bash applications/IDU-pre/tests/clock/run.sh
 失败用例同时检查诊断原因，工具链缺失等其他构建错误不算通过。
 输出在 `build/IDU-pre/clock-*`，日志在 `build/IDU-pre/tests/clock-*.log`。
 该脚本只编译，不烧录；本板的实际有源输入仍为 20 MHz。
+
+SoC 另有编译断言：`RCU_CFG0_PLLMF_4 == BIT(29)`，用于拒绝误选 XD 的
+bit27 寄存器布局。修复前保留 XD 编译参数运行此脚本，已确认在该断言处失败；
+切换 CL 后上述三项通过。默认板的 `/5 ×45` 配置由 MCUboot + IAPv3 联合构建验证。
+这些检查不能替代板端频率和串口位宽测量。

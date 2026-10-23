@@ -20,8 +20,8 @@
         #clock-cells = <0>;
         clocks = <&hxtal>;
         hxtal-bypass;
-        prediv = <2>;
-        mul = <18>;
+        prediv = <5>;
+        mul = <45>;
         apb1-prescaler = <2>;
         apb2-prescaler = <1>;
     };

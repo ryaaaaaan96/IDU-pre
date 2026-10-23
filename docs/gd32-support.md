@@ -36,8 +36,9 @@
 
 **为什么目前仍需要自己的 `soc.c`。** 本地 [SoC 启动](../modules/gd32e505/soc/gd/gd32e505/soc.c)、[构建配置](../modules/gd32e505/soc/gd/gd32e505/CMakeLists.txt) 和 [板级 DTS](../boards/idu/idu_pre/idu_pre.dts) 已复用官方类型、HAL 函数、上游 E50x DTS 与 GD32 公共目录，补充以下硬件条件：
 
-- `GD32E50X_XD` 类型选择；`HXTAL_VALUE` 来自设备树，编译断言校验 PLL、CPU 与总线频率。
-- OSC_IN 输入是 20 MHz 有源时钟，需要 HXTAL bypass；PLL 为 `20 / 2 × 18 = 180 MHz`。
+- `GD32E50X_CL` 类型选择，与已运行的 `GD32E505_Firmware` 工程一致；
+  编译断言检查 PLLMF[4] 的 bit29 布局，`HXTAL_VALUE` 来自设备树，并校验 PLL、CPU 与总线频率。
+- OSC_IN 输入是 20 MHz 有源时钟，需要 HXTAL bypass；PLL 为 `20 / 5 × 45 = 180 MHz`。
 - 兼容旧引导程序已经开启 PLL 的情况，先切换并确认 IRC8M，再复位时钟配置。
 - Flash 等待周期、APB 分频、高驱动模式和时钟稳定等待。
 - MCUboot 期间 PC13 外部看门狗的处理属于板级，现由

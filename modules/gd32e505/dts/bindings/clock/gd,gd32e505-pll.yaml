@@ -15,7 +15,8 @@ properties:
   prediv:
     type: int
     required: true
-    enum: [1, 2]
+    enum: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+    description: CL PREDV0 divider, configured in RCU_CFG1.
   mul:
     type: int
     required: true

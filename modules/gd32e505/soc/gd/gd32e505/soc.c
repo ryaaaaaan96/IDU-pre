@@ -5,6 +5,9 @@
 #include <zephyr/devicetree.h>
 #include <zephyr/sys/util.h>
 
+/* E505 uses the CL register layout, including PLLMF[4] at bit 29. */
+BUILD_ASSERT(RCU_CFG0_PLLMF_4 == BIT(29), "E505 requires the CL HAL register layout");
+
 #define PLL_NODE DT_COMPAT_GET_ANY_STATUS_OKAY(gd_gd32e505_pll)
 #define HXTAL_HZ DT_PROP(DT_CLOCKS_CTLR(PLL_NODE), clock_frequency)
 #define PLL_PREDIV DT_PROP(PLL_NODE, prediv)
@@ -60,11 +63,9 @@ void soc_early_init_hook(void)
     rcu_osci_on(RCU_HXTAL);
     wait_ready(&RCU_CTL, RCU_CTL_HXTALSTB, RCU_CTL_HXTALSTB);
 
-    if (PLL_PREDIV == 2) {
-        RCU_CFG0 |= RCU_CFG0_PREDV0;
-    } else {
-        RCU_CFG0 &= ~RCU_CFG0_PREDV0;
-    }
+    rcu_pllpresel_config(RCU_PLLPRESRC_HXTAL);
+    rcu_predv0_config(RCU_PREDV0SRC_HXTAL_IRC48M,
+                     UTIL_CAT(RCU_PREDV0_DIV, PLL_PREDIV));
     rcu_pll_config(RCU_PLLSRC_HXTAL_IRC48M, UTIL_CAT(RCU_PLL_MUL, PLL_MUL));
     rcu_osci_on(RCU_PLL_CK);
     wait_ready(&RCU_CTL, RCU_CTL_PLLSTB, RCU_CTL_PLLSTB);
