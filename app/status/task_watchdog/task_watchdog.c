@@ -1,7 +1,6 @@
 #include "task_watchdog.h"
 #include "internal.h"
 #include <watchdog/watchdog.h>
-#include <zephyr/task_wdt/task_wdt.h>
 #include <errno.h>
 #include <zephyr/sys/reboot.h>
 
@@ -9,6 +8,19 @@ static struct k_spinlock lock;
 static struct watchdog *physical;
 static bool initialized, terminal, fault_valid;
 static struct status_fault_snapshot fault;
+static struct status_task *active;
+static struct k_timer timer;
+
+/* Caller holds lock. A single one-shot timer follows the earliest deadline. */
+static void schedule_next(void)
+{
+    struct status_task *next = NULL;
+    for (struct status_task *task = active; task; task = task->next) {
+        if (!next || task->deadline_ticks < next->deadline_ticks) { next = task; }
+    }
+    if (terminal || !next) { k_timer_stop(&timer); }
+    else { k_timer_start(&timer, K_TIMEOUT_ABS_TICKS(next->deadline_ticks), K_NO_WAIT); }
+}
 
 static int service_error(void)
 {
@@ -29,17 +41,23 @@ static bool trip(struct status_task *task)
         .error = -ETIMEDOUT, .feed_error = 0,
     };
     fault_valid = true;
+    k_timer_stop(&timer);
     watchdog_stop(physical);
     return true;
 }
 
-static void expired(int channel, void *user)
+static void expired(struct k_timer *expired_timer)
 {
-    struct status_task *task = user;
+    ARG_UNUSED(expired_timer);
     k_spinlock_key_t key = k_spin_lock(&lock);
-    bool reset = task->registered && task->channel == channel &&
-        (task->state.flags & STATUS_TASK_ACTIVE) &&
-        k_uptime_ticks() >= task->deadline_ticks && trip(task);
+    struct status_task *first = NULL;
+    int64_t now = k_uptime_ticks();
+    for (struct status_task *task = active; task; task = task->next) {
+        if (task->deadline_ticks <= now &&
+            (!first || task->deadline_ticks < first->deadline_ticks)) { first = task; }
+    }
+    bool reset = first && trip(first);
+    if (!terminal) { schedule_next(); }
     k_spin_unlock(&lock, key);
     if (reset) { sys_reboot(SYS_REBOOT_COLD); }
 }
@@ -48,8 +66,12 @@ int status_tasks_init(struct watchdog *monitor)
 {
     if (!monitor) { return -EINVAL; }
     k_spinlock_key_t key = k_spin_lock(&lock);
-    int err = terminal ? -ECANCELED : initialized ? -EALREADY : task_wdt_init(NULL);
-    if (!err) { physical = monitor; initialized = true; }
+    int err = terminal ? -ECANCELED : initialized ? -EALREADY : 0;
+    if (!err) {
+        k_timer_init(&timer, expired, NULL);
+        physical = monitor;
+        initialized = true;
+    }
     k_spin_unlock(&lock, key);
     return err;
 }
@@ -58,6 +80,7 @@ void status_tasks_stop(struct watchdog *monitor)
 {
     k_spinlock_key_t key = k_spin_lock(&lock);
     terminal = true;
+    if (initialized) { k_timer_stop(&timer); }
     watchdog_stop(monitor);
     k_spin_unlock(&lock, key);
 }
@@ -73,19 +96,15 @@ int status_register(struct status_task *task, const struct status_task_config *c
         err = -EALREADY;
     }
     if (!err) {
-        int64_t now = k_uptime_get();
-        int64_t due = k_uptime_ticks() + k_ms_to_ticks_ceil64(config->timeout_ms);
-        int channel = task_wdt_add(config->timeout_ms, expired, task);
-        if (channel < 0) { err = channel; }
-        else {
-            task->state = (struct status_task_snapshot){
-                .name = config->name, .timeout_ms = config->timeout_ms,
-                .last_feed_ms = now, .flags = STATUS_TASK_ACTIVE,
-            };
-            task->deadline_ticks = due;
-            task->channel = channel;
-            task->registered = true;
-        }
+        task->state = (struct status_task_snapshot){
+            .name = config->name, .timeout_ms = config->timeout_ms,
+            .last_feed_ms = k_uptime_get(), .flags = STATUS_TASK_ACTIVE,
+        };
+        task->deadline_ticks = k_uptime_ticks() + k_ms_to_ticks_ceil64(config->timeout_ms);
+        task->next = active;
+        active = task;
+        task->registered = true;
+        schedule_next();
     }
     k_spin_unlock(&lock, key);
     return err;
@@ -105,10 +124,9 @@ int status_feed(struct status_task *task)
         err = -ETIMEDOUT;
     }
     if (!err) {
-        int64_t now = k_uptime_get();
-        int64_t due = k_uptime_ticks() + k_ms_to_ticks_ceil64(task->state.timeout_ms);
-        err = task_wdt_feed(task->channel);
-        if (!err) { task->state.last_feed_ms = now; task->deadline_ticks = due; }
+        task->state.last_feed_ms = k_uptime_get();
+        task->deadline_ticks = k_uptime_ticks() + k_ms_to_ticks_ceil64(task->state.timeout_ms);
+        schedule_next();
     }
     k_spin_unlock(&lock, key);
     if (reset) { sys_reboot(SYS_REBOOT_COLD); }
@@ -147,11 +165,12 @@ int status_sleep_forever(struct status_task *task)
             reset = trip(task);
             err = -ETIMEDOUT;
         } else {
-            err = task_wdt_delete(task->channel);
-            if (!err) {
-                task->state.flags = STATUS_TASK_SLEEP_FOREVER;
-                task->channel = -1;
-            }
+            struct status_task **link = &active;
+            while (*link != task) { link = &(*link)->next; }
+            *link = task->next;
+            task->next = NULL;
+            task->state.flags = STATUS_TASK_SLEEP_FOREVER;
+            schedule_next();
         }
     }
     k_spin_unlock(&lock, key);

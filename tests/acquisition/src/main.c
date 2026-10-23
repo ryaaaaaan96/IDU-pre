@@ -12,6 +12,7 @@
 #include <iap/iap.h>
 #include <zephyr/drivers/led.h>
 #include <watchdog/watchdog.h>
+#include "status/task_watchdog/internal.h"
 #include <zephyr/ztest.h>
 #include <zephyr/storage/flash_map.h>
 #include <string.h>
@@ -140,6 +141,8 @@ int iap_init(void) { return service(IAP_INIT); }
 int protocol_forwarding_init(void) { return service(FORWARD_INIT); }
 int watchdog_error(struct watchdog *monitor) { ++checks; return service(WATCHDOG_CHECK); }
 void watchdog_stop(struct watchdog *monitor) { ++stops; }
+int status_tasks_init(struct watchdog *monitor) { ARG_UNUSED(monitor); return 0; }
+void status_tasks_stop(struct watchdog *monitor) { watchdog_stop(monitor); }
 
 static int output_led(bool on)
 {

@@ -1,17 +1,19 @@
 # 按需登记的多任务看门狗
 
-状态：已实施，完整回归、当前固件构建和两轴代码审查通过；实板验证未执行。依据[正式规格](../.scratch/task-watchdog/spec.md)、
+状态：已按用户要求将期限检测迁入应用层，当前验证见[应用层实现记录](../.scratch/task-watchdog/application-timer.md)；实板验证未执行。依据[正式规格](../.scratch/task-watchdog/spec.md)、
 [边界问答](../.scratch/task-watchdog/discussion.md)与 [ADR 0009](adr/0009-opt-in-task-watchdog.md)。
 本轮没有给现有业务任务登记；监控仅由调用者显式启用。
 
 ## 管理职责
 
 `app/status` 统一编排任务监控、RAM 诊断、故障锁存及重启动作。
-多通道超时检测使用当前 Zephyr 的 Task Watchdog，GPIO 喂狗继续由底层模块执行。
+任务登记、心跳、永久休眠和超时检测均由应用层实现；仅复用 Zephyr 内核定时器和锁，GPIO 喂狗继续由底层模块执行。
 任务通过 `status` 接口显式登记和报告进展；通用模块后续通过应用注册的健康回调接入，保持与产品头文件分离。
 
 GPIO 喂狗周期与任务超时时间分别配置。任务期限由调用者在登记时传入，
-登记容量通过 Kconfig / `.conf` 手动配置，不按固件类型预设任务清单。
+活动任务通过调用者提供的常驻上下文串联，不预留固定通道、不分配堆内存，不需要任务看门狗功能或容量配置。
+一个单次内核定时器跟踪最早到期项；登记、心跳、休眠后重新选择期限。无活动项时停止此定时器，外部 GPIO 喂狗仍继续。
+每次重排需要遍历活动任务，开销随登记任务数线性增加；不为每个任务创建线程或定时器。
 本轮不扫描线程，不维护应启动任务清单，也不检查登记遗漏。
 
 ## 喂狗规则
@@ -70,17 +72,16 @@ status_sleep_forever(&task);
 status_register(&task, &config); /* 永久休眠后的恢复。 */
 ```
 
-调用者持有常驻的任务上下文和名称，检查登记结果；底层通道编号由 `status` 管理。
+调用者持有常驻的任务上下文和名称，检查登记结果；活动链表及期限由 `status` 管理。
 公开头文件为 `status/task_watchdog/task_watchdog.h`。任务配置包含 `name` 和 `timeout_ms`，
 任务上下文只需零初始化一次，其字段由接口维护；配置值被复制，但名称必须保持有效。
 `status_task_get()` 返回任务快照，`status_fault_get()` 返回首个故障及物理后端错误。
 两种查询均不改变状态，也可在 ISR 中使用；没有相应记录时返回 `-ENOENT`。
 登记、心跳与休眠成功调用限线程上下文；全局故障后返回 `-ECANCELED`，活动重复登记返回
-`-EALREADY`，容量不足返回 `-ENOMEM`，休眠或未登记对象的心跳返回 `-EACCES`。
+`-EALREADY`，休眠或未登记对象的心跳返回 `-EACCES`。
 
-产品 Kconfig 通过 `IDU_PRE` 自动选择 `TASK_WDT`，无需在产品 `.conf` 再写 `CONFIG_TASK_WDT=y`。
-`.conf` 仅手动设置 `CONFIG_TASK_WDT_CHANNELS=2`，并关闭 `CONFIG_TASK_WDT_HW_FALLBACK`。
-两个槽是容量，不是两个已登记任务；扩展时手动调整。独立 status 测试不加载产品 Kconfig，仍自行启用该依赖。
+不依赖 Zephyr Task Watchdog 子系统，产品与测试均不配置 `CONFIG_TASK_WDT*`。
+应用构建始终包含此功能，软件复位依赖由产品 Kconfig 的 `REBOOT` 选择提供。
 底层 GPIO 后端通过 `watchdog_error()` 查询状态，不再通过进展通知刷新单一主循环期限。
 
 ## 诊断与故障处理
@@ -88,9 +89,9 @@ status_register(&task, &config); /* 永久休眠后的恢复。 */
 RAM 中保存当前登记状态、任务名、期限、最后心跳、永久休眠标志和首个超时任务，提供查询。
 普通 RAM 记录在重启后清空，不提供跨重启保存；故障路径不写 Flash。
 
-Task Watchdog 超时回调运行在计时器中断上下文，实现中只执行安全的故障锁存、停喂和复位。
+应用内核定时器的超时回调运行在中断上下文，实现中只执行安全的故障锁存、停喂和复位。
 不从该回调直接调用包含 LED 操作的完整 `status_fail()`，也不等待其他任务、工作队列或日志落盘。
-当前 GPIO 看门狗封装不是 Zephyr watchdog device，不能直接作为 Task Watchdog 的原生硬件 fallback。
+当前 GPIO 看门狗封装不是 Zephyr watchdog device，不通过原生硬件 watchdog fallback 接口接入。
 这里的外狗保障是：故障回调先停喂，即使后续软件复位未完成，也保持停喂。
 保留 MCUboot 将 PC13 浮空禁用外狗、应用重新启用的板级交接。
 
@@ -104,14 +105,14 @@ Task Watchdog 超时回调运行在计时器中断上下文，实现中只执行
 
 ## 实施验收
 
-详细结果及命令见[验收记录](../.scratch/task-watchdog/validation.md)，审查结论见[两轴审查](../.scratch/task-watchdog/review.md)。
+当前结果及命令见[应用层实现记录](../.scratch/task-watchdog/application-timer.md)。原三任务的[验收记录](../.scratch/task-watchdog/validation.md)和[两轴审查](../.scratch/task-watchdog/review.md)保留为迁移前证据。
 
 - 零活动登记项持续喂狗；全部永久休眠时同样持续喂狗。
 - 多任务独立期限互不代喂，任一超时触发停喂及软件复位。
 - 正常休眠和事件空闲不误报；迟到心跳不能恢复已锁存故障。
-- 永久休眠标志、重新登记、重复登记、容量不足及无效参数符合约定。
+- 永久休眠标志、重新登记、重复登记、批量登记及无效参数符合约定。
 - RAM 查询反映当前状态及首个故障；不产生跨重启存储记录。
 - 现有任务保持未登记，不产生隐藏的主循环或 DP 任务超时约束。
 - 区分主机/native 验证与实板 GPIO 波形、外部看门狗和复位链验证。
 
-底层公开能力参考 [Zephyr Task Watchdog](https://docs.zephyrproject.org/latest/services/task_wdt/index.html)。
+实现位于 `app/status/task_watchdog/`；不改动上游 Zephyr 或通用 GPIO 看门狗模块。

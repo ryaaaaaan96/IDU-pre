@@ -89,7 +89,7 @@ ZTEST(task_watchdog, test_zero_registered_continues_past_legacy_timeout)
     status_set_phase(&application, STATUS_CHECKING_HEALTH);
     zassert_ok(status_progress(&application));
 }
-ZTEST(task_watchdog, test_registration_validation_and_capacity)
+ZTEST(task_watchdog, test_registration_validation_without_fixed_capacity)
 {
     struct status_task_config config = {.name = "first", .timeout_ms = 2000};
     zassert_equal(status_feed(&extra), -EACCES);
@@ -114,8 +114,15 @@ ZTEST(task_watchdog, test_registration_validation_and_capacity)
     zassert_equal(after.last_feed_ms, before.last_feed_ms);
     config.timeout_ms = 2000;
     zassert_ok(status_register(&second, &config));
-    zassert_equal(status_register(&extra, &config), -ENOMEM);
-    zassert_equal(status_task_get(&extra, &after), -ENOENT);
+    zassert_ok(status_register(&extra, &config));
+    static struct status_task additional[16];
+    for (size_t i = 0; i < ARRAY_SIZE(additional); ++i) {
+        zassert_ok(status_register(&additional[i], &config));
+        zassert_ok(status_feed(&additional[i]));
+    }
+    for (size_t i = 0; i < ARRAY_SIZE(additional); ++i) {
+        zassert_ok(status_sleep_forever(&additional[i]));
+    }
     zassert_equal(status_task_get(NULL, &after), -EINVAL);
     zassert_equal(status_fault_get(NULL), -EINVAL);
 }
@@ -160,7 +167,7 @@ ZTEST(task_watchdog, test_permanent_sleep_and_explicit_reregistration)
     zassert_ok(status_feed(&first));
     zassert_ok(status_sleep_forever(&first));
 }
-ZTEST(task_watchdog, test_failed_resume_preserves_sleep_and_reused_channels)
+ZTEST(task_watchdog, test_invalid_resume_preserves_sleep_and_other_tasks)
 {
     struct status_task_config config = {.name = "sleeping", .timeout_ms = 100};
     zassert_ok(status_register(&first, &config));
@@ -168,8 +175,8 @@ ZTEST(task_watchdog, test_failed_resume_preserves_sleep_and_reused_channels)
     config.name = "peer"; config.timeout_ms = 1000;
     zassert_ok(status_register(&second, &config));
     zassert_ok(status_register(&extra, &config));
-    config.name = "resume"; config.timeout_ms = 300;
-    zassert_equal(status_register(&first, &config), -ENOMEM);
+    config.name = "resume"; config.timeout_ms = 0;
+    zassert_equal(status_register(&first, &config), -EINVAL);
     struct status_task_snapshot state;
     zassert_ok(status_task_get(&first, &state));
     zassert_str_equal(state.name, "sleeping");
@@ -177,6 +184,7 @@ ZTEST(task_watchdog, test_failed_resume_preserves_sleep_and_reused_channels)
     zassert_equal(state.flags, STATUS_TASK_SLEEP_FOREVER);
     zassert_equal(status_feed(&first), -EACCES);
     zassert_ok(status_sleep_forever(&second));
+    config.timeout_ms = 300;
     zassert_ok(status_register(&first, &config));
     zassert_equal(status_feed(&second), -EACCES);
     k_sleep(K_MSEC(180));
@@ -211,6 +219,35 @@ ZTEST(task_watchdog, test_sleep_does_not_protect_peer_stops_and_reboots)
     expected = &first;
     k_sleep(K_MSEC(300));
     zassert_unreachable("Peer task did not time out");
+}
+
+ZTEST(task_watchdog, test_feeding_earliest_preserves_peer_deadline_stops_and_reboots)
+{
+    struct status_task_config config = {.name = "fed", .timeout_ms = 80};
+    zassert_ok(status_register(&first, &config));
+    config.name = "silent"; config.timeout_ms = 120;
+    zassert_ok(status_register(&second, &config));
+    expected = &second;
+    k_sleep(K_MSEC(60));
+    zassert_ok(status_feed(&first));
+    k_sleep(K_MSEC(200));
+    zassert_unreachable("Feeding the earliest task hid its peer deadline");
+}
+
+ZTEST(task_watchdog, test_sleeping_earliest_preserves_peer_deadline_stops_and_reboots)
+{
+    struct status_task_config config = {.name = "sleeping", .timeout_ms = 80};
+    zassert_ok(status_register(&first, &config));
+    config.name = "silent"; config.timeout_ms = 120;
+    zassert_ok(status_register(&second, &config));
+    expected = &second;
+    zassert_ok(status_sleep_forever(&first));
+    k_sleep(K_MSEC(100));
+    struct status_task_snapshot snapshot;
+    zassert_ok(status_task_get(&second, &snapshot));
+    zassert_equal(snapshot.flags, STATUS_TASK_ACTIVE);
+    k_sleep(K_MSEC(100));
+    zassert_unreachable("Sleeping the earliest task cancelled its peer deadline");
 }
 
 static struct k_thread worker;

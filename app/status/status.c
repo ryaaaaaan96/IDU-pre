@@ -1,7 +1,5 @@
 #include "status/status.h"
-#ifdef CONFIG_TASK_WDT
 #include "task_watchdog/internal.h"
-#endif
 #ifdef CONFIG_BOOTLOADER_MCUBOOT
 #include <dataprocess/params.h>
 #endif
@@ -50,9 +48,7 @@ int status_init(struct application_status *status)
     status->phase = STATUS_STARTING;
     int err = watchdog_init(&monitor, &watchdog);
 
-#ifdef CONFIG_TASK_WDT
     if (!err) { err = status_tasks_init(&monitor); }
-#endif
 
     if (!err && !led_is_ready_dt(&run_led)) {
         err = -ENODEV;
@@ -105,11 +101,7 @@ void status_fail(struct application_status *status, enum status_phase phase, int
     status->fault_phase = phase;
     status->last_error = error;
     status->phase = STATUS_FAULT_LOCKED;
-#ifdef CONFIG_TASK_WDT
     status_tasks_stop(&monitor);
-#else
-    watchdog_stop(&monitor);
-#endif
     /* Best effort fault indication must not replace the original failure. */
     if (led_is_ready_dt(&run_led)) {
         (void)set_run_led(status, true);
