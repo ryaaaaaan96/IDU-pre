@@ -1,6 +1,7 @@
 # WSL 与 J-Link 官方资料核对
 
 供[操作方案](wsl-jlink.md)引用；核对日期：2026-10-23。这里只记录资料与推导，未安装软件、改变 Windows 配置或烧录实板。
+最新型号按用户后续说明修正为 GD32E505VET6；下方 VET7 相关段落保留原始输入与排查过程。
 
 ## 连接路径
 
@@ -56,3 +57,18 @@ SEGGER 当前公开列表包含 GD32E505VET6，但没有列出完整 VET7 型号
 本地 `scripts/west_commands/runners/jlink.py` 支持 `--gdb-host`；attach 仅连接，debug 会附加 `load`；即使远程连接仍先检查本地 Commander/共享库与 pylink。`debugserver` 拒绝 `--gdb-host`。自定义板目前没有 board.cmake 与生成的 runners.yaml，west runner 尚未接入，直接 SDK GDB 不受此限制。[Zephyr west 工作流](https://docs.zephyrproject.org/latest/develop/west/build-flash-debug.html)
 
 Zephyr 自身 `CONFIG_GDBSTUB` 是目标固件内的调试服务，当前文档说明其后端为串口；本方案采用 Windows J-Link 提供 TCP RSP，不启用目标 gdbstub。[Zephyr GDB stub](https://docs.zephyrproject.org/latest/services/debugging/gdbstub.html)
+
+
+## V8.78 设备索引错误修正
+
+用户实测日志已复现 `GD32E505VET7` 名称查找失败；失败发生在 USB 探针连接成功之后。
+随后仅加载本机 `JLink_x64.dll`，调用 `JLINKARM_DEVICE_GetIndex()`：VET7 返回 -1，`GD32E505VE` 与 `GD32E505VET6` 均返回 974，未调用打开探针或连接目标的接口。
+因此默认调试配置改为 `GD32E505VE`，实际产品仍为 GD32E505VET7。前面的字符串证据已由本次运行时名称索引证据补充；此前“通用映射待确认”仅描述当时状态。
+该查询不证明实板连接或下载成功，仍待用户验证。
+
+
+## 最终型号按用户说明修正为 T6
+
+用户后续说明“应该是 T6”，因此脚本默认值及当前操作说明统一采用 `GD32E505VET6`。
+此完整名称已由本机 V8.78 设备索引查询确认，索引为 974；相应温度档按厂家表 6-1 改为 -40…+85°C。
+前面先使用通用 VE 名称的排查方案由该最终默认值替代；VET7 错误日志保留为历史证据。

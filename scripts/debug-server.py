@@ -10,7 +10,8 @@ import subprocess
 import sys
 
 
-DEFAULT_DEVICE = "GD32E505VET7"
+# Target corrected to GD32E505VET6; this exact name is recognized by J-Link V8.78.
+DEFAULT_DEVICE = "GD32E505VET6"
 DEFAULT_PORT = 2331
 DEFAULT_SPEED_KHZ = 1000
 
@@ -52,7 +53,7 @@ def main():
                "installation needs a confirmed generic mapping. See docs/wsl-jlink.md.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--device", default=DEFAULT_DEVICE, help="J-Link device name")
+    parser.add_argument("--device", default=DEFAULT_DEVICE, help="J-Link debug profile (target: GD32E505VET6)")
     parser.add_argument("--jlink-dir", type=Path, help="Installation directory (auto-detected)")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="GDB TCP port")
     parser.add_argument("--speed", type=int, default=DEFAULT_SPEED_KHZ, help="SWD clock in kHz")

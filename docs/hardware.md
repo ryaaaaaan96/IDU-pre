@@ -6,7 +6,7 @@
 
 - 用户确认 `io-interface-board` 已在这套实际硬件运行，它是 Zephyr 移植的硬件基准。
   下述上板检查针对 Zephyr 移植，不表示旧硬件方案未经验证。
-- 用户确认 MCU 完整型号为 **GD32E505VET7**，外部输入为 **20 MHz 有源时钟**。
+- 按用户最新说明，MCU 完整型号修正为 **GD32E505VET6**，外部输入为 **20 MHz 有源时钟**。
 - 启动使用 HXTAL bypass，PLL 为 `20 MHz / 2 * 18 = 180 MHz`，
   AHB/APB2 为 180 MHz，APB1 为 90 MHz，ADC 时钟为 APB2 / 6 = 30 MHz。
 - Zephyr 4.4.2 没有 GD32E505 SoC 定义。本应用在 `modules/gd32e505/soc/gd/gd32e505/`
@@ -18,8 +18,8 @@
   MCUboot 的 PC13 浮空操作在 [板级早期钩子](../boards/idu/idu_pre/board.c) 中，
   于 SoC 时钟初始化后、设备初始化和镜像交换前执行；应用由 `status_init()` 启用喂狗。
   应用和 MCUboot 都在该钩子释放 JTAG、保留 SWD，供 PA15 用作 RS485 DE。
-- 用户补充的 GD32E505VET7 对应官方手册表 2-1、6-1 的 512 KB Flash、128 KB SRAM、LQFP100，
-  与当前容量配置一致；T7 为 -40…+105°C 温度档。调试器器件名称的支持范围另见 [J-Link 方案](wsl-jlink.md)。
+- 用户最新说明的 GD32E505VET6 对应官方手册表 2-1、6-1 的 512 KB Flash、128 KB SRAM、LQFP100，
+  与当前容量配置一致；T6 为 -40…+85°C 温度档。调试器器件名称的支持范围另见 [J-Link 方案](wsl-jlink.md)。
 - 外部 Flash 按旧代码的 4 MB W25Q32、SPI mode 3 设置；驱动用 SFDP
   检测。待验证的是 Zephyr SPI NOR 驱动的上电、JEDEC/SFDP 和写擦行为。
 - 代码中的引脚定义是 Zephyr 移植依据；参考目录未发现原理图。

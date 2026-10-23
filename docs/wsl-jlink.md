@@ -13,7 +13,7 @@ Windows JLinkGDBServerCL.exe
               │ USB
            J-Link
               │ SWD + GND + VTref + 建议 NRST
-       GD32E505VET7 / IDU
+       GD32E505VET6 / IDU
 ```
 
 ## 使用项目脚本
@@ -29,19 +29,19 @@ Windows JLinkGDBServerCL.exe
 py .\scripts\debug-server.py
 ```
 
-默认器件为用户确认的 `GD32E505VET7`，端口 2331、SWD 1000 kHz，自动查找 J-Link。无需交互输入；默认值也集中在脚本顶部，可手动修改。
-脚本不会自动替换器件名。若当前 J-Link 不识别完整型号，按下文先核对通用映射，再用 `--device` 覆盖。
-若需要直接指定并预览参数，可执行（下面仅示例已确认通用映射的情况）：
+按用户最新说明，目标型号及脚本默认调试器件名均为 `GD32E505VET6`，端口 2331、SWD 1000 kHz，自动查找 J-Link。无需交互输入；默认值集中在脚本顶部，可手动修改。
+当前 V8.78 设备库已识别此完整名称，可用 `--device` 显式覆盖；脚本不自动重试其他设备名称。
+直接指定并预览参数：
 
 ```powershell
-py .\scripts\debug-server.py --device GD32E505VE --dry-run
-py .\scripts\debug-server.py --device GD32E505VE
+py .\scripts\debug-server.py --device GD32E505VET6 --dry-run
+py .\scripts\debug-server.py --device GD32E505VET6
 ```
 
 Windows 安装目录自动从 PATH、注册表或 Program Files 下定位，也可显式填写：
 
 ```powershell
-py .\scripts\debug-server.py --device GD32E505VE --jlink-dir 'C:\Program Files\SEGGER\JLink_V878' --port 2331 --speed 1000
+py .\scripts\debug-server.py --device GD32E505VET6 --jlink-dir 'C:\Program Files\SEGGER\JLink_V878' --port 2331 --speed 1000
 ```
 
 默认允许远程连接，用于 NAT WSL；mirrored 模式可增加 `--localhost-only`。
@@ -74,7 +74,7 @@ Windows 端保留寄存器、不主动复位，但启动后会 halt；长期暂�
 
 ## 已核实的本机条件
 
-- 用户确认 MCU 为 **GD32E505VET7**。官方数据手册表 2-1、6-1 对应 512 KB Flash、128 KB SRAM、LQFP100，T7 为 -40…+105°C 温度档。[GD32E505 Rev2.3](https://www.gd32mcu.com/data/documents/datasheet/GD32E505xx_Datasheet_Rev2.3.pdf)
+- 按用户最新说明，目标 MCU 修正为 **GD32E505VET6**。官方数据手册表 2-1、6-1 对应 512 KB Flash、128 KB SRAM、LQFP100，T6 为 -40…+85°C 温度档。[GD32E505 Rev2.3](https://www.gd32mcu.com/data/documents/datasheet/GD32E505xx_Datasheet_Rev2.3.pdf)
 - 当前为 WSL2，Windows 已安装 `C:\Program Files\SEGGER\JLink_V878`。
 - WSL 已有可运行的 GDB：`/home/ryan/Tools/toolchain/zephyr-sdk-1.0.1/gnu/arm-zephyr-eabi/bin/arm-zephyr-eabi-gdb`。
 - `/etc/wsl.conf` 的 `appendWindowsPath=false`，因此 WSL 中找不到 `powershell.exe` 的短命令并不代表 Windows 没有安装它；下面 Windows 命令在 Windows PowerShell 执行。
@@ -119,13 +119,21 @@ WSL 的 GDB 此时可用 `info threads`、`thread <编号>`、`thread apply all 
 
 本项目早期钩子释放 JTAG、保留 SWD；请选 **SWD**，初始速度建议 **1000 kHz**。连接不稳定时降至 100–400 kHz。
 
-设备名称需要单独核对：当前 [SEGGER 公开列表](https://www.segger.com/supported-devices/gigadevice/)列出 `GD32E505VET6` 等，未确认精确 `GD32E505VET7`。
-本机 V8.78 DLL 的只读字符串检查发现 `GD32E505VE`、`GD32E505VET6`，未发现 `GD32E505VET7`；字符串不能代替运行时设备列表。
-先在 Windows **J-Link GDB Server GUI** 的设备选择器中搜索完整型号；若没有，再核对是否提供通用 `GD32E505VE` 的 512 KB 配置。
-通用配置只有在当前安装实际接受、容量及连接行为匹配后才使用；若仍不确定，升级 J-Link 或向 SEGGER 确认映射，不选别的芯片系列作为 Flash loader。
-厂家手册显示 VET6/VET7 的容量和封装相同、温度档不同，但这不等于 SEGGER 对 VET7 做过独立验证。
+按用户最新修正，目标及 J-Link 默认设备名统一为 **GD32E505VET6**。
+用户实板日志中，探针已成功连接，随后报 `Failed to get index for device name 'GD32E505VET7'`；这是设备库名称查找失败，尚不能据此判断板端供电或 SWD 连线。
 
-下面 `$device` 必须填上述步骤确认的 J-Link 名称，不能把占位符直接执行。
+本机 Windows Python 使用 `JLINKARM_DEVICE_GetIndex()` 只读查询 V8.78 DLL，结果为：
+
+| 名称 | 设备索引 |
+| --- | ---: |
+| GD32E505VET7 | -1（不识别） |
+| GD32E505VE | 974 |
+| GD32E505VET6 | 974 |
+
+相同索引说明两个受支持名称指向同一库项。官方数据手册中 VET6/VET7 同为 E505、512 KB Flash、128 KB SRAM、LQFP100，温度档不同；根据最新型号说明直接采用 VET6 完整配置。
+来源：[厂家数据手册](https://www.gd32mcu.com/data/documents/datasheet/GD32E505xx_Datasheet_Rev2.3.pdf)、[SEGGER 支持表](https://www.segger.com/supported-devices/gigadevice/)及上述本机索引查询。
+
+这验证了设备名可识别，尚未验证该配置连接实板成功。下面 `$device` 在本机 V8.78 填 `GD32E505VET6`；其他目标或库版本按设备选择器与容量核对。
 
 ## 2. Windows 启动 GDB Server
 
@@ -133,12 +141,12 @@ Windows PowerShell：
 
 ```powershell
 $server = 'C:\Program Files\SEGGER\JLink_V878\JLinkGDBServerCL.exe'
-$device = '<设备选择器确认的名称>'
+$device = 'GD32E505VET6'
 $rtos = 'C:\Program Files\SEGGER\JLink_V878\GDBServer\RTOSPlugin_Zephyr.dll'
 & $server -device $device -if SWD -endian little -speed 1000 -port 2331 -LocalhostOnly 1 -noir -noreset -halt -rtos $rtos
 ```
 
-例如实际确认了通用配置后，变量可填 `$device = 'GD32E505VE'`。
+此名称已通过当前 V8.78 设备索引查询。
 仅一只探针时无需选择序号；多只时增加 `-USB <探针序列号>`。GUI 中也可选探针、设备和 SWD，再等待连接。
 `-noir -noreset` 用于保留运行现场，服务器启动仍会 halt；这一步本身也可能因外部看门狗而复位，参见第 6 节。
 参数含义见 [SEGGER 参数说明](https://kb.segger.com/J-Link_GDB_Server#Command_line_options)。
@@ -343,7 +351,7 @@ MCUboot 早期将 PC13 浮空以禁用外狗，应用 `status_init()` 又恢复�
 | --- | --- |
 | 无法连接 TCP 2331 | Windows Server 是否监听；NAT/mirrored 地址是否正确；localhost-only 与窄范围防火墙规则 |
 | Server 找不到 J-Link | Windows 驱动、USB 占用；退出 Commander/J-Flash；不要同时将探针 attach 到 WSL |
-| Unknown device | 第 1 节设备选择器；VET7 未确认精确名称，不套用其他系列 |
+| Unknown device / Failed to get index | 当前 V8.78 使用 `GD32E505VET6`；更新 Windows 上复制的脚本或传 `--device GD32E505VET6` |
 | VTref=0 或无法连接目标 | 目标供电、公共地、SWDIO/SWCLK、NRST、降低 SWD 速度 |
 | 一暂停就复位 | 外部看门狗，按第 6 节处理 |
 | 跳转地址异常或 MCUboot 拒绝启动 | 用匹配密钥和本次签名 HEX，检查外部镜像交换状态，不用裸 ELF 覆盖 slot0 |
