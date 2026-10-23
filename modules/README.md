@@ -10,6 +10,10 @@ module metadata for integration with Zephyr 4.4.2. See
 [architecture and application integration](../docs/collect-process-transmit.md).
 No legacy platform library is linked.
 
+Large runtime work buffers use Zephyr `k_malloc()` / `k_free()`. See
+[memory ownership and heap budgets](../docs/memory-management.md) for lifetimes,
+failure handling and application sizing; const point tables remain in Flash.
+
 Business-facing headers keep the reference names `data_process.h`,
 `collect_lib.h`, `transmit_lib.h` and `platform_callback.h`. They use standard C
 and Zephyr types directly; no ARC layer is implemented. Original and native

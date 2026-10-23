@@ -586,26 +586,29 @@ bool tr_modbus_write_request(struct modbus_context *ctx, bool *reply)
         return true; /* Parameter broadcasts have no side effects. */
     }
     int err = -EINVAL;
-    uint16_t words[123];
+    uint16_t *words = NULL;
     uint16_t address = 0;
     uint16_t count = 0;
     if (rx->fc == 6 && rx->length == 4) {
         address = sys_get_be16(rx->data);
         count = 1;
-        words[0] = sys_get_be16(rx->data + 2);
         err = 0;
     } else if (rx->fc == 16 && rx->length >= 7) {
         address = sys_get_be16(rx->data);
         count = sys_get_be16(rx->data + 2);
-        if (count && count <= ARRAY_SIZE(words) && rx->data[4] == count * 2 &&
+        if (count && count <= 123 && rx->data[4] == count * 2 &&
             rx->length == 5 + count * 2 && (uint32_t)address + count <= 65536) {
-            for (unsigned i = 0; i < count; ++i) {
-                words[i] = sys_get_be16(rx->data + 5 + i * 2);
-            }
             err = 0;
         }
     }
     if (!err) {
+        words = k_malloc(count * sizeof(*words));
+        if (!words) { err = -ENOMEM; }
+    }
+    if (!err) {
+        for (unsigned i = 0; i < count; ++i) {
+            words[i] = sys_get_be16(rx->data + (rx->fc == 6 ? 2 : 5) + i * 2);
+        }
         routes[iface].caller = k_current_get();
         err = writers[iface](address, words, count);
         routes[iface].caller = NULL;
@@ -619,6 +622,7 @@ bool tr_modbus_write_request(struct modbus_context *ctx, bool *reply)
         sys_put_be16(address, ctx->tx_adu.data);
         sys_put_be16(rx->fc == 6 ? words[0] : count, ctx->tx_adu.data + 2);
     }
+    k_free(words);
     return true;
 }
 

@@ -27,13 +27,8 @@ static const struct dp_equip_cfg *equipment;
 static uint16_t defs[CONFIG_DP_PARAMS_MAX_COUNT];
 /* The compound literal lives in the caller's block; no descriptor is retained. */
 #define PARAM_DEF(i) dp_config_point(equipment, defs[i], &(struct dp_point_cfg){0})
-static struct dp_point_state cache[CONFIG_DP_PARAMS_MAX_COUNT];
 static size_t param_count;
-static struct dp_value staged[CONFIG_DP_PARAMS_MAX_COUNT];
 /* durable never follows transient NO_STORE cache writes. */
-static struct dp_value durable[CONFIG_DP_PARAMS_MAX_COUNT];
-static struct dp_value durable_stage[CONFIG_DP_PARAMS_MAX_COUNT];
-static struct dp_value deferred[CONFIG_DP_PARAMS_MAX_COUNT];
 static bool dirty[CONFIG_DP_PARAMS_MAX_COUNT];
 static int64_t flush_at;
 static uint8_t operation_flags;
@@ -44,8 +39,16 @@ static struct dp_params_transport transport;
 static bool stored[CONFIG_DP_PARAMS_MAX_COUNT];
 static struct dp_param_status status;
 /* Scratch space is serialized by transaction_lock, never borrowed by readers. */
-static uint8_t commit_image[IMAGE_MAX];
-static uint8_t intent[INTENT_MAX];
+struct parameter_buffers {
+    struct dp_point_state cache[CONFIG_DP_PARAMS_MAX_COUNT];
+    struct dp_value staged[CONFIG_DP_PARAMS_MAX_COUNT];
+    struct dp_value durable[CONFIG_DP_PARAMS_MAX_COUNT];
+    struct dp_value durable_stage[CONFIG_DP_PARAMS_MAX_COUNT];
+    struct dp_value deferred[CONFIG_DP_PARAMS_MAX_COUNT];
+    uint8_t commit_image[IMAGE_MAX];
+    uint8_t intent[INTENT_MAX];
+};
+static struct parameter_buffers *buffers;
 static size_t intent_length;
 static uint16_t old_wire[DP_TRANSFER_WORDS], new_wire[DP_TRANSFER_WORDS], actual[DP_TRANSFER_WORDS];
 K_MUTEX_DEFINE(transaction_lock);
@@ -197,7 +200,7 @@ int dp_params_read(struct dp_key key, struct dp_point_state *out)
         return i < 0 ? i : -EINVAL;
     }
     k_mutex_lock(&cache_lock, K_FOREVER);
-    *out = cache[i];
+    *out = buffers->cache[i];
     k_mutex_unlock(&cache_lock);
     return 0;
 }
@@ -206,8 +209,8 @@ static void stage_cache(void)
 {
     k_mutex_lock(&cache_lock, K_FOREVER);
     for (size_t i = 0; i < param_count; ++i) {
-        staged[i] = cache[i].value;
-        durable_stage[i] = durable[i];
+        buffers->staged[i] = buffers->cache[i].value;
+        buffers->durable_stage[i] = buffers->durable[i];
     }
     k_mutex_unlock(&cache_lock);
 }
@@ -219,14 +222,14 @@ static void commit_cache(uint32_t sequence, const bool *selected)
         if (selected && !selected[i]) { continue; }
         if ((status.flags & DP_PARAM_STORAGE_READY) ||
             (cache_initialized && !(PARAM_DEF(i)->param_flags & DP_PARAM_PERSIST))) {
-            dp_reference_notify(PARAM_DEF(i), &cache[i].value, &staged[i]);
+            dp_reference_notify(PARAM_DEF(i), &buffers->cache[i].value, &buffers->staged[i]);
         }
-        cache[i].value = staged[i];
-        cache[i].quality = ((PARAM_DEF(i)->param_flags & DP_PARAM_FORWARD) && simulated_device(PARAM_DEF(i)->key.dev_id)) ?
+        buffers->cache[i].value = buffers->staged[i];
+        buffers->cache[i].quality = ((PARAM_DEF(i)->param_flags & DP_PARAM_FORWARD) && simulated_device(PARAM_DEF(i)->key.dev_id)) ?
                             DP_QUALITY_SIMULATED : DP_QUALITY_GOOD;
-        cache[i].sampled_at = k_uptime_get();
-        cache[i].generation = sequence;
-        cache[i].error = 0;
+        buffers->cache[i].sampled_at = k_uptime_get();
+        buffers->cache[i].generation = sequence;
+        buffers->cache[i].error = 0;
     }
     status.sequence = sequence;
     k_mutex_unlock(&cache_lock);
@@ -265,11 +268,11 @@ static size_t encode_changes(uint8_t *buf, uint32_t sequence)
     for (size_t i = 0; i < param_count; ++i) {
         const struct dp_point_cfg *p = PARAM_DEF(i);
         if (!(p->param_flags & DP_PARAM_PERSIST) ||
-            (stored[i] && !memcmp(&durable_stage[i], &durable[i], p->width * 2))) { continue; }
+            (stored[i] && !memcmp(&buffers->durable_stage[i], &buffers->durable[i], p->width * 2))) { continue; }
         sys_put_le16(p->key.dev_id, buf + offset); sys_put_le16(p->key.sig_id, buf + offset + 2);
         buf[offset + 4] = p->type; buf[offset + 5] = p->width; offset += 6;
         for (size_t w = 0; w < p->width; ++w) {
-            sys_put_le16(durable_stage[i].words[w], buf + offset); offset += 2;
+            sys_put_le16(buffers->durable_stage[i].words[w], buf + offset); offset += 2;
         }
         ++count;
     }
@@ -279,10 +282,10 @@ static size_t encode_changes(uint8_t *buf, uint32_t sequence)
 
 static int save_parameters(uint32_t sequence)
 {
-    size_t len = encode_changes(commit_image, sequence);
-    int err = dp_store_commit(&fs, commit_image, len);
+    size_t len = encode_changes(buffers->commit_image, sequence);
+    int err = dp_store_commit(&fs, buffers->commit_image, len);
     if (!err) {
-        memcpy(durable, durable_stage, sizeof(durable));
+        memcpy(buffers->durable, buffers->durable_stage, sizeof(buffers->durable));
         for (size_t i = 0; i < param_count; ++i) {
             if (PARAM_DEF(i)->param_flags & DP_PARAM_PERSIST) { stored[i] = true; }
         }
@@ -310,49 +313,49 @@ static uint8_t bus_for_device(uint16_t dev_id)
 
 static int intent_validate(void)
 {
-    if (intent_length < INTENT_HEADER || sys_get_le32(intent) != INTENT_MAGIC ||
-        sys_get_le16(intent + 4) != FORMAT_VERSION || intent[7] == 0 ||
-        (intent[10] & ~DP_OP_MASK) || intent[11] != bus_for_device(sys_get_le16(intent + 18)) || intent[7] > DP_TRANSFER_WORDS || intent[6] != unit_for(sys_get_le16(intent + 18)) ||
-        intent[6] == 0 || (uint32_t)sys_get_le16(intent + 8) + intent[7] > 65536 ||
-        intent_length != INTENT_HEADER + 4U * intent[7] + sys_get_le16(intent + 16)) {
+    if (intent_length < INTENT_HEADER || sys_get_le32(buffers->intent) != INTENT_MAGIC ||
+        sys_get_le16(buffers->intent + 4) != FORMAT_VERSION || buffers->intent[7] == 0 ||
+        (buffers->intent[10] & ~DP_OP_MASK) || buffers->intent[11] != bus_for_device(sys_get_le16(buffers->intent + 18)) || buffers->intent[7] > DP_TRANSFER_WORDS || buffers->intent[6] != unit_for(sys_get_le16(buffers->intent + 18)) ||
+        buffers->intent[6] == 0 || (uint32_t)sys_get_le16(buffers->intent + 8) + buffers->intent[7] > 65536 ||
+        intent_length != INTENT_HEADER + 4U * buffers->intent[7] + sys_get_le16(buffers->intent + 16)) {
         return -EPROTO;
     }
-    const uint8_t *image = intent + INTENT_HEADER + 4U * intent[7];
-    size_t length = sys_get_le16(intent + 16);
+    const uint8_t *image = buffers->intent + INTENT_HEADER + 4U * buffers->intent[7];
+    size_t length = sys_get_le16(buffers->intent + 16);
     int err = dp_store_validate_image(image, length);
     uint32_t sequence = length >= IMAGE_HEADER ? sys_get_le32(image + 12) : 0;
     for (size_t at = IMAGE_HEADER; !err && at < length; at += 6 + 2U * image[at + 5]) {
         int i = index_of((struct dp_key){sys_get_le16(image + at), sys_get_le16(image + at + 2)});
         if (i < 0) { return -EPROTO; }
         const struct dp_point_cfg *p = PARAM_DEF(i);
-        uint16_t begin = sys_get_le16(intent + 8);
+        uint16_t begin = sys_get_le16(buffers->intent + 8);
         if (!(p->param_flags & DP_PARAM_FORWARD) || !(p->param_flags & DP_PARAM_PERSIST) ||
-            p->key.dev_id != sys_get_le16(intent + 18) || p->write_address < begin ||
-            (uint32_t)p->write_address + p->width > begin + intent[7]) { return -EPROTO; }
-        err = load_value(p, image[at + 4], image[at + 5], image + at + 6, &durable_stage[i]);
+            p->key.dev_id != sys_get_le16(buffers->intent + 18) || p->write_address < begin ||
+            (uint32_t)p->write_address + p->width > begin + buffers->intent[7]) { return -EPROTO; }
+        err = load_value(p, image[at + 4], image[at + 5], image + at + 6, &buffers->durable_stage[i]);
         if (!err) {
             for (size_t w = 0; w < p->width; ++w) {
-                if (dp_order_word(durable_stage[i].words, p->width, w, p->write_order) !=
-                    sys_get_le16(intent + INTENT_HEADER + 2U * intent[7] +
+                if (dp_order_word(buffers->durable_stage[i].words, p->width, w, p->write_order) !=
+                    sys_get_le16(buffers->intent + INTENT_HEADER + 2U * buffers->intent[7] +
                                  2U * (p->write_address - begin + w))) { return -EPROTO; }
             }
         }
     }
-    return err ? err : sequence == sys_get_le32(intent + 12) ? 0 : -EPROTO;
+    return err ? err : sequence == sys_get_le32(buffers->intent + 12) ? 0 : -EPROTO;
 }
 
 static void invalidate_pending(int error)
 {
-    uint16_t dev_id = sys_get_le16(intent + 18);
-    uint16_t address = sys_get_le16(intent + 8);
+    uint16_t dev_id = sys_get_le16(buffers->intent + 18);
+    uint16_t address = sys_get_le16(buffers->intent + 8);
     k_mutex_lock(&cache_lock, K_FOREVER);
     for (size_t i = 0; i < param_count; ++i) {
         if ((PARAM_DEF(i)->param_flags & DP_PARAM_FORWARD) && PARAM_DEF(i)->key.dev_id == dev_id &&
             PARAM_DEF(i)->write_address >= address &&
-            PARAM_DEF(i)->write_address < (uint32_t)address + intent[7]) {
-            cache[i].quality = DP_QUALITY_COMM_ERROR |
+            PARAM_DEF(i)->write_address < (uint32_t)address + buffers->intent[7]) {
+            buffers->cache[i].quality = DP_QUALITY_COMM_ERROR |
                                (simulated_device(dev_id) ? DP_QUALITY_SIMULATED : 0);
-            cache[i].error = error;
+            buffers->cache[i].error = error;
         }
     }
     status.flags |= DP_PARAM_PENDING;
@@ -372,35 +375,35 @@ static int recover_locked(void)
     if (err) {
         return err;
     }
-    size_t count = intent[7];
+    size_t count = buffers->intent[7];
     bool selected[CONFIG_DP_PARAMS_MAX_COUNT] = {0};
-    uint16_t device = sys_get_le16(intent + 18), address = sys_get_le16(intent + 8);
+    uint16_t device = sys_get_le16(buffers->intent + 18), address = sys_get_le16(buffers->intent + 8);
     for (size_t i = 0; i < param_count; ++i) {
         const struct dp_point_cfg *p = PARAM_DEF(i);
         selected[i] = (p->param_flags & DP_PARAM_FORWARD) && p->key.dev_id == device &&
             p->write_address >= address && (uint32_t)p->write_address + p->width <= address + count;
     }
-    err = transport_read(sys_get_le16(intent + 18), sys_get_le16(intent + 8), actual, count);
+    err = transport_read(sys_get_le16(buffers->intent + 18), sys_get_le16(buffers->intent + 8), actual, count);
     if (err) {
         return err < 0 ? err : -EIO;
     }
     bool is_new = true, is_old = true;
     for (size_t i = 0; i < count; ++i) {
-        is_old &= actual[i] == sys_get_le16(intent + INTENT_HEADER + 2 * i);
-        is_new &= actual[i] == sys_get_le16(intent + INTENT_HEADER + 2 * count + 2 * i);
+        is_old &= actual[i] == sys_get_le16(buffers->intent + INTENT_HEADER + 2 * i);
+        is_new &= actual[i] == sys_get_le16(buffers->intent + INTENT_HEADER + 2 * count + 2 * i);
     }
     if (!is_new && !is_old) {
         return -EBADMSG;
     }
-    uint32_t sequence = sys_get_le32(intent + 12);
+    uint32_t sequence = sys_get_le32(buffers->intent + 12);
     if (is_new) {
         err = save_parameters(sequence);
         if (err) {
             set_status(err, status.flags & ~DP_PARAM_STORAGE_READY);
             return err;
         }
-        uint8_t flags = sys_get_le16(intent + 10);
-        uint16_t dev = sys_get_le16(intent + 18), begin = sys_get_le16(intent + 8);
+        uint8_t flags = sys_get_le16(buffers->intent + 10);
+        uint16_t dev = sys_get_le16(buffers->intent + 18), begin = sys_get_le16(buffers->intent + 8);
         for (size_t i = 0; i < param_count; ++i) {
             const struct dp_point_cfg *p = PARAM_DEF(i);
             if (!(p->param_flags & DP_PARAM_FORWARD) || p->key.dev_id != dev ||
@@ -409,13 +412,13 @@ static int recover_locked(void)
             }
             if (!(flags & DP_OP_NO_DM)) {
                 for (size_t w = 0; w < p->width; ++w) {
-                    staged[i].words[w] = dp_order_word(actual + p->write_address - begin,
+                    buffers->staged[i].words[w] = dp_order_word(actual + p->write_address - begin,
                                                         p->width, w, p->write_order);
                 }
                 if (!(flags & DP_OP_NO_STORE)) {
                     bool defer = (flags & DP_OP_DEFER) || (p->param_flags & DP_PARAM_DEFER_STORE);
                     dirty[i] = defer;
-                    if (defer) { deferred[i] = staged[i]; flush_at = k_uptime_get() + 1000; }
+                    if (defer) { buffers->deferred[i] = buffers->staged[i]; flush_at = k_uptime_get() + 1000; }
                 }
             }
         }
@@ -471,14 +474,14 @@ static int load_locked(bool *incompatible)
         return err;
     }
     for (size_t i = 0; i < param_count; ++i) {
-        err = dp_reference_default(PARAM_DEF(i), &durable_stage[i], false);
+        err = dp_reference_default(PARAM_DEF(i), &buffers->durable_stage[i], false);
         if (err) { return err; }
-        staged[i] = durable_stage[i];
+        buffers->staged[i] = buffers->durable_stage[i];
     }
     uint32_t sequence = 0;
     bool recovered = false, present = false, converted = false;
     memset(stored, 0, sizeof(stored));
-    err = dp_store_open(&fs, commit_image, sizeof(commit_image), &sequence, &present, &recovered);
+    err = dp_store_open(&fs, buffers->commit_image, sizeof(buffers->commit_image), &sequence, &present, &recovered);
     if (err) { *incompatible = incompatible_format(err); return err; }
     bool seed[CONFIG_DP_PARAMS_MAX_COUNT] = {0};
     if (present) {
@@ -491,7 +494,7 @@ static int load_locked(bool *incompatible)
             if (err) { *incompatible = incompatible_format(err); return err; }
             uint8_t bytes[DP_STORE_MAX_WORDS * 2];
             for (size_t w = 0; w < value.width; ++w) { sys_put_le16(value.words[w], bytes + w * 2); }
-            err = load_value(p, value.type, value.width, bytes, &durable_stage[i]);
+            err = load_value(p, value.type, value.width, bytes, &buffers->durable_stage[i]);
             if (err) { *incompatible = incompatible_format(err); return err; }
             stored[i] = value.width == p->width;
             if (!stored[i]) { converted = true; }
@@ -510,22 +513,22 @@ static int load_locked(bool *incompatible)
     for (size_t i = 0; i < param_count; ++i) {
         const struct dp_point_cfg *p = PARAM_DEF(i);
         if (seed[i]) {
-            err = p->seed_missing ? p->seed_missing(p, &durable_stage[i]) :
-                                   dp_reference_default(p, &durable_stage[i], true);
-            if (!err) { err = range_check(p, &durable_stage[i]); }
+            err = p->seed_missing ? p->seed_missing(p, &buffers->durable_stage[i]) :
+                                   dp_reference_default(p, &buffers->durable_stage[i], true);
+            if (!err) { err = range_check(p, &buffers->durable_stage[i]); }
             if (err) { return err; }
         }
         need_save |= (p->param_flags & DP_PARAM_PERSIST) && !stored[i];
     }
-    memcpy(staged, durable_stage, sizeof(staged));
-    memcpy(durable, durable_stage, sizeof(durable));
+    memcpy(buffers->staged, buffers->durable_stage, sizeof(buffers->staged));
+    memcpy(buffers->durable, buffers->durable_stage, sizeof(buffers->durable));
     memset(dirty, 0, sizeof(dirty)); flush_at = 0;
     commit_cache(sequence, NULL);
-    ssize_t len = nvs_read(&fs, INTENT_ID, intent, sizeof(intent));
+    ssize_t len = nvs_read(&fs, INTENT_ID, buffers->intent, sizeof(buffers->intent));
     intent_length = 0;
     if (len != -ENOENT) {
         if (len < 0) { return len; }
-        if (len > sizeof(intent)) { *incompatible = true; return -EMSGSIZE; }
+        if (len > sizeof(buffers->intent)) { *incompatible = true; return -EMSGSIZE; }
         intent_length = len;
         stage_cache();
         err = intent_validate();
@@ -570,6 +573,9 @@ int dp_params_init(const struct dp_equip_cfg *cfg, uint8_t area_id)
     if (err) {
         return err;
     }
+    buffers = k_malloc(sizeof(*buffers));
+    if (!buffers) { set_status(-ENOMEM, 0); return -ENOMEM; }
+    memset(buffers, 0, sizeof(*buffers));
     equipment = cfg;
     partition_id = area_id;
     zbus_chan_set_msg_sub_pool(&dp_param_events, &param_event_pool);
@@ -580,7 +586,7 @@ int dp_params_init(const struct dp_equip_cfg *cfg, uint8_t area_id)
         defs[param_count++] = i;
     }
     for (size_t i = 0; i < param_count; ++i) {
-        staged[i] = PARAM_DEF(i)->initial;
+        buffers->staged[i] = PARAM_DEF(i)->initial;
     }
     commit_cache(0, NULL);
     cache_initialized = true;
@@ -639,24 +645,24 @@ static int apply_staged(const bool selected[CONFIG_DP_PARAMS_MAX_COUNT])
         if (!(p->param_flags & DP_PARAM_WRITE)) {
             return -EACCES;
         }
-        int err = range_check(p, &staged[i]);
+        int err = range_check(p, &buffers->staged[i]);
         if (!err && p->prepare_write) {
-            err = p->prepare_write(p, &staged[i], &cache[i].value);
+            err = p->prepare_write(p, &buffers->staged[i], &buffers->cache[i].value);
         }
         if (!err) {
-            err = range_check(p, &staged[i]);
+            err = range_check(p, &buffers->staged[i]);
         }
         if (err) {
             return err;
         }
         changed |= !(operation_flags & DP_OP_NO_DM) &&
-                   memcmp(&cache[i].value, &staged[i], p->width * 2) != 0;
+                   memcmp(&buffers->cache[i].value, &buffers->staged[i], p->width * 2) != 0;
         bool store = (p->param_flags & DP_PARAM_PERSIST) &&
                      !(operation_flags & (DP_OP_NO_DM | DP_OP_NO_STORE));
         if (store && !(status.flags & DP_PARAM_STORAGE_READY)) { return -EROFS; }
         bool defer = (operation_flags & DP_OP_DEFER) || (p->param_flags & DP_PARAM_DEFER_STORE);
         persistent |= store && !defer;
-        if (store && !defer) { durable_stage[i] = staged[i]; }
+        if (store && !defer) { buffers->durable_stage[i] = buffers->staged[i]; }
         if ((p->param_flags & DP_PARAM_FORWARD) && !(operation_flags & DP_OP_NO_COLLECT)) {
             if (remote && dev_id != p->key.dev_id) {
                 return -EXDEV;
@@ -685,13 +691,13 @@ static int apply_staged(const bool selected[CONFIG_DP_PARAMS_MAX_COUNT])
         }
         for (size_t i = 0; i < param_count; ++i) {
             if (!selected[i]) { continue; }
-            if (operation_flags & DP_OP_NO_DM) { staged[i] = cache[i].value; }
+            if (operation_flags & DP_OP_NO_DM) { buffers->staged[i] = buffers->cache[i].value; }
             if ((PARAM_DEF(i)->param_flags & DP_PARAM_PERSIST) &&
                 !(operation_flags & (DP_OP_NO_DM | DP_OP_NO_STORE))) {
                 bool defer = (operation_flags & DP_OP_DEFER) ||
                              (PARAM_DEF(i)->param_flags & DP_PARAM_DEFER_STORE);
                 dirty[i] = defer;
-                if (defer) { deferred[i] = staged[i]; flush_at = k_uptime_get() + 1000; }
+                if (defer) { buffers->deferred[i] = buffers->staged[i]; flush_at = k_uptime_get() + 1000; }
             }
         }
         commit_cache(sequence, selected);
@@ -710,7 +716,7 @@ static int apply_staged(const bool selected[CONFIG_DP_PARAMS_MAX_COUNT])
         for (size_t w = 0; w < p->width; ++w) {
             size_t n = p->write_address - begin + w;
             covered[n] = true;
-            new_wire[n] = dp_order_word(staged[i].words, p->width, w, p->write_order);
+            new_wire[n] = dp_order_word(buffers->staged[i].words, p->width, w, p->write_order);
         }
     }
     for (size_t i = 0; i < count; ++i) {
@@ -732,23 +738,23 @@ static int apply_staged(const bool selected[CONFIG_DP_PARAMS_MAX_COUNT])
     if (err) {
         return err < 0 ? err : -EIO;
     }
-    size_t image_len = encode_changes(intent + INTENT_HEADER + 4 * count, sequence);
-    sys_put_le32(INTENT_MAGIC, intent);
-    sys_put_le16(FORMAT_VERSION, intent + 4);
-    intent[6] = unit;
-    intent[7] = count;
-    sys_put_le16(begin, intent + 8);
-    intent[10] = operation_flags;
-    intent[11] = bus_for_device(dev_id);
-    sys_put_le32(sequence, intent + 12);
-    sys_put_le16(image_len, intent + 16);
-    sys_put_le16(dev_id, intent + 18);
+    size_t image_len = encode_changes(buffers->intent + INTENT_HEADER + 4 * count, sequence);
+    sys_put_le32(INTENT_MAGIC, buffers->intent);
+    sys_put_le16(FORMAT_VERSION, buffers->intent + 4);
+    buffers->intent[6] = unit;
+    buffers->intent[7] = count;
+    sys_put_le16(begin, buffers->intent + 8);
+    buffers->intent[10] = operation_flags;
+    buffers->intent[11] = bus_for_device(dev_id);
+    sys_put_le32(sequence, buffers->intent + 12);
+    sys_put_le16(image_len, buffers->intent + 16);
+    sys_put_le16(dev_id, buffers->intent + 18);
     for (size_t i = 0; i < count; ++i) {
-        sys_put_le16(old_wire[i], intent + INTENT_HEADER + 2 * i);
-        sys_put_le16(new_wire[i], intent + INTENT_HEADER + 2 * count + 2 * i);
+        sys_put_le16(old_wire[i], buffers->intent + INTENT_HEADER + 2 * i);
+        sys_put_le16(new_wire[i], buffers->intent + INTENT_HEADER + 2 * count + 2 * i);
     }
     intent_length = INTENT_HEADER + 4 * count + image_len;
-    ssize_t rc = nvs_write(&fs, INTENT_ID, intent, intent_length);
+    ssize_t rc = nvs_write(&fs, INTENT_ID, buffers->intent, intent_length);
     if (rc < 0) {
         set_status(rc, status.flags & ~DP_PARAM_STORAGE_READY);
         return rc; /* No downstream write without a durable intent. */
@@ -785,7 +791,7 @@ int dp_params_apply(const struct dp_point_update *values, size_t count, uint8_t 
         if (selected[index] || values[i].error || values[i].width != PARAM_DEF(index)->width) {
             return end_transaction(-EINVAL);
         }
-        staged[index] = values[i].value;
+        buffers->staged[index] = values[i].value;
         selected[index] = true;
     }
     return end_transaction(apply_staged(selected));
@@ -828,7 +834,7 @@ int dp_params_write_registers(const struct dp_equip_cfg *mapping, uint16_t addre
         }
         selected[index] = true;
         for (size_t w = 0; w < map->count; ++w) {
-            staged[index].words[w] = dp_order_word(words + offset, map->count, w, map->order);
+            buffers->staged[index].words[w] = dp_order_word(words + offset, map->count, w, map->order);
         }
         offset += map->count;
     }
@@ -845,7 +851,7 @@ int dp_params_restore(uint16_t dev_id)
     bool found = false;
     for (size_t i = 0; i < param_count; ++i) {
         if (PARAM_DEF(i)->key.dev_id == dev_id && (PARAM_DEF(i)->param_flags & DP_PARAM_RESTORE)) {
-            err = dp_reference_default(PARAM_DEF(i), &staged[i], true);
+            err = dp_reference_default(PARAM_DEF(i), &buffers->staged[i], true);
             if (err) { return end_transaction(err); }
             selected[i] = true;
             found = true;
@@ -862,7 +868,7 @@ static int flush_for_reboot(bool freeze)
     }
     if (!(status.flags & DP_PARAM_STORAGE_READY)) { return end_transaction(-EROFS); }
     for (size_t i = 0; i < param_count; ++i) {
-        if (dirty[i]) { durable_stage[i] = deferred[i]; }
+        if (dirty[i]) { buffers->durable_stage[i] = buffers->deferred[i]; }
     }
     err = save_parameters(status.sequence);
     if (!err) { memset(dirty, 0, sizeof(dirty)); flush_at = 0; reboot_frozen = freeze; }
@@ -930,7 +936,7 @@ int dp_params_sync_device(uint16_t dev_id)
         int err = begin_transaction(false);
         if (err) { return err; }
         /* A polled live value must not replace the desired configuration. */
-        staged[i] = dirty[i] ? deferred[i] : durable[i];
+        buffers->staged[i] = dirty[i] ? buffers->deferred[i] : buffers->durable[i];
         bool selected[CONFIG_DP_PARAMS_MAX_COUNT] = {0};
         selected[i] = true;
         operation_flags = DP_OP_NO_DM | DP_OP_NO_STORE;
@@ -961,7 +967,7 @@ int dp_params_sample(const struct dp_point_update *values, size_t count,
     k_mutex_lock(&cache_lock, K_FOREVER);
     for (size_t i = 0; i < count; ++i) {
         int n = index_of(values[i].key);
-        if (sampled_at <= cache[n].sampled_at ||
+        if (sampled_at <= buffers->cache[n].sampled_at ||
             !dp_acquired_sample_current(values[i].key.dev_id, sampled_at)) { continue; }
         int err = values[i].error;
         uint16_t quality = err ? DP_QUALITY_COMM_ERROR : DP_QUALITY_GOOD;
@@ -970,13 +976,13 @@ int dp_params_sample(const struct dp_point_update *values, size_t count,
             if (err) { quality = DP_QUALITY_BAD_VALUE; }
         }
         if (!err) {
-            dp_reference_notify(PARAM_DEF(n), &cache[n].value, &values[i].value);
-            cache[n].value = values[i].value;
+            dp_reference_notify(PARAM_DEF(n), &buffers->cache[n].value, &values[i].value);
+            buffers->cache[n].value = values[i].value;
         }
-        cache[n].error = err;
-        cache[n].quality = quality | flags;
-        cache[n].sampled_at = sampled_at;
-        ++cache[n].generation;
+        buffers->cache[n].error = err;
+        buffers->cache[n].quality = quality | flags;
+        buffers->cache[n].sampled_at = sampled_at;
+        ++buffers->cache[n].generation;
     }
     k_mutex_unlock(&cache_lock);
     k_mutex_unlock(&transaction_lock);
@@ -989,10 +995,10 @@ void dp_params_invalidate_acquired_device(uint16_t dev, int error, int64_t obser
     for (size_t i = 0; i < param_count; ++i) {
         const struct dp_point_cfg *p = PARAM_DEF(i);
         if (p->key.dev_id != dev || !dp_acquired_key(equipment, p->key) ||
-            cache[i].sampled_at > observed_at) { continue; }
-        cache[i].quality = (cache[i].quality & DP_QUALITY_SIMULATED) | DP_QUALITY_COMM_ERROR;
-        cache[i].error = error;
-        ++cache[i].generation;
+            buffers->cache[i].sampled_at > observed_at) { continue; }
+        buffers->cache[i].quality = (buffers->cache[i].quality & DP_QUALITY_SIMULATED) | DP_QUALITY_COMM_ERROR;
+        buffers->cache[i].error = error;
+        ++buffers->cache[i].generation;
     }
     k_mutex_unlock(&cache_lock);
 }

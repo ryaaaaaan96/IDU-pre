@@ -30,6 +30,48 @@ static uint16_t sent_device;
 static bool wrong_device;
 static atomic_t concurrent_test, concurrent_sends[2];
 static int configure_error;
+static k_tid_t allocation_owner;
+static atomic_t allocation_countdown;
+static bool track_allocations;
+static struct k_spinlock allocation_lock;
+static void *tracked[64];
+
+void *__real_k_malloc(size_t size);
+void __real_k_free(void *ptr);
+void *__wrap_k_malloc(size_t size)
+{
+    if (allocation_owner == k_current_get() && atomic_dec(&allocation_countdown) == 1) {
+        allocation_owner = NULL;
+        return NULL;
+    }
+    void *ptr = __real_k_malloc(size);
+    k_spinlock_key_t key = k_spin_lock(&allocation_lock);
+    if (ptr && track_allocations) {
+        size_t i;
+        for (i = 0; i < ARRAY_SIZE(tracked); ++i) {
+            if (!tracked[i]) { tracked[i] = ptr; break; }
+        }
+        __ASSERT_NO_MSG(i < ARRAY_SIZE(tracked));
+    }
+    k_spin_unlock(&allocation_lock, key);
+    return ptr;
+}
+
+void __wrap_k_free(void *ptr)
+{
+    k_spinlock_key_t key = k_spin_lock(&allocation_lock);
+    for (size_t i = 0; i < ARRAY_SIZE(tracked); ++i) {
+        if (ptr && tracked[i] == ptr) { tracked[i] = NULL; break; }
+    }
+    k_spin_unlock(&allocation_lock, key);
+    __real_k_free(ptr);
+}
+
+static void fail_allocation(unsigned nth)
+{
+    atomic_set(&allocation_countdown, nth);
+    allocation_owner = k_current_get();
+}
 static int read_register(uint16_t address, uint16_t *value)
 {
     if (atomic_get(&hold_handler)) { k_sem_give(&blocked); k_sem_take(&unblock, K_FOREVER); }
@@ -174,6 +216,45 @@ ZTEST(communication, test_raw_client_server_and_send_error)
     zassert_equal(modbus_read_input_regs(client, 1, 7, &word, 1), -EIO);
     atomic_clear(&fail_tx);
     zassert_ok(modbus_read_input_regs(client, 1, 8, &word, 1)); zassert_equal(word, 0x123c);
+}
+
+ZTEST(communication, test_heap_failure_releases_receive_and_transaction_ownership)
+{
+    k_spinlock_key_t key = k_spin_lock(&allocation_lock);
+    track_allocations = true;
+    k_spin_unlock(&allocation_lock, key);
+    uint8_t data[] = {1, 4, 0, 7, 0, 1, 0, 0};
+    sys_put_le16(crc16_ansi(data, 6), data + 6);
+    const struct vport_frame frame = {.data = data, .size = sizeof(data)};
+    const struct vport_source source = {.link = 22};
+    int before = atomic_get(&completed);
+    fail_allocation(1);
+    zassert_equal(tr_port_input(3, &source, &frame), -ENOMEM);
+    zassert_equal(atomic_get(&completed), before + 1);
+    fail_allocation(1);
+    zassert_equal(co_port_input(2, &source, &frame), -ENOMEM);
+    zassert_equal(atomic_get(&completed), before + 2);
+
+    for (unsigned nth = 1; nth <= 2; ++nth) {
+        struct modbus_adu adu = {.unit_id = 1, .fc = 4, .length = 4,
+            .data = {0, 7, 0, 1}};
+        fail_allocation(nth); /* Register conversion, then RAW transmit frame. */
+        zassert_equal(co_modbus_transfer(client, 42, &adu), -ENOMEM);
+        zassert_is_null(allocation_owner);
+        zassert_ok(co_modbus_transfer(client, 43, &adu));
+        zassert_equal(sent_device, 43);
+        zassert_equal(sys_get_be16(adu.data + 1), 0x1233);
+    }
+    uint16_t word;
+    zassert_ok(modbus_read_input_regs(client, 1, 8, &word, 1));
+    zassert_equal(word, 0x123c);
+    k_msleep(5); /* Allow protocol completion bookkeeping to release RX copies. */
+    key = k_spin_lock(&allocation_lock);
+    track_allocations = false;
+    size_t outstanding = 0;
+    for (size_t i = 0; i < ARRAY_SIZE(tracked); ++i) { outstanding += tracked[i] != NULL; }
+    k_spin_unlock(&allocation_lock, key);
+    zassert_equal(outstanding, 0, "Temporary communication buffers leaked");
 }
 ZTEST(communication, test_source_preserved_and_busy_request_not_overwritten)
 {

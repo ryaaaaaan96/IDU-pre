@@ -72,8 +72,9 @@ static int route(int iface, const struct modbus_adu *rx,
                          rx->data[4] != count * 2))) { return -EINVAL; }
     if (atomic_get(&sim->fault) == CO_SIMULATOR_WRITE_REJECT) { return -EIO; }
     k_mutex_lock(&sim->lock, K_FOREVER);
-    uint16_t candidate[CONFIG_CO_SIMULATOR_WORDS];
-    memcpy(candidate, sim->values, sizeof(candidate));
+    uint16_t *candidate = k_malloc(sizeof(sim->values));
+    if (!candidate) { k_mutex_unlock(&sim->lock); return -ENOMEM; }
+    memcpy(candidate, sim->values, sizeof(sim->values));
     int err = 0;
     for (size_t i = 0; i < count;) {
         const struct co_simulator_register *r;
@@ -91,9 +92,10 @@ static int route(int iface, const struct modbus_adu *rx,
         i += r->width;
     }
     if (!err) {
-        memcpy(sim->values, candidate, sizeof(candidate));
+        memcpy(sim->values, candidate, sizeof(sim->values));
         atomic_inc(&sim->writes);
     }
+    k_free(candidate);
     k_mutex_unlock(&sim->lock);
     tx->length = 4;
     return err;

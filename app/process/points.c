@@ -13,7 +13,9 @@ int points_publish_snapshot(const struct acquisition_sample *snapshot)
         return -EINVAL;
     }
     /* Product mapping stays here; DP owns batching and sample processing. */
-    struct dp_point_update values[2 + SAMPLE_ANALOG_COUNT] = {0};
+    const size_t count = 2 + SAMPLE_ANALOG_COUNT;
+    struct dp_point_update *values = k_malloc(count * sizeof(*values));
+    if (!values) { return -ENOMEM; }
     values[0] = (struct dp_point_update){
         .key = {DEVICE_LOCAL, SIGNAL_ADDRESS}, .width = 1,
         .value.words = {snapshot->address}, .error = snapshot->valid ? 0 : -EIO,
@@ -29,7 +31,9 @@ int points_publish_snapshot(const struct acquisition_sample *snapshot)
             .error = !snapshot->valid ? -EIO : snapshot->raw[i] > 4095 ? -ERANGE : 0,
         };
     }
-    return dp_submit_sig_values(values, ARRAY_SIZE(values), K_MSEC(20), NULL);
+    int err = dp_submit_sig_values(values, count, K_MSEC(20), NULL);
+    k_free(values);
+    return err;
 }
 
 int32_t points_default_callback(FUNC_PARA_ALL *in, FUNC_PARA_ALL *out,

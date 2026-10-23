@@ -2,6 +2,18 @@
 #include <dataprocess/params.h>
 #include <dataprocess/process.h>
 #include <zephyr/ztest.h>
+
+static k_tid_t allocation_owner;
+static unsigned allocation_countdown;
+void *__real_k_malloc(size_t size);
+void *__wrap_k_malloc(size_t size)
+{
+    if (allocation_owner == k_current_get() && --allocation_countdown == 0) {
+        allocation_owner = NULL;
+        return NULL;
+    }
+    return __real_k_malloc(size);
+}
 #include <errno.h>
 #if defined(CONFIG_DP_PARAMS)
 #include <zephyr/storage/flash_map.h>
@@ -464,6 +476,29 @@ ZTEST(dataprocess, test_declarative_lifecycle_rolls_back_timers_and_starts_once)
     zassert_equal(timer_count, 1);
     k_sleep(K_MSEC(30));
     zassert_equal(timer_count, 1);
+}
+
+ZTEST(dataprocess, test_heap_failure_preserves_transaction_and_allows_retry)
+{
+    struct dp_point_state before_input, before_output, state;
+    zassert_ok(dp_read(input, &before_input));
+    zassert_ok(dp_read(output, &before_output));
+    struct dp_process_request request = {.operation = DP_OP_WRITE, .count = 1,
+        .items[0].point = {.key = input, .width = 1, .value.words = {17}}};
+    struct dp_process_result result;
+    for (unsigned nth = 1; nth <= 2; ++nth) {
+        allocation_countdown = nth; allocation_owner = k_current_get();
+        zassert_equal(dp_process_execute(&request, &result), -ENOMEM);
+        zassert_equal(result.error, -ENOMEM);
+        zassert_is_null(allocation_owner);
+        zassert_ok(dp_read(input, &state));
+        zassert_equal(state.value.words[0], before_input.value.words[0]);
+        zassert_ok(dp_read(output, &state));
+        zassert_equal(state.value.words[0], before_output.value.words[0]);
+    }
+    zassert_ok(dp_process_execute(&request, &result));
+    zassert_ok(dp_read(output, &state));
+    zassert_equal(state.value.words[0], 51);
 }
 
 ZTEST_SUITE(dataprocess, NULL, setup, NULL, NULL, NULL);

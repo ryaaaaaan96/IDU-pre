@@ -94,9 +94,12 @@ static struct callback_scope *active_callback;
 static struct read_scope *active_read;
 static struct k_spinlock scope_lock;
 K_MUTEX_DEFINE(reference_lock);
-/* Shared scratch avoids placing a maximum-size transaction on callers' stacks. */
-static struct dp_process_request reference_request;
-static struct dp_process_result reference_result;
+/* Protected by reference_lock; never kept across an asynchronous submit. */
+struct reference_buffers {
+    struct dp_process_request request;
+    struct dp_process_result result;
+};
+static struct reference_buffers *reference;
 
 static struct dp_process_ctx *callback_context(void)
 {
@@ -114,7 +117,17 @@ static int enter(void)
 {
     if (k_is_in_isr()) { return -EWOULDBLOCK; }
     if (callback_context()) { return -EDEADLK; }
-    return k_mutex_lock(&reference_lock, K_FOREVER);
+    int err = k_mutex_lock(&reference_lock, K_FOREVER);
+    if (err) { return err; }
+    reference = k_malloc(sizeof(*reference));
+    if (!reference) { k_mutex_unlock(&reference_lock); return -ENOMEM; }
+    return 0;
+}
+
+static void leave(void)
+{
+    k_free(reference); reference = NULL;
+    k_mutex_unlock(&reference_lock);
 }
 
 static uint8_t *data_bytes(DATA_SET_S *data)
@@ -144,10 +157,10 @@ int32_t dp_set_sig_value(uint16_t dev, uint16_t sig, uint8_t size, uint8_t *byte
 {
     int err = enter();
     if (err) { return err; }
-    reference_request = (struct dp_process_request){.operation = DP_OP_WRITE, .count = 1};
-    err = prepare(&reference_request.items[0], dev, sig, size, bytes);
-    if (!err) { err = dp_process_execute(&reference_request, &reference_result); }
-    k_mutex_unlock(&reference_lock);
+    reference->request = (struct dp_process_request){.operation = DP_OP_WRITE, .count = 1};
+    err = prepare(&reference->request.items[0], dev, sig, size, bytes);
+    if (!err) { err = dp_process_execute(&reference->request, &reference->result); }
+    leave();
     return err;
 }
 
@@ -160,20 +173,20 @@ int32_t dp_fast_para_set(PARA_DATA_S *data, PARA_SET_STATUS status)
         err = -EINVAL; goto out;
     }
     if (data->type != DP_FAST_SET) { err = -ENOTSUP; goto out; }
-    reference_request = (struct dp_process_request){.operation = DP_OP_WRITE,
+    reference->request = (struct dp_process_request){.operation = DP_OP_WRITE,
         .port_id = data->port_id, .count = data->set_num};
     for (size_t i = 0; i < data->set_num; ++i) {
         DATA_SET_S *item = &data->p_set_data[i];
         if (item->extra.addr_type != FUNC_PARA_REG_TYPE_MB) { err = -ENOTSUP; goto out; }
-        err = prepare(&reference_request.items[i], item->dev_id, item->sig_id,
+        err = prepare(&reference->request.items[i], item->dev_id, item->sig_id,
                       item->sig_size, data_bytes(item));
         if (err) { goto out; }
-        reference_request.items[i].reference_address = item->extra.reg_addr;
-        reference_request.items[i].reference_address_valid = true;
+        reference->request.items[i].reference_address = item->extra.reg_addr;
+        reference->request.items[i].reference_address_valid = true;
     }
-    err = dp_process_execute(&reference_request, &reference_result);
+    err = dp_process_execute(&reference->request, &reference->result);
 out:
-    k_mutex_unlock(&reference_lock);
+    leave();
     if (!err && status) { status(data); }
     return err;
 }
@@ -187,13 +200,13 @@ static int reference_read(struct dp_key key, uint16_t port, uint8_t function,
     int err = enter();
     if (err) { return err; }
     struct read_scope scope = {.key = key, .thread = k_current_get()};
-    reference_request = (struct dp_process_request){.operation = DP_OP_READ,
+    reference->request = (struct dp_process_request){.operation = DP_OP_READ,
         .port_id = port, .function = function, .address = address,
         .register_count = count, .count = 1, .items[0].point.key = key};
     k_spinlock_key_t lock = k_spin_lock(&scope_lock);
     active_read = &scope;
     k_spin_unlock(&scope_lock, lock);
-    err = dp_process_execute(&reference_request, &reference_result);
+    err = dp_process_execute(&reference->request, &reference->result);
     lock = k_spin_lock(&scope_lock);
     active_read = NULL;
     k_spin_unlock(&scope_lock, lock);
@@ -208,7 +221,7 @@ static int reference_read(struct dp_key key, uint16_t port, uint8_t function,
             if (response) { *response = true; }
         }
     }
-    k_mutex_unlock(&reference_lock);
+    leave();
     return err;
 }
 
@@ -343,12 +356,12 @@ int dp_reference_invoke(DM_PF_SIG_PROC callback, bool timer)
     if (!callback) { return -EINVAL; }
     int err = enter();
     if (err) { return err; }
-    reference_request = (struct dp_process_request){
+    reference->request = (struct dp_process_request){
         .operation = timer ? DP_OP_TIMER : DP_OP_INIT,
         .callback = invoke_global, .reference_callback = callback,
     };
-    err = dp_process_execute(&reference_request, &reference_result);
-    k_mutex_unlock(&reference_lock);
+    err = dp_process_execute(&reference->request, &reference->result);
+    leave();
     return err;
 }
 
@@ -364,12 +377,14 @@ int dp_reference_submit(DM_PF_SIG_PROC callback, bool timer)
     if (!callback) { return -EINVAL; }
     if (callback_context()) { return -EDEADLK; }
     if (k_mutex_lock(&reference_lock, K_NO_WAIT)) { return -EBUSY; }
-    reference_request = (struct dp_process_request){
+    reference = k_malloc(sizeof(*reference));
+    if (!reference) { k_mutex_unlock(&reference_lock); return -ENOMEM; }
+    reference->request = (struct dp_process_request){
         .operation = timer ? DP_OP_TIMER : DP_OP_INIT,
         .callback = invoke_global, .reference_callback = callback,
     };
-    int err = dp_process_submit(&reference_request, reference_done, NULL);
-    k_mutex_unlock(&reference_lock);
+    int err = dp_process_submit(&reference->request, reference_done, NULL);
+    leave();
     return err;
 }
 
@@ -464,9 +479,12 @@ int32_t dp_set_para_only_dm_no_store(uint16_t dev, uint16_t sig, uint8_t size, u
 static PARA_SET_FUNC reference_collector;
 static struct k_spinlock collector_lock;
 #if defined(CONFIG_DP_PROCESS)
-static PARA_DATA_S collector_request;
-static DATA_SET_S collector_items[CONFIG_DP_PROCESS_MAX_OUTPUTS];
-static uint8_t collector_bytes[CONFIG_DP_PROCESS_MAX_OUTPUTS][DP_POINT_WORDS * 2];
+struct collector_buffers {
+    PARA_DATA_S request;
+    DATA_SET_S items[CONFIG_DP_PROCESS_MAX_OUTPUTS];
+    uint8_t bytes[CONFIG_DP_PROCESS_MAX_OUTPUTS][DP_POINT_WORDS * 2];
+};
+static struct collector_buffers *collector;
 static bool collector_busy, collector_waiting, collector_done;
 K_SEM_DEFINE(collector_complete, 0, 1);
 #endif
@@ -488,19 +506,21 @@ int32_t dp_para_reg_set_func(PARA_SET_FUNC callback)
 #if defined(CONFIG_DP_PROCESS)
 static void collected(PARA_DATA_S *data)
 {
+    struct collector_buffers *release = NULL;
     k_spinlock_key_t lock = k_spin_lock(&collector_lock);
-    if (data == &collector_request && collector_busy) {
+    if (collector && data == &collector->request && collector_busy) {
         collector_done = true;
         if (collector_waiting) { k_sem_give(&collector_complete); }
-        else { collector_busy = false; }
+        else { collector_busy = false; release = collector; collector = NULL; }
     }
     k_spin_unlock(&collector_lock, lock);
+    k_free(release);
 }
 
 int dp_reference_collect(PARA_DATA_S *data)
 {
     if (!data || !data->p_set_data || !data->set_num ||
-        data->set_num > ARRAY_SIZE(collector_items) || k_is_in_isr()) { return -EINVAL; }
+        data->set_num > ARRAY_SIZE(collector->items) || k_is_in_isr()) { return -EINVAL; }
     if (data->type != DP_FAST_SET && data->type != DP_TIMER_SET && data->type != DP_NO_DM_SET) { return -ENOTSUP; }
     k_spinlock_key_t lock = k_spin_lock(&collector_lock);
     PARA_SET_FUNC callback = reference_collector;
@@ -508,23 +528,33 @@ int dp_reference_collect(PARA_DATA_S *data)
     if (!err) { collector_busy = collector_waiting = true; collector_done = false; }
     k_spin_unlock(&collector_lock, lock);
     if (err) { return err; }
+    struct collector_buffers *buffer = k_malloc(sizeof(*buffer));
+    if (!buffer) {
+        lock = k_spin_lock(&collector_lock);
+        collector_busy = collector_waiting = false;
+        k_spin_unlock(&collector_lock, lock);
+        return -ENOMEM;
+    }
+    lock = k_spin_lock(&collector_lock);
+    collector = buffer;
+    k_spin_unlock(&collector_lock, lock);
     k_sem_reset(&collector_complete);
-    collector_request = *data;
-    collector_request.p_set_data = collector_items;
+    collector->request = *data;
+    collector->request.p_set_data = collector->items;
     for (size_t i = 0; i < data->set_num; ++i) {
         const DATA_SET_S *item = &data->p_set_data[i];
         const uint8_t *bytes = item->sig_size > 4 ? item->p_value.pst : item->p_value.str;
-        if (!bytes || !item->sig_size || item->sig_size > sizeof(collector_bytes[i]) ||
+        if (!bytes || !item->sig_size || item->sig_size > sizeof(collector->bytes[i]) ||
             item->extra.addr_type != FUNC_PARA_REG_TYPE_MB) { err = -EINVAL; break; }
-        collector_items[i] = *item;
+        collector->items[i] = *item;
         if (item->sig_size > 4) {
-            memcpy(collector_bytes[i], bytes, item->sig_size);
-            collector_items[i].p_value.pst = collector_bytes[i];
+            memcpy(collector->bytes[i], bytes, item->sig_size);
+            collector->items[i].p_value.pst = collector->bytes[i];
         }
     }
     bool accepted = false;
     if (!err) {
-        err = callback(&collector_request, collected);
+        err = callback(&collector->request, collected);
         accepted = !err;
         if (err > 0) { err = -EIO; }
         if (!err) { err = k_sem_take(&collector_complete, K_SECONDS(1)) ? -ETIMEDOUT : 0; }
@@ -532,8 +562,12 @@ int dp_reference_collect(PARA_DATA_S *data)
     lock = k_spin_lock(&collector_lock);
     collector_waiting = false;
     /* A backend error means rejection, with no later completion permitted. */
-    if (!accepted || err != -ETIMEDOUT || collector_done) { collector_busy = false; }
+    struct collector_buffers *release = NULL;
+    if (!accepted || err != -ETIMEDOUT || collector_done) {
+        collector_busy = false; release = collector; collector = NULL;
+    }
     k_spin_unlock(&collector_lock, lock);
+    k_free(release);
     return err;
 }
 

@@ -21,6 +21,14 @@ static int handler_mode, init_calls, transport_mode, completion_calls;
 static uint16_t old_registered;
 static PARA_DATA_S *pending;
 static PARA_SET_STATUS pending_done;
+static void *retained_allocation;
+static bool retained_released;
+void __real_k_free(void *ptr);
+void __wrap_k_free(void *ptr)
+{
+    if (ptr && ptr == retained_allocation) { retained_released = true; }
+    __real_k_free(ptr);
+}
 static DP_PARA_LOG_DATA last_log;
 K_SEM_DEFINE(event_received, 0, 16);
 K_SEM_DEFINE(log_received, 0, 16);
@@ -301,11 +309,16 @@ ZTEST(reference_services, test_collector_timeout_retains_copied_storage)
     PARA_DATA_S request = {.set_num=1,.p_set_data=&item};
     transport_mode = 1;
     zassert_equal(dp_set_para_not_dm(&request, complete), -ETIMEDOUT);
+    retained_allocation = pending;
+    retained_released = false;
     memset(bytes, 9, sizeof(bytes));
     zassert_mem_equal(pending->p_set_data[0].p_value.pst, ((uint8_t[]){1,2,3,4,5}),5);
     zassert_equal(dp_set_para_not_dm(&request, complete), -EBUSY);
     zassert_equal(dp_para_reg_set_func(collect), -EBUSY);
+    zassert_false(retained_released);
     pending_done(pending); transport_mode = 0;
+    zassert_true(retained_released, "Late completion must release the retained copy");
+    retained_allocation = NULL;
     zassert_ok(dp_set_para_not_dm(&request, complete)); zassert_equal(completion_calls,1);
     transport_mode = 2;
     zassert_equal(dp_set_para_not_dm(&request, complete), -EIO); zassert_equal(completion_calls,1);

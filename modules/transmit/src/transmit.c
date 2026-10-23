@@ -8,6 +8,7 @@
 #include <collect/collect.h>
 #endif
 #include <errno.h>
+#include <string.h>
 #include <zephyr/sys/byteorder.h>
 
 static int read_point(struct dp_key key, uint16_t port, uint8_t fc,
@@ -180,33 +181,40 @@ int tr_write(uint16_t port, uint16_t address, const uint16_t *words, size_t coun
     if (!words || !count || count > DP_TRANSFER_WORDS || (uint32_t)address + count > 65536) { return -EINVAL; }
     const struct dp_equip_cfg *cfg = mapping_config(port);
     if (!cfg) { return -ENOENT; }
-    struct dp_process_request request = {.operation = DP_OP_WRITE, .port_id = port,
-                                          .address = address, .register_count = count};
+    struct dp_process_request *request = k_malloc(sizeof(*request));
+    if (!request) { return -ENOMEM; }
+    memset(request, 0, sizeof(*request));
+    request->operation = DP_OP_WRITE; request->port_id = port;
+    request->address = address; request->register_count = count;
+    int err = 0;
 #if defined(CONFIG_TR_MODBUS_ADAPTER)
-    request.function = tr_modbus_request_function();
+    request->function = tr_modbus_request_function();
 #endif
-    if (!request.function) { request.function = count == 1 ? 6 : 16; }
+    if (!request->function) { request->function = count == 1 ? 6 : 16; }
     for (size_t offset = 0; offset < count;) {
         struct dp_transmit_cfg scratch;
         struct dp_point_cfg point_scratch;
         const struct dp_transmit_cfg *m = mapping(cfg, 3, address + offset, &scratch);
         const struct dp_point_cfg *p = m ? dp_find(m->key, &point_scratch) : NULL;
-        if (!m || !p || m->kind != DP_MAP_VALUE) { return -ENOENT; }
+        if (!m || !p || m->kind != DP_MAP_VALUE) { err = -ENOENT; goto out; }
         /* In original tables FC03 provides write access independently of
          * FLAG_PERSISTENCE. Volatile local values still run their callback.
          * Remote samples need an explicit forwarding parameter definition.
          */
         bool volatile_reference = p->reference_data_type && p->source == DP_SOURCE_LOCAL;
-        if (p->source != DP_SOURCE_PARAMETER && !volatile_reference) { return -EACCES; }
+        if (p->source != DP_SOURCE_PARAMETER && !volatile_reference) { err = -EACCES; goto out; }
         if (m->address != address + offset || m->count != p->width || offset + m->count > count ||
-            request.count == ARRAY_SIZE(request.items)) { return -EINVAL; }
-        struct dp_point_update *item = &request.items[request.count++].point;
+            request->count == ARRAY_SIZE(request->items)) { err = -EINVAL; goto out; }
+        struct dp_point_update *item = &request->items[request->count++].point;
         item->key = m->key; item->width = p->width;
         for (size_t w = 0; w < p->width; ++w) { item->value.words[w] = dp_order_word(words+offset, p->width, w, m->order); }
         offset += p->width;
     }
     struct dp_process_result result;
-    return dp_process_execute(&request, &result);
+    err = dp_process_execute(request, &result);
+out:
+    k_free(request);
+    return err;
 #else
     ARG_UNUSED(port); ARG_UNUSED(address); ARG_UNUSED(words); ARG_UNUSED(count);
     return -ENOTSUP;
@@ -259,12 +267,15 @@ int tr_dispatch(int iface, const struct modbus_adu *rx,
         }
     }
     if (rx->fc == 3 || rx->fc == 4) {
-        uint16_t words[125];
+        uint16_t *words = k_malloc(count * sizeof(*words));
+        if (!words) { return -ENOMEM; }
         int err = tr_read(iface, rx->fc, address, words, count);
-        if (err) { return err; }
-        tx->length = 1 + count * 2; tx->data[0] = count * 2;
-        for (size_t i = 0; i < count; ++i) { sys_put_be16(words[i], tx->data + 1 + i * 2); }
-        return 0;
+        if (!err) {
+            tx->length = 1 + count * 2; tx->data[0] = count * 2;
+            for (size_t i = 0; i < count; ++i) { sys_put_be16(words[i], tx->data + 1 + i * 2); }
+        }
+        k_free(words);
+        return err;
     }
     return -ENOENT; /* Ordinary FC06/16 point-table writer. */
 }

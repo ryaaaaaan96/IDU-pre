@@ -23,6 +23,7 @@
 | 迁移参考平台接口 | [参考平台对照](reference-platform.md) | 原库证据、79/89 名称覆盖、差异、const/RAM 分工 |
 | 核对产品与升级边界 | [领域术语](../GLOSSARY.md)、[单一 IDU 产品方案](adr/0001-single-idu-product.md) | IDU 产品、可选升级模块和测试夹具的区别 |
 | 测试和核对容量 | [验证说明](testing.md) | 测试命令、套件、桌面结果、RAM 对比、实板边界 |
+| 调整大缓冲和堆容量 | [内存管理](memory-management.md) | k_malloc 所有权、初始化/临时工作区、共享堆预算和栈保护 |
 
 ## 调研与历史证据
 

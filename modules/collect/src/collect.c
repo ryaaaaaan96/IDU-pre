@@ -17,7 +17,6 @@ struct queued_request {
     co_done_fn done;
     void *user;
     int64_t queued_at;
-    bool used;
 };
 struct bus_state {
     struct co_bus_cfg cfg;
@@ -26,7 +25,7 @@ struct bus_state {
     enum co_port_mode mode;
     bool ready, running;
     k_tid_t init_owner;
-    struct queued_request queue[CONFIG_CO_QUEUE_DEPTH];
+    struct queued_request *queue[CONFIG_CO_QUEUE_DEPTH];
 };
 static struct bus_state buses[CONFIG_CO_MAX_BUSES];
 static const struct dp_equip_cfg *equipment;
@@ -122,12 +121,16 @@ static int read_registers(uint16_t dev_id, uint8_t fc, uint16_t address, uint16_
 {
     if (!words || !count || count > CO_MAX_REGS || 1 + count * 2 > sizeof(((struct modbus_adu *)0)->data) || (fc != 3 && fc != 4) ||
         (uint32_t)address + count > 65536) { return -EINVAL; }
-    struct modbus_adu adu = {.fc = fc, .length = 4};
-    sys_put_be16(address, adu.data); sys_put_be16(count, adu.data + 2);
-    int err = exchange(dev_id, CO_PORT_POLL, &adu, outcome);
+    struct modbus_adu *adu = k_malloc(sizeof(*adu));
+    if (!adu) { *outcome = (struct co_outcome){0}; return -ENOMEM; }
+    memset(adu, 0, sizeof(*adu));
+    adu->fc = fc; adu->length = 4;
+    sys_put_be16(address, adu->data); sys_put_be16(count, adu->data + 2);
+    int err = exchange(dev_id, CO_PORT_POLL, adu, outcome);
     if (!err) {
-        for (size_t i = 0; i < count; ++i) { words[i] = sys_get_be16(adu.data + 1 + 2 * i); }
+        for (size_t i = 0; i < count; ++i) { words[i] = sys_get_be16(adu->data + 1 + 2 * i); }
     }
+    k_free(adu);
     if (record) { co_state_record(dev_id, err, *outcome); }
     return err;
 }
@@ -141,15 +144,19 @@ int co_read(uint16_t dev_id, uint8_t fc, uint16_t address, uint16_t *words, size
 int co_write(uint16_t dev_id, uint16_t address, const uint16_t *words, size_t count)
 {
     if (!words || !count || count > CO_MAX_REGS || 5 + count * 2 > sizeof(((struct modbus_adu *)0)->data) || (uint32_t)address + count > 65536) { return -EINVAL; }
-    struct modbus_adu adu = {.fc = count == 1 ? 6 : 16, .length = count == 1 ? 4 : 5 + count * 2};
-    sys_put_be16(address, adu.data);
-    sys_put_be16(count == 1 ? words[0] : count, adu.data + 2);
+    struct modbus_adu *adu = k_malloc(sizeof(*adu));
+    if (!adu) { return -ENOMEM; }
+    memset(adu, 0, sizeof(*adu));
+    adu->fc = count == 1 ? 6 : 16; adu->length = count == 1 ? 4 : 5 + count * 2;
+    sys_put_be16(address, adu->data);
+    sys_put_be16(count == 1 ? words[0] : count, adu->data + 2);
     if (count > 1) {
-        adu.data[4] = count * 2;
-        for (size_t i = 0; i < count; ++i) { sys_put_be16(words[i], adu.data + 5 + i * 2); }
+        adu->data[4] = count * 2;
+        for (size_t i = 0; i < count; ++i) { sys_put_be16(words[i], adu->data + 5 + i * 2); }
     }
     struct co_outcome outcome;
-    int err = exchange(dev_id, CO_PORT_POLL, &adu, &outcome);
+    int err = exchange(dev_id, CO_PORT_POLL, adu, &outcome);
+    k_free(adu);
     co_state_record(dev_id, err, outcome);
     return err;
 }
@@ -236,7 +243,13 @@ static int collect_request(const struct co_cfg *cfg, bool sync, struct co_outcom
     if (!data_callbacks.sample) { return -ENOTCONN; }
     struct bus_state *bus = bus_for(cfg->dev_id);
     if (!bus) { return -ENODEV; }
-    uint16_t registers[CO_MAX_REGS];
+    uint16_t *registers = k_malloc(cfg->count * sizeof(*registers));
+    struct dp_point_batch *batch = k_malloc(sizeof(*batch));
+    if (!registers || !batch) {
+        k_free(registers); k_free(batch);
+        *outcome = (struct co_outcome){0};
+        return -ENOMEM;
+    }
     int err;
     if (cfg->model_protocol) {
         k_mutex_lock(&bus->lock, K_FOREVER);
@@ -250,11 +263,13 @@ static int collect_request(const struct co_cfg *cfg, bool sync, struct co_outcom
     } else {
         err = read_registers(cfg->dev_id, cfg->function, cfg->address, registers, cfg->count, outcome, false);
     }
-    struct dp_point_batch batch = {.source = DP_SOURCE_MODBUS,
-        .flags = bus->cfg.simulated ? DP_QUALITY_SIMULATED : 0, .count = cfg->field_count};
+    memset(batch, 0, sizeof(*batch));
+    batch->source = DP_SOURCE_MODBUS;
+    batch->flags = bus->cfg.simulated ? DP_QUALITY_SIMULATED : 0;
+    batch->count = cfg->field_count;
     for (size_t i = 0; i < cfg->field_count; ++i) {
         const struct co_field *f = &cfg->fields[i];
-        struct dp_point_update *p = &batch.points[i];
+        struct dp_point_update *p = &batch->points[i];
         p->key = (struct dp_key){cfg->dev_id, f->sig_id}; p->width = f->width; p->error = err;
         if (!err) {
             for (size_t w = 0; w < f->width; ++w) {
@@ -262,7 +277,8 @@ static int collect_request(const struct co_cfg *cfg, bool sync, struct co_outcom
             }
         }
     }
-    int publish = data_callbacks.sample(&batch, sync);
+    int publish = data_callbacks.sample(batch, sync);
+    k_free(registers); k_free(batch);
     int result = publish ? publish : err;
     co_state_record(cfg->dev_id, result, *outcome);
     return result;
@@ -486,9 +502,11 @@ int co_submit(const struct co_request *request, co_done_fn done, void *user)
     k_mutex_lock(&schedule_lock, K_FOREVER);
     int err = -ENOSPC;
     for (size_t i = 0; i < ARRAY_SIZE(bus->queue); ++i) {
-        if (!bus->queue[i].used) {
-            bus->queue[i] = (struct queued_request){.request = *request, .done = done,
-                .user = user, .queued_at = k_uptime_get(), .used = true};
+        if (!bus->queue[i]) {
+            struct queued_request *job = k_malloc(sizeof(*job));
+            if (!job) { err = -ENOMEM; break; }
+            job->request = *request; job->done = done; job->user = user;
+            job->queued_at = k_uptime_get(); bus->queue[i] = job;
             err = 0; break;
         }
     }
@@ -502,9 +520,9 @@ int co_cancel(uint8_t id)
     if (id >= ARRAY_SIZE(buses) || !buses[id].ready) { return -EINVAL; }
     for (size_t i = 0; i < ARRAY_SIZE(buses[id].queue); ++i) {
         k_mutex_lock(&schedule_lock, K_FOREVER);
-        struct queued_request job = buses[id].queue[i]; buses[id].queue[i].used = false;
+        struct queued_request *job = buses[id].queue[i]; buses[id].queue[i] = NULL;
         k_mutex_unlock(&schedule_lock);
-        if (job.used) { job.done(&job.request, -ECANCELED, job.user); }
+        if (job) { job->done(&job->request, -ECANCELED, job->user); k_free(job); }
     }
     k_sem_give(&buses[id].wake);
     return 0;
@@ -540,14 +558,15 @@ void co_bus_task(void *arg, void *b, void *c)
         co_state_tick();
         int poll = -1, queued = -1; int64_t best = INT64_MIN, now = k_uptime_get();
         int64_t deadline = INT64_MAX;
-        struct queued_request job;
+        struct queued_request *job = NULL;
         k_mutex_lock(&schedule_lock, K_FOREVER);
         if (bus->mode != CO_PORT_SLEEP && !bus->init_owner) {
             for (size_t i = 0; i < ARRAY_SIZE(bus->queue); ++i) {
-                struct queued_request *q = &bus->queue[i];
+                struct queued_request *q = bus->queue[i];
+                if (!q) { continue; }
                 /* Priority advantage is bounded: one second of age per level. */
                 int64_t score = now - q->queued_at + q->request.priority * 1000;
-                if (q->used && q->request.mode == bus->mode && score > best) { best = score; queued = i; }
+                if (q->request.mode == bus->mode && score > best) { best = score; queued = i; }
             }
         }
         if (bus->mode == CO_PORT_POLL && !bus->init_owner) {
@@ -573,11 +592,12 @@ void co_bus_task(void *arg, void *b, void *c)
                 if (score > best) { best = score; poll = i; queued = -1; }
             }
         }
-        if (queued >= 0) { job = bus->queue[queued]; bus->queue[queued].used = false; }
+        if (queued >= 0) { job = bus->queue[queued]; bus->queue[queued] = NULL; }
         k_mutex_unlock(&schedule_lock);
         if (queued >= 0) {
-            int err = co_transfer_mode(job.request.dev_id, job.request.mode, &job.request.adu);
-            job.done(&job.request, err, job.user);
+            int err = co_transfer_mode(job->request.dev_id, job->request.mode, &job->request.adu);
+            job->done(&job->request, err, job->user);
+            k_free(job);
         } else if (poll >= 0) {
             struct co_cfg scratch;
             const struct co_cfg *cfg = dp_config_collect(equipment, poll, &scratch);
@@ -741,8 +761,12 @@ int co_anlysis_mb_pkg(uint8_t dev, uint16_t address, uint8_t *frame, uint16_t le
     }
     if ((frame[1] != 3 && frame[1] != 4) || !frame[2] || frame[2] % 2 ||
         length != 5U + frame[2] || (uint32_t)address + frame[2] / 2 > 65536) { return -EBADMSG; }
-    struct dp_point_batch batch = {.source = DP_SOURCE_MODBUS,
-        .flags = bus->cfg.simulated ? DP_QUALITY_SIMULATED : 0};
+    struct dp_point_batch *batch = k_malloc(sizeof(*batch));
+    if (!batch) { return -ENOMEM; }
+    memset(batch, 0, sizeof(*batch));
+    batch->source = DP_SOURCE_MODBUS;
+    batch->flags = bus->cfg.simulated ? DP_QUALITY_SIMULATED : 0;
+    int err = 0;
     for (size_t b = 0; b < equipment->collect_count; ++b) {
         struct co_cfg poll_scratch;
         const struct co_cfg *poll = dp_config_collect(equipment, b, &poll_scratch);
@@ -751,20 +775,22 @@ int co_anlysis_mb_pkg(uint8_t dev, uint16_t address, uint8_t *frame, uint16_t le
             const struct co_field *field = &poll->fields[f];
             uint32_t begin = poll->address + field->offset;
             if (begin < address || begin + field->width > (uint32_t)address + frame[2] / 2) { continue; }
-            if (batch.count == ARRAY_SIZE(batch.points)) { return -ENOSPC; }
-            for (size_t i = 0; i < batch.count; ++i) {
-                if (batch.points[i].key.sig_id == field->sig_id) { return -EEXIST; }
+            if (batch->count == ARRAY_SIZE(batch->points)) { err = -ENOSPC; goto out; }
+            for (size_t i = 0; i < batch->count; ++i) {
+                if (batch->points[i].key.sig_id == field->sig_id) { err = -EEXIST; goto out; }
             }
-            struct dp_point_update *point = &batch.points[batch.count++];
+            struct dp_point_update *point = &batch->points[batch->count++];
             point->key = (struct dp_key){dev, field->sig_id}; point->width = field->width;
             uint16_t words[DP_POINT_WORDS];
             for (size_t w = 0; w < field->width; ++w) { words[w] = sys_get_be16(frame + 3 + 2 * (begin - address + w)); }
             for (size_t w = 0; w < field->width; ++w) { point->value.words[w] = dp_order_word(words, field->width, w, field->order); }
         }
     }
-    if (!batch.count) { return -ENOENT; }
-    int err = data_callbacks.sample ? data_callbacks.sample(&batch, false) : -ENOTCONN;
+    if (!batch->count) { err = -ENOENT; goto out; }
+    err = data_callbacks.sample ? data_callbacks.sample(batch, false) : -ENOTCONN;
     if (!err) { co_state_record(dev, 0, (struct co_outcome){.replied = true}); }
+out:
+    k_free(batch);
     return err;
 }
 

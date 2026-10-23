@@ -5,6 +5,14 @@ menuconfig TRANSMIT
 
 if TRANSMIT
 
+config HEAP_MEM_POOL_ADD_SIZE_TRANSMIT
+    int "Shared heap budget for forwarding message buffers (bytes)"
+    default 4096
+    range 512 65536
+    help
+      Covers simultaneous RAW receive ADUs, transmit frames and register
+      conversion buffers. Tune for forwarding concurrency and payload size.
+
 config TR_VPORT
     bool "Complete-message ports through vport"
     select VPORT

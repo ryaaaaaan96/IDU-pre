@@ -38,12 +38,15 @@ static struct {
     uint32_t address;
     int64_t deadline;
 } receiver;
-static uint8_t bitmap[DIV_ROUND_UP(PACKETS_MAX, 8)];
-static uint8_t erased[DIV_ROUND_UP(DIV_ROUND_UP(CONFIG_IAP_MAX_CONTAINER_SIZE, SECTOR), 8)];
-static uint8_t packet[PACKET_MAX];
+struct receiver_buffers {
+    struct flash_img_context image;
+    struct iap_sgz_workspace workspace;
+    uint8_t packet[PACKET_MAX];
+    uint8_t bitmap[DIV_ROUND_UP(PACKETS_MAX, 8)];
+    uint8_t erased[DIV_ROUND_UP(DIV_ROUND_UP(CONFIG_IAP_MAX_CONTAINER_SIZE, SECTOR), 8)];
+};
+static struct receiver_buffers *buffers;
 static uint16_t packet_length;
-static struct iap_sgz_workspace workspace;
-static struct flash_img_context image;
 K_MUTEX_DEFINE(lock);
 K_SEM_DEFINE(wake, 0, 1);
 static struct k_thread thread;
@@ -78,22 +81,22 @@ static bool may_upload(void)
 static int store_packet(void)
 {
     uint32_t off = (uint32_t)(receiver.number - 1) * receiver.every;
-    int err = iap_sgz_decrypt(packet, packet_length, off, config.aes_key);
+    int err = iap_sgz_decrypt(buffers->packet, packet_length, off, config.aes_key);
     if (err) { return err; }
-    if (bit_get(bitmap, receiver.number - 1)) {
-        err = flash_area_read(staging, off, workspace.plain, packet_length);
-        return err ? err : memcmp(packet, workspace.plain, packet_length) ? -EBADMSG : 0;
+    if (bit_get(buffers->bitmap, receiver.number - 1)) {
+        err = flash_area_read(staging, off, buffers->workspace.plain, packet_length);
+        return err ? err : memcmp(buffers->packet, buffers->workspace.plain, packet_length) ? -EBADMSG : 0;
     }
     for (unsigned page = off / SECTOR; page <= (off + packet_length - 1) / SECTOR; ++page) {
-        if (!bit_get(erased, page)) {
+        if (!bit_get(buffers->erased, page)) {
             err = flash_area_erase(staging, page * SECTOR, SECTOR);
             if (err) { return err; }
-            bit_set(erased, page);
+            bit_set(buffers->erased, page);
         }
     }
-    err = flash_area_write(staging, off, packet, packet_length);
-    if (!err) { err = flash_area_read(staging, off, workspace.plain, packet_length); }
-    if (!err && memcmp(packet, workspace.plain, packet_length)) { err = -EIO; }
+    err = flash_area_write(staging, off, buffers->packet, packet_length);
+    if (!err) { err = flash_area_read(staging, off, buffers->workspace.plain, packet_length); }
+    if (!err && memcmp(buffers->packet, buffers->workspace.plain, packet_length)) { err = -EIO; }
     return err;
 }
 
@@ -103,13 +106,13 @@ static int finish(void)
     uint8_t hash[32];
     bool frozen = false;
     if (!may_upload()) { return -EBUSY; }
-    int err = flash_img_init_id(&image, secondary->fa_id);
+    int err = flash_img_init_id(&buffers->image, secondary->fa_id);
     if (err) { return err; }
     err = iap_sgz_unpack(area_read, (void *)staging,
                          (receiver.total - 1u) * receiver.every + receiver.last, config.image.max_size,
-                         image_write, &image, &workspace, &size);
-    if (!err) { err = flash_img_buffered_write(&image, NULL, 0, true); }
-    if (image.flash_area) { flash_area_close(image.flash_area); image.flash_area = NULL; }
+                         image_write, &buffers->image, &buffers->workspace, &size);
+    if (!err) { err = flash_img_buffered_write(&buffers->image, NULL, 0, true); }
+    if (buffers->image.flash_area) { flash_area_close(buffers->image.flash_area); buffers->image.flash_area = NULL; }
     if (!err) { err = iap_image_verify(area_read, (void *)secondary, size,
                                       &config.image, hash); }
     if (!err) {
@@ -133,6 +136,7 @@ static int finish(void)
 
 static uint8_t cause_for(int err)
 {
+    if (err == -ENOMEM) { return HEAP; }
     if (err == -EACCES) { return KEY_ERROR; }
     if (err == -EBADMSG) { return CRC_ERROR; }
     if (err == -ENOTSUP) { return SUBFILE; }
@@ -176,8 +180,8 @@ static void worker(void *a, void *b, void *c)
         k_mutex_lock(&lock, K_FOREVER);
         if (err) { state_set(IAP_FAULT, cause_for(err)); LOG_ERR("IAP job %u failed: %d", job, err); }
         else if (job == JOB_PACKET || job == JOB_LOGIN_PACKET) {
-            if (!bit_get(bitmap, receiver.number - 1)) {
-                bit_set(bitmap, receiver.number - 1); ++receiver.received;
+            if (!bit_get(buffers->bitmap, receiver.number - 1)) {
+                bit_set(buffers->bitmap, receiver.number - 1); ++receiver.received;
             }
             if (receiver.number == receiver.total) { receiver.last = packet_length; }
             state_set(IAP_TRANSFER, NO_CAUSE);
@@ -260,6 +264,9 @@ int iap_init_config(const struct iap_config *cfg)
         journal.crc != iap_sgz_crc32(0, wire, 44))) {
         close_areas(); return err < 0 ? err : -EBADMSG;
     }
+    buffers = k_malloc(sizeof(*buffers));
+    if (!buffers) { close_areas(); return -ENOMEM; }
+    memset(buffers, 0, sizeof(*buffers));
     config = *cfg;
     receiver.owner = -1;
     if (err > 0 && (journal.phase == 1 || journal.phase == 2)) {
@@ -278,7 +285,7 @@ bool iap_ready(void) { return receiver.ready; }
 
 static uint16_t missing(void)
 {
-    for (unsigned i = 0; i < receiver.total; ++i) { if (!bit_get(bitmap, i)) { return i + 1; } }
+    for (unsigned i = 0; i < receiver.total; ++i) { if (!bit_get(buffers->bitmap, i)) { return i + 1; } }
     return 0;
 }
 static void put32(uint8_t *dst, uint32_t n)
@@ -379,7 +386,7 @@ static int write_regs(int iface, uint16_t address, const uint8_t *data, size_t b
     if (login || logout) {
         receiver.command = command; receiver.owner = logout ? -1 : iface;
         receiver.last = receiver.received = 0;
-        memset(bitmap, 0, sizeof(bitmap)); memset(erased, 0, sizeof(erased));
+        memset(buffers->bitmap, 0, sizeof(buffers->bitmap)); memset(buffers->erased, 0, sizeof(buffers->erased));
         state_set(login ? IAP_LOGIN : IAP_IDLE, NO_CAUSE);
         receiver.job = login ? JOB_LOGIN : JOB_EXIT;
         receiver.busy = true;
@@ -387,7 +394,7 @@ static int write_regs(int iface, uint16_t address, const uint8_t *data, size_t b
     receiver.every = every; receiver.total = total; receiver.number = number;
     receiver.length = length; receiver.address = offset;
     if (payload) {
-        packet_length = actual; memcpy(packet, payload, actual);
+        packet_length = actual; memcpy(buffers->packet, payload, actual);
         receiver.job = login ? JOB_LOGIN_PACKET : JOB_PACKET;
         receiver.busy = true;
     }

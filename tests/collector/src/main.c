@@ -26,6 +26,16 @@ K_THREAD_STACK_DEFINE(init_stack, 4096);
 static struct k_thread init_thread;
 static atomic_t hold_init, init_error, init_callbacks;
 static int init_result;
+static k_tid_t fail_allocation_owner;
+void *__real_k_malloc(size_t size);
+void *__wrap_k_malloc(size_t size)
+{
+    if (fail_allocation_owner == k_current_get()) {
+        fail_allocation_owner = NULL;
+        return NULL;
+    }
+    return __real_k_malloc(size);
+}
 
 static int initialized(struct dp_process_ctx *ctx, struct dp_key key)
 {
@@ -190,6 +200,9 @@ static void before(void *fixture)
 ZTEST(collector, test_queue_capacity_priority_and_cancel)
 {
     zassert_equal(CONFIG_CO_QUEUE_DEPTH, 3);
+    fail_allocation_owner = k_current_get();
+    zassert_equal(submit(9, CO_PORT_UPDATE, 0), -ENOMEM);
+    zassert_is_null(fail_allocation_owner);
     zassert_ok(submit(10, CO_PORT_UPDATE, 0));
     zassert_ok(submit(11, CO_PORT_UPDATE, 3));
     zassert_ok(submit(12, CO_PORT_UPDATE, 1));

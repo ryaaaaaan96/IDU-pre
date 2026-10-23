@@ -10,6 +10,7 @@ menuconfig IAP
     depends on UPDATEABLE_IMAGE_NUMBER = 1
     depends on !BOOTLOADER_MCUBOOT || MCUBOOT_BOOTLOADER_MODE_SWAP_SCRATCH
     select QUICKLZ
+    select KERNEL_MEM_POOL
     help
       Single ARM SGZ/QuickLZ level-3 image over legacy Modbus IAPv3, with
       ECDSA-P256 verification, flash staging and a durable result journal.
@@ -18,6 +19,15 @@ menuconfig IAP
       transmit module is required. Native tests can emulate MCUboot.
 
 if IAP
+
+config HEAP_MEM_POOL_ADD_SIZE_IAP
+    int "Shared heap budget for IAP receiver working storage (bytes)"
+    default 16384
+    range 8192 65536
+    help
+      Allocated once at initialization for packet/erase bitmaps, the packet,
+      SGZ workspace and flash writer. Tune for IAP_MAX_CONTAINER_SIZE and
+      flash writer buffering. Failed initialization releases flash areas.
 
 config IAP_CONFIGURED
     bool "Configure IAP from devicetree and Kconfig"
@@ -75,7 +85,7 @@ config IAP_MAX_CONTAINER_SIZE
     default 983040
     range 4096 1048560
     help
-      Bounds static packet/erase bitmaps. Actual transfers are limited by
+      Bounds heap-allocated packet/erase bitmaps. Actual transfers are limited by
       the configured staging partition, which may be smaller. The legacy
       16-bit packet count supports at most 65535 packets of 16 bytes.
 

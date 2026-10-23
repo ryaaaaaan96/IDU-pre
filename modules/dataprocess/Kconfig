@@ -129,6 +129,27 @@ config HEAP_MEM_POOL_ADD_SIZE_DATAPROCESS
       Other heap users need their own budget. A failed allocation leaves DP
       uninitialized.
 
+config HEAP_MEM_POOL_ADD_SIZE_DP_WORK
+    int "Shared heap budget for sample processing buffers (bytes)"
+    default 16384 if DP_PROCESS
+    default 2048
+    range 512 32768
+    help
+      Covers the lifetime sample-worker batch, temporary process/reference
+      requests and transaction entries, copied asynchronous collector data,
+      queued/active business jobs and publication batches including product
+      sample mapping buffers. Queues hold pointers to owned heap jobs.
+
+config HEAP_MEM_POOL_ADD_SIZE_DP_PARAMS
+    int "Shared heap budget for parameter state and transaction buffers (bytes)"
+    depends on DP_PARAMS
+    default 8192
+    range 1024 131072
+    help
+      Allocated once by dp_params_init(). Tune for DP_PARAMS_MAX_COUNT,
+      DP_POINT_WORDS and DP_PARAMS_TRANSACTION_BYTES. These buffers remain
+      available during storage failure so cached parameter reads can continue.
+
 config DP_POINTS_MAX_POLLS
     int "Maximum collection blocks"
     default 16

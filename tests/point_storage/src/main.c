@@ -5,6 +5,7 @@
 static bool fail_allocation, fail_after_allocation, reader_failed;
 static size_t requested;
 static unsigned allocations, releases;
+static unsigned fail_nth;
 
 void *__real_k_malloc(size_t size);
 void __real_k_free(void *ptr);
@@ -12,6 +13,7 @@ void *__wrap_k_malloc(size_t size)
 {
     ++allocations;
     requested = size;
+    if (fail_nth && --fail_nth == 0) { return NULL; }
     if (fail_allocation) { return NULL; }
     void *ptr = __real_k_malloc(size);
     if (ptr && fail_after_allocation) { reader_failed = true; }
@@ -55,6 +57,10 @@ ZTEST(point_storage, test_allocation_failure_cleanup_and_retry)
     zassert_equal(releases, 1);
 
     fail_after_allocation = reader_failed = false;
+    fail_nth = 2; /* The worker batch fails after point-value allocation. */
+    zassert_equal(dp_init_config(&config), -ENOMEM);
+    zassert_is_null(dp_config());
+    zassert_equal(releases, 2);
     zassert_ok(dp_init_config(&config));
     struct dp_point_state first, second;
     zassert_ok(dp_read((struct dp_key){10, 100}, &first));

@@ -8,6 +8,40 @@ AIDC 产品代码、专用测试及导入工具已移除；下方日期章节保
 其中的旧构建命令和文件路径不再作为当前操作入口。
 当前构建入口为 `./applications/IDU-pre/scripts/build.sh`（从工作区根目录运行）；旧记录中的根目录 `build.sh` 已移入 `scripts/`。
 
+## 2026-10-23 大工作缓冲迁移到系统堆
+
+分配与所有权见[内存管理](memory-management.md)。覆盖 DP 样本和业务请求、
+CO 队列及 ADU、CO/TR RAW 帧、参数缓存与事务工作区，以及 IAP 位图和解压工作区。
+CO 和 DP 的排队载荷按需申请，完成/取消回调返回后释放；队列自身只保存指针。
+
+Arm 编译器 `-fstack-usage` 对比（单函数栈帧，不等于运行期高水位）：
+
+| 函数 | 迁移前（B） | 迁移后（B） |
+| --- | ---: | ---: |
+| CO RAW `send()` | 1160 | 48 |
+| `co_bus_task()` | 1312 | 176 |
+| `read_registers()` | 1152 | 40 |
+| `collect_request()` | 688 | 72 |
+
+采集栈从临时的 8192 B 恢复为 4096 B，硬件栈保护保留。当前 MCUboot + IAPv3
+应用构建、验签及导出成功：Flash 130248 B，RAM 115308 B（87.97%），其中共享
+堆预算 49408 B。相对于迁移前的 RAM 108164 B，系统堆预留使总量增加 7144 B；
+不能把栈减少量直接当作总 RAM 节省。当前调试配置仍跳过看门狗初始化。
+
+验收覆盖接收/发送分配失败后的端口恢复、队列分配失败不占槽位、DP 事务分配
+失败不修改点值且可重试、初始化部分分配失败清理，以及迟到回调释放超时副本。
+通信测试跟踪临时申请/释放，确认成功、失败和恢复后无遗留缓冲。
+
+完整回归命令为 `CCACHE_DISABLE=1 ASAN_OPTIONS=detect_leaks=0 bash applications/IDU-pre/tests/run.sh`。
+最终完整回归通过：391 项 Ztest PASS，Python 23 项中 20 项通过、3 项因缺少外部
+QuickLZ/SGZ 样本跳过；任务看门狗另覆盖 12 个独立进程场景。IAP 缓冲布局收尾后，
+单独重跑 `tests/iap/run.sh`，接收、重启恢复、配置分区和转发接入变体均通过。
+该环境下 LeakSanitizer 无法在 ptrace 中运行；主机 ASan/UBSan 保持启用，Zephyr
+系统堆的生命周期由上述专用断言验证。日志保存在工作区
+`build/IDU-pre/heap-migration-validated.log`，固件记录在
+`build/IDU-pre/heap-migration-build.log`，栈报告在 `build/IDU-pre/heap-stack-after/`。
+本轮迁移后的实板持续通信、升级并发、堆峰值与线程栈余量仍需另行验证。
+
 ## 当前通信重构验收
 
 协议装配、任务归属、每设备四状态、组包、失效恢复、RAM 诊断和存储降级见

@@ -19,7 +19,7 @@ IDU 无需编写独立的 IAP 适配 `.c`。配置由以下内容提供：
 | 公钥来源 | `CONFIG_IAP_PUBLIC_KEY_FILE`，默认跟随 `CONFIG_MCUBOOT_SIGNATURE_KEY_FILE`；相对路径以应用配置目录为基准 |
 | 旧 AES 传输密钥 | `CONFIG_IAP_AES_KEY_HEX`，32 个十六进制字符 |
 | 升级前保存策略 | `CONFIG_IAP_REBOOT_DP_PARAMS` 或 `CONFIG_IAP_REBOOT_NO_STATE` |
-| 暂存容量上限 | `CONFIG_IAP_MAX_CONTAINER_SIZE`，限制静态位图大小；实际接收限额为暂存分区大小 |
+| 暂存容量上限 | `CONFIG_IAP_MAX_CONTAINER_SIZE`，限定位图大小；位图及工作区在初始化时从堆申请，实际接收限额为暂存分区大小 |
 
 [`conf/iapv3.conf`](../../conf/iapv3.conf) 选择 DP 保存策略。模块在验签完成后调用
 `dp_params_prepare_reboot()`；提交日志或请求升级失败时调用

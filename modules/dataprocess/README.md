@@ -16,7 +16,9 @@ transmit 提供。数据池数值采用主机字节序、低字在前。
 `DP_POINTS_VALUE_WORDS` 是总字数上限，不再对应专用静态数组。
 `HEAP_MEM_POOL_ADD_SIZE_DATAPROCESS` 为共享系统堆提供容量预算，模块默认 1024 B，
 可在应用 `.conf` 手动调整；堆还包含管理开销，不能将申请字节数等同于固件总 RAM。
-测点状态、轮询和参数事务缓存仍有各自的静态容量，不随点值缓冲区自动扩展。
+测点索引和轮询仍有各自的固定容量；参数缓存、处理事务及大请求缓冲已改为
+`k_malloc()`，分别由 `HEAP_MEM_POOL_ADD_SIZE_DP_PARAMS` 和
+`HEAP_MEM_POOL_ADD_SIZE_DP_WORK` 贡献容量。详见[内存管理](../../docs/memory-management.md)。
 
 ## 采样与事务
 

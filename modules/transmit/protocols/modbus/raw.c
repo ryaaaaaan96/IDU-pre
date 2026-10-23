@@ -35,10 +35,15 @@ static int receive(void *user, const struct vport_source *source,
 
     if (!atomic_cas(&port->receiving, 0, 1)) { return -EBUSY; }
     port->source = *source;
-    struct modbus_adu adu = {.unit_id = frame->data[0], .fc = frame->data[1],
-        .length = frame->size - 4, .crc = sys_get_le16(frame->data + frame->size - 2)};
-    memcpy(adu.data, frame->data + 2, adu.length);
-    int err = modbus_raw_submit_rx(port->iface, &adu);
+    struct modbus_adu *adu = k_malloc(sizeof(*adu));
+    if (!adu) { finished(port); return -ENOMEM; }
+    memset(adu, 0, sizeof(*adu));
+    adu->unit_id = frame->data[0]; adu->fc = frame->data[1];
+    adu->length = frame->size - 4;
+    adu->crc = sys_get_le16(frame->data + frame->size - 2);
+    memcpy(adu->data, frame->data + 2, adu->length);
+    int err = modbus_raw_submit_rx(port->iface, adu);
+    k_free(adu); /* Zephyr copies the complete ADU before returning. */
     if (err) { finished(port); }
     return err;
 }
@@ -48,13 +53,16 @@ static int send(int iface, const struct modbus_adu *adu, void *user)
     ARG_UNUSED(iface);
     struct raw_port *port = user;
     if (adu->length > sizeof(adu->data)) { return -EMSGSIZE; }
-    uint8_t data[CONFIG_MODBUS_BUFFER_SIZE];
+    uint8_t *data = k_malloc(adu->length + 4U);
+    if (!data) { return -ENOMEM; }
     data[0] = adu->unit_id; data[1] = adu->fc;
     memcpy(data + 2, adu->data, adu->length);
     sys_put_le16(crc16_ansi(data, adu->length + 2), data + adu->length + 2);
     const struct vport_frame frame = {.data = data, .size = adu->length + 4};
-    return tr_port_send(port->binding.port, &port->source, &frame,
+    int err = tr_port_send(port->binding.port, &port->source, &frame,
                              K_MSEC(CONFIG_TR_MODBUS_TX_TIMEOUT_MS));
+    k_free(data); /* The send callback completes or copies the frame. */
+    return err;
 }
 
 int tr_modbus_port_bind(uint16_t id, const char *name, const struct vport_io *io)

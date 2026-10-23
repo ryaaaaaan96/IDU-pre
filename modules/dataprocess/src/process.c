@@ -12,22 +12,22 @@ struct entry {
     struct dp_point_state old;
     bool dirty;
 };
-static struct entry entries[CONFIG_DP_PROCESS_MAX_OUTPUTS];
+static struct entry *entries;
 static size_t entry_count;
 static uint16_t transaction_quality;
 static k_tid_t owner;
 static const struct dp_process_request *active_request;
 static struct k_spinlock context_lock;
 K_MUTEX_DEFINE(process_lock);
-static struct dp_point_update group[CONFIG_DP_PROCESS_MAX_OUTPUTS];
+static struct dp_point_update *group;
 struct async_job {
     struct dp_process_request request;
     dp_process_done_fn done;
     void *user;
 };
-K_MSGQ_DEFINE(process_jobs, sizeof(struct async_job), CONFIG_DP_PROCESS_QUEUE_DEPTH, 4);
+K_MSGQ_DEFINE(process_jobs, sizeof(struct async_job *), CONFIG_DP_PROCESS_QUEUE_DEPTH, sizeof(void *));
 K_MUTEX_DEFINE(submission_lock);
-static struct async_job submission;
+
 struct business_timer {
     struct dp_key key;
     int64_t due;
@@ -63,7 +63,7 @@ static int capture(struct dp_key key)
     struct dp_point_cfg p_scratch;
     const struct dp_point_cfg *p = dp_find(key, &p_scratch);
     if (!p) { return -ENOENT; }
-    if (entry_count == ARRAY_SIZE(entries)) { return -ENOSPC; }
+    if (entry_count == CONFIG_DP_PROCESS_MAX_OUTPUTS) { return -ENOSPC; }
     struct dp_point_state state;
     int err = dp_read(key, &state);
     if (err) { return err; }
@@ -188,6 +188,12 @@ int dp_process_execute(const struct dp_process_request *request,
     if (owner == k_current_get()) {
         k_mutex_unlock(&process_lock); result->error = -EDEADLK; return -EDEADLK;
     }
+    entries = k_malloc(CONFIG_DP_PROCESS_MAX_OUTPUTS * sizeof(*entries));
+    group = k_malloc(CONFIG_DP_PROCESS_MAX_OUTPUTS * sizeof(*group));
+    if (!entries || !group) {
+        k_free(entries); k_free(group); entries = NULL; group = NULL;
+        k_mutex_unlock(&process_lock); result->error = -ENOMEM; return -ENOMEM;
+    }
     k_spinlock_key_t context_key = k_spin_lock(&context_lock);
     owner = k_current_get();
     active_request = request;
@@ -310,6 +316,7 @@ out:
     owner = NULL;
     active_request = NULL;
     k_spin_unlock(&context_lock, context_key);
+    k_free(entries); k_free(group); entries = NULL; group = NULL;
     k_mutex_unlock(&process_lock);
     return err;
 }
@@ -323,27 +330,34 @@ int dp_process_submit(const struct dp_process_request *request,
         request->count > CONFIG_DP_PROCESS_MAX_OUTPUTS ||
         (unsigned)request->operation > DP_OP_TIMER || k_is_in_isr()) { return -EINVAL; }
     if (k_mutex_lock(&submission_lock, K_NO_WAIT)) { return -EBUSY; }
-    memcpy(&submission.request, request, sizeof(*request));
-    submission.done = done;
-    submission.user = user;
+    struct async_job *submission = k_malloc(sizeof(*submission));
+    if (!submission) { k_mutex_unlock(&submission_lock); return -ENOMEM; }
+    memcpy(&submission->request, request, sizeof(*request));
+    submission->done = done;
+    submission->user = user;
     int err = k_msgq_put(&process_jobs, &submission, K_NO_WAIT);
+    if (err) { k_free(submission); } /* Successful enqueue transfers ownership. */
     k_mutex_unlock(&submission_lock);
     return err;
 }
 
 int dp_process_sample(const struct dp_point_batch *batch)
 {
-    /* Single zbus consumer owns this scratch space. */
-    static struct dp_process_request request;
-    static struct dp_process_result result;
-    if (!batch || !batch->count || batch->count > ARRAY_SIZE(request.items)) { return -EINVAL; }
-    request = (struct dp_process_request){.operation = DP_OP_SAMPLE,
-        .count = batch->count, .quality_flags = batch->flags, .sampled_at = batch->sampled_at};
+    if (!batch || !batch->count || batch->count > CONFIG_DP_PROCESS_MAX_OUTPUTS) { return -EINVAL; }
+    struct dp_process_request *request = k_malloc(sizeof(*request));
+    if (!request) { return -ENOMEM; }
+    memset(request, 0, sizeof(*request));
+    request->operation = DP_OP_SAMPLE;
+    request->count = batch->count; request->quality_flags = batch->flags;
+    request->sampled_at = batch->sampled_at;
     for (size_t i = 0; i < batch->count; ++i) {
-        request.items[i].point = batch->points[i];
-        request.items[i].flags = DP_OP_NO_COLLECT | DP_OP_NO_STORE;
+        request->items[i].point = batch->points[i];
+        request->items[i].flags = DP_OP_NO_COLLECT | DP_OP_NO_STORE;
     }
-    return dp_process_execute(&request, &result);
+    struct dp_process_result result;
+    int err = dp_process_execute(request, &result);
+    k_free(request);
+    return err;
 }
 
 int dp_process_read_at(struct dp_key key, uint16_t port_id, uint8_t function,
@@ -356,11 +370,16 @@ int dp_process_read_at(struct dp_key key, uint16_t port_id, uint8_t function,
         return dp_reference_read_at(key, port_id, function, address, count, state);
     }
     if (p->handler && p->read_callback) {
-        struct dp_process_request request = {.operation = DP_OP_READ, .port_id = port_id,
-                                               .function = function, .address = address, .register_count = count,
-                                               .count = 1, .items[0].point.key = key};
+        struct dp_process_request *request = k_malloc(sizeof(*request));
+        if (!request) { return -ENOMEM; }
+        memset(request, 0, sizeof(*request));
+        request->operation = DP_OP_READ; request->port_id = port_id;
+        request->function = function; request->address = address;
+        request->register_count = count; request->count = 1;
+        request->items[0].point.key = key;
         struct dp_process_result result;
-        int err = dp_process_execute(&request, &result);
+        int err = dp_process_execute(request, &result);
+        k_free(request);
         if (err) { return err; }
     }
     return dp_read(key, state);
@@ -373,11 +392,15 @@ int dp_process_read(struct dp_key key, uint16_t port_id, struct dp_point_state *
 
 static int initialize_key(struct dp_key key)
 {
-    struct dp_process_request request = {
-        .operation = DP_OP_INIT, .count = 1, .items[0].point.key = key,
-    };
+    struct dp_process_request *request = k_malloc(sizeof(*request));
+    if (!request) { return -ENOMEM; }
+    memset(request, 0, sizeof(*request));
+    request->operation = DP_OP_INIT; request->count = 1;
+    request->items[0].point.key = key;
     struct dp_process_result result;
-    return dp_process_execute(&request, &result);
+    int err = dp_process_execute(request, &result);
+    k_free(request);
+    return err;
 }
 
 int dp_process_init_device(uint16_t dev_id)
@@ -560,12 +583,12 @@ __weak void dp_process_reboot(void) { sys_reboot(SYS_REBOOT_COLD); }
 void dp_business_task(void *a, void *b, void *c)
 {
     ARG_UNUSED(a); ARG_UNUSED(b); ARG_UNUSED(c);
-    struct async_job job;
     struct dp_process_result result;
     while (true) {
+        struct async_job *job = NULL;
         if (!k_msgq_get(&process_jobs, &job, K_MSEC(10))) {
-            dp_process_execute(&job.request, &result);
-            job.done(&result, job.user);
+            dp_process_execute(&job->request, &result);
+            job->done(&result, job->user);
         }
         for (size_t i = 0; i < ARRAY_SIZE(timers); ++i) {
             k_mutex_lock(&timer_lock, K_FOREVER);
@@ -574,11 +597,13 @@ void dp_business_task(void *a, void *b, void *c)
             uint32_t revision = timers[i].revision;
             k_mutex_unlock(&timer_lock);
             if (due) {
-                memset(&job.request, 0, sizeof(job.request));
-                job.request.operation = DP_OP_TIMER;
-                job.request.count = 1;
-                job.request.items[0].point.key = key;
-                int err = dp_process_execute(&job.request, &result);
+                if (!job) { job = k_malloc(sizeof(*job)); }
+                if (!job) { continue; } /* Keep the timer due; retry next pass. */
+                memset(&job->request, 0, sizeof(job->request));
+                job->request.operation = DP_OP_TIMER;
+                job->request.count = 1;
+                job->request.items[0].point.key = key;
+                int err = dp_process_execute(&job->request, &result);
                 k_mutex_lock(&timer_lock, K_FOREVER);
                 if (timers[i].revision == revision) {
                     timers[i].active = err == -EBUSY || timers[i].period != 0;
@@ -595,6 +620,7 @@ void dp_business_task(void *a, void *b, void *c)
         if (reboot && !dp_params_flush()) { dp_process_reboot(); }
         dp_params_flush_due();
 #endif
+        k_free(job);
         dp_reference_drain_events();
     }
 }

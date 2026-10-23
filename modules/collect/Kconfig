@@ -5,6 +5,15 @@ menuconfig COLLECT
 
 if COLLECT
 
+config HEAP_MEM_POOL_ADD_SIZE_COLLECT
+    int "Shared heap budget for acquisition queues and message buffers (bytes)"
+    default 12288
+    range 1024 131072
+    help
+      Covers queued/active request copies and concurrent temporary ADUs,
+      sample batches and RAW frames. Tune for bus count, queue depth and
+      MODBUS_BUFFER_SIZE. Allocation failures return ENOMEM without sending.
+
 config CO_MAX_BUSES
     int "Maximum acquisition buses"
     default 1

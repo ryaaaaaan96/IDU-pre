@@ -23,6 +23,8 @@ struct stored_point {
     uint16_t quality;
 };
 static struct stored_point states[CONFIG_DP_POINTS_MAX_POINTS];
+/* One application-owned sample worker; allocated before DP becomes ready. */
+static struct dp_point_batch *sample_batch;
 static uint32_t generation;
 static int64_t reset_epoch[CONFIG_DP_MAX_DEVICES];
 static atomic_t ready;
@@ -279,6 +281,13 @@ int dp_init_config(const struct dp_equip_cfg *cfg)
                             DP_QUALITY_GOOD : DP_QUALITY_UNINITIALIZED;
         states[i].error = p->source == DP_SOURCE_CONSTANT ? 0 : -ENODATA;
     }
+    struct dp_point_batch *buffer = k_malloc(sizeof(*buffer));
+    if (!buffer) {
+        k_free(values);
+        k_mutex_unlock(&initialization_lock);
+        return -ENOMEM;
+    }
+    sample_batch = buffer;
     /* 配置和点值在服务生命周期内保持有效，不在采样路径分配或释放。 */
     equipment = cfg;
     zbus_chan_set_msg_sub_pool(&dp_samples_chan, &sample_pool);
@@ -337,10 +346,14 @@ int dp_submit_sig_values(const struct dp_point_update *values, size_t count,
     if (k_is_in_isr()) { return -EWOULDBLOCK; }
     if (!values || !count || count > DP_BATCH_POINTS) { return -EINVAL; }
 
-    struct dp_point_batch batch = {.source = DP_SOURCE_LOCAL, .count = count};
-    memcpy(batch.points, values, count * sizeof(*values));
-    int err = dp_publish(&batch, timeout);
-    if (!err && ticket) { *ticket = batch.ticket; }
+    struct dp_point_batch *batch = k_malloc(sizeof(*batch));
+    if (!batch) { return -ENOMEM; }
+    memset(batch, 0, sizeof(*batch));
+    batch->source = DP_SOURCE_LOCAL; batch->count = count;
+    memcpy(batch->points, values, count * sizeof(*values));
+    int err = dp_publish(batch, timeout);
+    if (!err && ticket) { *ticket = batch->ticket; }
+    k_free(batch);
     return err;
 }
 
@@ -464,9 +477,10 @@ void dp_samples_task(void *a, void *b, void *c)
     ARG_UNUSED(b);
     ARG_UNUSED(c);
     const struct zbus_channel *channel;
-    struct dp_point_batch batch;
+    if (!atomic_get(&ready)) { return; }
+    struct dp_point_batch *batch = sample_batch;
     while (true) {
-        int err = zbus_sub_wait_msg(&dp_processor, &channel, &batch, K_FOREVER);
+        int err = zbus_sub_wait_msg(&dp_processor, &channel, batch, K_FOREVER);
         if (err) {
             continue;
         }
@@ -475,14 +489,14 @@ void dp_samples_task(void *a, void *b, void *c)
             continue;
         }
         k_mutex_lock(&store_lock, K_FOREVER);
-        bool obsolete = obsolete_samples(batch.points, batch.count, batch.sampled_at);
+        bool obsolete = obsolete_samples(batch->points, batch->count, batch->sampled_at);
         k_mutex_unlock(&store_lock);
-        if (obsolete) { complete_ticket(batch.ticket); continue; }
+        if (obsolete) { complete_ticket(batch->ticket); continue; }
         uint16_t quality[DP_BATCH_POINTS];
         bool callbacks = false, all_valid = true;
         k_mutex_lock(&store_lock, K_FOREVER);
-        for (size_t i = 0; i < batch.count; ++i) {
-            struct dp_point_update *u = &batch.points[i];
+        for (size_t i = 0; i < batch->count; ++i) {
+            struct dp_point_update *u = &batch->points[i];
             int n = dp_config_index(equipment, u->key);
             struct dp_point_cfg p_scratch;
             const struct dp_point_cfg *p = dp_config_point(equipment, n, &p_scratch);
@@ -500,39 +514,39 @@ void dp_samples_task(void *a, void *b, void *c)
         k_mutex_unlock(&store_lock);
 #if defined(CONFIG_DP_PROCESS)
         if (callbacks && all_valid) {
-            err = dp_process_sample(&batch);
+            err = dp_process_sample(batch);
             if (!err) {
                 atomic_set(&last_progress, k_uptime_get_32());
-                complete_ticket(batch.ticket);
+                complete_ticket(batch->ticket);
                 continue;
             }
             /* Callback validation rejects this transaction before the usual
              * sample commit. Expose invalid input quality, retaining old values. */
-            for (size_t i = 0; i < batch.count; ++i) {
-                batch.points[i].error = err; quality[i] = DP_QUALITY_BAD_VALUE;
+            for (size_t i = 0; i < batch->count; ++i) {
+                batch->points[i].error = err; quality[i] = DP_QUALITY_BAD_VALUE;
             }
         }
 #else
         ARG_UNUSED(callbacks); ARG_UNUSED(all_valid);
 #endif
 #if defined(CONFIG_DP_PARAMS)
-        for (size_t i = 0; i < batch.count; ++i) {
+        for (size_t i = 0; i < batch->count; ++i) {
             struct dp_point_cfg scratch;
-            const struct dp_point_cfg *p = dp_find(batch.points[i].key, &scratch);
+            const struct dp_point_cfg *p = dp_find(batch->points[i].key, &scratch);
             if (p->source == DP_SOURCE_PARAMETER) {
-                (void)dp_params_sample(&batch.points[i], 1, batch.flags, batch.sampled_at);
+                (void)dp_params_sample(&batch->points[i], 1, batch->flags, batch->sampled_at);
             }
         }
 #endif
         k_mutex_lock(&store_lock, K_FOREVER);
-        if (obsolete_samples(batch.points, batch.count, batch.sampled_at)) {
+        if (obsolete_samples(batch->points, batch->count, batch->sampled_at)) {
             k_mutex_unlock(&store_lock);
-            complete_ticket(batch.ticket);
+            complete_ticket(batch->ticket);
             continue;
         }
         ++generation;
-        for (size_t i = 0; i < batch.count; ++i) {
-            const struct dp_point_update *u = &batch.points[i];
+        for (size_t i = 0; i < batch->count; ++i) {
+            const struct dp_point_update *u = &batch->points[i];
             struct dp_point_cfg scratch;
             if (dp_find(u->key, &scratch)->source == DP_SOURCE_PARAMETER) { continue; }
             struct stored_point *state = &states[dp_config_index(equipment, u->key)];
@@ -542,21 +556,21 @@ void dp_samples_task(void *a, void *b, void *c)
                 dp_reference_notify(dp_find(u->key, &(struct dp_point_cfg){0}), &old, &u->value);
                 memcpy(state->words, u->value.words, u->width * 2);
             }
-            state->sampled_at = batch.sampled_at;
-            state->quality = quality[i] | batch.flags;
+            state->sampled_at = batch->sampled_at;
+            state->quality = quality[i] | batch->flags;
             state->error = u->error;
             state->generation = generation;
         }
         k_mutex_unlock(&store_lock);
         atomic_set(&last_progress, k_uptime_get_32());
         const struct dp_processed_event event = {
-            .generation = generation, .changed = batch.count,
+            .generation = generation, .changed = batch->count,
         };
         err = zbus_chan_pub(&dp_processed_chan, &event, K_NO_WAIT);
         if (err) {
             LOG_WRN("Processed notification lost: %d", err);
         }
-        complete_ticket(batch.ticket);
+        complete_ticket(batch->ticket);
     }
 }
 
