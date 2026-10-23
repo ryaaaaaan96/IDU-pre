@@ -235,7 +235,7 @@ Application state, fault latching and state-to-LED policy live in `app/status/`.
 LED output directly uses Zephyr's LED API (`LED` / `LED_GPIO`); no application-owned
 LED module or generic blink worker is retained.
 It also binds the external watchdog configuration and reports completed cycles.
-With MCUboot enabled, healthy progress invokes `status/image_confirm.c` to
+With MCUboot enabled, healthy progress invokes `status/image_confirm/image_confirm.c` to
 qualify and confirm the trial image. The confirmation state belongs to
 `idu_status`; acquisition only orchestrates sampling, publication and communication.
 Current policy is steady on during startup/fault and one toggle per successful

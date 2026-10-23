@@ -59,7 +59,7 @@ IDU 的 [`app/main.c`](../../app/main.c) 直接调用 `iap_start()`，
 接收器为单实例，多端口共享上传所有权；一个互斥锁、信号量和专用线程处理
 有界任务，Flash 擦写和解包不阻塞 Modbus 回调。初始化失败释放 Flash 句柄并允许重试；
 初始化成功后再次启动返回 `-EALREADY`。不提供运行中停机／重新配置接口。
-应用健康确认仍由 [`app/status/image_confirm.c`](../../app/status/image_confirm.c) 执行，不属于上传协议。
+应用健康确认仍由 [`app/status/image_confirm/image_confirm.c`](../../app/status/image_confirm/image_confirm.c) 执行，不属于上传协议。
 
 IDU 启用 IAPv3 时，`CONFIG_IDU_FORWARD_UNIT=247` 在产品配置阶段被明确拒绝，
 因为旧接收器对 247 静默；这项校验保留原升级线协议。关闭 IAPv3 后普通转发可使用站号 247。

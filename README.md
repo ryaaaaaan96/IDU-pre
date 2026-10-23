@@ -64,7 +64,7 @@ app/main.c                         启动顺序、采样周期与休眠
 不再设置独立的 startup 文件或设备服务兼容入口。
 `app/status/idu_status.h` 定义业务阶段，启动或采集失败时保留最初故障、停止喂狗，
 并拒绝继续执行。MCUboot 确认条件由 `status` 检查 Flash 和参数事务状态，
-持续健康窗口由 `status/image_confirm.c` 判断。
+持续健康窗口由 `status/image_confirm/image_confirm.c` 判断。
 
 新增功能时，通用机制放进对应模块，产品数据放进 `protocol/`，测点业务放进 `process/`。
 启动依赖顺序由 `main.c` 管理，每周期工作由 `acquisition` 编排；不在这些文件中
@@ -130,7 +130,7 @@ IDU-pre/
 | `acquisition/idu_acquisition.h` | 每周期采样、发布、转发及健康检查 |
 | `status/idu_status.h` | 业务阶段、故障状态、LED 策略及健康进度 |
 | `<gpio/idu_inputs.h>` | 模块提供的 IDU 统一原始采样接口及快照 |
-| `status/idu_image_confirm.h` | MCUboot 试运行健康确认 |
+| `status/image_confirm/idu_image_confirm.h` | MCUboot 试运行健康确认 |
 | `process/engineering.h` | 仅依赖标准 C 的工程量换算，可用于主机测试 |
 | `process/idu_process.h` | 采样发布、周期参数及测点业务回调 |
 | `protocol/inc/protocol.h` | 点表注册、`idu_ports_init()` 注册入口及常驻配置声明 |
@@ -151,7 +151,7 @@ IDU-pre/
 回调。目录及依赖边界见[模块说明](modules/README.md#protocol-implementation-layout)。
 
 [`bootloader/`](bootloader/README.md) 保存本板 MCUboot 配置、分区和联合构建设置。
-MCUboot 源码仍使用 West 工作区中的独立仓库；`app/status/image_confirm.c` 负责应用健康确认。
+MCUboot 源码仍使用 West 工作区中的独立仓库；`app/status/image_confirm/image_confirm.c` 负责应用健康确认。
 [`modules/iap/`](modules/iap/README.md) 负责升级接收、解包和验签，分区／内存取自
 设备树，密钥来源、镜像上限和保存策略由 `conf/iapv3.conf` 等 Kconfig 配置提供，
 产品升级开关归 `app/Kconfig`，运行层和通信层直接调用 `iap_*`，不再保留

@@ -1,4 +1,4 @@
-#include "status/idu_image_confirm.h"
+#include "status/image_confirm/idu_image_confirm.h"
 #include <errno.h>
 #include <zephyr/dfu/mcuboot.h>
 #include <zephyr/logging/log.h>

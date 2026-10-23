@@ -1,4 +1,4 @@
-#include "status/idu_image_confirm.h"
+#include "status/image_confirm/idu_image_confirm.h"
 #include <zephyr/ztest.h>
 
 static unsigned writes;

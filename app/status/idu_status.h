@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #ifdef CONFIG_BOOTLOADER_MCUBOOT
-#include "status/idu_image_confirm.h"
+#include "status/image_confirm/idu_image_confirm.h"
 #endif
 
 enum idu_status_phase {
