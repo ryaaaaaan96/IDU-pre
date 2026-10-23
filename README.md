@@ -60,7 +60,7 @@ app/main.c                         启动顺序、采样周期与休眠
        └─ status/status.c          业务阶段、故障、LED 和试运行确认条件
 ```
 
-`main.c` 中的 `application_init()` 显式组织状态与输入初始化、点表注册、端口和总线
+`main.c` 中的 `startup()` 显式组织状态与输入初始化、点表注册、端口和总线
 建立、参数恢复、INIT 和采集启动。启动成功后按周期调用 `acquisition_cycle()`；
 不再设置独立的 startup 文件或设备服务兼容入口。
 `app/status/status.h` 定义业务阶段，启动或采集失败时保留最初故障、停止喂狗，

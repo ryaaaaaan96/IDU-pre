@@ -11,7 +11,7 @@
 
 LOG_MODULE_REGISTER(app_main, LOG_LEVEL_INF);
 
-int application_init(struct application_status *status)
+int startup(struct application_status *status)
 {
     if (!status) {
         return -EINVAL;
@@ -46,7 +46,7 @@ int application_init(struct application_status *status)
 int main(void)
 {
     struct application_status status = {0};
-    int err = application_init(&status);
+    int err = startup(&status);
 
     if (err) {
         return err;

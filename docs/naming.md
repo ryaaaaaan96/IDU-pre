@@ -8,7 +8,7 @@
 
 | 职责 | 当前接口或类型 |
 | --- | --- |
-| 整机启动 | `application_init()`，位于 `app/main.c` |
+| 整机启动 | `startup()`，位于 `app/main.c` |
 | 协议装配 | `protocol_init()`、`protocol_register_point_tables()` |
 | 协议任务与端口 | `protocol_dp_tasks_*()`、`protocol_co_tasks_*()`、`protocol_ports_init()` |
 | 每周期采样编排 | `acquisition_cycle()` |
@@ -18,7 +18,8 @@
 | 工程换算 | `engineering_current_from_raw()` |
 | 健康与镜像确认 | `status_init()`、`status_*()`、`image_confirm_checkpoint()` |
 
-一次性装配与初始化接口使用 `*_init()`；同时提供默认配置和显式配置入口时，
+整机启动编排入口使用 `startup()`，集中组织各服务初始化。
+模块的一次性装配与初始化接口使用 `*_init()`；同时提供默认配置和显式配置入口时，
 分别使用 `*_init()` 与 `*_init_config(config)`，例如 IAP 的两种初始化方式。
 运行期启动操作保留 `*_start()`，例如放行已创建的线程和启动测点定时器。
 
