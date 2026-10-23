@@ -8,9 +8,10 @@ build_dir="$workspace_dir/build/IDU-pre/mcuboot-iapv3/IDU-pre"
 remote_host=127.0.0.1
 remote_port=2331
 elf_file=
+hex_file=
 gdb_program=
 dry_run=false
-load_elf=true
+download=true
 
 usage() {
     cat <<'EOF'
@@ -19,16 +20,17 @@ Usage: ./scripts/debug.sh [options] [-- extra GDB arguments]
   --port PORT       GDB TCP port (default: 2331)
   --build-dir DIR   Application domain build directory (relative to workspace)
   --elf FILE        ELF with symbols (relative to workspace)
+  --hex FILE        Signed application HEX (default: ELF sibling .signed.hex)
   --gdb PROGRAM     Arm GDB executable; otherwise use CMakeCache.txt or PATH
-  --attach          Only connect and halt; skip ELF download
+  --attach          Only connect and halt; skip download/reset
   --dry-run         Print the command without connecting
   -h, --help        Show help
 
 Default build: build/IDU-pre/mcuboot-iapv3/IDU-pre
 NAT WSL: pass --host with the Windows address from `ip route show default`.
-Connects, halts and downloads the ELF, then stays in GDB. No build/reset/run.
-Use --attach for an existing signed MCUboot image. Raw ELF downloads may
-invalidate MCUboot verification; reinstall signed firmware with flash.sh.
+Downloads the signed application HEX, reloads ELF symbols and resets into
+the installed MCUboot, then stays halted in GDB. No build or automatic run.
+Requires a matching MCUboot/key; first install it with flash.sh.
 See docs/wsl-jlink.md for Zephyr thread support and external watchdog handling.
 EOF
 }
@@ -42,9 +44,10 @@ while [[ $# -gt 0 ]]; do
         --port) need_value "$@"; remote_port=$2; shift 2 ;;
         --build-dir) need_value "$@"; build_dir=$2; shift 2 ;;
         --elf) need_value "$@"; elf_file=$2; shift 2 ;;
+        --hex) need_value "$@"; hex_file=$2; shift 2 ;;
         --gdb) need_value "$@"; gdb_program=$2; shift 2 ;;
         --dry-run) dry_run=true; shift ;;
-        --attach) load_elf=false; shift ;;
+        --attach) download=false; shift ;;
         -h|--help) usage; exit 0 ;;
         --) shift; break ;;
         *) fail "Unknown option: $1 (use --help)" ;;
@@ -69,6 +72,12 @@ fi
 [[ "$elf_file" == /* ]] || elf_file="$workspace_dir/$elf_file"
 [[ -f "$elf_file" ]] || fail "ELF not found: $elf_file; build first or use --elf"
 [[ "$elf_file" != *$'\n'* && "$elf_file" != *$'\r'* ]] || fail 'ELF path contains a newline'
+if "$download"; then
+    [[ -n "$hex_file" ]] || hex_file="${elf_file%.elf}.signed.hex"
+    [[ "$hex_file" == /* ]] || hex_file="$workspace_dir/$hex_file"
+    [[ -f "$hex_file" ]] || fail "Signed application HEX not found: $hex_file; build first or supply --hex (use --attach to skip download)"
+    [[ "$hex_file" != *$'\n'* && "$hex_file" != *$'\r'* ]] || fail 'HEX path contains a newline'
+fi
 
 if [[ -z "$gdb_program" && -f "$build_dir/CMakeCache.txt" ]]; then
     cached_gdb=$(sed -n 's/^CMAKE_GDB:[^=]*=//p' "$build_dir/CMakeCache.txt")
@@ -86,18 +95,22 @@ gdb_program=$resolved_gdb
 
 target="$remote_host:$remote_port"
 [[ "$remote_host" != *:* ]] || target="[$remote_host]:$remote_port"
-command_line=("$gdb_program" -q -nx "$elf_file" -ex "target remote $target" -ex 'monitor halt')
-if "$load_elf"; then
+commands=$(printf 'target remote %s\nmonitor halt' "$target")
+if "$download"; then
     quoted_elf=${elf_file//\\/\\\\}
     quoted_elf=${quoted_elf//\"/\\\"}
-    command_line+=(-ex "load \"$quoted_elf\"")
+    quoted_hex=${hex_file//\\/\\\\}
+    quoted_hex=${quoted_hex//\"/\\\"}
+    commands+=$(printf '\nmonitor reset\nmonitor exec SetVerifyDownload = 1\nload "%s"\nsymbol-file "%s"\nmonitor reset' "$quoted_hex" "$quoted_elf")
 fi
-command_line+=("$@")
 printf 'GDB target: %s\nELF: %s\n' "$target" "$elf_file" >&2
-if "$load_elf"; then printf 'ELF download enabled (raw development image).\n' >&2; fi
+if "$download"; then printf 'Signed application HEX: %s\n' "$hex_file" >&2; fi
 if "$dry_run"; then
-    printf '%q ' "${command_line[@]}"
-    printf '\n'
+    printf 'GDB: %s\n%s\n' "$gdb_program" "$commands"
     exit 0
 fi
-exec "${command_line[@]}"
+command_file=$(mktemp "${TMPDIR:-/tmp}/idu-debug.XXXXXX")
+trap 'rm -f -- "$command_file"' EXIT
+printf '%s\n' "$commands" > "$command_file"
+# An initialization error stops this file before subsequent reset commands.
+"$gdb_program" -q -nx "$elf_file" -x "$command_file" "$@"
