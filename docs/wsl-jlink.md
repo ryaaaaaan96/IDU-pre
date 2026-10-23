@@ -236,6 +236,39 @@ cd /home/ryan/Documents/zephyrproject
 应用槽位从 `0x08010000` 开始，头长 512 B；实际向量位于 `0x08010200`。
 本项目的导出、签名和地址检查见[构建与升级](build-and-upgrade.md)。
 
+### Linux 独立烧录入口
+
+保留 Windows J-Link GDB Server 运行，先退出命令行 GDB / VS Code 调试会话，释放客户端连接。
+在 Linux/WSL 应用目录执行：
+
+```bash
+./scripts/flash.sh --host 172.30.96.1 --dry-run
+./scripts/flash.sh --host 172.30.96.1
+```
+
+把示例地址替换为 Windows 主机地址；mirrored 模式可直接 `./scripts/flash.sh`。
+默认读取本地 `build/hex/IDU-pre-mcuboot-iapv3/IDU-pre-factory.hex`，通过 GDB 传输，不需要复制 HEX 到 Windows，也不需要应用 ELF。
+该入口单独完成烧录，不调用构建脚本、不打开交互调试界面、不启动或关闭 Windows Server。
+
+这是**完整安装/重装**入口：先检查 HEX 记录校验、内部 Flash 地址范围、MCUboot 头和启动/应用向量，然后连接目标，复位并擦除 MCU 内部 Flash，下载合并 HEX，最后复位运行并退出。
+完整擦除同时清除内部 slot0 的旧 trailer；应用单独的 `IDU-pre.hex` 会因缺少 MCUboot 数据而被预检拒绝。
+结构预检不替代密码学验签，签名由既有 build/export 流程验证。脚本开启 J-Link 的下载校验，使用 GDB 命令文件使任一命令报错后停止后续步骤。
+命令依据：[GDB load](https://sourceware.org/gdb/current/onlinedocs/gdb.html/Target-Commands.html)、[GDB 命令文件错误处理](https://sourceware.org/gdb/current/onlinedocs/gdb.html/Command-Files.html)、[J-Link monitor 命令](https://kb.segger.com/J-Link_GDB_Server)。
+
+其他选项：
+
+```bash
+./scripts/flash.sh --host 172.30.96.1 --port 2331
+./scripts/flash.sh --host 172.30.96.1 --hex build/hex/IDU-pre-mcuboot-smp/IDU-pre-factory.hex
+./scripts/flash.sh --help
+```
+
+它不清理外部 SPI NOR；首次从旧布局迁移时，仍按下文处理外部 slot1/scratch。实际板上的外部看门狗与擦写过程仍需验证。
+本轮只执行离线预检、DryRun 和模拟 GDB 服务验证，不对实板执行烧录。
+模拟验证使用真实 Arm GDB，核对写入字节、地址、旧 trailer 擦除及写入失败后不发送复位/运行命令；日志在工作区 `build/IDU-pre/flash-rsp-check.log`。
+
+### Windows Commander 手工安装（可选）
+
 首次烧录推荐先退出 GDB Server，再用 Windows J-Link Commander，避免两个程序同时占用探针。
 把同次构建的 factory HEX 复制到 Windows 的 `C:\Temp\IDU-pre-factory.hex`，例如在 WSL 执行：
 

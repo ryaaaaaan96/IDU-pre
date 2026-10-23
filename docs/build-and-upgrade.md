@@ -88,6 +88,18 @@ imgtool 验签，并检查 MCUboot 头、向量、镜像边界和 HEX/BIN 一致
 
 测试命令、覆盖范围与已记录结果见[验证说明](testing.md)。
 
+## 独立程序烧录
+
+先启动 Windows J-Link GDB Server，在工作区根目录运行：
+
+```bash
+./applications/IDU-pre/scripts/flash.sh --host <Windows主机IPv4> --dry-run
+./applications/IDU-pre/scripts/flash.sh --host <Windows主机IPv4>
+```
+
+该入口默认完整擦除内部 Flash、写入合并的 MCUboot＋签名应用 factory HEX、复位运行后退出。
+它不构建、不进入交互调试、不清理外部 SPI NOR，拒绝仅含应用的 HEX。参数及首次迁移条件见 [Linux 独立烧录](wsl-jlink.md#linux-独立烧录入口)。
+
 ## MCUboot
 
 MCUboot 负责启动校验、镜像安装和升级状态管理。本配置选择

@@ -30,6 +30,7 @@ bash applications/IDU-pre/tests/run.sh
 `./scripts/build.sh --mcuboot --iapv3`，产物位于 `build/hex/IDU-pre-mcuboot-iapv3/`。
 `./scripts/build.sh` 默认构建同一套 MCUboot + IAPv3 固件；旧 BOOT 构建入口已删除。
 配置选项、签名密钥、分区和首次安装步骤见[构建与升级](docs/build-and-upgrade.md)。
+Linux 独立烧录使用 `./scripts/flash.sh --host <Windows主机IPv4>`，连接已有 J-Link GDB Server，完整擦写内部 Flash 并安装 factory HEX，成功后复位运行并退出；可先加 `--dry-run` 预览。
 J-Link GDB Server 界面可直接加载 `scripts/gd32e505vet6.JLinkScript`；Linux 端使用 `scripts/debug.sh`，Windows 自动启动入口保留为 `scripts/debug-server.py`。设置及线程调试见 [WSL/J-Link 方案](docs/wsl-jlink.md)。
 
 ## 阅读文档
@@ -110,8 +111,9 @@ IDU-pre/
 ├── conf/                # 应用可选配置
 ├── tools/、tests/       # 导入、镜像工具及回归测试
 ├── docs/                # 按主题组织的说明与历史记录
-└── scripts/             # 构建与远程调试入口
+└── scripts/             # 构建、烧录与调试入口
     ├── build.sh
+    ├── flash.sh
     ├── debug.sh
     ├── debug-server.py
     └── gd32e505vet6.JLinkScript
