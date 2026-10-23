@@ -19,7 +19,7 @@ CO/TR 各自的[RAW 适配](docs/communication-ports.md)通过通用端口收发
 
 ```bash
 # 当前工作固件：MCUboot + IAPv3 / AES / SGZ 升级
-./applications/IDU-pre/build.sh --mcuboot --iapv3
+./applications/IDU-pre/scripts/build.sh --mcuboot --iapv3
 
 # 主机回归与 Zephyr native_sim 测试
 bash applications/IDU-pre/tests/run.sh
@@ -27,8 +27,8 @@ bash applications/IDU-pre/tests/run.sh
 
 首次恢复工作区或有意同步依赖时运行 `west update`。构建/测试脚本在未激活
 虚拟环境时自动使用工作区 `.venv`。也可在本仓库中执行
-`./build.sh --mcuboot --iapv3`，产物位于 `build/hex/IDU-pre-mcuboot-iapv3/`。
-`./build.sh` 默认构建同一套 MCUboot + IAPv3 固件；旧 BOOT 构建入口已删除。
+`./scripts/build.sh --mcuboot --iapv3`，产物位于 `build/hex/IDU-pre-mcuboot-iapv3/`。
+`./scripts/build.sh` 默认构建同一套 MCUboot + IAPv3 固件；旧 BOOT 构建入口已删除。
 配置选项、签名密钥、分区和首次安装步骤见[构建与升级](docs/build-and-upgrade.md)。
 远程调试入口位于 `scripts/debug.sh`（Linux GDB）和 `scripts/debug-server.ps1`（Windows J-Link Server）；参数及线程调试见 [WSL/J-Link 方案](docs/wsl-jlink.md)。
 
@@ -110,7 +110,10 @@ IDU-pre/
 ├── conf/                # 应用可选配置
 ├── tools/、tests/       # 导入、镜像工具及回归测试
 ├── docs/                # 按主题组织的说明与历史记录
-└── build.sh             # 构建入口
+└── scripts/             # 构建与远程调试入口
+    ├── build.sh
+    ├── debug.sh
+    └── debug-server.ps1
 ```
 
 运行和构建不依赖旧工程或预编译 `plateform.lib`。重新导入和可选互操作测试

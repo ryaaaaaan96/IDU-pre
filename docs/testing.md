@@ -6,6 +6,7 @@
 [根 README](../README.md) 和[模块接口](../modules/README.md)为准。
 AIDC 产品代码、专用测试及导入工具已移除；下方日期章节保留当时的历史记录，
 其中的旧构建命令和文件路径不再作为当前操作入口。
+当前构建入口为 `./applications/IDU-pre/scripts/build.sh`（从工作区根目录运行）；旧记录中的根目录 `build.sh` 已移入 `scripts/`。
 
 ## 当前通信重构验收
 

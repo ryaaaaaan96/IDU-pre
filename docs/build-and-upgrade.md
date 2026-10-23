@@ -9,16 +9,16 @@ SMP 和无上传入口使用各自的构建/导出目录。旧 BOOT 构建和旧
 
 | 需求 | 命令 |
 | --- | --- |
-| 默认 MCUboot + IAPv3 | `./applications/IDU-pre/build.sh` |
-| MCUboot，无上传入口 | `./applications/IDU-pre/build.sh --no-upload` |
-| MCUboot + SMP UART | `./applications/IDU-pre/build.sh --mcuboot --smp-uart` |
-| MCUboot + IAPv3 | `./applications/IDU-pre/build.sh --mcuboot --iapv3` |
+| 默认 MCUboot + IAPv3 | `./applications/IDU-pre/scripts/build.sh` |
+| MCUboot，无上传入口 | `./applications/IDU-pre/scripts/build.sh --no-upload` |
+| MCUboot + SMP UART | `./applications/IDU-pre/scripts/build.sh --mcuboot --smp-uart` |
+| MCUboot + IAPv3 | `./applications/IDU-pre/scripts/build.sh --mcuboot --iapv3` |
 
 所有构建使用同一套 IDU 产品点表和业务。IAPv3 与 SMP 是互斥的升级入口选项，
 不是不同产品方案；不再保留 AIDC 产品分支。
 南北向共用 RS485 的联调配置见[端口说明](communication-ports.md)。
 
-从包含旧产品分支的版本更新后，首次执行 `./applications/IDU-pre/build.sh --pristine always`
+从包含旧产品分支的版本更新后，首次执行 `./applications/IDU-pre/scripts/build.sh --pristine always`
 重新生成构建目录，清除已删除开关的配置缓存。
 
 采集和转发的实例数量、栈大小由各模块的 Kconfig 定义，在 `prj.conf`
@@ -37,7 +37,7 @@ TR_CONFIG_STACK_SIZE` 字节栈，另计架构对齐/保护开销；DP、系统�
 其他线程不在这个公式中。槽位数量决定预留几份栈，栈大小决定每份的容量。
 即使某个槽位没有启动线程，静态栈仍占用 RAM。后续增加设备总线或转发口时，
 由维护者手动修改 `.conf`；调整栈大小后检查目标板最深调用路径的栈余量。
-IAPv3 通过 `./applications/IDU-pre/build.sh --mcuboot --iapv3` 构建，
+IAPv3 通过 `./applications/IDU-pre/scripts/build.sh --mcuboot --iapv3` 构建，
 `conf/iapv3.conf` 启用升级功能，不覆盖上述线程配置。
 
 总线容量原名 `CONFIG_DP_MAX_BUSES` 已迁移为 `CONFIG_CO_MAX_BUSES`；
@@ -72,7 +72,7 @@ IDU NVS、IAP 和 MCUboot 的有效存储偏移保持不变：
 ## 默认固件构建
 
 ```bash
-./applications/IDU-pre/build.sh
+./applications/IDU-pre/scripts/build.sh
 # 与显式 --mcuboot --iapv3 等价
 ```
 
@@ -122,13 +122,13 @@ MCUboot 在板级早期初始化中将 PC13 设为浮空输入；
 
 ```bash
 # MCUboot + IAPv3，独立目录输出
-./applications/IDU-pre/build.sh
+./applications/IDU-pre/scripts/build.sh
 
 # 增加标准 SMP 升级入口：USART0，115200 8N1；USART2 共用采集/转发
-./applications/IDU-pre/build.sh --mcuboot --smp-uart
+./applications/IDU-pre/scripts/build.sh --mcuboot --smp-uart
 
 # 后续版本：使用同一签名密钥，更新镜像版本
-./applications/IDU-pre/build.sh --mcuboot --smp-uart --version 0.1.1+1
+./applications/IDU-pre/scripts/build.sh --mcuboot --smp-uart --version 0.1.1+1
 ```
 
 脚本首次生成本地开发密钥 `build/keys/IDU-pre-dev.pem`（权限 600），后续复用；
@@ -190,9 +190,9 @@ AES 密钥及 DP 参数保存策略。公钥文件默认跟随 MCUboot 签名配
 此配置与 `--smp-uart` 互斥，不允许两个镜像上传端同时写 slot1。
 
 ```bash
-./applications/IDU-pre/build.sh --mcuboot --iapv3
+./applications/IDU-pre/scripts/build.sh --mcuboot --iapv3
 # 后续版本沿用同一签名密钥：
-./applications/IDU-pre/build.sh --mcuboot --iapv3 --version 0.1.1+1
+./applications/IDU-pre/scripts/build.sh --mcuboot --iapv3 --version 0.1.1+1
 ```
 
 产物位于 `build/hex/IDU-pre-mcuboot-iapv3/`：

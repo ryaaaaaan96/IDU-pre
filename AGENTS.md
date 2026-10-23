@@ -22,7 +22,7 @@
 - 源码由 `app/CMakeLists.txt` 及各功能目录的 CMakeLists 集中管理；头文件与所属功能源码同目录，跨功能引用以 `app/` 为搜索根目录，通用 `dp_*`、`co_*`、`tr_*` 实现留在 `modules/`。
 - `app/protocol/` 保存产品协议配置。`protocol.c` 以 data_device_cfg 声明数据设备的 process/可选 collect，以 tr_forward_cfg 独立声明北向逻辑口、转发表和 IAP 段；Modbus 采集表直接填写 `uint16_t period_ms` 毫秒周期，0 表示不周期采集，初始化读须显式设置 `FLAG_INITIALIZE`；下发资格由 `FLAG_COLLECT` 单独决定；`ports.c` 编排物理端口；`inc/` 仅放对外头文件，内部 `tables.h`、`ports.h` 放目录根部。三表独立编译，显式填写结构行；process 行内填写 data 默认值/范围，sig_flag 使用 FLAG_RANGE_CHECK 和 FLAG_NO_RESTORE 控制检查及恢复，由 DP 直接读取；国家选择固定在 DP 初始化前，产品使用通用配置；每张 static const 数组使用 Zephyr Iterable Sections 登记一次，以 ARRAY_SIZE 自动计数。数据视图校验/装配归 DP_TABLE_REGISTRY，北向映射选择和生命周期归 TR_FORWARD_CONFIG；点表及登记项在 Flash，DP 数据设备关联视图和 TR 每入口的映射/生命周期视图占少量 RAM，启动后不可修改。不得恢复 extern 数组、手工数量枚举、包含 .c、逐行宏或 point_metadata。应用只维护 IDU 产品点表与业务，不保留 AIDC 产品分支、导入工具或专用测试。IAPv3 是独立升级模块，不是产品方案；其开关不切换业务点表。
 - FLAG_COLLECT 表示南向下发，与 FLAG_PERSISTENCE 独立。非持久命令只写一次，不读回、不写 NVS、不自动重放；持久设置保留意图日志和读回恢复。下发点非零周期可以同时轮询，反馈只更新缓存，不能覆盖已保存目标。现用 IAPv3、参数状态/命令寄存器和恢复入口保留。状态使用 FLAG_READ_CALLBACK 在读取时产生快照；命令通过 dp_defer_para_action 登记，整笔校验通过后同步执行，不存储触发值，不在初始化或读取时重放。南向周期采集 DI 和两路模拟量，周期由 .conf 手动设置；协议号和地址只初始化读取。本地模拟量保持现有换算单位，变更须明确协议含义。
-- 在应用目录执行 `./build.sh` 构建 MCUboot + IAPv3；`--smp-uart` 选择 SMP，`--no-upload` 关闭上传入口。旧 BOOT 构建不再提供。
+- 在应用目录执行 `./scripts/build.sh` 构建 MCUboot + IAPv3；`--smp-uart` 选择 SMP，`--no-upload` 关闭上传入口。旧 BOOT 构建不再提供。
 - 当前工作固件启用 MCUboot + IAPv3。采集总线数量及栈大小由 `modules/collect/Kconfig` 定义，隔离转发口数量、转发栈及共享重配置栈由 `modules/transmit/Kconfig` 定义；数值保留在 `prj.conf` 手动维护，不按固件类型自动覆盖，也不预留未来端口。扩展时手动修改 `.conf`，多端口测试在自己的配置中显式声明容量。
 - 在应用目录执行 `bash tests/run.sh` 运行完整回归；按改动范围选择必要验证。文档修改检查内容、路径和格式即可。
 - 构建与测试产物放在工作区 `build/`，签名私钥放在 `build/keys/`，均不提交。

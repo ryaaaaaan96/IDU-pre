@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-app_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+app_dir="$(cd -- "$script_dir/.." && pwd)"
 workspace_dir="$(cd -- "$app_dir/../.." && pwd)"
 
 if [[ "${1:-}" == --help || "${1:-}" == -h ]]; then

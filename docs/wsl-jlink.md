@@ -87,7 +87,7 @@ cat > build/jlink-debug.conf <<'CONF'
 CONFIG_DEBUG_OPTIMIZATIONS=y
 CONFIG_DEBUG_THREAD_INFO=y
 CONF
-./applications/IDU-pre/build.sh --extra-conf build/jlink-debug.conf
+./applications/IDU-pre/scripts/build.sh --extra-conf build/jlink-debug.conf
 ```
 
 当前 Zephyr 4.4.2 中 `DEBUG_THREAD_INFO` 自动选择 `THREAD_MONITOR` 和 `THREAD_NAME`，无需重复填写。
@@ -168,7 +168,7 @@ mirrored 的启用条件、`.wslconfig` 和 NAT 的区别见 [Microsoft 官方�
 
 ```bash
 cd /home/ryan/Documents/zephyrproject
-./applications/IDU-pre/build.sh
+./applications/IDU-pre/scripts/build.sh
 ```
 
 | 文件 | 用途 |

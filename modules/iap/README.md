@@ -28,7 +28,7 @@ IDU 无需编写独立的 IAP 适配 `.c`。配置由以下内容提供：
 
 构建时从 PEM 导出公钥和哈希，签名私钥不会编入固件；AES 是旧协议互操作常量，
 不替代 ECDSA 身份验证。打包工具支持 `--config <应用 .config>`；
-`build.sh --mcuboot --iapv3` 自动将本次构建的 `.config` 交给它，因此修改 AES
+`scripts/build.sh --mcuboot --iapv3` 自动将本次构建的 `.config` 交给它，因此修改 AES
 或镜像长度限制后，收发两端使用同一份实际配置。直接运行工具时默认读取
 `conf/iapv3.conf`。
 
@@ -85,7 +85,7 @@ Flash 地址和密钥是构建配置，不允许通过上传协议修改。
 
 ```sh
 CCACHE_DISABLE=1 ASAN_OPTIONS=detect_leaks=0 bash applications/IDU-pre/tests/iap/run.sh
-CCACHE_DISABLE=1 ./applications/IDU-pre/build.sh --mcuboot --iapv3
+CCACHE_DISABLE=1 ./applications/IDU-pre/scripts/build.sh --mcuboot --iapv3
 ```
 
 独立模拟器测试仅加载 IAP 和 QuickLZ 模块，不编译 IDU、DP 或 transmit 源码；

@@ -13,7 +13,7 @@ build/IDU-pre/mcuboot-iapv3/IDU-pre/compile_commands.json
 首次使用或清理构建后，先在工作区根执行：
 
 ```bash
-./applications/IDU-pre/build.sh
+./applications/IDU-pre/scripts/build.sh
 ```
 
 构建生成真实的编译命令、设备树头文件及 `autoconf.h`，供 clangd 解析。

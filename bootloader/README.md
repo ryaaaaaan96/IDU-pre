@@ -18,7 +18,7 @@
 `sysbuild.conf` 保留 Sysbuild 功能选择。使用原构建命令即可：
 
 ```bash
-./applications/IDU-pre/build.sh --mcuboot --iapv3
+./applications/IDU-pre/scripts/build.sh --mcuboot --iapv3
 ```
 
 `modules/hardware.cmake` 在 Sysbuild 发现板与镜像之前注册

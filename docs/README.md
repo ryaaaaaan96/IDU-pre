@@ -35,7 +35,7 @@
 ## 维护规则
 
 当前行为写入对应主题；测试数量、容量和外部仓库结论须注明日期或提交。
-构建命令统一以 West 工作区为起点，使用应用自带的 `build.sh`。
+构建命令统一以 West 工作区为起点，使用应用自带的 `scripts/build.sh`。
 产品配置步骤集中在 `app/protocol/README.md`，原接口兼容结论集中在
 `reference-platform.md`，验证结果集中在 `testing.md`，避免各页重复维护数值。
 
