@@ -1,6 +1,6 @@
 # 按需登记的多任务看门狗
 
-状态：设计已确认，尚未实施。讨论记录见[边界问答](../.scratch/task-watchdog/discussion.md)，
+状态：设计已确认，[正式规格](../.scratch/task-watchdog/spec.md)已发布，尚未实施。讨论记录见[边界问答](../.scratch/task-watchdog/discussion.md)，
 决策见 [ADR 0009](adr/0009-opt-in-task-watchdog.md)。本页描述目标行为，当前代码仍使用旧健康喂狗路径。
 
 ## 管理职责
