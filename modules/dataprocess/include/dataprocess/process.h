@@ -106,10 +106,10 @@ struct dp_process_plan {
  * the whole plan and reserves timer slots before ordered INIT calls. Plan timers
  * start only if every INIT succeeds; failure releases reservations for retry.
  * Earlier successful INIT transactions are not rolled back. initialize_all and
- * explicit init_keys are mutually exclusive. A successful start is one-time;
+ * explicit init_keys are mutually exclusive. Successful initialization is one-time;
  * repeated calls return -EALREADY. The plan is consumed during this call.
  */
-int dp_process_start(const struct dp_process_plan *plan);
+int dp_process_init(const struct dp_process_plan *plan);
 /* Active slot can be cancelled; a completed one-shot frees its slot. */
 int dp_process_timer_start(struct dp_key key, uint32_t delay_ms, uint32_t period_ms);
 int dp_process_timer_cancel(int slot);

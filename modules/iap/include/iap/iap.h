@@ -21,16 +21,16 @@ struct iap_config {
     void *user;
 };
 
-/* Single receiver. Call once during application startup, before routing.
+/* Single receiver. Initialize once during application startup, before routing.
  * Config is copied; keys and user context must remain valid for its lifetime.
  * Failed initialization releases flash handles and can be retried.
  * Uses MCUboot slot0/slot1 and a 4 KiB erase unit for staging and NVS.
  * Reboot health confirmation remains the application's responsibility. */
-int iap_init(const struct iap_config *config);
+int iap_init_config(const struct iap_config *config);
 bool iap_ready(void);
-/* CONFIG_IAP_CONFIGURED: same explicit startup, using devicetree, generated
+/* CONFIG_IAP_CONFIGURED: same explicit initialization, using devicetree, generated
  * verification/transport keys and the selected reboot policy. */
-int iap_start(void);
+int iap_init(void);
 
 /* Caller supplies an already unit-filtered complete Modbus ADU, including
  * legacy oversized FC16 packets. Return 0 to reply, -ENOENT for an unowned address,

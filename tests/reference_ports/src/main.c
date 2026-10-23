@@ -153,7 +153,7 @@ static void *setup(void)
     fixture_connect_points();
     zassert_ok(co_init_bus(&equipment, &bus));
     for (size_t i = 0; i < ARRAY_SIZE(polls); ++i) { zassert_ok(co_enable_poll(i, false)); }
-    zassert_ok(co_start()); fixture_start_co();
+    zassert_ok(co_polling_init()); fixture_start_co();
     client = modbus_iface_get_by_name("RAW_0");
     servers[0] = modbus_iface_get_by_name("RAW_1");
     servers[1] = modbus_iface_get_by_name("RAW_2");

@@ -216,7 +216,7 @@ active bits in LSB-first or MSB-first order, leaving the caller's result unchang
 on failure. Pins are sampled sequentially. The implementation now lives in
 `gpio`, retaining its existing public GPIO API.
 
-`watchdog_start()` uses a configured on-chip GPIO and kernel timer. The
+`watchdog_init()` uses a configured on-chip GPIO and kernel timer. The
 GPIO must support nonblocking ISR-safe toggles. `watchdog_progress()` reports
 completed business work; missing progress or a GPIO failure permanently stops
 feeding. Late progress cannot revive an expired monitor. `watchdog_stop()`
@@ -277,8 +277,8 @@ Supply static `dp_equip_cfg` tables. IDU's `app/main.c` explicitly calls
 the application acquisition interface, registers all buses
 through `co_init()` / `co_init_bus()`, then initializes and recovers parameters.
 The application decides whether a storage failure permits degraded operation.
-It calls `dp_process_start()` for the per-point plan and `dp_reference_start()`
-for registered global INIT/TIMER tables before `co_start()` starts collection.
+It calls `dp_process_init()` for the per-point plan and `dp_reference_init()`
+for registered global INIT/TIMER tables before `co_polling_init()` starts collection.
 This order is application orchestration, not `SYS_INIT` registration.
 Once the first sampled address is available, `tr_forward_service()` resolves the registered logical port, internally attaches and
 starts the northbound interface with an independent forwarding workqueue, then

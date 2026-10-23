@@ -21,13 +21,13 @@ struct watchdog {
 };
 
 /* Zero-initialize each instance once. The instance and const config must outlive
- * the timer. Serialize startup; progress/stop are safe against timer execution.
+ * the timer. Serialize initialization; progress/stop are safe against timer execution.
  * The feed GPIO must support ISR-safe toggle (on-chip GPIO, not a sleeping bus).
  * Timeout, GPIO failure and explicit stop are terminal until the device resets.
  * Stop leaves the pin driven at its last level so the external watchdog expires.
  */
-int watchdog_start(struct watchdog *monitor,
-                   const struct watchdog_config *config);
+int watchdog_init(struct watchdog *monitor,
+                  const struct watchdog_config *config);
 int watchdog_progress(struct watchdog *monitor);
 void watchdog_stop(struct watchdog *monitor);
 

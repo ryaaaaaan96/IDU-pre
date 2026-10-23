@@ -8,7 +8,7 @@
 
 | 职责 | 当前接口或类型 |
 | --- | --- |
-| 整机启动 | `application_startup()`，位于 `app/main.c` |
+| 整机启动 | `application_init()`，位于 `app/main.c` |
 | 协议装配 | `protocol_init()`、`protocol_register_point_tables()` |
 | 协议任务与端口 | `protocol_dp_tasks_*()`、`protocol_co_tasks_*()`、`protocol_ports_init()` |
 | 每周期采样编排 | `acquisition_cycle()` |
@@ -17,6 +17,21 @@
 | 测点业务 | `points_publish_snapshot()`、`points_parameter_command()`、`points_parameter_status()` |
 | 工程换算 | `engineering_current_from_raw()` |
 | 健康与镜像确认 | `status_init()`、`status_*()`、`image_confirm_checkpoint()` |
+
+一次性装配与初始化接口使用 `*_init()`；同时提供默认配置和显式配置入口时，
+分别使用 `*_init()` 与 `*_init_config(config)`，例如 IAP 的两种初始化方式。
+运行期启动操作保留 `*_start()`，例如放行已创建的线程和启动测点定时器。
+
+| 初始化内容 | 接口 |
+| --- | --- |
+| IAP 项目配置 / 显式配置 | `iap_init()` / `iap_init_config(config)` |
+| 看门狗实例 | `watchdog_init()` |
+| DP 测点处理计划 / 全局 INIT 与 TIMER 表 | `dp_process_init()` / `dp_reference_init()` |
+| 采集调度就绪 / 测试模拟器 | `co_polling_init()` / `co_simulator_init()` |
+| 应用任务上下文 / 转发服务 | `protocol_dp_tasks_init()`、`protocol_co_tasks_init()` / `protocol_forwarding_init()` |
+
+`protocol_dp_tasks_start()`、`protocol_co_tasks_start()` 最后放行已初始化的任务；
+`dp_process_timer_start()` 是运行期的定时器操作。这些接口保留启动含义，初始化顺序与执行上下文归属保持原约定。
 
 头文件与职责一致，例如 `acquisition/acquisition.h`、`process/points.h`、
 `status/status.h`、`status/image_confirm/image_confirm.h`。

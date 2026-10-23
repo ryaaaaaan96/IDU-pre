@@ -22,7 +22,7 @@ int protocol_error(void)
     return (int)atomic_get(&maintenance_error);
 }
 
-int protocol_dp_tasks_prepare(void)
+int protocol_dp_tasks_init(void)
 {
     if (prepared) { return -EALREADY; }
     k_thread_create(&samples, sample_stack, K_THREAD_STACK_SIZEOF(sample_stack),
@@ -40,7 +40,7 @@ void protocol_dp_tasks_start(void)
     k_thread_start(&business);
 }
 
-int protocol_co_tasks_prepare(void)
+int protocol_co_tasks_init(void)
 {
     if (collect_prepared) { return -EALREADY; }
     k_thread_create(&collect, collect_stack, K_THREAD_STACK_SIZEOF(collect_stack),
@@ -72,7 +72,7 @@ static void maintain_forwarding(struct k_work *work)
                                 K_MSEC(CONFIG_IDU_PROTOCOL_SERVICE_PERIOD_MS));
 }
 
-int protocol_start_forwarding(void)
+int protocol_forwarding_init(void)
 {
     if (forwarding_started) { return -EALREADY; }
     const char *name = tr_modbus_port_name(protocol_forwarding.port_id);

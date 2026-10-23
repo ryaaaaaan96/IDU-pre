@@ -23,10 +23,10 @@ config IAP_CONFIGURED
     bool "Configure IAP from devicetree and Kconfig"
     default y
     help
-      iap_start() reads iap,staging and iap,journal chosen partitions,
+      iap_init() reads iap,staging and iap,journal chosen partitions,
       slot0_partition's mapped address and zephyr,sram. Keys and image
       payload limits come from the options below. Disable when calling
-      iap_init() with an explicit configuration (for example in tests).
+      iap_init_config() with an explicit configuration (for example in tests).
 
 if IAP_CONFIGURED
 
@@ -64,7 +64,7 @@ config IAP_REBOOT_DP_PARAMS
     help
       Use the DP transaction API after signature verification. Failed
       commit/upgrade requests unfreeze parameter writes. Other products
-      can provide callbacks with iap_init() for a different state store.
+      can provide callbacks with iap_init_config() for a different state store.
 
 endchoice
 

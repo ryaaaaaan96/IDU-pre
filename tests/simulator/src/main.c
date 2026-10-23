@@ -107,9 +107,9 @@ ZTEST(simulator, test_invalid_register_layout_does_not_touch_running_device)
         {.function = 3, .address = 101, .width = 1},
     };
     config.registers = invalid; config.register_count = ARRAY_SIZE(invalid);
-    zassert_equal(co_simulator_start(&unused, &config), -EEXIST);
-    zassert_equal(co_simulator_start(&sims[0], &configs[0]), clients[0]);
-    zassert_equal(co_simulator_start(&sims[0], &configs[1]), -EALREADY);
+    zassert_equal(co_simulator_init(&unused, &config), -EEXIST);
+    zassert_equal(co_simulator_init(&sims[0], &configs[0]), clients[0]);
+    zassert_equal(co_simulator_init(&sims[0], &configs[1]), -EALREADY);
     uint16_t value;
     zassert_ok(modbus_read_holding_regs(clients[0], 3, 100, &value, 1));
     zassert_equal(value, 10);

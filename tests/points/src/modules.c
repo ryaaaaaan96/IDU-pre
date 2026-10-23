@@ -151,7 +151,7 @@ void module_bus_init(const struct dp_equip_cfg *cfg)
     fixture_connect_points();
     zassert_ok(co_init_bus(cfg, &bus));
     for (size_t i = 0; i < cfg->collect_count; ++i) { zassert_ok(co_enable_poll(i, false)); }
-    zassert_ok(co_start()); fixture_start_co();
+    zassert_ok(co_polling_init()); fixture_start_co();
 }
 
 static uint16_t value(struct dp_key key)

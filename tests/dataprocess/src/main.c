@@ -422,13 +422,13 @@ ZTEST(dataprocess, test_declarative_lifecycle_rolls_back_timers_and_starts_once)
     };
     /* Invalid plans cannot run INIT or reserve timers. */
     plan.initialize_all = true;
-    zassert_equal(dp_process_start(&plan), -EINVAL);
+    zassert_equal(dp_process_init(&plan), -EINVAL);
     zassert_equal(init_count, 0);
     plan.initialize_all = false;
     struct dp_timer_spec invalid_timer = timer;
     invalid_timer.period = K_FOREVER;
     plan.timers = &invalid_timer;
-    zassert_equal(dp_process_start(&plan), -EINVAL);
+    zassert_equal(dp_process_init(&plan), -EINVAL);
     zassert_equal(init_count, 0);
     plan.timers = &timer;
     int occupied[CONFIG_DP_PROCESS_TIMERS];
@@ -436,13 +436,13 @@ ZTEST(dataprocess, test_declarative_lifecycle_rolls_back_timers_and_starts_once)
         occupied[i] = dp_process_timer_start(input, 1000, 0);
         zassert_true(occupied[i] >= 0);
     }
-    zassert_equal(dp_process_start(&plan), -ENOSPC);
+    zassert_equal(dp_process_init(&plan), -ENOSPC);
     zassert_equal(init_count, 0);
     for (size_t i = 0; i < ARRAY_SIZE(occupied); ++i) {
         zassert_ok(dp_process_timer_cancel(occupied[i]));
     }
     fail_init = true;
-    zassert_equal(dp_process_start(&plan), -EIO);
+    zassert_equal(dp_process_init(&plan), -EIO);
     zassert_equal(init_count, 2);
     zassert_equal(init_order[0], 1);
     zassert_equal(init_order[1], 3);
@@ -457,9 +457,9 @@ ZTEST(dataprocess, test_declarative_lifecycle_rolls_back_timers_and_starts_once)
         zassert_ok(dp_process_timer_cancel(occupied[i]));
     }
     fail_init = false;
-    zassert_ok(dp_process_start(&plan));
+    zassert_ok(dp_process_init(&plan));
     zassert_equal(init_count, 4);
-    zassert_equal(dp_process_start(&plan), -EALREADY);
+    zassert_equal(dp_process_init(&plan), -EALREADY);
     k_sleep(K_MSEC(50));
     zassert_equal(timer_count, 1);
     k_sleep(K_MSEC(30));

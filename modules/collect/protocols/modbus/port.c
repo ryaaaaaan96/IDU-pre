@@ -13,7 +13,7 @@ int co_port_open(const struct co_port_config *config)
 #if defined(CONFIG_CO_MODBUS_ADAPTER)
     if (config->simulator) {
 #ifdef CONFIG_CO_SIMULATOR
-        return co_simulator_start(config->simulator, config->simulation);
+        return co_simulator_init(config->simulator, config->simulation);
 #else
         return -ENOTSUP;
 #endif

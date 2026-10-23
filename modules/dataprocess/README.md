@@ -91,12 +91,12 @@ int dp_submit_sig_values(const struct dp_point_update *values, size_t count,
 模块提供初始化机制，由应用明确决定装配顺序。IDU 在 `app/main.c`
 组织启动流程：先注册配置并调用 `dp_init()`，建立采集接口并注册全部总线，
 再初始化/恢复参数，由应用判断存储故障是否允许降级，最后调用
-`dp_process_start()`、`dp_reference_start()` 和 `co_start()`，再由应用放行处理任务。
+`dp_process_init()`、`dp_reference_init()` 和 `co_polling_init()`，再由应用放行处理任务。
 北向站号在本地初始化确定，显式初始化转发服务后由独立任务维护，
 不使用 `SYS_INIT` 隐式决定这组依赖顺序。
 
 原格式全局 INIT/TIMER 表通过 `pltcb_reg_cfg_get_*` 成对注册，由
-`dp_reference_start()` 校验并启动。INIT 按表序执行，负返回值使本次启动失败；
+`dp_reference_init()` 校验并启动。INIT 按表序执行，负返回值使本次启动失败；
 全部 INIT 成功后才启用 type=0 周期定时器。定时工作向 DP 队列提交请求，
 业务函数在 DP 线程执行。原格式表与下面的按点计划是两组显式入口，避免重复注册同一业务。
 
@@ -113,7 +113,7 @@ static const struct dp_process_plan plan = {
     .timers = timers, .timer_count = ARRAY_SIZE(timers),
 };
 /* 在 dp_init() 和应用完成可选参数恢复策略后，由启动线程调用。 */
-int err = dp_process_start(&plan);
+int err = dp_process_init(&plan);
 ```
 
 `initialize_all=true` 可替代显式 INIT 列表，按点表顺序调用全部 handler，

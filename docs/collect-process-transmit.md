@@ -42,7 +42,7 @@ const 处理/采集数组，模块按需构造单条执行视图，避免整表 
 | `dp_set_sig_value` 设置测点 | `data_process.h` 保留四参数、字节长度及同步回调；异步遥测使用 `dp_submit_sig_value()` / `dp_submit_sig_values()` |
 | 数据池、旧值、输入集合、多输出、不递归回调 | `dp_read()`、`dp_process_execute()`、`dp_txn_get()` / `dp_txn_emit()` |
 | 直接下发与持久化后端 | `dp_para_reg_set_func()` 用于 `dp_set_para_not_dm()`；`dp_params_set_transport()` 提供 NVS 事务的读/写/来源回调 |
-| INIT 列表与 TIMER 注册 | 按点计划 `dp_process_start()`；原全局表 `dp_reference_start()`；按设备重初始化 `dp_set_init()` |
+| INIT 列表与 TIMER 注册 | 按点计划 `dp_process_init()`；原全局表 `dp_reference_init()`；按设备重初始化 `dp_set_init()` |
 | 采集表、周期、优先级、端口状态 | `co_init_bus()`、`co_submit()`、`co_set_mode()` |
 | `tr_reg_table_func`、SLAVE / SLEEP / CALLBACK | `tr_reg_table_func()`、`tr_set_port_mode()` |
 | 包过滤与端口控制 | `tr_reg_pkt_filter_func()`、`tr_pkt_filter_config()`、`tr_mb_port_work_control()` |
@@ -134,7 +134,7 @@ flowchart LR
 应用在 `app/main.c` 显式组织启动：注册点表 → `dp_init()` →
 `protocol_ports_init()` → `co_port_open()` →
 `co_init()` / `co_init_bus()` 注册全部总线 → `dp_params_init()` / 恢复参数 →
-`dp_process_start()` → `dp_reference_start()` → `co_start()`。参数存储失败后的降级策略由应用决定。
+`dp_process_init()` → `dp_reference_init()` → `co_polling_init()`。参数存储失败后的降级策略由应用决定。
 首轮采样地址就绪后，调用 `tr_forward_service()` 按虚拟转发配置装配并维护转发接口；不使用 `SYS_INIT` 安排这些步骤。
 初始化计划先完整校验并预留定时器槽，全部 INIT 成功后再启用定时器；
 失败释放预留槽，已成功的 INIT 事务不会回滚。成功后的重复启动返回

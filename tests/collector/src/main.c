@@ -158,7 +158,7 @@ static void *setup(void)
     zassert_ok(co_init_bus(&equipment, &bus));
     zassert_ok(co_enable_poll(0, false));
     set_mode(CO_PORT_SLEEP);
-    zassert_ok(co_start());
+    zassert_ok(co_polling_init());
     set_mode(CO_PORT_UPDATE);
     zassert_ok(submit(999, CO_PORT_UPDATE, 0));
     struct completion_event delayed;

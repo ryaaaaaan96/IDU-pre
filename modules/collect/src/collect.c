@@ -622,7 +622,7 @@ void co_bus_task(void *arg, void *b, void *c)
     }
 }
 
-int co_start(void)
+int co_polling_init(void)
 {
     if (!equipment) { return -EACCES; }
     if (started) { return -EALREADY; }

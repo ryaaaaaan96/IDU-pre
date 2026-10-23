@@ -46,7 +46,7 @@ int status_init(struct application_status *status)
         return -EALREADY;
     }
     status->phase = STATUS_STARTING;
-    int err = watchdog_start(&monitor, &watchdog);
+    int err = watchdog_init(&monitor, &watchdog);
 
     if (!err && !led_is_ready_dt(&run_led)) {
         err = -ENODEV;

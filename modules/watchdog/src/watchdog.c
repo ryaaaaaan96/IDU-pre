@@ -21,8 +21,8 @@ static void feed(struct k_timer *timer)
     if (!active) { k_timer_stop(timer); }
 }
 
-int watchdog_start(struct watchdog *monitor,
-                   const struct watchdog_config *config)
+int watchdog_init(struct watchdog *monitor,
+                  const struct watchdog_config *config)
 {
     if (!monitor || !config || !config->feed_interval_ms ||
         config->progress_timeout_ms <= config->feed_interval_ms ||

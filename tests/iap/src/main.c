@@ -164,24 +164,24 @@ static void *setup(void)
         .prepare_reboot = prepare_reboot, .cancel_reboot = cancel_reboot,
         .user = &hook_context,
     };
-    zassert_equal(iap_init(NULL), -EINVAL);
+    zassert_equal(iap_init_config(NULL), -EINVAL);
     struct iap_config bad = config;
     bad.cancel_reboot = NULL;
-    zassert_equal(iap_init(&bad), -EINVAL);
+    zassert_equal(iap_init_config(&bad), -EINVAL);
     bad = config; bad.journal_area_id = bad.staging_area_id;
-    zassert_equal(iap_init(&bad), -EINVAL);
+    zassert_equal(iap_init_config(&bad), -EINVAL);
     bad = config; bad.staging_area_id = 255;
-    zassert_true(iap_init(&bad) < 0);
+    zassert_true(iap_init_config(&bad) < 0);
     bad = config; bad.image.max_size = slot->fa_size + 1;
-    zassert_equal(iap_init(&bad), -EINVAL);
+    zassert_equal(iap_init_config(&bad), -EINVAL);
     zassert_false(iap_ready());
 #ifdef CONFIG_IAP_CONFIGURED
-    zassert_ok(iap_start());
+    zassert_ok(iap_init());
 #else
-    zassert_ok(iap_init(&config));
+    zassert_ok(iap_init_config(&config));
 #endif
     zassert_true(iap_ready());
-    zassert_equal(iap_init(&config), -EALREADY);
+    zassert_equal(iap_init_config(&config), -EALREADY);
     /* Caller may discard its configuration after startup. */
     memset(&config, 0, sizeof(config));
     return NULL;

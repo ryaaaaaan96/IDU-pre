@@ -407,7 +407,7 @@ static int timer_timeout_ms(k_timeout_t timeout, uint32_t *milliseconds)
     return 0;
 }
 
-int dp_process_start(const struct dp_process_plan *plan)
+int dp_process_init(const struct dp_process_plan *plan)
 {
     if (!plan || k_is_in_isr() || (plan->init_count && !plan->init_keys) ||
         (plan->timer_count && !plan->timers) ||

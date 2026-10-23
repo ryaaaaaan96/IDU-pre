@@ -37,8 +37,8 @@ IDU 无需编写独立的 IAP 适配 `.c`。配置由以下内容提供：
 公开头文件为 [`iap/iap.h`](include/iap/iap.h) 和
 [`iap/sgz.h`](include/iap/sgz.h)。
 
-- `iap_start()`：启用 `CONFIG_IAP_CONFIGURED` 时，按上述配置显式启动。
-- `iap_init(config)`：其他使用方可以直接提供配置；结构被复制，密钥和回调上下文
+- `iap_init()`：启用 `CONFIG_IAP_CONFIGURED` 时，按上述配置显式初始化。
+- `iap_init_config(config)`：其他使用方可以直接提供配置；结构被复制，密钥和回调上下文
   必须长期有效。可选保存／取消回调必须成对提供。
 - `iap_ready()`：启动后可用于决定是否开放升级能力。
 - `iap_route(iface, rx, tx)`：处理完整 Modbus ADU；0 表示回复，`-ENOENT`
@@ -46,11 +46,11 @@ IDU 无需编写独立的 IAP 适配 `.c`。配置由以下内容提供：
 - `iap_sgz_decrypt/unpack`、`iap_image_verify`：纯 C 编解码／校验接口，支持
   调用方提供的读写回调、输出上限、AES 密钥和镜像内存策略。
 
-应用在参数服务初始化之后、开放 Modbus 路由之前调用启动接口。模块不使用
+应用在开放 Modbus 路由之前调用初始化接口。模块不使用
 `SYS_INIT` 提前启动，也不注册或占用串口；调用方负责站号过滤及超长 FC16 接收。
-IDU 的 [`app/main.c`](../../app/main.c) 直接调用 `iap_start()`，
+IDU 的 [`app/main.c`](../../app/main.c) 直接调用 `iap_init()`，
 [`app/protocol/tables/segments.c`](../../app/protocol/tables/segments.c) 将 `iap_route()`
-写入 `MB_TABLE_SEG_T`，由本地设备的 `PRO_ADDR_SLAVE` 挂载。TR 按首地址分派，
+写入 `MB_TABLE_SEG_T`，由独立转发配置的协议段挂载。TR 按首地址分派，
 在标准 Modbus 长度校验前处理完整 IAP 报文；精确长度、功能码、广播及会话仍由 IAP 校验。
 段内返回 `-ENOENT` 会转换成非法地址，不回退到普通点表。能力寄存器 20003、
 版本寄存器 31996–31997 由本模块返回，不依赖 MV-IO 兼容路由。产品开关 `IDU_IAPV3` 归

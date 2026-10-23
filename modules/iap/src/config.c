@@ -21,7 +21,7 @@ static void cancel_reboot(void *user)
 }
 #endif
 
-int iap_start(void)
+int iap_init(void)
 {
     const struct iap_config config = {
         .staging_area_id = DT_FIXED_PARTITION_ID(STAGING),
@@ -40,5 +40,5 @@ int iap_start(void)
         .cancel_reboot = cancel_reboot,
 #endif
     };
-    return iap_init(&config);
+    return iap_init_config(&config);
 }

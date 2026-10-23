@@ -41,7 +41,7 @@ python3 applications/IDU-pre/tools/analyze_reference.py \
 | `app/port_filter`、`app/plc` 的报文处理和端口控制 | [app/protocol](../app/protocol) 提供产品配置；[transmit](../modules/transmit) 执行协议和端口管理 |
 | `platform/libs/plateform.lib` 的共享数据池、调度、采集、转发 | [modules/dataprocess](../modules/dataprocess)、[collect](../modules/collect)、[transmit](../modules/transmit) 的源码实现 |
 
-参考工程的 `local_equip` 还包含产品功能。IDU 的采样映射、启动顺序和工程量换算继续属于应用。当前顺序为配置注册、`dp_init()`、采集接口、各总线 `co_init()`、参数恢复、`dp_process_start()`、`dp_reference_start()`、`co_start()`；TR 在地址就绪后绑定，产品依赖由应用显式安排。
+参考工程的 `local_equip` 还包含产品功能。IDU 的采样映射、启动顺序和工程量换算继续属于应用。当前顺序为配置注册、`dp_init()`、采集接口、各总线 `co_init()`、参数恢复、`dp_process_init()`、`dp_reference_init()`、`co_polling_init()`；TR 在地址就绪后绑定，产品依赖由应用显式安排。
 
 ## 配置契约与支持范围
 
@@ -94,7 +94,7 @@ IDU 的处理表扩展 `DM_SIG_CFG_S`，内嵌 `DM_SIG_DATA_S data`，恢复及�
 周期必须经 `dp_register_model_period()` 显式解释。后端交换已解码的主机字序 word，
 当前 IDU 只提供虚拟实现，不包含 UPP 帧编码、链路或设备管理。
 
-原 INIT/TIMER 表使用 `pltcb_reg_cfg_get_init_reg_tbl/num()`、`pltcb_reg_cfg_get_timer_reg_tbl/num()` 成对注册。`dp_reference_start()` 在参数恢复及 DP 处理启动之后，先校验整组配置，再按表序执行 INIT，最后启用 TIMER。支持参考应用 `app/timer/timefunction.c:35–44` 实际使用的 type=0 周期定时，其他类型拒绝。Zephyr 延迟工作只向 DP 业务队列提交请求，业务回调在线程中执行，不占用系统工作队列。INIT 中途失败时，前面已成功的回调不会回滚；成功启动不能重复执行。
+原 INIT/TIMER 表使用 `pltcb_reg_cfg_get_init_reg_tbl/num()`、`pltcb_reg_cfg_get_timer_reg_tbl/num()` 成对注册。`dp_reference_init()` 在参数恢复及 DP 处理启动之后，先校验整组配置，再按表序执行 INIT，最后启用 TIMER。支持参考应用 `app/timer/timefunction.c:35–44` 实际使用的 type=0 周期定时，其他类型拒绝。Zephyr 延迟工作只向 DP 业务队列提交请求，业务回调在线程中执行，不占用系统工作队列。INIT 中途失败时，前面已成功的回调不会回滚；成功启动不能重复执行。
 
 ## 已核实的行为与新版边界
 

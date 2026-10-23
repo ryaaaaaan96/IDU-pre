@@ -184,7 +184,7 @@ static void timer_due(struct k_work *work)
 }
 #endif
 
-int dp_reference_start(void)
+int dp_reference_init(void)
 {
     if (k_is_in_isr()) { return -EWOULDBLOCK; }
     k_mutex_lock(&configuration_lock, K_FOREVER);

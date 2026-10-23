@@ -282,10 +282,10 @@ ZTEST(reference_configuration, test_original_tables_validate_before_initializati
     zassert_equal(limits.def_value.u32, 123);
     zassert_equal(local_signals[0].sig_id, 1);
 
-    zassert_equal(dp_reference_start(), -ENOTSUP);
+    zassert_equal(dp_reference_init(), -ENOTSUP);
     zassert_equal(init_calls, 0); /* Validate every timer before INIT effects. */
     timers[0].type = 0;
-    zassert_equal(dp_reference_start(), -EIO);
+    zassert_equal(dp_reference_init(), -EIO);
     zassert_equal(init_calls, 1);
     zassert_not_equal(k_sem_take(&timer_fired, K_MSEC(40)), 0);
     zassert_equal(dp_get_sig_value(247, 1, 1, value), 1);
@@ -293,10 +293,10 @@ ZTEST(reference_configuration, test_original_tables_validate_before_initializati
     zassert_ok(dp_set_init(247));
     zassert_equal(init_calls, 2); /* Per-device INIT includes the registered table. */
     reject_init = false;
-    zassert_ok(dp_reference_start());
+    zassert_ok(dp_reference_init());
     zassert_equal(init_calls, 3);
     zassert_ok(k_sem_take(&timer_fired, K_MSEC(200)));
-    zassert_equal(dp_reference_start(), -EALREADY);
+    zassert_equal(dp_reference_init(), -EALREADY);
 
     zassert_equal(dp_init(), -1);
     zassert_equal(dp_register_config_provider(no_native_config), -EBUSY);

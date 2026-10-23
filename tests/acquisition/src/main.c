@@ -17,7 +17,7 @@
 #include <string.h>
 
 /* main.c keeps startup local to the application entry, without a public header. */
-int application_startup(struct application_status *status);
+int application_init(struct application_status *status);
 
 enum service { WATCHDOG_INIT, LED_START, INPUTS_INIT, IAP_INIT, TABLES_INIT, DP_INIT, DATA_BIND, TASKS_PREPARE,
                NETWORK_INIT, PORT_OPEN, COLLECT_INIT, PARAMS_INIT, PARAMS_RECOVER,
@@ -76,12 +76,12 @@ static int service(enum service service)
     return errors[service];
 }
 
-int watchdog_start(struct watchdog *monitor, const struct watchdog_config *config)
+int watchdog_init(struct watchdog *monitor, const struct watchdog_config *config)
 { return service(WATCHDOG_INIT); }
 int acquisition_inputs_init(void) { return service(INPUTS_INIT); }
 int protocol_register_point_tables(void) { return service(TABLES_INIT); }
-int protocol_dp_tasks_prepare(void) { return service(TASKS_PREPARE); }
-int protocol_co_tasks_prepare(void) { return 0; }
+int protocol_dp_tasks_init(void) { return service(TASKS_PREPARE); }
+int protocol_co_tasks_init(void) { return 0; }
 void protocol_dp_tasks_start(void) { workers_started |= 1; }
 void protocol_co_tasks_start(void) { workers_started |= 2; }
 int co_set_data_callbacks(const struct co_data_callbacks *callbacks)
@@ -127,16 +127,16 @@ int dp_params_init(const struct dp_equip_cfg *config, uint8_t area_id)
     return parameter_storage_error;
 }
 int dp_params_recover(void) { return service(PARAMS_RECOVER); }
-int dp_process_start(const struct dp_process_plan *plan)
+int dp_process_init(const struct dp_process_plan *plan)
 {
     zassert_true(plan->initialize_all);
     return service(PROCESS_INIT);
 }
-int dp_reference_start(void) { return service(REFERENCE_INIT); }
-int co_start(void) { return service(COLLECT_START); }
+int dp_reference_init(void) { return service(REFERENCE_INIT); }
+int co_polling_init(void) { return service(COLLECT_START); }
 uint16_t points_sample_period_ms(void) { return 500; }
-int iap_start(void) { return service(IAP_INIT); }
-int protocol_start_forwarding(void) { return service(FORWARD_INIT); }
+int iap_init(void) { return service(IAP_INIT); }
+int protocol_forwarding_init(void) { return service(FORWARD_INIT); }
 int watchdog_progress(struct watchdog *monitor) { ++kicks; return service(WATCHDOG_PROGRESS); }
 void watchdog_stop(struct watchdog *monitor) { ++stops; }
 
@@ -240,7 +240,7 @@ ZTEST(acquisition, test_startup_failure_stops_before_later_services)
         }
         reset();
         errors[failed] = -EIO;
-        zassert_equal(application_startup(&acquisition), -EIO);
+        zassert_equal(application_init(&acquisition), -EIO);
         zassert_equal(acquisition.phase, STATUS_FAULT_LOCKED);
         zassert_equal(acquisition.fault_phase, STATUS_STARTING);
         zassert_equal(acquisition.last_error, -EIO);
@@ -250,21 +250,21 @@ ZTEST(acquisition, test_startup_failure_stops_before_later_services)
         zassert_equal(stops, 1);
         zassert_equal(kicks, 0);
         zassert_equal(acquisition_cycle(&acquisition), -EACCES);
-        zassert_equal(application_startup(&acquisition), -EALREADY);
+        zassert_equal(application_init(&acquisition), -EALREADY);
     }
 }
 
 ZTEST(acquisition, test_failed_forwarding_never_starts_acquisition)
 {
     errors[FORWARD_INIT] = -EIO;
-    zassert_equal(application_startup(&acquisition), -EIO);
+    zassert_equal(application_init(&acquisition), -EIO);
     zassert_equal(workers_started, 0,
                   "Do not release acquisition before local protocol assembly completes");
 }
 
 ZTEST(acquisition, test_success_publishes_complete_sample_and_checks_trial_health)
 {
-    zassert_ok(application_startup(&acquisition));
+    zassert_ok(application_init(&acquisition));
     zassert_equal(acquisition.phase, STATUS_RUN);
     zassert_equal(workers_started, 3);
     zassert_ok(acquisition_cycle(&acquisition));
@@ -287,7 +287,7 @@ ZTEST(acquisition, test_success_publishes_complete_sample_and_checks_trial_healt
 
 ZTEST(acquisition, test_failed_acquisition_publishes_invalid_quality_and_preserves_error)
 {
-    zassert_ok(application_startup(&acquisition));
+    zassert_ok(application_init(&acquisition));
     errors[SAMPLE] = -ENODEV;
     errors[PUBLISH] = -ENOMEM;
     zassert_equal(acquisition_cycle(&acquisition), -ENODEV);
@@ -306,7 +306,7 @@ ZTEST(acquisition, test_cycle_errors_cannot_feed_or_confirm_and_stop_is_terminal
     const enum service failures[] = {PUBLISH, PROTOCOL, LED};
     for (size_t i = 0; i < ARRAY_SIZE(failures); ++i) {
         reset();
-        zassert_ok(application_startup(&acquisition));
+        zassert_ok(application_init(&acquisition));
         errors[failures[i]] = -EIO;
         zassert_equal(acquisition_cycle(&acquisition), -EIO);
         zassert_equal(kicks, 0);
@@ -322,7 +322,7 @@ ZTEST(acquisition, test_cycle_errors_cannot_feed_or_confirm_and_stop_is_terminal
 
 ZTEST(acquisition, test_stalled_processing_stops_before_protocol_and_confirmation)
 {
-    zassert_ok(application_startup(&acquisition));
+    zassert_ok(application_init(&acquisition));
     healthy = false;
     zassert_equal(acquisition_cycle(&acquisition), -ETIMEDOUT);
     zassert_equal(calls[PROTOCOL], 0);
@@ -333,7 +333,7 @@ ZTEST(acquisition, test_stalled_processing_stops_before_protocol_and_confirmatio
 
 ZTEST(acquisition, test_confirmation_failure_stops_watchdog)
 {
-    zassert_ok(application_startup(&acquisition));
+    zassert_ok(application_init(&acquisition));
     errors[CHECKPOINT] = -EIO;
     zassert_equal(acquisition_cycle(&acquisition), -EIO);
     zassert_equal(stops, 1);
@@ -343,7 +343,7 @@ ZTEST(acquisition, test_confirmation_failure_stops_watchdog)
 
 ZTEST(acquisition, test_expired_watchdog_prevents_trial_confirmation)
 {
-    zassert_ok(application_startup(&acquisition));
+    zassert_ok(application_init(&acquisition));
     errors[WATCHDOG_PROGRESS] = -ETIMEDOUT;
     zassert_equal(acquisition_cycle(&acquisition), -ETIMEDOUT);
     zassert_equal(acquisition.fault_phase, STATUS_CHECKING_HEALTH);
@@ -353,18 +353,18 @@ ZTEST(acquisition, test_expired_watchdog_prevents_trial_confirmation)
 
 ZTEST(acquisition, test_lifecycle_guards)
 {
-    zassert_equal(application_startup(NULL), -EINVAL);
+    zassert_equal(application_init(NULL), -EINVAL);
     zassert_equal(acquisition_cycle(NULL), -EINVAL);
     zassert_equal(acquisition_cycle(&acquisition), -EACCES);
     zassert_equal(calls[SAMPLE], 0);
-    zassert_ok(application_startup(&acquisition));
-    zassert_equal(application_startup(&acquisition), -EALREADY);
+    zassert_ok(application_init(&acquisition));
+    zassert_equal(application_init(&acquisition), -EALREADY);
     zassert_equal(calls[TABLES_INIT], 1);
 }
 
 ZTEST(acquisition, test_status_retains_original_fault_despite_indicator_failure)
 {
-    zassert_ok(application_startup(&acquisition));
+    zassert_ok(application_init(&acquisition));
     zassert_true(indicator_on);
     led_set_error = -ENODEV; /* Fault indication itself cannot hide sampling error. */
     errors[SAMPLE] = -EIO;
@@ -380,7 +380,7 @@ ZTEST(acquisition, test_status_retains_original_fault_despite_indicator_failure)
 
 ZTEST(acquisition, test_led_tracks_startup_healthy_cycles_and_fault)
 {
-    zassert_ok(application_startup(&acquisition));
+    zassert_ok(application_init(&acquisition));
     zassert_true(indicator_on);
     zassert_true(acquisition.led_on);
     zassert_ok(acquisition_cycle(&acquisition));
@@ -396,7 +396,7 @@ ZTEST(acquisition, test_led_tracks_startup_healthy_cycles_and_fault)
 ZTEST(acquisition, test_initial_led_output_failure_stops_startup)
 {
     led_set_error = -EIO;
-    zassert_equal(application_startup(&acquisition), -EIO);
+    zassert_equal(application_init(&acquisition), -EIO);
     zassert_equal(calls[INPUTS_INIT], 0);
     zassert_equal(stops, 1);
     zassert_equal(acquisition.fault_phase, STATUS_STARTING);
@@ -406,7 +406,7 @@ ZTEST(acquisition, test_storage_failure_keeps_sampling_without_confirmation)
 {
     errors[PARAMS_INIT] = -EIO;
     parameter_flags = 0;
-    zassert_ok(application_startup(&acquisition));
+    zassert_ok(application_init(&acquisition));
     zassert_equal(calls[PARAMS_RECOVER], 0);
     zassert_equal(calls[PROCESS_INIT], 1);
     zassert_equal(calls[COLLECT_START], 1);
@@ -420,7 +420,7 @@ ZTEST(acquisition, test_pending_recovery_prevents_confirmation_until_resolved)
 {
     errors[PARAMS_RECOVER] = -ETIMEDOUT;
     parameter_flags = DP_PARAM_STORAGE_READY | DP_PARAM_PENDING;
-    zassert_ok(application_startup(&acquisition));
+    zassert_ok(application_init(&acquisition));
     zassert_equal(calls[COLLECT_START], 1);
     zassert_ok(acquisition_cycle(&acquisition));
     zassert_false(checkpoint_ready);
@@ -432,7 +432,7 @@ ZTEST(acquisition, test_pending_recovery_prevents_confirmation_until_resolved)
 
 ZTEST(acquisition, test_remote_outage_is_diagnostic_and_keeps_watchdog_progress)
 {
-    zassert_ok(application_startup(&acquisition));
+    zassert_ok(application_init(&acquisition));
     remote_state = CO_DEVICE_OFFLINE;
     zassert_ok(acquisition_cycle(&acquisition));
     zassert_equal(acquisition.remote_offline, 1);
@@ -448,7 +448,7 @@ ZTEST(acquisition, test_remote_outage_is_diagnostic_and_keeps_watchdog_progress)
 ZTEST(acquisition, test_shared_wire_station_conflict_fails_before_ports_or_workers)
 {
     remote_device[0].unit_id = CONFIG_IDU_FORWARD_UNIT;
-    zassert_equal(application_startup(&acquisition), -EADDRINUSE);
+    zassert_equal(application_init(&acquisition), -EADDRINUSE);
     zassert_equal(calls[NETWORK_INIT], 0);
     zassert_equal(calls[TASKS_PREPARE], 0);
     zassert_equal(calls[FORWARD_INIT], 0);
@@ -459,7 +459,7 @@ ZTEST(acquisition, test_storage_fault_survives_successful_operation_until_storag
 {
     errors[PARAMS_INIT] = -EIO;
     parameter_flags = 0;
-    zassert_ok(application_startup(&acquisition));
+    zassert_ok(application_init(&acquisition));
     zassert_ok(acquisition_cycle(&acquisition));
     zassert_equal(acquisition.storage_error, -EIO);
     errors[PARAMS_INIT] = 0; /* The most recent parameter operation now succeeded. */

@@ -217,7 +217,7 @@ static bool overlap(const struct flash_area *a, const struct flash_area *b)
            a->fa_off < b->fa_off + b->fa_size && b->fa_off < a->fa_off + a->fa_size;
 }
 
-int iap_init(const struct iap_config *cfg)
+int iap_init_config(const struct iap_config *cfg)
 {
     if (receiver.ready) { return -EALREADY; }
     if (!cfg || !cfg->aes_key || !cfg->image.public_key || !cfg->image.key_hash ||

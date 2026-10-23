@@ -24,8 +24,8 @@ static int connect_point_services(void)
     if (!err) { err = dp_params_set_transport(co_parameter_transport()); }
 #endif
     if (!err) { err = dp_para_reg_set_func(co_dp_fast_set); }
-    if (!err) { err = protocol_dp_tasks_prepare(); }
-    if (!err) { err = protocol_co_tasks_prepare(); }
+    if (!err) { err = protocol_dp_tasks_init(); }
+    if (!err) { err = protocol_co_tasks_init(); }
     return err;
 }
 
@@ -93,14 +93,14 @@ int protocol_init(void)
         .timer_count = DP_PROCESS_DEFAULT_COUNT,
     };
 
-    err = dp_process_start(&process_plan);
+    err = dp_process_init(&process_plan);
     if (!err) {
-        err = dp_reference_start();
+        err = dp_reference_init();
     }
     if (!err) {
-        err = co_start();
+        err = co_polling_init();
     }
-    if (!err) { err = protocol_start_forwarding(); }
+    if (!err) { err = protocol_forwarding_init(); }
     if (!err) {
         protocol_dp_tasks_start();
         protocol_co_tasks_start();

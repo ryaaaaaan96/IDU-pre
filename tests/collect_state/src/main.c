@@ -198,7 +198,7 @@ ZTEST(collect_state, test_a_initialization_combines_contiguous_registers)
 
 ZTEST(collect_state, test_b_periodic_groups_preserve_gaps_and_device_identity)
 {
-    zassert_ok(co_start());
+    zassert_ok(co_polling_init());
     fixture_start_co();
     struct request_event event;
     bool combined = false, gap = false, other = false;
@@ -240,7 +240,7 @@ static void wait_state(uint16_t dev, enum co_device_online wanted)
 
 ZTEST(collect_state, test_c_explicit_timeout_does_not_change_device_state)
 {
-    int err = co_start();
+    int err = co_polling_init();
     zassert_true(!err || err == -EALREADY);
     fixture_start_co();
     for (size_t i = 0; i < ARRAY_SIZE(polls); ++i) { zassert_ok(co_enable_poll(i, true)); }
@@ -263,7 +263,7 @@ ZTEST(collect_state, test_c_explicit_timeout_does_not_change_device_state)
 
 static void enable_periodic(bool enabled)
 {
-    int err = co_start();
+    int err = co_polling_init();
     zassert_true(!err || err == -EALREADY);
     fixture_start_co();
     for (size_t i = 0; i < ARRAY_SIZE(polls); ++i) { zassert_ok(co_enable_poll(i, enabled)); }

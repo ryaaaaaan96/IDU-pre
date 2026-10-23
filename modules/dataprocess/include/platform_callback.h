@@ -76,10 +76,10 @@ uint16_t pltcb_cfg_get_init_reg_num(void);
  * INIT/TIMER registrations, execute INIT in table order, then enable timers.
  * Callbacks receive four NULL arguments and use dp_* transaction helpers.
  * type=0 periodic timers are supported; other types are rejected. Timer work
- * only submits copied requests to the DP business worker. Successful start is
+ * only submits copied requests to the DP business worker. Successful initialization is
  * one-time; after INIT failure, earlier successful effects are not rolled back.
  */
-int dp_reference_start(void);
+int dp_reference_init(void);
 
 struct dp_equip_cfg;
 /* Explicit Zephyr configuration extension for products already using native

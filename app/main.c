@@ -11,7 +11,7 @@
 
 LOG_MODULE_REGISTER(app_main, LOG_LEVEL_INF);
 
-int application_startup(struct application_status *status)
+int application_init(struct application_status *status)
 {
     if (!status) {
         return -EINVAL;
@@ -27,7 +27,7 @@ int application_startup(struct application_status *status)
     }
 #ifdef CONFIG_IDU_IAPV3
     if (!err) {
-        err = iap_start();
+        err = iap_init();
     }
 #endif
     if (!err) {
@@ -46,7 +46,7 @@ int application_startup(struct application_status *status)
 int main(void)
 {
     struct application_status status = {0};
-    int err = application_startup(&status);
+    int err = application_init(&status);
 
     if (err) {
         return err;

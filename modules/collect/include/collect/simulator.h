@@ -32,7 +32,7 @@ struct co_simulator {
 /* 调用者持有零初始化实例和常驻配置；启动串行化，运行期读写受互斥锁保护。
  * 这是完整 ADU 回环，不模拟 UART 电气时序。拒绝拆分值写入，整包校验后提交。
  */
-int co_simulator_start(struct co_simulator *sim, const struct co_simulator_config *config);
+int co_simulator_init(struct co_simulator *sim, const struct co_simulator_config *config);
 void co_simulator_set_online(struct co_simulator *sim, bool online);
 void co_simulator_set_write_fault(struct co_simulator *sim, enum co_simulator_fault fault);
 unsigned co_simulator_write_count(struct co_simulator *sim);

@@ -118,7 +118,7 @@ static int server_tx(int iface, const struct modbus_adu *adu, void *user)
     return modbus_raw_submit_rx(sim->client, adu);
 }
 
-int co_simulator_start(struct co_simulator *sim, const struct co_simulator_config *config)
+int co_simulator_init(struct co_simulator *sim, const struct co_simulator_config *config)
 {
     if (!sim || !config || !config->registers || !config->register_count ||
         !config->client_iface || !config->server_iface || !config->timeout_us) { return -EINVAL; }
