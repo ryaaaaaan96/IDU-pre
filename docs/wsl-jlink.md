@@ -62,7 +62,7 @@ mirrored 模式可直接 `./scripts/debug.sh`。查看 Zephyr 线程仍需用下
 
 两个入口统一放在应用的 `scripts/` 目录：
 
-- [debug.sh](../scripts/debug.sh)：Linux/WSL 运行 Arm GDB，连接现有 Windows 服务。
+- [debug.sh](../scripts/debug.sh)：Linux/WSL 运行 Arm GDB，连接现有 Windows 服务，默认下载 ELF 后进入调试；`--attach` 只连接。
 - [debug-server.py](../scripts/debug-server.py)：Windows Python 启动 J-Link GDB Server，自动加载 Zephyr RTOS 插件。
 
 在应用目录下，先在 Windows PowerShell 或命令提示符中执行：
@@ -107,12 +107,15 @@ Linux 默认使用当前 MCUboot + IAPv3 应用构建，读取其 `.config` 识�
 ```bash
 ./scripts/debug.sh --host 172.30.96.1 --build-dir build/IDU-pre/mcuboot-iapv3/mcuboot
 ./scripts/debug.sh --host 172.30.96.1 --elf /path/with\ spaces/application.elf --gdb /path/to/arm-none-eabi-gdb
+./scripts/debug.sh --host 172.30.96.1 --attach
 ./scripts/debug.sh --help
 ```
 
-两端端口必须一致。Linux 默认执行 `target remote` 与 `monitor halt`，使用 `-nx` 跳过 GDB 初始化文件，不构建、不下载、不复位；`--` 后可追加 GDB 参数。
+两端端口必须一致。Linux 默认依次执行 `target remote`、`monitor halt`、`load "ELF路径"`，随后停留在 GDB；不自动构建、复位或运行。`--attach` 跳过下载，保留原来的只连接行为。使用 `-nx` 跳过 GDB 初始化文件，`--` 后可追加 GDB 参数。
+默认 ELF 下载仅用于开发调试：它会改写应用代码，可能使 MCUboot 镜像校验失败；不自动修复镜像头、签名或启动状态。调试后通过 `flash.sh` 恢复签名固件，调试现有签名镜像则用 `--attach`。
 Windows 端保留寄存器、不主动复位，但启动后会 halt；长期暂停仍须处理下文的外部看门狗。
 脚本已做 Bash 参数/路径验证及 Windows Python DryRun 验证，未连接探针或实板。
+默认 ELF 下载、`--attach` 无写入和下载错误返回已用真实 Arm GDB 对接本地模拟服务验证；日志位于工作区 `build/IDU-pre/debug-load-rsp-check.log`。
 
 ## 已核实的本机条件
 
@@ -232,7 +235,7 @@ cd /home/ryan/Documents/zephyrproject
 | `build/IDU-pre/mcuboot-iapv3/IDU-pre/zephyr/IDU-pre.elf` | 应用符号与源码调试 |
 | `build/IDU-pre/mcuboot-iapv3/mcuboot/zephyr/zephyr.elf` | MCUboot 符号与源码调试 |
 
-**不要把未签名应用 ELF 用 GDB `load` 当作默认烧录流程**：它不会替你安装同次构建的 MCUboot 头、签名与启动程序。
+**完整安装使用签名 factory HEX**。`debug.sh` 的默认 `load ELF` 是用户明确启用的开发调试步骤，不会替你安装同次构建的 MCUboot 头、签名与启动程序；独立 `flash.sh` 仍用于完整签名安装。
 应用槽位从 `0x08010000` 开始，头长 512 B；实际向量位于 `0x08010200`。
 本项目的导出、签名和地址检查见[构建与升级](build-and-upgrade.md)。
 

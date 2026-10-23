@@ -10,6 +10,7 @@ remote_port=2331
 elf_file=
 gdb_program=
 dry_run=false
+load_elf=true
 
 usage() {
     cat <<'EOF'
@@ -19,12 +20,15 @@ Usage: ./scripts/debug.sh [options] [-- extra GDB arguments]
   --build-dir DIR   Application domain build directory (relative to workspace)
   --elf FILE        ELF with symbols (relative to workspace)
   --gdb PROGRAM     Arm GDB executable; otherwise use CMakeCache.txt or PATH
+  --attach          Only connect and halt; skip ELF download
   --dry-run         Print the command without connecting
   -h, --help        Show help
 
 Default build: build/IDU-pre/mcuboot-iapv3/IDU-pre
 NAT WSL: pass --host with the Windows address from `ip route show default`.
-Attaches and halts only; does not build, download an ELF, or reset the target.
+Connects, halts and downloads the ELF, then stays in GDB. No build/reset/run.
+Use --attach for an existing signed MCUboot image. Raw ELF downloads may
+invalidate MCUboot verification; reinstall signed firmware with flash.sh.
 See docs/wsl-jlink.md for Zephyr thread support and external watchdog handling.
 EOF
 }
@@ -40,6 +44,7 @@ while [[ $# -gt 0 ]]; do
         --elf) need_value "$@"; elf_file=$2; shift 2 ;;
         --gdb) need_value "$@"; gdb_program=$2; shift 2 ;;
         --dry-run) dry_run=true; shift ;;
+        --attach) load_elf=false; shift ;;
         -h|--help) usage; exit 0 ;;
         --) shift; break ;;
         *) fail "Unknown option: $1 (use --help)" ;;
@@ -63,6 +68,7 @@ if [[ -z "$elf_file" ]]; then
 fi
 [[ "$elf_file" == /* ]] || elf_file="$workspace_dir/$elf_file"
 [[ -f "$elf_file" ]] || fail "ELF not found: $elf_file; build first or use --elf"
+[[ "$elf_file" != *$'\n'* && "$elf_file" != *$'\r'* ]] || fail 'ELF path contains a newline'
 
 if [[ -z "$gdb_program" && -f "$build_dir/CMakeCache.txt" ]]; then
     cached_gdb=$(sed -n 's/^CMAKE_GDB:[^=]*=//p' "$build_dir/CMakeCache.txt")
@@ -80,8 +86,15 @@ gdb_program=$resolved_gdb
 
 target="$remote_host:$remote_port"
 [[ "$remote_host" != *:* ]] || target="[$remote_host]:$remote_port"
-command_line=("$gdb_program" -q -nx "$elf_file" -ex "target remote $target" -ex 'monitor halt' "$@")
+command_line=("$gdb_program" -q -nx "$elf_file" -ex "target remote $target" -ex 'monitor halt')
+if "$load_elf"; then
+    quoted_elf=${elf_file//\\/\\\\}
+    quoted_elf=${quoted_elf//\"/\\\"}
+    command_line+=(-ex "load \"$quoted_elf\"")
+fi
+command_line+=("$@")
 printf 'GDB target: %s\nELF: %s\n' "$target" "$elf_file" >&2
+if "$load_elf"; then printf 'ELF download enabled (raw development image).\n' >&2; fi
 if "$dry_run"; then
     printf '%q ' "${command_line[@]}"
     printf '\n'
