@@ -129,7 +129,7 @@ static void task_expired(void)
 {
     enum status_fault_phase phase = STATUS_RUNTIME;
     if (status_phase_get() == STATUS_STARTING) { phase = STATUS_INIT; }
-    (void)status_report_fault(phase, -ETIMEDOUT, "任务心跳超时",
+    (void)status_report_fault(phase, -ETIMEDOUT, "Task heartbeat timed out",
                               CONFIG_APP_FAULT_TASK_TIMEOUT_ACTION);
 }
 
@@ -299,7 +299,7 @@ static void indicate(struct k_work *work)
             }
         } else { err = gpio_pin_set_dt(&run_led, 1); }
         if (err && phase != STATUS_FAULT_LOCKED) {
-            (void)status_report_fault(fault_phase, err, "指示灯输出失败",
+            (void)status_report_fault(fault_phase, err, "Indicator output failed",
                                       CONFIG_APP_FAULT_LED_ACTION);
         }
         /* 运行中的翻转或报错不能覆盖同时到达的故障常亮要求。 */
@@ -313,7 +313,7 @@ static void indicate(struct k_work *work)
     k_spin_unlock(&lock, key);
     if (!IS_ENABLED(CONFIG_APP_DEBUG_SKIP_WATCHDOG) && check_watchdog) {
         int err = watchdog_error(&monitor);
-        if (err) { (void)status_report_fault(fault_phase, err, "喂狗输出失败", STATUS_RESET); }
+        if (err) { (void)status_report_fault(fault_phase, err, "Watchdog feed output failed", STATUS_RESET); }
     }
     k_work_reschedule(&indicator, K_MSEC(STATUS_LED_HALF_PERIOD_MS));
 }
@@ -330,15 +330,15 @@ int status_init(void)
     int err = 0;
     if (!IS_ENABLED(CONFIG_APP_DEBUG_SKIP_WATCHDOG)) {
         err = watchdog_init(&monitor, &watchdog);
-        if (err) { return status_report_fault(STATUS_INIT, err, "看门狗初始化失败", STATUS_RESET); }
+        if (err) { return status_report_fault(STATUS_INIT, err, "Watchdog initialization failed", STATUS_RESET); }
     }
     if (!gpio_is_ready_dt(&run_led)) {
-        return status_report_fault(STATUS_INIT, -ENODEV, "指示灯初始化失败",
+        return status_report_fault(STATUS_INIT, -ENODEV, "Indicator initialization failed",
                                    CONFIG_APP_FAULT_LED_INIT_ACTION);
     }
     err = gpio_pin_configure_dt(&run_led, GPIO_OUTPUT_ACTIVE);
     if (err) {
-        return status_report_fault(STATUS_INIT, err, "指示灯初始化失败",
+        return status_report_fault(STATUS_INIT, err, "Indicator initialization failed",
                                    CONFIG_APP_FAULT_LED_INIT_ACTION);
     }
     indicator_ready = true;
@@ -366,7 +366,7 @@ int status_progress(void)
     if (status_phase_get() != STATUS_CHECKING_HEALTH) { return -EACCES; }
     if (!IS_ENABLED(CONFIG_APP_DEBUG_SKIP_WATCHDOG)) {
         int err = watchdog_error(&monitor);
-        if (err) { return status_report_fault(STATUS_RUNTIME, err, "喂狗输出失败", STATUS_RESET); }
+        if (err) { return status_report_fault(STATUS_RUNTIME, err, "Watchdog feed output failed", STATUS_RESET); }
     }
 #ifdef CONFIG_BOOTLOADER_MCUBOOT
     const struct device *flash = DEVICE_DT_GET(DT_NODELABEL(external_flash));
@@ -375,7 +375,7 @@ int status_progress(void)
     bool ready = device_is_ready(flash) && (parameters.flags & DP_PARAM_STORAGE_READY) &&
                  !(parameters.flags & DP_PARAM_PENDING);
     int err = image_confirm_checkpoint(&application.image_confirm, k_uptime_get(), ready);
-    if (err) { return status_report_fault(STATUS_RUNTIME, err, "镜像确认失败",
+    if (err) { return status_report_fault(STATUS_RUNTIME, err, "Image confirmation failed",
                                              CONFIG_APP_FAULT_IMAGE_CONFIRM_ACTION); }
 #endif
     return 0;

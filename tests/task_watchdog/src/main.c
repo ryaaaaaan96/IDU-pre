@@ -129,7 +129,7 @@ ZTEST(task_watchdog, test_explicit_hold_keeps_feed_without_task_fault)
 {
     const struct status_task_config config = {.name = "first", .timeout_ms = 2000};
     zassert_ok(status_register(&first, &config));
-    (void)status_report_fault(STATUS_INIT, -EIO, "输入初始化失败", CONFIG_APP_FAULT_INPUT_INIT_ACTION);
+    (void)status_report_fault(STATUS_INIT, -EIO, "Input initialization failed", CONFIG_APP_FAULT_INPUT_INIT_ACTION);
     atomic_val_t before = atomic_get(&edges);
     k_sleep(K_MSEC(40));
     zassert_true(atomic_get(&edges) > before);

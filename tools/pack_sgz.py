@@ -52,7 +52,9 @@ def pack(image, version="IDU-pre", encrypt=True, config=DEFAULT_CONFIG):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=(
+        'Wrap a signed IDU-pre MCUboot BIN for the legacy AES/IAPv3 transport.'
+    ))
     parser.add_argument("--bin", type=Path, required=True)
     parser.add_argument("--key", type=Path, required=True, help="MCUboot public or private PEM")
     parser.add_argument("--output", type=Path, required=True)

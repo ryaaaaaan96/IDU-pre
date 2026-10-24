@@ -27,11 +27,11 @@ int acquisition_cycle(void)
     status_set_phase(STATUS_PUBLISHING);
     int publish_err = points_publish_snapshot(&sample);
     if (err) {
-        return status_report_fault(STATUS_RUNTIME, err, "输入采样失败",
+        return status_report_fault(STATUS_RUNTIME, err, "Input sampling failed",
                                    CONFIG_APP_FAULT_SAMPLE_ACTION);
     }
     if (publish_err) {
-        return status_report_fault(STATUS_RUNTIME, publish_err, "样本发布失败",
+        return status_report_fault(STATUS_RUNTIME, publish_err, "Sample publication failed",
                                    CONFIG_APP_FAULT_PUBLISH_ACTION);
     }
 
@@ -39,7 +39,7 @@ int acquisition_cycle(void)
     protocol_update_status();
     err = protocol_error();
     if (err) {
-        return status_report_fault(STATUS_RUNTIME, err, "协议维护失败",
+        return status_report_fault(STATUS_RUNTIME, err, "Protocol maintenance failed",
                                    CONFIG_APP_FAULT_PROTOCOL_ACTION);
     }
 

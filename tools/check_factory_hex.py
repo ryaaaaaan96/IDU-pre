@@ -60,7 +60,11 @@ def check(path):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=(
+        'Check factory HEX structure and IDU flash layout before full-chip programming.\n'
+        '\n'
+        'This checks layout, not cryptographic authenticity; build/export verifies signatures.\n'
+    ))
     parser.add_argument("hex", type=Path)
     args = parser.parse_args()
     try:

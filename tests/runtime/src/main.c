@@ -133,15 +133,15 @@ ZTEST(runtime, test_real_main_fault_policy)
 {
     scenario = getenv("IDU_RUNTIME_CASE");
     if (!scenario) { scenario = "publish"; }
-    if (!strcmp(scenario, "publish")) { expected_description = "样本发布失败"; }
-    else if (!strcmp(scenario, "sample")) { expected_description = "输入采样失败"; }
-    else if (!strcmp(scenario, "led")) { expected_description = "指示灯输出失败"; }
-    else if (!strcmp(scenario, "led-init")) { expected_description = "指示灯初始化失败"; }
-    else if (!strcmp(scenario, "input-init")) { expected_description = "输入初始化失败"; }
-    else if (!strcmp(scenario, "protocol-init")) { expected_description = "协议初始化失败"; }
-    else if (!strcmp(scenario, "maintenance")) { expected_description = "协议维护失败"; }
-    else if (!strcmp(scenario, "task-timeout")) { expected_description = "任务心跳超时"; }
-    else if (!strcmp(scenario, "force-reset")) { expected_description = "显式复位测试"; }
+    if (!strcmp(scenario, "publish")) { expected_description = "Sample publication failed"; }
+    else if (!strcmp(scenario, "sample")) { expected_description = "Input sampling failed"; }
+    else if (!strcmp(scenario, "led")) { expected_description = "Indicator output failed"; }
+    else if (!strcmp(scenario, "led-init")) { expected_description = "Indicator initialization failed"; }
+    else if (!strcmp(scenario, "input-init")) { expected_description = "Input initialization failed"; }
+    else if (!strcmp(scenario, "protocol-init")) { expected_description = "Protocol initialization failed"; }
+    else if (!strcmp(scenario, "maintenance")) { expected_description = "Protocol maintenance failed"; }
+    else if (!strcmp(scenario, "task-timeout")) { expected_description = "Task heartbeat timed out"; }
+    else if (!strcmp(scenario, "force-reset")) { expected_description = "Explicit reset test"; }
     else if (!strcmp(scenario, "storage-degraded")) { expected_description = NULL; }
     else { zassert_unreachable("Unknown scenario"); }
     /* 即使远端断开，UART 仍会在物理线上发送字节。 */
@@ -167,7 +167,7 @@ ZTEST(runtime, test_real_main_fault_policy)
     }
     for (int i = 0; i < 300; ++i) {
         if (!strcmp(scenario, "force-reset") && atomic_get(&samples)) {
-            (void)status_report_fault(STATUS_RUNTIME, -EIO, "显式复位测试", STATUS_RESET);
+            (void)status_report_fault(STATUS_RUNTIME, -EIO, "Explicit reset test", STATUS_RESET);
         }
         if (!strcmp(scenario, "maintenance") && atomic_get(&samples) && !maintenance_injected) {
             zassert_ok(modbus_disable(modbus_iface_get_by_name("RAW_1")));
@@ -183,7 +183,7 @@ ZTEST(runtime, test_real_main_fault_policy)
     }
     zassert_ok(status_application_fault_get(&fault));
     if (!fault.terminal_description) {
-        zassert_str_equal(expected_description, "指示灯输出失败");
+        zassert_str_equal(expected_description, "Indicator output failed");
         zassert_str_equal(fault.description, expected_description);
         zassert_false(protocol_stopped());
         int before = atomic_get(&samples);

@@ -3,14 +3,14 @@
 故障上报显式提供阶段、错误码、常驻描述和最终动作：
 
 ```c
-status_report_fault(STATUS_INIT, err, "输入初始化失败",
+status_report_fault(STATUS_INIT, err, "Input initialization failed",
                     CONFIG_APP_FAULT_INPUT_INIT_ACTION);
-status_report_fault(STATUS_RUNTIME, err, "喂狗输出失败", STATUS_RESET);
+status_report_fault(STATUS_RUNTIME, err, "Watchdog feed output failed", STATUS_RESET);
 ```
 
 `STATUS_INIT` / `STATUS_RUNTIME` 表示故障发生于初始化或运行阶段，与采样、发布等细分
 业务阶段独立。错误码表示失败原因，描述说明故障来源；同一个 `-EIO` 可来自不同硬件。
-描述必须是字符串常量或始终有效的常驻字符串，函数保存指针，不复制或动态格式化。
+描述使用英文，必须是字符串常量或始终有效的常驻字符串，函数保存指针，不复制或动态格式化。
 `status` 不比较描述字符串、不维护故障来源枚举或动作映射表，直接执行调用方的最终动作。
 
 动作仍在 `app/status/Kconfig` 集中配置，调用方直接传入对应配置值；更改 `.conf` 后
@@ -62,7 +62,7 @@ CONFIG_APP_FAULT_LED_ACTION=0
 CONFIG_APP_FAULT_PUBLISH_ACTION=1
 ```
 
-新增故障时，在调用点给出初始化／运行阶段、错误码、中文常驻描述和最终动作；需要
+新增故障时，在调用点给出初始化／运行阶段、错误码、英文常驻描述和最终动作；需要
 可配置时在 Kconfig 声明动作及允许范围，按业务有效性决定能否继续，无需增加来源枚举。
 验收使用 `bash tests/runtime/run.sh`，采样单场景使用 `tests/acquisition/run.py`；
 测试以独立进程隔离每次启动，不通过清零内部状态模拟重启。完整入口为 `bash tests/run.sh`。

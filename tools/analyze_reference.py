@@ -324,7 +324,14 @@ def analyze(source, output, prefix):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=(
+        'Audit the supplied platform archive without modifying or linking it.\n'
+        '\n'
+        'Only declarations and selected disassembly are inventoried, not decompiled C.\n'
+        'All output belongs in an explicit build directory outside the application and\n'
+        'reference repositories. ARC symbols are excluded from the public API inventory;\n'
+        'ARC relocations in selected functions remain evidence of the original backend.\n'
+    ))
     parser.add_argument("--source", required=True, type=Path, help="Reference CODE directory (read only)")
     parser.add_argument("--output", required=True, type=Path, help="Dedicated build output directory")
     parser.add_argument("--toolchain-prefix", help="GNU Arm prefix, e.g. /opt/toolchain/bin/arm-none-eabi-")

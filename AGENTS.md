@@ -10,6 +10,8 @@
 
 ## 代码与构建
 
+- 运行时字符串、故障描述、日志和命令行／配置帮助使用英文；注释及 Doxygen 说明使用中文。
+
 - 产品代码、板级支持和点表模块保存在本应用内；依赖版本由工作区 `manifest/west.yml` 管理。
 - `modules/gd32e505` 通过 Zephyr `soc_root` / `dts_root` 提供 E505 SoC、设备树时钟配置和 ADC0 驱动；本板保持 20 MHz bypass / 180 MHz；`modules/hardware.cmake` 供应用和 Sysbuild 共用。ADC 寄存器与 HAL 调用归模块驱动，`modules/analog_input` 通过标准 ADC API 处理通道组及平均，`app/acquisition/config.c` 从设备树装配产品配置并传给 `modules/input_sampler`；芯片代码不包含 IDU 专用 GPIO 策略；JTAG/SWD 配置和 MCUboot 的 PC13 浮空处理归 `boards/idu/idu_pre/board.c` 的早期钩子。`sysbuild/` 保留标准薄入口，产品镜像配置与分区归 `bootloader/`。
 - 通用点表模块使用 `modules/dataprocess`、`modules/collect`、`modules/transmit`，接口分别为 `dp_*`、`co_*`、`tr_*`；独立块解码算法归 `modules/quicklz`，接口为 `qlz_decode_level3()`；升级接收、SGZ 和验签归 `modules/iap`，接口为 `iap_*`；应用接口按职责命名；调整名称或硬件配置前读 [命名与采样边界](docs/naming.md)。

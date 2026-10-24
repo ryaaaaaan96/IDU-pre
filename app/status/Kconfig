@@ -50,7 +50,8 @@ config APP_FAULT_LED_ACTION
     default 2
     range 0 2
     help
-      仅控制运行期输出错误；指示灯初始化失败使用 APP_FAULT_LED_INIT_ACTION。
+      Controls runtime output errors only. Indicator initialization failures
+      use APP_FAULT_LED_INIT_ACTION.
 
 config APP_FAULT_LED_INIT_ACTION
     int "Status indicator initialization action"
@@ -58,8 +59,8 @@ config APP_FAULT_LED_INIT_ACTION
     default APP_FAULT_LED_ACTION
     range 1 2
     help
-      指示灯初始化失败只能留驻或复位。默认沿用运行期 LED 动作，
-      但运行期选择继续时，初始化动作默认为复位。
+      Indicator initialization failures must hold or reset. The default follows
+      the runtime LED action, except that continue defaults to reset.
 
 config APP_FAULT_IMAGE_CONFIRM_ACTION
     int "Trial image confirmation action"

@@ -103,7 +103,9 @@ def export(build, key, destination, iapv3=False, version="IDU-pre"):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=(
+        "Build and export IDU-pre's MCUboot profile; never programs hardware."
+    ))
     parser.add_argument("--key", type=Path, help="Existing ECDSA P-256 private signing key")
     parser.add_argument("--version", default="0.1.0+0")
     parser.add_argument("--extra-conf", type=Path, action="append", default=[],

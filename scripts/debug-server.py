@@ -47,7 +47,9 @@ def find_jlink():
 
 def main():
     parser = argparse.ArgumentParser(
-        description=__doc__,
+        description=(
+            'Start Windows J-Link GDB Server with Zephyr thread awareness.'
+        ),
         epilog="Default: remote access for NAT WSL; no firewall changes. "
                "Device names are not substituted; use --device if your J-Link "
                "installation needs a confirmed generic mapping. See docs/wsl-jlink.md.",
