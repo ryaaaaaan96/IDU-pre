@@ -49,7 +49,7 @@ int main(void)
         if (err) {
             return err;
         }
-        /* An overrun starts the next cycle without replaying missed samples. */
+        /* 周期超时后直接开始下一轮，不补采错过的历史样本。 */
         int64_t delay = next_sample - k_uptime_get();
         if (delay > 0) { k_sleep(K_MSEC(delay)); }
     }

@@ -1,7 +1,7 @@
-/* Private implementation inserted after Zephyr's interface table. */
+/* 插入 Zephyr 接口表之后的私有实现。 */
 #include <zephyr/sys/crc.h>
 struct mb_io_state {
-    bool client_bounded; /* Protected by the recursive Zephyr iface_lock. */
+    bool client_bounded; /* 由 Zephyr 可递归的 iface_lock 保护。 */
     k_timepoint_t client_deadline;
     atomic_t raw_busy;
     void (*done)(void *user);
@@ -59,8 +59,8 @@ int mb_raw_rx_begin(struct modbus_context *ctx)
 {
     int iface = modbus_iface_get_by_ctx(ctx);
     if (iface < 0) { return iface; }
-    /* Direct Zephyr callers retain their own scheduling contract. Bound message
-     * ports use the completion hook to hold ownership through protocol work. */
+    /* 直接调用 Zephyr 的使用者保留自己的调度契约；
+     * 绑定的报文端口通过完成钩子持有所有权，直到协议处理结束。 */
     if (!mb_io[iface].done) { return 0; }
     return atomic_cas(&mb_io[iface].raw_busy, 0, 1) ? 0 : -EBUSY;
 }
@@ -95,8 +95,8 @@ bool mb_serial_dispatch(struct modbus_context *ctx)
     if (!io->receive) { return false; }
     int err = ctx->rx_adu_err;
     if (!err) {
-        /* Parser resets the counter but leaves the complete wire frame intact.
-         * The receiver must copy before returning; avoid another large stack buffer. */
+        /* 解析器会复位计数，但保留完整通信报文。接收方必须在返回前复制，
+         * 避免再分配一个大的栈缓冲。 */
         const uint8_t *data = ctx->cfg->uart_buf;
         atomic_set(&io->pending, 1);
         err = io->receive(io->user, data, ctx->rx_adu.length + 4);
@@ -115,7 +115,7 @@ void mb_serial_tx_done(struct modbus_context *ctx)
 #ifdef CONFIG_MODBUS_SERIAL
     struct mb_io_state *io = &mb_io[modbus_iface_get_by_ctx(ctx)];
     if (io->receive && atomic_get(&io->transmitting)) {
-        /* A server request owns RX until its RAW handler has fully finished. */
+        /* 服务端请求持有 RX，直到其 RAW 处理函数完整结束。 */
         if (atomic_get(&io->pending)) { modbus_serial_rx_disable(ctx); }
         k_sem_give(&io->transmitted);
     }
@@ -141,9 +141,9 @@ int mb_serial_send(int iface, const uint8_t *data, size_t size, k_timeout_t time
     k_timepoint_t deadline = sys_timepoint_calc(timeout);
     int err = k_mutex_lock(&io->lock, sys_timepoint_timeout(deadline));
     if (err) { return -EBUSY; }
-    /* Shared links may start a client transaction while RX is assembling a
-     * frame. Never overwrite that buffer; wait for its dispatch and TX silence.
-     * This coordinates this MCU only, not other masters on the wire.
+    /* 共享链路可能在 RX 正组装报文时发起客户端事务。不得覆盖该缓冲，
+     * 须等待报文分发和 TX 静默；此处只协调本 MCU，
+     * 不协调链路上的其他主机。
      */
     for (;;) {
         if (sys_timepoint_expired(deadline)) { err = -EBUSY; goto out; }
@@ -165,7 +165,7 @@ int mb_serial_send(int iface, const uint8_t *data, size_t size, k_timeout_t time
     err = modbus_serial_tx_adu(ctx);
     if (!err && k_sem_take(&io->transmitted, sys_timepoint_timeout(deadline))) { err = -ETIMEDOUT; }
     if (err) { mb_serial_abort(ctx); }
-    /* Reuse the serial backend's configured RTU inter-frame delay. */
+    /* 复用串口后端配置的 RTU 帧间延时。 */
     io->next_tx = sys_timepoint_calc(K_USEC(ctx->cfg->rtu_timeout));
     atomic_clear(&io->transmitting);
 out:

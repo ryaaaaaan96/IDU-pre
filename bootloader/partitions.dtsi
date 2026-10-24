@@ -1,4 +1,4 @@
-/* Current MCUboot image layout. */
+/* 当前 MCUboot 镜像布局。 */
 / {
     chosen { zephyr,code-partition = &slot0_partition; };
 };
@@ -18,7 +18,7 @@
         };
     };
 };
-/* External image slot and swap scratch; parameter/IAP addresses stay fixed. */
+/* 外部镜像槽和交换暂存区；参数与 IAP 地址保持固定。 */
 &{/soc/spi@40003800/flash@0/partitions} {
     slot1_partition: partition@300000 {
         label = "image-1";

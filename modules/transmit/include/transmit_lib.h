@@ -39,35 +39,36 @@ typedef enum {
     MB_PORT_CTRL_ENUM_MAX,
 } MB_PORT_CTRL_E;
 
-/* These port APIs require CONFIG_TR_MODBUS_ADAPTER.
- * Deliberate Zephyr interface: an accepted complete ADU, not ARC/raw bytes.
- * Callbacks must validate function-specific PDU lengths before accessing data.
- * port_id is a Zephyr Modbus interface index. No user pointer or ARC dependency.
- * Mode handler: -1 continues to normal routing, 0 replies using response.
- * Packet filter: 0 continues, 4 consumes silently. Other results are unsupported;
- * in particular AES=2 is not a Modbus exception. For native -errno/exception/
- * silence semantics and per-port handlers, use tr_port_* instead.
+/* 这些端口接口要求 CONFIG_TR_MODBUS_ADAPTER。
+ * 此处采用 Zephyr 专用接口，输入为已准入的完整 ADU，
+ * 不接受 ARC 或原始字节。回调访问数据前须校验对应功能码的 PDU 长度。
+ * port_id 是 Zephyr Modbus 接口索引，
+ * 不含用户指针或 ARC 依赖。模式处理函数返回 -1 继续普通路由，
+ * 0 使用 response 回复。报文过滤器返回 0 继续，4 静默接收；
+ * 其他结果不支持，尤其 AES=2 不是 Modbus 异常。
+ * 需要原生 -errno、异常、静默及逐端口处理语义时，使用 tr_port_*。
  */
 typedef int (*TR_FUNC_CB)(uint16_t port_id, const struct modbus_adu *request,
                           struct modbus_adu *response);
-/* Global per-mode fallback, including interfaces initialized later. Explicit
- * tr_port_set_handler registrations take precedence. SLEEP has no callback.
- * NULL unregisters, unless it would leave a port in CALLBACK without a handler.
+/* 各模式的全局后备处理器，也作用于稍后初始化的接口。
+ * 显式 tr_port_set_handler 优先；SLEEP 没有回调。
+ * NULL 取消登记，但不允许让 CALLBACK 端口失去处理函数。
  */
 int tr_reg_table_func(MB_MODE_E work_mode, TR_FUNC_CB table_func);
 int tr_reg_pkt_filter_func(uint16_t port_id, TR_FUNC_CB filter);
 int tr_pkt_filter_config(uint16_t port_id, bool enabled);
 int tr_get_port_mode(uint16_t port_id, uint8_t *mode);
 int tr_set_port_mode(uint16_t port_id, uint8_t mode);
-/* Enables accepted-ADU activity monitoring, timeout CONFIG_TR_CONN_TIMEOUT_MS.
- * Observe through tr_port_connection_get(); no physical carrier is inferred.
+/* 启用按已准入 ADU 活动判断的连接监控，超时为 CONFIG_TR_CONN_TIMEOUT_MS。
+ * 通过 tr_port_connection_get() 观察，不推断物理载波。
  */
 int tr_port_conn_status_config(uint16_t port_id, bool enabled);
-/* GET_RECV_MB writes uint32_t accepted complete ADUs reaching dispatch;
- * CLR_RECV_MB clears that count (NULL arg). All other reference commands return
- * -ENOTSUP without reading/writing arg: physical CRC/TX counters and raw port
- * configuration are not exposed by this adapter. Native detailed statistics
- * remain available through tr_port_control(). All APIs return 0 or -errno.
+/* GET_RECV_MB 向 uint32_t 写入到达分发阶段的已准入完整 ADU 数；
+ * CLR_RECV_MB 清除此计数，参数为 NULL。
+ * 其余参考命令均返回 -ENOTSUP，且不读写 arg：
+ * 此适配实现不提供物理 CRC/TX 计数或原始端口配置。
+ * 原生详细统计仍可通过 tr_port_control() 获取；
+ * 所有接口返回 0 或 -errno。
  */
 int tr_mb_port_work_control(uint16_t port_id, uint16_t command, void *arg);
 

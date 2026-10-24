@@ -25,10 +25,10 @@ LOG_MODULE_REGISTER(dp_params, LOG_LEVEL_INF);
 
 static const struct dp_equip_cfg *equipment;
 static uint16_t defs[CONFIG_DP_PARAMS_MAX_COUNT];
-/* The compound literal lives in the caller's block; no descriptor is retained. */
+/* 复合字面量的生命周期属于调用方代码块，不保留描述符。 */
 #define PARAM_DEF(i) dp_config_point(equipment, defs[i], &(struct dp_point_cfg){0})
 static size_t param_count;
-/* durable never follows transient NO_STORE cache writes. */
+/* durable 不跟随临时的 NO_STORE 缓存写入变化。 */
 static bool dirty[CONFIG_DP_PARAMS_MAX_COUNT];
 static int64_t flush_at;
 static uint8_t operation_flags;
@@ -38,7 +38,7 @@ static uint8_t partition_id;
 static struct dp_params_transport transport;
 static bool stored[CONFIG_DP_PARAMS_MAX_COUNT];
 static struct dp_param_status status;
-/* Scratch space is serialized by transaction_lock, never borrowed by readers. */
+/* 临时空间由 transaction_lock 串行保护，不借给读取方使用。 */
 struct parameter_buffers {
     struct dp_point_state cache[CONFIG_DP_PARAMS_MAX_COUNT];
     struct dp_value staged[CONFIG_DP_PARAMS_MAX_COUNT];
@@ -363,8 +363,8 @@ static void invalidate_pending(int error)
     k_mutex_unlock(&cache_lock);
 }
 
-/* Returns 0 if committed, 1 if the device still has the pre-write values.
- * Neither timeout nor an ambiguous result triggers an automatic write retry.
+/* 已提交返回 0，设备仍为写入前数值返回 1。
+ * 超时或结果不明确均不触发自动重试写入。
  */
 static int recover_locked(void)
 {
@@ -431,7 +431,7 @@ static int recover_locked(void)
         return err;
     }
     if (!is_new) {
-        stage_cache(); /* Clear the uncertain quality without applying the candidate. */
+        stage_cache(); /* 不应用候选值，只清除不确定质量标志。 */
         commit_cache(status.sequence, selected);
     }
     intent_length = 0;
@@ -501,7 +501,7 @@ static int load_locked(bool *incompatible)
             if (!stored[i]) { converted = true; }
         }
     } else {
-        /* ID 1 belonged to the retired aggregate format. No payload is imported. */
+        /* ID 1 曾用于已停用的整体格式，不导入任何旧载荷。 */
         uint8_t probe;
         ssize_t legacy = nvs_read(&fs, 1, &probe, sizeof(probe));
         if (legacy != -ENOENT) {
@@ -551,8 +551,8 @@ static int load_locked(bool *incompatible)
     return 0;
 }
 
-/* Format changes explicitly discard settings; I/O failures never trigger erase.
- * Bound the retry so a bad current definition cannot create an erase loop. */
+/* 格式变化会显式丢弃设置，I/O 失败不触发擦除。限制重试次数，
+ * 避免无效的当前定义导致反复擦除。 */
 static int mount_locked(void)
 {
     bool incompatible;
@@ -639,7 +639,7 @@ static int apply_staged(const bool selected[CONFIG_DP_PARAMS_MAX_COUNT])
     bool durable_remote = false, volatile_remote = false;
     uint16_t dev_id = 0, begin = UINT16_MAX;
     uint32_t end = 0;
-    /* Validate and prepare the entire request before touching any device/flash. */
+    /* 接触任何设备或 Flash 前，先校验并准备整个请求。 */
     for (size_t i = 0; i < param_count; ++i) {
         if (!selected[i]) {
             continue;
@@ -687,8 +687,8 @@ static int apply_staged(const bool selected[CONFIG_DP_PARAMS_MAX_COUNT])
     if (!remote) {
         int err = persistent ? save_parameters(sequence) : 0;
         if (err) {
-            /* An I/O failure may have happened after metadata was written.
-             * Freeze writes until remount resolves the durable state. */
+            /* I/O 失败可能发生在元数据已写入之后。暂停写入，
+             * 直到重新挂载确定持久状态。 */
             set_status(err, status.flags & ~DP_PARAM_STORAGE_READY);
             return err;
         }
@@ -728,7 +728,7 @@ static int apply_staged(const bool selected[CONFIG_DP_PARAMS_MAX_COUNT])
         }
     }
     if (volatile_remote) {
-        /* One command, one write. An uncertain ACK must not cause replay. */
+        /* 一个命令只写一次，ACK 不确定时也不得重放。 */
         int err = transport_write(dev_id, begin, new_wire, count);
         if (err) { return err < 0 ? err : -EIO; }
         if (operation_flags & DP_OP_NO_DM) { stage_cache(); }
@@ -760,13 +760,13 @@ static int apply_staged(const bool selected[CONFIG_DP_PARAMS_MAX_COUNT])
     ssize_t rc = nvs_write(&fs, INTENT_ID, buffers->intent, intent_length);
     if (rc < 0) {
         set_status(rc, status.flags & ~DP_PARAM_STORAGE_READY);
-        return rc; /* No downstream write without a durable intent. */
+        return rc; /* 没有持久化事务意图就不得执行南向写入。 */
     }
     invalidate_pending(-EINPROGRESS);
     err = transport_write(dev_id, begin, new_wire, count);
     int recovered = recover_locked();
     if (recovered == 0) {
-        return 0; /* Readback also resolves a lost write acknowledgement. */
+        return 0; /* 读回也能确认写入已执行但确认应答丢失的情况。 */
     }
     if (recovered == 1) {
         return err < 0 ? err : -EIO;
@@ -833,7 +833,7 @@ int dp_params_write_registers(const struct dp_equip_cfg *mapping, uint16_t addre
             return end_transaction(-ENOENT);
         }
         if (map->count != PARAM_DEF(index)->width || offset + map->count > count || selected[index]) {
-            return end_transaction(-EINVAL); /* No partial multiword/duplicate alias writes. */
+            return end_transaction(-EINVAL); /* 不允许多字值或重复别名的部分写入。 */
         }
         selected[index] = true;
         for (size_t w = 0; w < map->count; ++w) {
@@ -933,14 +933,14 @@ int dp_params_flush_due(void)
 int dp_params_sync_device(uint16_t dev_id)
 {
     if (!equipment) { return -EACCES; }
-    /* Explicit initialization operation, never automatic crash recovery replay. */
+    /* 显式初始化操作，不用于崩溃恢复时自动重放。 */
     for (size_t i = 0; i < param_count; ++i) {
         if (PARAM_DEF(i)->key.dev_id != dev_id ||
             (PARAM_DEF(i)->param_flags & (DP_PARAM_FORWARD | DP_PARAM_PERSIST)) !=
             (DP_PARAM_FORWARD | DP_PARAM_PERSIST)) { continue; }
         int err = begin_transaction(false);
         if (err) { return err; }
-        /* A polled live value must not replace the desired configuration. */
+        /* 轮询得到的实时值不得覆盖期望配置。 */
         buffers->staged[i] = dirty[i] ? buffers->deferred[i] : buffers->durable[i];
         bool selected[CONFIG_DP_PARAMS_MAX_COUNT] = {0};
         selected[i] = true;
@@ -951,7 +951,7 @@ int dp_params_sync_device(uint16_t dev_id)
     return 0;
 }
 
-/* Poll feedback only updates live values. It neither stores nor sends a command. */
+/* 轮询反馈只更新实时值，不存储或发送命令。 */
 int dp_params_sample(const struct dp_point_update *values, size_t count,
                      uint16_t flags, int64_t sampled_at)
 {

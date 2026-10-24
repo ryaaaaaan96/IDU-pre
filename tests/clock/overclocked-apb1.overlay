@@ -1,2 +1,2 @@
-/* Must be rejected: APB1 is limited to 90 MHz. */
+/* 必须拒绝：APB1 上限为 90 MHz。 */
 &pll { apb1-prescaler = <1>; };

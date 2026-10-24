@@ -27,8 +27,8 @@ static const struct tr_register_service upgrade_service = {
 };
 #endif
 
-/* The routed variant exercises the real IAP state machine through TR dispatch;
- * the standalone variants retain the transport-independent receiver contract. */
+/* 路由变体通过 TR 分发验证真实 IAP 状态机；
+ * 独立变体保留与传输无关的接收器契约。 */
 static int dispatch(int iface, const struct modbus_adu *request, struct modbus_adu *response)
 {
 #if defined(CONFIG_TR_REGISTER_SERVICE)
@@ -120,7 +120,7 @@ static void configure(void)
 static int send_blob(unsigned number, bool broadcast, bool corrupt, const uint8_t *blob)
 {
     size_t every = word(20088);
-    /* Deliberately malformed zero-size metadata is exercised by test_a. */
+    /* test_a 专门验证格式错误的零大小元数据。 */
     if (!every) { every = 1024; }
     size_t offset = (number - 1u) * every;
     size_t length = MIN(every, sizeof(fixture_sgz) - offset);
@@ -156,7 +156,7 @@ static void *setup(void)
     flash_simulator_set_callbacks(flash_area_get_device(stage), &flash_cb);
     if (phase && !strcmp(phase, "confirmed")) {
         zassert_ok(flash_area_erase(primary, 0, primary->fa_size));
-        /* Model the bootloader's completed swap; receiver still verifies flash. */
+        /* 模拟引导程序已完成交换，接收器仍须校验 Flash。 */
         uint8_t chunk[256];
         for (size_t off = 0; off < sizeof(fixture_image); off += sizeof(chunk)) {
             size_t n = MIN(sizeof(chunk), sizeof(fixture_image) - off);
@@ -191,7 +191,7 @@ static void *setup(void)
 #endif
     zassert_true(iap_ready());
     zassert_equal(iap_init_config(&config), -EALREADY);
-    /* Caller may discard its configuration after startup. */
+    /* 启动后调用方可以丢弃配置对象。 */
     memset(&config, 0, sizeof(config));
     return NULL;
 }
@@ -216,20 +216,20 @@ ZTEST(iap, test_a_metadata_and_validation)
     zassert_equal(sys_get_be16(tx.data + 1), 0); zassert_equal(sys_get_be16(tx.data + 3), 0x0300);
     confirmed = false; zassert_equal(command(20083, 0xaa), IAP_ROUTE_SILENT); confirmed = true;
     login(); configure();
-    zassert_equal(command(20088, 0), 0); /* incomplete metadata allowed; no packet accepted */
+    zassert_equal(command(20088, 0), 0); /* 允许元数据不完整，但不接收任何分包。 */
     zassert_equal(packet_send(1, false, false), IAP_ROUTE_SILENT);
     configure();
     zassert_equal(command(20088, 1025), IAP_ROUTE_SILENT); zassert_equal(word(20088), 1024);
     zassert_equal(command(20089, 0xffff), IAP_ROUTE_SILENT);
     zassert_equal(command(20090, 99), IAP_ROUTE_SILENT);
-    zassert_equal(command(20091, 1), IAP_ROUTE_SILENT); /* partial u32 */
+    zassert_equal(command(20091, 1), IAP_ROUTE_SILENT); /* 不完整的 u32。 */
     zassert_equal(command(20083, 0xa1), IAP_ROUTE_SILENT);
     zassert_ok(read_regs(20099, 4)); zassert_equal(sys_get_be16(tx.data + 1), 1);
     zassert_equal(sys_get_be16(tx.data + 7), 1024);
     rx.unit_id = 247; zassert_equal(dispatch(2, &rx, &tx), IAP_ROUTE_SILENT);
     rx.unit_id = 1; zassert_equal(dispatch(3, &rx, &tx), IAP_ROUTE_SILENT);
     rx.unit_id = 0; rx.fc = 4; zassert_ok(dispatch(2, &rx, &tx));
-    /* Combined login + reserved gap + packet geometry, nonstandard byte count. */
+    /* 合并登录、保留空洞和分包参数，使用非标准字节计数。 */
     rx = (struct modbus_adu){.unit_id = 1, .fc = 16, .length = 19};
     sys_put_be16(20083, rx.data); sys_put_be16(7, rx.data + 2); rx.data[4] = 0;
     sys_put_be16(0xaa, rx.data + 5); sys_put_be16(1024, rx.data + 15);
@@ -285,15 +285,15 @@ ZTEST(iap, test_c_sector_crossing_and_atomic_frame_rejection)
     zassert_ok(packet_send(18, false, false)); k_sleep(K_MSEC(10));
     zassert_ok(packet_send(17, false, false)); k_sleep(K_MSEC(10));
     zassert_ok(packet_send(18, false, false)); k_sleep(K_MSEC(10));
-    zassert_equal(state(), 2); /* packet 17 must not erase packet 18's sector */
+    zassert_equal(state(), 2); /* 第 17 包不得擦除第 18 包所在扇区。 */
     zassert_equal(word(20103), DIV_ROUND_UP(sizeof(fixture_sgz), 240) - 2);
     rx = (struct modbus_adu){.unit_id = 1, .fc = 16, .length = 13};
     sys_put_be16(20090, rx.data); sys_put_be16(4, rx.data + 2); rx.data[4] = 8;
     sys_put_be16(1, rx.data + 5); sys_put_be16(240, rx.data + 11);
-    /* Metadata can be written separately, as in the old protocol. */
-    zassert_equal(dispatch(2, &rx, &tx), 0); /* metadata-only is valid */
+    /* 元数据可像旧协议一样分开写入。 */
+    zassert_equal(dispatch(2, &rx, &tx), 0); /* 只写元数据也有效。 */
     rx.length = 15; sys_put_be16(5, rx.data + 2); rx.data[4] = 10;
-    sys_put_be16(2, rx.data + 5); /* claims 240 bytes but contains only 2 */
+    sys_put_be16(2, rx.data + 5); /* 声明 240 字节，实际只有 2 字节。 */
     zassert_equal(dispatch(2, &rx, &tx), IAP_ROUTE_SILENT);
     zassert_equal(word(20090), 1);
 }
@@ -352,7 +352,7 @@ ZTEST(iap, test_z_signed_image_staged_and_test_boot)
         zassert_ok(flash_area_read(slot, off, data, n));
         zassert_mem_equal(data, fixture_image + off, n);
     }
-    /* The running image and old configuration gap were never written. */
+    /* 运行镜像和旧配置空洞均未被写入。 */
     zassert_ok(flash_area_read(primary, 0, data, sizeof(data)));
     for (size_t i = 0; i < sizeof(data); ++i) { zassert_equal(data[i], 0xff); }
     zassert_equal(command(20083, 0xaa), IAP_ROUTE_SILENT);
@@ -365,7 +365,7 @@ ZTEST(iap, test_terminal_stop_at_upgrade_commit)
     stop_on_commit = !strcmp(mode, "during");
     zassert_true(stop_on_prepare || stop_on_commit);
     full_receive();
-    zassert_equal(word(20103), 0); /* This read queues the finish job. */
+    zassert_equal(word(20103), 0); /* 此读取会将完成作业入队。 */
     zassert_ok(k_sem_take(&stop_observed, K_SECONDS(3)));
     if (stop_on_prepare) {
         zassert_ok(k_sem_take(&stop_cancelled, K_SECONDS(1)));
@@ -373,7 +373,7 @@ ZTEST(iap, test_terminal_stop_at_upgrade_commit)
         zassert_false(frozen);
         zassert_equal(mcuboot_swap_type(), BOOT_SWAP_TYPE_NONE);
     } else {
-        k_msleep(600); /* The existing post-commit reboot delay has elapsed. */
+        k_msleep(600); /* 现有提交后的复位等待时间已过。 */
         zassert_equal(pending_calls, 1);
         zassert_equal(mcuboot_swap_type(), BOOT_SWAP_TYPE_TEST);
     }

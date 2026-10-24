@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Real legacy-compressor interoperability and signed SGZ rejection tests."""
+"""真实旧版压缩器互操作及签名 SGZ 拒绝测试。"""
 import ctypes as C
 import importlib.util
 import os
@@ -18,8 +18,8 @@ APP = Path(__file__).resolve().parents[1]
 ROOT = APP.parents[1]
 BUILD = ROOT / "build/IDU-pre/tests/iap-codec"
 TINY = ROOT / "bootloader/mcuboot/ext/tinycrypt/lib"
-# Optional reference checkout for old-compressor interoperability only.
-# The firmware, fuzzing and signed SGZ tests do not depend on the old project.
+# 可选参考源码仅用于旧压缩器互操作。
+# 固件、模糊测试和签名 SGZ 测试均不依赖旧项目。
 LEGACY = Path(os.environ["IDU_LEGACY_IAP_DIR"]).expanduser() if os.environ.get("IDU_LEGACY_IAP_DIR") else None
 
 

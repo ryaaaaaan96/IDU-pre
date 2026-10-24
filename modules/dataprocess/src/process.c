@@ -225,7 +225,7 @@ int dp_process_execute(const struct dp_process_request *request,
         err = request->callback(&ctx, request->user);
         if (err) { goto out; }
     }
-    /* All inputs are visible before any callback. Derived outputs never recurse. */
+    /* 所有输入在调用任一回调前可见，派生输出不递归执行。 */
     for (size_t n = 0; n < request->count; ++n) {
         struct dp_point_cfg p_scratch;
         const struct dp_point_cfg *p = dp_find(request->items[n].point.key, &p_scratch);
@@ -246,8 +246,8 @@ int dp_process_execute(const struct dp_process_request *request,
         if (err) { goto out; }
     }
     if (ctx.action) {
-        /* A command cannot be mixed with derived or durable writes. Nothing
-         * has been committed, and no action has run, before this check.
+        /* 命令不得与派生或持久写入混合。执行此检查前，尚未提交任何内容，
+         * 也未执行动作。
          */
         struct dp_point_cfg scratch;
         const struct dp_point_cfg *p = dp_find(entries[0].item.point.key, &scratch);
@@ -263,8 +263,8 @@ int dp_process_execute(const struct dp_process_request *request,
         result->points[0].error = err;
         goto out;
     }
-    /* Bounded groups preserve per-device parameter transactions. Explicit
-     * per-output results describe effects when a later device rejects a write. */
+    /* 有界分组保留按设备的参数事务；后续设备拒绝写入时，
+     * 用各输出的显式结果描述已产生的副作用。 */
     bool done[CONFIG_DP_PROCESS_MAX_OUTPUTS] = {0};
     for (size_t i = 0; i < entry_count; ++i) {
         if (!entries[i].dirty || done[i]) { continue; }
@@ -341,7 +341,7 @@ int dp_process_submit(const struct dp_process_request *request,
     submission->done = done;
     submission->user = user;
     int err = k_msgq_put(&process_jobs, &submission, K_NO_WAIT);
-    if (err) { k_free(submission); } /* Successful enqueue transfers ownership. */
+    if (err) { k_free(submission); } /* 成功入队即转移所有权。 */
     k_mutex_unlock(&submission_lock);
     return err;
 }
@@ -606,7 +606,7 @@ void dp_business_task(void *a, void *b, void *c)
             k_mutex_unlock(&timer_lock);
             if (due) {
                 if (!job) { job = k_malloc(sizeof(*job)); }
-                if (!job) { continue; } /* Keep the timer due; retry next pass. */
+                if (!job) { continue; } /* 保留定时器到期状态，下次处理时重试。 */
                 memset(&job->request, 0, sizeof(job->request));
                 job->request.operation = DP_OP_TIMER;
                 job->request.count = 1;

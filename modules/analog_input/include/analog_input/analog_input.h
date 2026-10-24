@@ -9,10 +9,10 @@ struct analog_input_config {
     uint16_t average_count;
 };
 
-/* Thread APIs; configuration remains immutable while in use. Supports unsigned
- * single-ended samples up to 16 bits. Hardware setup is serialized by the caller.
- * Reads preserve configured channel order and round averages down. On failure,
- * preceding output elements may have changed; the entire sample is invalid.
+/* 仅在线程中调用；配置在使用期间保持不变。
+ * 支持不超过 16 位的无符号单端采样。硬件初始化由调用方串行执行。
+ * 读取结果保留配置的通道顺序，平均值向下取整。
+ * 失败时此前的输出元素可能已改变，应将整个样本视为无效。
  */
 int analog_input_init(const struct analog_input_config *config);
 int analog_input_read(const struct analog_input_config *config,

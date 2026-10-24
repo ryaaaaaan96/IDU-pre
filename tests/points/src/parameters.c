@@ -76,7 +76,7 @@ void parameter_before(void)
     co_simulator_set_write_fault(&idu_collect_simulator, CO_SIMULATOR_WRITE_OK);
     co_simulator_set_online(&idu_collect_simulator, true);
     if (getenv("IDU_REBOOT_PHASE")) {
-        return; /* A dedicated process run must inspect the boot-loaded state. */
+        return; /* 专用进程必须检查启动时加载的状态。 */
     }
     zassert_ok(dp_params_reload());
     zassert_ok(dp_params_recover());
@@ -155,7 +155,7 @@ ZTEST(points, test_parameters_local_write_persists_and_applies)
     zassert_equal(read_word(31000), 750);
     zassert_equal(param_status().sequence, sequence);
     zassert_ok(modbus_write_holding_reg(north_client, 16, 31000, 750));
-    zassert_equal(param_status().sequence, sequence); /* No change, no new generation. */
+    zassert_equal(param_status().sequence, sequence); /* 数值未变化就不产生新代次。 */
     struct dp_param_status event;
     zassert_ok(zbus_chan_read(&dp_param_events, &event, K_NO_WAIT));
     zassert_equal(event.sequence, sequence);
@@ -166,7 +166,7 @@ ZTEST(points, test_parameters_local_write_persists_and_applies)
 ZTEST(points, test_parameters_full_request_validated_before_write)
 {
     unsigned count = co_simulator_write_count(&idu_collect_simulator);
-    uint16_t bad_remote[3] = {321, 0xffff, 0x7fff}; /* Last S32 out of range. */
+    uint16_t bad_remote[3] = {321, 0xffff, 0x7fff}; /* 最后一个 S32 超出范围。 */
     zassert_equal(modbus_write_holding_regs(north_client, 16, 31500, bad_remote, 3),
                   MODBUS_EXC_ILLEGAL_DATA_VAL);
     zassert_equal(co_simulator_write_count(&idu_collect_simulator), count);
@@ -174,10 +174,10 @@ ZTEST(points, test_parameters_full_request_validated_before_write)
     zassert_equal(modbus_write_holding_reg(north_client, 16, 31000, 99),
                   MODBUS_EXC_ILLEGAL_DATA_VAL);
     zassert_equal(modbus_write_holding_reg(north_client, 16, 31501, 7),
-                  MODBUS_EXC_ILLEGAL_DATA_VAL); /* Half of S32. */
+                  MODBUS_EXC_ILLEGAL_DATA_VAL); /* 只包含 S32 的一半。 */
     zassert_equal(modbus_write_holding_reg(north_client, 16, 31001, 7),
-                  MODBUS_EXC_ILLEGAL_DATA_VAL); /* Partial label. */
-    uint16_t crossing[10] = {700}; /* First nine valid, tenth unmapped. */
+                  MODBUS_EXC_ILLEGAL_DATA_VAL); /* 只包含部分标签。 */
+    uint16_t crossing[10] = {700}; /* 前九个有效，第十个未映射。 */
     zassert_equal(modbus_write_holding_regs(north_client, 16, 31000, crossing, 10),
                   MODBUS_EXC_ILLEGAL_DATA_ADDR);
     zassert_equal(read_word(31000), 500);
@@ -215,7 +215,7 @@ ZTEST(points, test_parameters_lost_ack_resolved_by_readback)
     unsigned count = co_simulator_write_count(&idu_collect_simulator);
     co_simulator_set_write_fault(&idu_collect_simulator, CO_SIMULATOR_WRITE_LOSE_ACK);
     zassert_ok(modbus_write_holding_reg(north_client, 16, 31500, 456));
-    zassert_equal(co_simulator_write_count(&idu_collect_simulator), count + 1); /* No write retry. */
+    zassert_equal(co_simulator_write_count(&idu_collect_simulator), count + 1); /* 不重试写入。 */
     zassert_equal(read_word(31500), 456);
     zassert_false(param_status().flags & DP_PARAM_PENDING);
     co_simulator_set_write_fault(&idu_collect_simulator, CO_SIMULATOR_WRITE_OK);
@@ -238,7 +238,7 @@ ZTEST(points, test_parameters_pending_survives_remount_and_blocks_writes)
     co_simulator_set_online(&idu_collect_simulator, true);
     co_simulator_set_write_fault(&idu_collect_simulator, CO_SIMULATOR_WRITE_OK);
     zassert_ok(modbus_write_holding_reg(north_client, 16, 31093, 1));
-    zassert_equal(co_simulator_write_count(&idu_collect_simulator), count); /* Recovery only reads. */
+    zassert_equal(co_simulator_write_count(&idu_collect_simulator), count); /* 恢复只执行读取。 */
     zassert_equal(read_word(31500), 678);
     zassert_false(param_status().flags & DP_PARAM_PENDING);
 }
@@ -255,7 +255,7 @@ ZTEST(points, test_parameters_ambiguous_readback_never_replays)
     zassert_equal(dp_params_recover(), -EBADMSG);
     zassert_true(param_status().flags & DP_PARAM_PENDING);
     zassert_equal(co_simulator_write_count(&idu_collect_simulator), count);
-    /* Device inspected/reset by an operator to its captured pre-write value. */
+    /* 操作员已检查设备，并将其复位到记录的写入前数值。 */
     zassert_ok(co_simulator_set_register(&idu_collect_simulator, 3, 40000, 100));
     zassert_ok(dp_params_recover());
     zassert_equal(read_word(31500), 100);
@@ -368,8 +368,8 @@ ZTEST(points, test_parameters_torn_flash_write_keeps_whole_batch)
     uint16_t baseline[9];
     zassert_ok(modbus_read_holding_regs(north_client, 16, 31000, baseline, 9));
     uint16_t request[9] = {700, 0x7465, 0x7374, 0x2d69, 0x6475, 0, 0, 0, 0};
-    /* Fail each possible byte in the journal, individual records, CRC, and metadata,
-     * plus successful writes. Repeated iterations also exercise NVS GC. */
+    /* 遍历日志、各记录、CRC 和元数据的每一个可失败字节，同时覆盖成功写入；
+     * 反复迭代也验证 NVS 垃圾回收。 */
     for (int cut = 0; cut < 256; ++cut) {
         zassert_ok(dp_params_write_registers(dp_config(), 31000, baseline, 9));
         atomic_clear(&flash_fault_hits);
@@ -474,7 +474,7 @@ ZTEST(points, test_parameters_unknown_format_resets_settings)
     zassert_equal(read_word(31000), CONFIG_IDU_SAMPLE_PERIOD_MS);
     zassert_ok(dp_params_flush());
     zassert_ok(dp_params_reload());
-    zassert_equal(param_status().flags, DP_PARAM_STORAGE_READY); /* Reset only once. */
+    zassert_equal(param_status().flags, DP_PARAM_STORAGE_READY); /* 只复位一次。 */
 }
 
 ZTEST(points, test_parameters_business_api_callbacks_and_permissions)
@@ -497,7 +497,7 @@ ZTEST(points, test_parameters_business_api_callbacks_and_permissions)
     zassert_equal(dp_params_set_values(values, 2), -EINVAL);
     values[1].key = (struct dp_key){DEVICE_REMOTE_IO, SIGNAL_REMOTE_SETPOINT};
     unsigned count = co_simulator_write_count(&idu_collect_simulator);
-    zassert_equal(dp_params_set_values(values, 2), -EXDEV); /* Mixed local/remote. */
+    zassert_equal(dp_params_set_values(values, 2), -EXDEV); /* 混合本地与远端。 */
     zassert_equal(co_simulator_write_count(&idu_collect_simulator), count);
     zassert_ok(dp_params_restore(DEVICE_LOCAL));
     zassert_ok(dp_params_read((struct dp_key){1, 31100}, &state));
@@ -520,7 +520,7 @@ ZTEST(points, test_parameters_corrupt_value_recovers_valid_history)
             sys_get_le16(memory + off + 6) == DEVICE_LOCAL &&
             sys_get_le16(memory + off + 8) == SIGNAL_SAMPLE_PERIOD &&
             sys_get_le32(memory + off + 12) == seq) {
-            memory[off + 12] ^= 0x80; /* Leave NVS metadata intact; data CRC must detect it. */
+            memory[off + 12] ^= 0x80; /* 保持 NVS 元数据不变，必须由数据 CRC 检出损坏。 */
             ++corruptions;
         }
     }
@@ -534,7 +534,7 @@ ZTEST(points, test_parameters_reboot_probe)
 {
     const char *phase = getenv("IDU_REBOOT_PHASE");
     if (!phase) {
-        ztest_test_skip(); /* run.sh runs this in three separate processes. */
+        ztest_test_skip(); /* run.sh 在三个独立进程中运行此用例。 */
         return;
     }
     if (!strcmp(phase, "write")) {
@@ -546,8 +546,8 @@ ZTEST(points, test_parameters_reboot_probe)
     } else if (!strcmp(phase, "recover")) {
         zassert_equal(read_word(31000), 750);
         zassert_true(param_status().flags & DP_PARAM_PENDING);
-        /* The virtual slave RAM restarts with the simulator. Model a real
-         * independently powered slave that retained the completed command. */
+        /* 虚拟从机 RAM 随模拟器重启；
+         * 此处模拟独立供电、仍保留已完成命令的真实从机。 */
         zassert_ok(co_simulator_set_register(&idu_collect_simulator, 3, 40000, 987));
         unsigned count = co_simulator_write_count(&idu_collect_simulator);
         zassert_ok(dp_params_recover());

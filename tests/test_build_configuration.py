@@ -1,4 +1,4 @@
-"""Exercise product Sysbuild defaults and application feature requirements."""
+"""验证产品 Sysbuild 默认值及应用功能依赖。"""
 from pathlib import Path
 import subprocess
 import tempfile
@@ -70,11 +70,11 @@ class ApplicationRequirements(unittest.TestCase):
         values.update(CO_SIMULATOR='n', CO_MODEL_SIMULATOR='n', CO_MAX_BUSES='1')
         values.update(overrides)
         script = 'cmake_minimum_required(VERSION 3.20.0)\n'
-        # Execute the actual configure checks without compiling a firmware image.
+        # 运行真实配置检查，不编译固件镜像。
         for command in ('target_include_directories', 'target_sources', 'add_subdirectory'):
             script += f'function({command})\nendfunction()\n'
         for name, value in values.items():
-            # CMake uses ON/OFF, while generated Zephyr y/n become defined/undefined.
+            # CMake 使用 ON/OFF，而生成的 Zephyr y/n 对应已定义或未定义。
             value = {'y': 'ON', 'n': 'OFF'}.get(value, value)
             script += f'set(CONFIG_{name} {value})\n'
         script += f'include([=[{APP / "app/CMakeLists.txt"}]=])\n'

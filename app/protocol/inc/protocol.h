@@ -11,11 +11,11 @@ int protocol_register_point_tables(void);
 int protocol_init(void);
 /* 已锁存的本地通信维护故障，不驱动首次启动或采样。 */
 int protocol_error(void);
-/* Terminal, idempotent, ISR-safe. Allows already admitted operations to finish
- * or leave durable recovery intent; does not suspend threads holding locks. */
+/* 终止操作具有幂等性，可在 ISR 中调用。
+ * 允许已准入的操作完成或留下持久恢复意图，不挂起持锁线程。 */
 void protocol_stop(void);
 bool protocol_stopped(void);
-/* Publish remote/storage diagnostics to the application status singleton. */
+/* 向应用状态单例提交远端和存储诊断。 */
 void protocol_update_status(void);
 const DEV_TABLE_S *protocol_device_table(void);
 uint16_t protocol_device_count(void);

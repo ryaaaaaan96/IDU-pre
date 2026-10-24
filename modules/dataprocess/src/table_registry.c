@@ -100,7 +100,7 @@ int dp_data_device_bind(const struct data_device_cfg *devices, size_t count,
                          DEV_TABLE_S *output)
 {
     if (!devices || !count || !output) { return -EINVAL; }
-    /* Validate the whole declaration before publishing any runtime view. */
+    /* 发布任何运行视图前，先校验整个声明。 */
     for (size_t i = 0; i < count; ++i) {
         const struct data_device_cfg *d = &devices[i];
         const struct dp_registered_table *process, *collect;

@@ -36,7 +36,7 @@ static int receive(void *user, const struct vport_source *source,
     if (!adu) { finished(port); return -ENOMEM; }
     err = mb_rtu_decode(frame->data, frame->size, adu);
     if (!err) { err = modbus_raw_submit_rx(port->iface, adu); }
-    k_free(adu); /* Zephyr copies the complete ADU before returning. */
+    k_free(adu); /* Zephyr 在返回前复制完整 ADU。 */
     if (err) { finished(port); }
     return err;
 }
@@ -54,7 +54,7 @@ static int send(int iface, const struct modbus_adu *adu, void *user)
     const struct vport_frame frame = {.data = data, .size = size};
     err = tr_port_send(port->binding.port, &port->source, &frame,
                              K_MSEC(CONFIG_TR_MODBUS_TX_TIMEOUT_MS));
-    k_free(data); /* The send callback completes or copies the frame. */
+    k_free(data); /* 发送回调完成发送或复制报文。 */
     return err;
 }
 
@@ -104,7 +104,7 @@ int tr_modbus_port_param(int iface, struct modbus_iface_param *param)
             return 0;
         }
     }
-    return 0; /* Direct Zephyr RAW/RTU users may deliberately omit vport. */
+    return 0; /* 直接使用 Zephyr RAW/RTU 时，可以有意省略 vport。 */
 }
 
 const char *tr_modbus_port_name(uint16_t id)

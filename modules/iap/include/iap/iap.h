@@ -10,37 +10,37 @@ struct modbus_adu;
 struct iap_config {
     uint8_t staging_area_id;
     uint8_t journal_area_id;
-    const uint8_t *aes_key; /* 16-byte legacy transport interoperability key */
+    const uint8_t *aes_key; /* 16 字节旧版传输互操作密钥。 */
     struct iap_image_policy image;
-    /* Optional paired hooks, called in the IAP thread after verification.
-     * prepare must make application state durable and freeze mutations;
-     * on error it must undo its own partial work. cancel follows only a
-     * successful prepare if committing the journal/upgrade then fails. */
+    /* 可选的配对钩子，在验签后的 IAP 线程中调用。
+     * prepare 须持久化应用状态并冻结修改；失败时自行撤销部分操作。
+     * 仅在 prepare 成功而日志或升级提交失败时调用 cancel。 */
     int (*prepare_reboot)(void *user);
     void (*cancel_reboot)(void *user);
     void *user;
 };
 
-/* Single receiver. Initialize once during application startup, before routing.
- * Config is copied; keys and user context must remain valid for its lifetime.
- * Failed initialization releases flash handles and can be retried.
- * Uses MCUboot slot0/slot1 and a 4 KiB erase unit for staging and NVS.
- * Reboot health confirmation remains the application's responsibility. */
+/* 单接收器，在应用启动、安装路由前初始化一次。配置会复制，
+ * 密钥和用户上下文须在其整个生命周期内有效。
+ * 初始化失败会释放 Flash 句柄，允许重试。
+ * 使用 MCUboot slot0/slot1，
+ * 暂存与 NVS 的擦除单元为 4 KiB。重启后的健康确认仍归应用负责。 */
 int iap_init_config(const struct iap_config *config);
 bool iap_ready(void);
-/* ISR-safe, terminal until reset. Rejects new routes/jobs; current Flash
- * operations finish safely. An admitted upgrade commit is not rolled back. */
+/* 可在 ISR 中调用，终止状态保持到复位。拒绝新路由和作业，
+ * 当前 Flash 操作安全完成；已准入的升级提交不回滚。 */
 void iap_stop(void);
-/* CONFIG_IAP_CONFIGURED: same explicit initialization, using devicetree, generated
- * verification/transport keys and the selected reboot policy. */
+/* CONFIG_IAP_CONFIGURED：使用相同的显式初始化，
+ * 配置来自设备树、生成的验签及传输密钥，以及所选复位策略。 */
 int iap_init(void);
 
-/* Caller supplies an already unit-filtered complete Modbus ADU, including
- * legacy oversized FC16 packets. Return 0 to reply, -ENOENT for an unowned address,
- * IAP_ROUTE_SILENT to consume without a reply. No transport is registered here.
- * Interface IDs must be nonnegative. Multiple ports share one upload owner.
- * When registered in a PRO_ADDR_SLAVE table, TR selects by start address and
- * treats -ENOENT as an address error, never falling through to point writes. */
+/* 调用方提供已按站号过滤的完整 Modbus ADU，
+ * 包括旧版超长 FC16 报文。返回 0 表示回复，
+ * -ENOENT 表示地址不归本模块，
+ * IAP_ROUTE_SILENT 表示接收但不回复。此处不登记传输层。
+ * 接口 ID 必须非负，多个端口共用一个上传所有者。
+ * 登记到 PRO_ADDR_SLAVE 表时，TR 按起始地址选择路由，
+ * 将 -ENOENT 作为地址错误，不回退到测点写入。 */
 #define IAP_ROUTE_SILENT (-ECANCELED)
 int iap_route(int iface, const struct modbus_adu *request, struct modbus_adu *response);
 

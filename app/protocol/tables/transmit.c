@@ -56,7 +56,7 @@ static const MB_TABLE_CELL_T transmit_rows[] = {
     {.sig_id = SIGNAL_SAVED_ADDRESS, .reg_addr = 30459, .reg_num = 1,
      .dev_id = DEVICE_LOCAL, .reg_type = 3, .byte_order = TR_TABLE_DEFAULT_BYTE_ORDER},
 
-    /* IDU extension: separate remote data from physical local inputs. */
+    /* IDU 扩展：区分远端数据与本地物理输入。 */
     {.sig_id = SIGNAL_DI, .reg_addr = 10000, .reg_num = 1,
      .dev_id = DEVICE_REMOTE_IO, .reg_type = 4, .byte_order = TR_TABLE_DEFAULT_BYTE_ORDER},
     {.sig_id = SIGNAL_CURRENT_1 + 0, .reg_addr = 10001, .reg_num = 1,

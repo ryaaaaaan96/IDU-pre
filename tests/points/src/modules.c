@@ -172,14 +172,14 @@ ZTEST(points, test_modules_process_linked_outputs_and_read_init)
     zassert_equal(callback_count, 1); zassert_equal(callback_port, 9);
     zassert_equal(value(output), 40); zassert_equal(value((struct dp_key){1,31100}), 30);
     zassert_ok(dp_params_flush()); zassert_ok(dp_params_reload());
-    zassert_equal(value((struct dp_key){1,31100}), 10); /* linked NO_STORE never leaked */
+    zassert_equal(value((struct dp_key){1,31100}), 10); /* 关联的 NO_STORE 值从未泄露。 */
     struct dp_point_state state;
     zassert_ok(dp_process_read(dynamic, 12, &state));
     zassert_equal(state.value.words[0], 1234); zassert_equal(callback_port, 12);
     zassert_ok(dp_process_init_device(1)); zassert_equal(value(output), 7);
     req.items[0].point.value.words[0] = 2000;
     zassert_equal(dp_process_execute(&req, &result), -ERANGE);
-    zassert_equal(value(output), 7); /* no output committed after failed validation */
+    zassert_equal(value(output), 7); /* 校验失败后不提交任何输出。 */
 }
 
 static K_SEM_DEFINE(done_sem, 0, 8);
@@ -194,7 +194,7 @@ ZTEST(points, test_modules_async_timer_and_save_reboot)
     struct dp_process_request req = {.operation = DP_OP_WRITE, .id = 321, .count = 1,
         .items[0].point = {.key = input, .width = 1, .value.words = {8}}};
     zassert_ok(dp_process_submit(&req, completed, &completion));
-    req.items[0].point.value.words[0] = 999; /* queue owns a value copy */
+    req.items[0].point.value.words[0] = 999; /* 队列持有数值副本。 */
     zassert_ok(k_sem_take(&done_sem, K_SECONDS(1)));
     zassert_ok(completion.error); zassert_equal(completion.id, 321); zassert_equal(value(output), 16);
     timer_count = 0;
@@ -239,7 +239,7 @@ ZTEST(points, test_modules_multibus_modes_state_and_initialization)
     zassert_ok(dp_params_set_values(&update, 1)); zassert_equal(bus_value, 222);
     zassert_ok(co_set_mode(1, CO_PORT_SLEEP));
     uint16_t word; zassert_equal(co_read(20, 3, 40000, &word, 1), -EBUSY);
-    zassert_ok(co_read(DEVICE_REMOTE_IO, 4, 8152, &word, 1)); /* other bus unaffected */
+    zassert_ok(co_read(DEVICE_REMOTE_IO, 4, 8152, &word, 1)); /* 其他总线不受影响。 */
     zassert_ok(co_set_mode(1, CO_PORT_POLL));
     bus_fault = -ETIMEDOUT;
     zassert_equal(co_read(20, 3, 40000, &word, 1), -ETIMEDOUT);
@@ -374,7 +374,7 @@ ZTEST(points, test_deferred_action_validates_before_effects)
     zassert_equal(modbus_write_holding_reg(north_client, 16, 31200, 1),
                   MODBUS_EXC_ILLEGAL_DATA_VAL);
     action_validation_error = 0;
-    /* The callback accepts this value; final range validation must reject it. */
+    /* 回调接受此值，最终范围校验仍须拒绝。 */
     zassert_equal(modbus_write_holding_reg(north_client, 16, 31200, 2),
                   MODBUS_EXC_ILLEGAL_DATA_VAL);
     action_derived = true;

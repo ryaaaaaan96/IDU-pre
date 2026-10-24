@@ -6,7 +6,7 @@ cd -- "$workspace_dir"
 if [[ -z "${VIRTUAL_ENV:-}" && -f .venv/bin/activate ]]; then
     source .venv/bin/activate
 fi
-# Requires the Arm toolchain. This compiles only; it does not flash a board.
+# 需要 Arm 工具链；仅编译，不烧录实板。
 for variant in 120mhz mismatched-cpu overclocked-apb1; do
     test_build_dir="$workspace_dir/build/IDU-pre/clock-$variant"
     test_log="$workspace_dir/build/IDU-pre/tests/clock-$variant.log"

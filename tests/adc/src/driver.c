@@ -1,5 +1,5 @@
 #include <zephyr/ztest.h>
-/* Exercise the real backend through adc_*(), substituting only hardware. */
+/* 通过 adc_*() 测试真实后端，仅替换硬件。 */
 #include "../../../modules/gd32e505/drivers/adc/adc_gd32e50x.c"
 
 int test_pin_error;
@@ -15,7 +15,7 @@ uint32_t *test_ctl1(void)
 {
     ctl1 &= calibration_stall;
     if (ctl1) {
-        k_busy_wait(1000); /* Advance native_sim time for a stuck peripheral. */
+        k_busy_wait(1000); /* 外设卡住时推进 native_sim 时间。 */
     }
     return &ctl1;
 }
@@ -131,7 +131,7 @@ ZTEST(adc_driver, test_reject_sequences_before_hardware_or_buffer_writes)
     zassert_equal(adc_read(adc, &sequence), -EINVAL);
     sequence.channels = BIT(13) | BIT(0);
     zassert_equal(adc_read(adc, &sequence), -ENOTSUP);
-    sequence.channels = BIT(0); /* Valid physical channel, not configured. */
+    sequence.channels = BIT(0); /* 有效物理通道，但未配置。 */
     zassert_equal(adc_read(adc, &sequence), -EINVAL);
     sequence.channels = BIT(13); sequence.buffer_size = 1;
     zassert_equal(adc_read(adc, &sequence), -ENOMEM);
@@ -183,9 +183,9 @@ ZTEST(adc_driver, test_calibration_timeouts_release_lock_and_recover)
 ZTEST(adc_driver, test_init_clock_limits_and_error_propagation)
 {
     test_config.vdda_mv = 1800;
-    zassert_equal(gd32_adc_init(adc), -EINVAL); /* 30 MHz exceeds low-voltage limit. */
+    zassert_equal(gd32_adc_init(adc), -EINVAL); /* 30 MHz 超过低电压下的限制。 */
     test_config.vdda_mv = 3300; test_config.divisor = 4;
-    zassert_equal(gd32_adc_init(adc), -EINVAL); /* 45 MHz exceeds 35 MHz. */
+    zassert_equal(gd32_adc_init(adc), -EINVAL); /* 45 MHz 超过 35 MHz。 */
     test_config.divisor = 6;
     test_pin_error = -EIO;
     zassert_equal(gd32_adc_init(adc), -EIO);

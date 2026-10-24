@@ -5,7 +5,7 @@
 #include <zephyr/devicetree.h>
 #include <zephyr/sys/util.h>
 
-/* E505 uses the CL register layout, including PLLMF[4] at bit 29. */
+/* E505 使用 CL 寄存器布局，其中 PLLMF[4] 位于第 29 位。 */
 BUILD_ASSERT(RCU_CFG0_PLLMF_4 == BIT(29), "E505 requires the CL HAL register layout");
 
 #define PLL_NODE DT_COMPAT_GET_ANY_STATUS_OKAY(gd_gd32e505_pll)
@@ -36,21 +36,21 @@ static void wait_ready(volatile uint32_t *reg, uint32_t mask, uint32_t expected)
             return;
         }
     }
-    /* Do not continue with an incorrect clock. Recovery is board-dependent. */
+    /* 时钟错误时不得继续运行；恢复方式由板级决定。 */
     while (true) {
     }
 }
 
 void soc_early_init_hook(void)
 {
-    /* The bootloader may have left PLL enabled: switch safely to IRC8M. */
+    /* 引导程序可能仍启用 PLL，先安全切换至 IRC8M。 */
     RCU_CTL |= RCU_CTL_IRC8MEN;
     wait_ready(&RCU_CTL, RCU_CTL_IRC8MSTB, RCU_CTL_IRC8MSTB);
     rcu_system_clock_source_config(RCU_CKSYSSRC_IRC8M);
     wait_ready(&RCU_CFG0, RCU_CFG0_SCSS, RCU_SCSS_IRC8M);
     rcu_deinit();
 
-    /* Conservative wait states for the supported <=180 MHz range. */
+    /* 对支持的不超过 180 MHz 范围采用保守等待周期。 */
     FMC_WS = (FMC_WS & ~FMC_WS_WSCNT) | WS_WSCNT(4);
     rcu_periph_clock_enable(RCU_PMU);
     rcu_ahb_clock_config(RCU_AHB_CKSYS_DIV1);

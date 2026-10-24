@@ -8,7 +8,7 @@
 #include <zephyr/sys/byteorder.h>
 #include "modbus_hooks.h"
 
-/* Zephyr exposes at most four RAW interfaces. Leave room for serial ports. */
+/* Zephyr 最多提供四个 RAW 接口，应为串口保留空间。 */
 #define IFACE_LIMIT 16
 static tr_modbus_write_fn writers[IFACE_LIMIT];
 static struct tr_modbus_policy policies[IFACE_LIMIT];
@@ -212,8 +212,8 @@ static void reconfigure_work(struct k_work *work)
                                                 struct forwarding_port, reconfigure);
     struct modbus_context *ctx = modbus_get_context(port->iface);
     int err = 0;
-    /* Stop new submissions before waiting. Never block this control queue in
-     * drain/cancel_sync on a stuck business callback: enforce a deadline first. */
+    /* 先停止新提交再等待。业务回调卡住时，
+     * 不得在此控制队列中无限等待排空或同步取消，须先施加期限。 */
     k_spinlock_key_t key = k_spin_lock(&submission_lock);
     atomic_set(&port->paused, 1);
     k_spin_unlock(&submission_lock, key);
@@ -229,8 +229,8 @@ static void reconfigure_work(struct k_work *work)
         k_work_queue_drain(port->queue, true);
         port->plugged = true;
     }
-    /* Serial RX resumes only after TX complete/DE release. Busy work cannot be
-     * cancelled from itself, so configuration runs on a separate queue. */
+    /* 仅在 TX 完成并释放 DE 后恢复串口 RX。工作不能从自身同步取消，
+     * 因此重配置放到独立队列执行。 */
     bool idle = ctx && !k_work_busy_get(&ctx->server_work) &&
         (port->force || ctx->mode == MODBUS_MODE_RAW || atomic_test_bit(&ctx->state, MODBUS_STATE_RX_ENABLED));
     if (!idle && k_uptime_get() < port->deadline) {
@@ -304,7 +304,7 @@ int tr_modbus_init_server(int iface, struct modbus_iface_param param,
     writers[iface] = write_fn;
     err = modbus_init_server(iface, param);
     if (!err && port) {
-        /* RX stays paused until the worker exists. Failed startup consumes no slot. */
+        /* 任务创建前 RX 保持暂停；启动失败不占用槽位。 */
         if (reserved) {
             k_work_init_delayable(&port->reconfigure, reconfigure_work);
         }
@@ -318,8 +318,8 @@ int tr_modbus_init_server(int iface, struct modbus_iface_param param,
         if (err && reserved) { port->allocated = false; }
         port->starting = false;
         atomic_clear(&port->paused);
-        /* UART RX may complete before init returns. Preserve that notification
-         * so a full RX buffer can be consumed and reception enabled again.
+        /* UART RX 可能在初始化返回前就完成，须保留此通知，
+         * 让完整接收缓冲得到消费并重新开启接收。
          */
         if (!err && port->startup_work) {
             k_work_submit_to_queue(port->queue, port->startup_work);
@@ -334,7 +334,7 @@ int tr_modbus_init_server(int iface, struct modbus_iface_param param,
 int tr_modbus_set_router(int iface, tr_modbus_route_fn route, void *user)
 {
     if (iface < 0 || iface >= IFACE_LIMIT) { return -EINVAL; }
-    /* Configure at startup, before the interface receives requests. */
+    /* 启动时配置，须早于接口开始接收请求。 */
     routes[iface].fn = route; routes[iface].user = user; return 0;
 }
 
@@ -489,8 +489,8 @@ static uint8_t exception_from_error(int err)
     }
 }
 
-/* No control locks are held across application callbacks. One snapshot governs
- * each admitted request; changing mode never cancels a handler or serial TX.
+/* 调用应用回调时不持有控制锁。每个准入请求使用同一份快照，
+ * 模式切换不取消处理函数或串口 TX。
  */
 static int call_handler(int iface, struct modbus_context *ctx,
                          struct port_callback callback, bool filter)
@@ -583,7 +583,7 @@ bool mb_support_write_request(struct modbus_context *ctx, bool *reply)
     }
     *reply = rx->unit_id != 0;
     if (!*reply) {
-        return true; /* Parameter broadcasts have no side effects. */
+        return true; /* 参数广播不产生副作用。 */
     }
     int err = -EINVAL;
     uint16_t *words = NULL;

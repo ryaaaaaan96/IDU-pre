@@ -10,9 +10,9 @@ struct digital_io_config {
     enum digital_io_order order;
 };
 
-/* 1..32 inputs, logical active levels from gpio_dt_spec. No pin ownership or
- * device-specific address interpretation. Read leaves *bits unchanged on error.
- * GPIOs are read sequentially, not as an electrically simultaneous snapshot.
+/* 支持 1..32 路输入，逻辑有效电平取自 gpio_dt_spec；
+ * 不管理引脚所有权，也不解释设备专用地址。读取失败时保持 *bits 不变。
+ * GPIO 顺序读取，不构成电气上同时采样的快照。
  */
 int digital_io_init(const struct digital_io_config *config);
 int digital_io_read(const struct digital_io_config *config, uint32_t *bits);

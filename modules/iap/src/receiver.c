@@ -1,6 +1,7 @@
-/* Legacy MV-IO IAPv3 wire adapter. All erases/decoding run on one Zephyr
- * thread; the Modbus worker only validates and enqueues one bounded job.
- * A packet ACK means accepted. The missing bitmap means persisted/read back.
+/* 旧版 MV-IO IAPv3 通信适配。
+ * 擦除和解码全部在一个 Zephyr 线程执行；
+ * Modbus 任务只校验并入队一个有界作业。报文 ACK 表示已接收，
+ * 缺失位图表示已持久化或读回。
  */
 #include <iap/iap.h>
 #include <iap/sgz.h>
@@ -28,7 +29,7 @@ BUILD_ASSERT(CONFIG_MODBUS_BUFFER_SIZE >= PACKET_MAX + 31,
 static const struct flash_area *staging, *secondary, *primary;
 static struct nvs_fs journal_fs;
 static struct iap_config config;
-/* Persist only upgrade result/expected hash, never unverified resume state. */
+/* 仅持久化升级结果及预期哈希，不保存未验证的续传状态。 */
 static struct journal { uint32_t magic, phase, size; uint8_t hash[32]; uint32_t crc; } journal;
 static struct {
     bool ready, busy;
@@ -123,13 +124,13 @@ static int finish(void)
     if (!err) {
         k_mutex_lock(&lock, K_FOREVER); state_set(IAP_UPGRADING, NO_CAUSE); k_mutex_unlock(&lock);
     }
-    /* Freeze parameter transactions only for the short commit/reboot window. */
+    /* 仅在短暂的提交和复位窗口冻结参数事务。 */
     if (!err && stopped()) { err = -ECANCELED; }
     if (!err && config.prepare_reboot) {
         err = config.prepare_reboot(config.user); frozen = !err;
     }
-    /* One atomic admission point: stop wins before this point; afterwards the
-     * journal/MCUboot pair reaches its existing durable completion path. */
+    /* 唯一的原子准入点：在此之前停止请求优先，
+     * 此后日志和 MCUboot 标记沿现有持久化完成路径执行。 */
     if (!err && !atomic_cas(&lifecycle, 0, COMMIT_ADMITTED)) { err = -ECANCELED; }
     if (!err) { err = journal_save(2, size, hash); }
     if (!err) { err = boot_request_upgrade(BOOT_UPGRADE_TEST); }
@@ -142,7 +143,7 @@ static int finish(void)
     state_set(IAP_JUMP, NO_CAUSE);
     k_mutex_unlock(&lock);
     LOG_INF("Verified SGZ image staged (%u bytes); MCUboot test boot requested", size);
-    k_sleep(K_MSEC(500)); /* Allow the host to read status / release RS485 DE. */
+    k_sleep(K_MSEC(500)); /* 允许主机读取状态，并给 RS485 DE 留出释放时间。 */
     if (atomic_cas(&lifecycle, COMMIT_ADMITTED, REBOOT_ADMITTED)) { sys_reboot(SYS_REBOOT_COLD); }
     return 0;
 }
@@ -184,13 +185,13 @@ static void worker(void *a, void *b, void *c)
         else if (job == JOB_FINISH) { err = finish(); }
         else if (job == JOB_RECOVER) {
             if (journal.phase == 2 && !boot_is_img_confirmed()) {
-                continue; /* The application health policy must confirm first. */
+                continue; /* 必须先由应用健康策略确认镜像。 */
             }
             uint8_t hash[32];
             err = journal.phase == 2 ? iap_image_verify(area_read, (void *)primary, journal.size,
                          &config.image, hash) : -ETIMEDOUT;
             if (!err && memcmp(hash, journal.hash, 32)) { err = -ENOEXEC; }
-            /* Store terminal result so a later reset doesn't erase the result. */
+            /* 保存最终结果，避免后续复位丢失结果。 */
             int saved = journal_save(err ? 4 : 3, 0, NULL);
             if (saved) { err = saved; }
         }
@@ -215,7 +216,7 @@ static void close_areas(void)
     if (primary) { flash_area_close(primary); primary = NULL; }
 }
 
-/* Staging and NVS use 4 KiB units; smaller hardware erase pages are allowed. */
+/* 暂存区和 NVS 使用 4 KiB 单元，允许硬件擦除页更小。 */
 static int check_erase_area(const struct flash_area *area)
 {
     if (!flash_area_device_is_ready(area) || !area->fa_size ||
@@ -326,7 +327,7 @@ static int read_regs(uint16_t address, uint16_t count, struct modbus_adu *tx)
     sys_put_be16(0, REG(20061)); sys_put_be16(3, REG(20062));
     memset(REG(20063), 0, 16);
     REG(20063)[15] = receiver.state;
-    /* Legacy login/receive/analyse affect total status, not firmware[0]. */
+    /* 旧版登录、接收和分析影响总状态，不影响 firmware[0]。 */
     if (receiver.state >= IAP_UPGRADING) { REG(20063)[0] = receiver.state; }
     memset(REG(20071), 0, 16); REG(20071)[0] = REG(20071)[15] = receiver.cause;
     sys_put_be16(receiver.command, REG(20083));
@@ -366,8 +367,8 @@ static int write_regs(int iface, uint16_t address, const uint8_t *data, size_t b
         data += 2; bytes -= 2; ++address;
     } else if (receiver.state != IAP_LOGIN && receiver.state != IAP_TRANSFER) { return -EACCES; }
 
-    /* Validate the whole frame before committing metadata. A legacy master
-     * may write command + reserved words + packet geometry in one FC16. */
+    /* 提交元数据前先校验完整报文；
+     * 旧版主机可能在一笔 FC16 中同时写入命令、保留字和分包参数。 */
     uint16_t every = login || logout ? 0 : receiver.every;
     uint16_t total = login || logout ? 0 : receiver.total;
     uint16_t number = login || logout ? 0 : receiver.number;
@@ -379,7 +380,7 @@ static int write_regs(int iface, uint16_t address, const uint8_t *data, size_t b
         if (reg == 20094) { payload = data; break; }
         if (remaining < 2) { return -EINVAL; }
         uint16_t value = sys_get_be16(data);
-        if (login && reg >= 20084 && reg <= 20087) { /* reserved */ }
+        if (login && reg >= 20084 && reg <= 20087) { /* 保留字段。 */ }
         else if (reg == 20088) { every = value; }
         else if (reg == 20089) { total = value; }
         else if (reg == 20090) { number = value; }
@@ -394,8 +395,8 @@ static int write_regs(int iface, uint16_t address, const uint8_t *data, size_t b
         (every && total && (uint32_t)every * total > staging->fa_size) ||
         (!login && !logout && (every != receiver.every || total != receiver.total) && receiver.received) ||
         (number && (!total || number > total))) { return -EINVAL; }
-    /* In the old callback CUR_PACKLEN is meaningful only for the final packet;
-     * other packets always use EVERY_PACKLEN, even when this field is zero. */
+    /* 旧回调中的 CUR_PACKLEN 仅对最后一包有效；
+     * 其他包始终使用 EVERY_PACKLEN，即使该字段为零。 */
     uint16_t actual = number == total ? length : every;
     if (payload && (!every || !total || !number || !actual || actual > every || actual % 16 ||
         remaining != actual ||
@@ -454,8 +455,8 @@ int iap_route(int iface, const struct modbus_adu *rx, struct modbus_adu *tx)
         if (rx->length == 4 && count && count <= 55 &&
             (receiver.owner < 0 || receiver.owner == iface)) { err = read_regs(address, count, tx); }
     } else if (rx->fc == 6 || rx->fc == 16) {
-        /* Legacy IAP ignores the 8-bit byte count and uses the full 16-bit
-         * register count. Exact ADU size and packet bounds remain mandatory. */
+        /* 旧版 IAP 忽略 8 位字节计数，使用完整的 16 位寄存器计数；
+         * 仍须严格检查 ADU 大小和分包边界。 */
         bool valid = rx->fc == 6 ? rx->length == 4 :
             count && count <= PACKET_MAX / 2 + 11 && rx->length == 5u + 2u * count;
         if (valid && !write_regs(iface, address, rx->data + (rx->fc == 6 ? 2 : 5),

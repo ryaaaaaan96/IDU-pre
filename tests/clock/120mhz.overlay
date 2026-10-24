@@ -1,4 +1,4 @@
-/* Compile-only alternate board: 8 MHz crystal, PLL /2 *30, 120 MHz CPU. */
+/* 仅编译的替代板级配置：8 MHz 晶振，PLL /2 *30，CPU 120 MHz。 */
 &hxtal { clock-frequency = <8000000>; };
 &pll {
     /delete-property/ hxtal-bypass;

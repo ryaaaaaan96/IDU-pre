@@ -1,6 +1,5 @@
-"""Check factory HEX structure and IDU flash layout before full-chip programming.
-
-This checks layout, not cryptographic authenticity; build/export verifies signatures.
+"""全片烧录前检查工厂 HEX 结构和 IDU Flash 布局。
+此处只检查布局，密码学认证由构建和导出流程的验签完成。
 """
 import argparse
 from pathlib import Path

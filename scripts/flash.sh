@@ -54,7 +54,7 @@ cd -- "$workspace_dir"
 [[ -f "$hex_file" ]] || fail "Factory HEX not found: $hex_file; run scripts/build.sh first"
 [[ "$hex_file" != *$'\n'* && "$hex_file" != *$'\r'* ]] || fail 'HEX path contains a newline'
 
-# Reject application-only/invalid images before any connection or erase.
+# 连接或擦除前，拒绝仅含应用或无效的镜像。
 python3 "$app_dir/tools/check_factory_hex.py" "$hex_file"
 
 if [[ -z "$gdb_program" && -f "$build_dir/CMakeCache.txt" ]]; then
@@ -100,6 +100,6 @@ fi
 command_file=$(mktemp "${TMPDIR:-/tmp}/idu-flash.XXXXXX")
 trap 'rm -f -- "$command_file"' EXIT
 printf '%s\n' "$commands" > "$command_file"
-# A command file stops at the first GDB error, before reset/run on load failure.
+# 命令文件在首个 GDB 错误处停止；下载失败时不再复位或运行。
 "$resolved_gdb" -q -nx -batch -x "$command_file"
 printf 'Firmware programmed; reset and run commands completed.\n'

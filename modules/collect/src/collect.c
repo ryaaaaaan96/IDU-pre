@@ -218,7 +218,7 @@ int co_init_bus(const struct dp_equip_cfg *cfg, const struct co_bus_cfg *config)
     }
     int err = dp_validate(cfg);
     if (err) { return err; }
-    /* Worker capacity belongs to collect; DP only validates point-table data. */
+    /* 任务容量归 collect 管理；DP 仅校验点表数据。 */
     for (size_t i = 0; i < cfg->device_count; ++i) {
         if (cfg->devices[i].bus_id >= ARRAY_SIZE(buses)) { return -EINVAL; }
     }
@@ -304,9 +304,9 @@ static int collect_poll(size_t block, bool sync)
     return collect_request(dp_config_collect(equipment, block, &scratch), sync, &outcome);
 }
 
-/* Build a bounded request on the caller's stack; immutable rows stay in ROM.
- * Explicit co_poll keeps its one-row contract. Scheduled/initialization reads
- * combine adjacent compatible rows and report how many deadlines were served.
+/* 在调用方栈上构建有界请求，不可变表行仍保存在 ROM。
+ * 显式 co_poll 保持单行契约；定时和初始化读取合并相邻兼容表行，
+ * 并报告本次完成的期限数量。
  */
 static int collect_group(size_t first, bool sync, bool due_only, size_t *rows,
                           uint8_t retries, struct co_outcome *outcome)
@@ -380,7 +380,7 @@ int co_set_port_mode(uint16_t id, uint8_t mode, uint32_t timeout_ms)
     if (k_mutex_lock(&schedule_lock, sys_timepoint_timeout(deadline))) {
         k_mutex_unlock(&bus->lock); return busy;
     }
-    /* The supported reference modes have the same numbers; OTHER does not. */
+    /* 受支持的参考模式数值一致，但 OTHER 不一致。 */
     bus->mode = (enum co_port_mode)mode;
     k_mutex_unlock(&schedule_lock);
     k_mutex_unlock(&bus->lock);
@@ -394,7 +394,7 @@ int co_get_port_mode(uint16_t id, uint8_t *mode)
     if (k_is_in_isr()) { return -EWOULDBLOCK; }
     enum co_port_mode current;
     int err = co_get_mode((uint8_t)id, &current);
-    /* Native SLEEP cannot be reported as reference OTHER. */
+    /* 不能将原生 SLEEP 报告为参考模式 OTHER。 */
     if (!err && current == CO_PORT_SLEEP) { return -ENOTSUP; }
     if (!err) { *mode = (uint8_t)current; }
     return err;
@@ -421,8 +421,7 @@ int co_set_scan_pkg_flag(uint8_t dev_id, uint16_t address_model,
     int d = device_index(dev_id);
     if (d < 0) { return d; }
     bool found = false, model = false, matched = false;
-    /* Resolve protocol before touching any schedule state. Otherwise an RTU
-     * function could accidentally match an unrelated model offset. */
+    /* 修改调度状态前先确定协议，防止 RTU 功能码误匹配无关的模型偏移。 */
     for (size_t i = 0; i < equipment->collect_count; ++i) {
         struct co_cfg p_scratch;
         const struct co_cfg *p = dp_config_collect(equipment, i, &p_scratch);
@@ -580,7 +579,7 @@ void co_bus_task(void *arg, void *b, void *c)
             for (size_t i = 0; i < ARRAY_SIZE(bus->queue); ++i) {
                 struct queued_request *q = bus->queue[i];
                 if (!q) { continue; }
-                /* Priority advantage is bounded: one second of age per level. */
+                /* 优先级优势有上限：每级相当于一秒等待时间。 */
                 int64_t score = now - q->queued_at + q->request.priority * 1000;
                 if (q->request.mode == bus->mode && score > best) { best = score; queued = i; }
             }
@@ -613,16 +612,16 @@ void co_bus_task(void *arg, void *b, void *c)
             k_mutex_lock(&bus->lock, K_FOREVER);
             bool running = bus->mode == CO_PORT_POLL;
             k_mutex_unlock(&bus->lock);
-            /* exchange() serializes each physical transaction. Never retain
-             * the bus lock while waiting for DP SAMPLE/business completion. */
+            /* exchange() 串行执行每次物理事务。
+             * 等待 DP SAMPLE 或业务处理完成时，不得持续持有总线锁。 */
             int err = running ? collect_group(poll, plan.synchronous, !plan.synchronous,
                                               &rows, plan.retries, &outcome) : -EBUSY;
             if (!running) { continue; }
             co_state_poll_complete(poll, rows, &plan, err, outcome);
         } else {
-            /* Updates give a latched semaphore after changing the schedule.
-             * A wake racing this scan is retained, including before take().
-             * Sleeping/owned buses and queues for other modes have no deadline.
+            /* 更新调度后释放一个可锁存的信号量；与本次扫描并发的唤醒会保留，
+             * 包括 take() 前的唤醒。休眠或被占用的总线，
+             * 以及其他模式的队列均不产生期限。
              */
             k_timeout_t timeout = deadline == INT64_MAX ? K_FOREVER :
                                   K_MSEC(MAX(deadline - k_uptime_get(), 0));

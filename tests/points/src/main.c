@@ -27,7 +27,7 @@
 #include <string.h>
 #include <zephyr/ztest.h>
 
-/* Only to verify that bypassing the publication API is rejected. */
+/* 仅用于验证绕过发布接口会被拒绝。 */
 ZBUS_CHAN_DECLARE(dp_samples_chan);
 
 ZTEST(points, test_product_port_registration_is_idempotent)
@@ -47,7 +47,7 @@ static int north_server;
 static int south_client;
 static struct modbus_adu north_reply;
 
-/* Fail only the publisher's heap boundary; other real workers keep running. */
+/* 仅让发布者的堆分配失败，其他真实任务继续运行。 */
 static k_tid_t allocation_failure_thread;
 void *__real_k_malloc(size_t size);
 void *__wrap_k_malloc(size_t size)
@@ -111,7 +111,7 @@ static int north_response(int iface, const struct modbus_adu *adu, void *data)
     return modbus_raw_submit_rx(north_client, adu);
 }
 
-/* The build-local adapter also accepts standard one-byte RAW exceptions. */
+/* 构建目录内的适配实现也接受标准单字节 RAW 异常。 */
 static void assert_exception(int result, uint8_t function, uint8_t code)
 {
     zassert_equal(result, code);
@@ -162,7 +162,7 @@ static void *setup(void)
     test_points[test_cfg.point_count++] = (struct dp_point_cfg){
         .key = {1, 31101}, .source = DP_SOURCE_PARAMETER, .type = DP_U16,
         .width = 1, .maximum = 1000, .initial.words = {7},
-        .param_flags = DP_PARAM_PERSIST, /* Readable, immutable, not restorable. */
+        .param_flags = DP_PARAM_PERSIST, /* 可读、不可变、不可恢复默认值。 */
     };
     const struct dp_registered_table *mapping;
     zassert_ok(dp_table_registry_find(protocol_forwarding.transmit_table, PRO_MB_SLAVE, &mapping));
@@ -182,7 +182,7 @@ static void *setup(void)
     };
     module_add_points(&test_cfg, test_points, test_transmit);
     zassert_ok(dp_init_config(&test_cfg)); fixture_start_dp();
-    /* First-use allocation failure releases ownership and permits a retry. */
+    /* 首次分配失败会释放所有权，允许重试。 */
     struct acquisition_sample initial_sample = {.valid = true};
     allocation_failure_thread = k_current_get();
     int publish_error = points_publish_snapshot(&initial_sample);
@@ -275,7 +275,7 @@ ZTEST(points, test_local_point_registers)
 
 ZTEST(points, test_local_samples_reuse_workspace_under_heap_pressure)
 {
-    /* before() has already published a sample and initialized the workspace. */
+    /* before() 已发布过样本并初始化工作区。 */
     uint32_t old = state_of(local_di).generation;
     local_sample.di = 0x1357;
     allocation_failure_thread = k_current_get();
@@ -344,7 +344,7 @@ ZTEST(points, test_reference_tables_do_not_enable_age_expiry)
     zassert_equal(state_of(remote_di).quality, DP_QUALITY_SIMULATED | DP_QUALITY_GOOD);
     uint16_t value;
     zassert_ok(tr_read_register(4, 10000, &value));
-    zassert_ok(tr_read_register(4, 8149, &value)); /* Constant never expires. */
+    zassert_ok(tr_read_register(4, 8149, &value)); /* 常量永不过期。 */
     poll_block(0, 0);
     zassert_ok(tr_read_register(4, 10000, &value));
 }
@@ -366,7 +366,7 @@ ZTEST(points, test_application_conversion_and_remote_range_rejection)
     wait_after(key, old);
     zassert_ok(tr_read_register(4, 8163, &value));
     zassert_equal(value, 34375);
-    /* A syntactically successful Modbus reply may still violate point range. */
+    /* 语法正确的 Modbus 成功响应仍可能违反测点范围。 */
     zassert_ok(co_simulator_set_register(&idu_collect_simulator, 3, 30459, 0));
     poll_signal(SIGNAL_ADDRESS, 0);
     key = (struct dp_key){DEVICE_REMOTE_IO, SIGNAL_ADDRESS};
@@ -409,13 +409,13 @@ ZTEST(points, test_invalid_batch_cannot_partially_update_store)
     };
     struct dp_point_state old = state_of(local_di);
     zassert_equal(dp_publish(&batch, K_NO_WAIT), -ENOENT);
-    /* Even direct use of the exposed zbus channel is validated. */
+    /* 即使直接使用公开的 zbus 通道，也会执行校验。 */
     zassert_true(zbus_chan_pub(&dp_samples_chan, &batch, K_NO_WAIT) < 0);
     batch.count = 1;
     batch.source = DP_SOURCE_MODBUS;
     zassert_equal(dp_publish(&batch, K_NO_WAIT), -EINVAL);
     batch.source = DP_SOURCE_LOCAL;
-    batch.points[0].key.sig_id = SIGNAL_SAMPLE_PERIOD; /* Telemetry cannot write parameters. */
+    batch.points[0].key.sig_id = SIGNAL_SAMPLE_PERIOD; /* 遥测输入不能写参数。 */
     zassert_equal(dp_publish(&batch, K_NO_WAIT), -EINVAL);
     uint8_t identity[2] = {0};
     zassert_equal(dp_set_sig_value(DEVICE_LOCAL, 8149, sizeof(identity), identity), -EACCES);
@@ -452,7 +452,7 @@ ZTEST(points, test_unknown_register_and_writes_rejected)
     assert_exception(modbus_write_holding_regs(north_client, 16, 30459, &value, 1),
                      16, MODBUS_EXC_ILLEGAL_DATA_VAL);
     zassert_equal(modbus_read_input_regs(north_client, 17, 10000, &value, 1), -ETIMEDOUT);
-    /* Valid RAW exception now reaches the client as a protocol exception. */
+    /* 有效 RAW 异常现在以协议异常形式传到客户端。 */
     zassert_equal(modbus_read_input_regs(south_client, 1, 99, &value, 1),
                   MODBUS_EXC_ILLEGAL_DATA_ADDR);
 }
@@ -582,8 +582,7 @@ ZTEST(points,test_modules_dynamic_port_configuration_and_routes)
     static const struct tr_routes routes={.segments=segments,.count=ARRAY_SIZE(segments)};
     zassert_ok(tr_attach(north_server,&routes));
     uint16_t word;
-    /* A backend initialization failure must restore the last working config,
-     * including when a second failed change follows the first one. */
+    /* 后端初始化失败必须恢复最近可用配置；连续第二次重配置也失败时同样如此。 */
     struct modbus_iface_param invalid={.mode=MODBUS_MODE_RAW,
         .server={.unit_id=19,.user_cb=tr_callbacks()},
         .rawcb={.raw_tx_cb=north_response}};

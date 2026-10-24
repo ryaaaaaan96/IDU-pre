@@ -125,7 +125,7 @@ static void *setup(void)
     const char *phase = getenv("IDU_BINDING_PHASE");
     bool legacy = phase && !strcmp(phase, "legacy_write");
     if (legacy) {
-        /* Previous product shape: local data owns the northbound map. */
+        /* 旧产品结构：本地数据持有北向映射。 */
         const struct dp_device_binding old_bindings[] = {
             {.dev_id = 1, .tables = {{1, PRO_DATA_PROCESS}, {3, PRO_MB_SLAVE}}},
             {.dev_id = 10, .port = 0, .coll_addr = 1,
@@ -185,7 +185,7 @@ ZTEST(forwarding_devices, test_invalid_declaration_preserves_active_entry)
     uint16_t word; target = 0;
     zassert_ok(modbus_read_input_regs(client, 7, 100, &word, 1)); zassert_equal(word, 111);
     invalid = forwarding[1]; invalid.port_id = 99;
-    zassert_equal(tr_forward_attach(15, &invalid), -EEXIST); /* Duplicate forward identity. */
+    zassert_equal(tr_forward_attach(15, &invalid), -EEXIST); /* 转发身份重复。 */
 }
 ZTEST(forwarding_devices, test_same_address_reads_selected_entry)
 {
@@ -213,14 +213,14 @@ ZTEST(forwarding_devices, test_writes_use_selected_data_identity_and_persist)
     zassert_ok(modbus_write_holding_reg(client, 7, 200, 456));
     zassert_equal(south_values[0][0], 123); zassert_equal(south_values[1][0], 456);
     uint16_t word;
-    target = 2; /* A second entrance shares the first const table. */
+    target = 2; /* 第二个入口共用第一份常量表。 */
     zassert_ok(modbus_read_holding_regs(client, 7, 200, &word, 1));
     zassert_equal(word, 123);
     unsigned writes = south_writes[0], reads = south_reads[0];
     zassert_ok(modbus_write_holding_reg(client, 7, 201, 99));
     zassert_equal(south_writes[0], writes + 1); zassert_equal(south_reads[0], reads);
     zassert_ok(dp_params_reload());
-    zassert_equal(south_writes[0], writes + 1); /* No command replay. */
+    zassert_equal(south_writes[0], writes + 1); /* 不重放命令。 */
     target = 0;
     zassert_ok(modbus_read_holding_regs(client, 7, 200, &word, 1)); zassert_equal(word, 123);
     target = 1;
@@ -239,7 +239,7 @@ ZTEST(forwarding_devices, test_protocol_segments_belong_to_selected_entry)
     zassert_equal(segment_calls, calls);
     target = 0;
     zassert_equal(modbus_write_holding_reg(client, 7, 20003, 99), MODBUS_EXC_ILLEGAL_DATA_ADDR);
-    zassert_equal(segment_calls, calls + 1); /* A segment error never falls through. */
+    zassert_equal(segment_calls, calls + 1); /* 协议段错误不得回退到后续处理。 */
     struct modbus_adu rx = {.unit_id = 0, .fc = 16, .length = 1024};
     sys_put_be16(20003, rx.data);
     k_sem_reset(&segment_done);
@@ -255,14 +255,14 @@ ZTEST(forwarding_devices, test_parameter_address_write_requires_explicit_mapping
     uint16_t value = 123;
     unsigned before = south_writes[0] + south_writes[1];
     zassert_equal(dp_params_write_registers(NULL, 200, &value, 1), -EINVAL);
-    /* Data-only DP has no northbound address map; never borrow a TR entry. */
+    /* 仅含数据的 DP 没有北向地址映射，不得借用 TR 条目。 */
     zassert_equal(dp_params_write_registers(dp_config(), 200, &value, 1), -ENOENT);
     zassert_equal(south_writes[0] + south_writes[1], before);
 }
 ZTEST(forwarding_devices, test_service_rejects_different_bound_interface)
 {
-    /* Existing forward 1 was attached to RAW_1, but its logical port resolves
-     * to RAW_0 here. Reject before allocating or configuring another server. */
+    /* 现有转发入口 1 已绑定 RAW_1，但此处逻辑口解析为 RAW_0。
+     * 分配或配置其他服务端前先拒绝。 */
     zassert_equal(tr_forward_service(&forwarding[0], 7), -EEXIST);
     target = 0;
     uint16_t value;

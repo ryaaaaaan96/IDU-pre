@@ -9,8 +9,8 @@ struct image_confirm {
     bool initialized, confirmed;
 };
 
-/* Call only after each complete acquisition + forwarding + health cycle.
- * A failed or stalled cycle must never confirm a trial image. */
+/* 仅在完整的采样、转发和健康检查周期结束后调用。
+ * 失败或停滞的周期不得确认试运行镜像。 */
 int image_confirm_checkpoint(struct image_confirm *state, int64_t now, bool healthy);
 
 #endif

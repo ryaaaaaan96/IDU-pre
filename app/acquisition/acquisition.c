@@ -22,8 +22,8 @@ int acquisition_cycle(void)
 
     sample.valid = !err;
 
-    /* The business layer maps values to DP. Publish invalid quality first,
-     * retaining the sampling failure when publication also fails. */
+    /* 业务层负责将数值映射到 DP。先发布无效质量；若发布也失败，
+     * 仍保留采样失败作为故障来源。 */
     status_set_phase(STATUS_PUBLISHING);
     int publish_err = points_publish_snapshot(&sample);
     if (err) {
@@ -43,7 +43,7 @@ int acquisition_cycle(void)
     status_set_phase(STATUS_CHECKING_HEALTH);
     err = status_progress();
     if (err) {
-        return err; /* status_progress already retained the precise source. */
+        return err; /* status_progress 已保留准确的故障来源。 */
     }
     status_set_phase(STATUS_RUN);
     LOG_DBG("Address=%u DI=0x%04x", sample.address, sample.di);

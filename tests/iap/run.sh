@@ -31,13 +31,13 @@ for phase in pending rollback; do
         -test=iap::test_reboot_journal
 done
 
-# Same module with configured partitions, different memory/key/limits and no DP.
+# 同一模块使用已配置分区及不同内存、密钥、限制，且不启用 DP。
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/iap -d build/IDU-pre/tests/iap-configured -- \
     -DEXTRA_CONF_FILE=configured.conf -DEXTRA_DTC_OVERLAY_FILE=configured.overlay
 timeout 30s build/IDU-pre/tests/iap-configured/zephyr/zephyr.exe -flash_in_ram
 
-# Real IAP receiver behind the reference-style protocol segment table.
+# 参考式协议段表后接真实 IAP 接收器。
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/iap -d build/IDU-pre/tests/iap-routed -- \
     -DEXTRA_CONF_FILE=routed.conf

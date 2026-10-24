@@ -3,7 +3,7 @@
 #include <zephyr/drivers/gpio/gpio_emul.h>
 #include <zephyr/ztest.h>
 
-/* A fault-injectable GPIO driver, exercised through the standard GPIO API. */
+/* 可注入故障的 GPIO 驱动，通过标准 GPIO 接口测试。 */
 static struct gpio_driver_data gpio_data;
 static const struct gpio_driver_config gpio_config = {.port_pin_mask = UINT32_MAX};
 static atomic_t toggle_error, configure_error, read_error;
@@ -79,7 +79,7 @@ ZTEST(io_modules, test_gpio_polarity_order_and_independent_groups)
     };
     zassert_ok(digital_io_init(&group));
     const struct device *port = pins[0].port;
-    /* Logical values 1,1,0 from physical levels 0,1,1. */
+    /* 物理电平 0、1、1 对应逻辑值 1、1、0。 */
     zassert_ok(gpio_emul_input_set_masked(port, BIT(2) | BIT(5) | BIT(8), BIT(5) | BIT(8)));
     uint32_t value;
     zassert_ok(digital_io_read(&group, &value));

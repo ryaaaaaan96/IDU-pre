@@ -17,7 +17,7 @@
 #include <string.h>
 #include "status/image_confirm/image_confirm.h"
 
-/* main.c keeps startup local to the application entry, without a public header. */
+/* main.c 将 startup 保留在应用入口内，不提供公共头文件。 */
 int startup(void);
 
 enum service { WATCHDOG_INIT, LED_START, INPUTS_INIT, IAP_INIT, TABLES_INIT, DP_INIT, DATA_BIND, TASKS_PREPARE,
@@ -42,7 +42,7 @@ static unsigned workers_started;
 static struct dp_device_cfg remote_device[] = {{.dev_id = 10, .unit_id = 1}};
 static const struct dp_equip_cfg point_config = {.devices = remote_device, .device_count = 1};
 static enum co_device_online remote_state;
-/* The orchestration fixture supplies the same event contract as real CO. */
+/* 编排测试夹具提供与真实 CO 相同的事件契约。 */
 ZBUS_CHAN_DEFINE(co_device_events, struct co_device_status, NULL, NULL,
                  ZBUS_OBSERVERS_EMPTY, ZBUS_MSG_INIT(0));
 const struct co_bus_cfg protocol_collect_bus = {0};
@@ -469,7 +469,7 @@ ZTEST(acquisition, test_status_retains_original_fault_despite_indicator_failure)
 {
     zassert_ok(startup());
     zassert_true(indicator_on);
-    led_set_error = -ENODEV; /* Fault indication itself cannot hide sampling error. */
+    led_set_error = -ENODEV; /* 故障指示本身失败不能覆盖采样错误。 */
     errors[SAMPLE] = -EIO;
     zassert_equal(acquisition_cycle(), -EIO);
     (void)status_report_fault(STATUS_FAULT_TASK_TIMEOUT, STATUS_CHECKING_HEALTH, -ETIMEDOUT);
@@ -486,7 +486,7 @@ ZTEST(acquisition, test_led_tracks_startup_healthy_cycles_and_fault)
     zassert_ok(startup());
     zassert_true(indicator_on);
     zassert_ok(acquisition_cycle());
-    zassert_true(indicator_on); /* Sampling no longer determines blink speed. */
+    zassert_true(indicator_on); /* 采样不再决定闪烁速度。 */
     k_sleep(K_MSEC(STATUS_LED_HALF_PERIOD_MS));
     zassert_false(indicator_on);
     zassert_ok(acquisition_cycle());
@@ -530,7 +530,7 @@ ZTEST(acquisition, test_late_indicator_skips_edges_and_fault_takes_priority)
     k_sem_give(&indicator_queue_release);
     k_msleep(10);
     zassert_equal(while_delayed, before);
-    zassert_equal(indicator_edges, before + 1); /* Skip, rather than replay, three missed edges. */
+    zassert_equal(indicator_edges, before + 1); /* 跳过错过的三次边沿，不补放。 */
     zassert_false(indicator_on);
     (void)status_report_fault(STATUS_FAULT_SAMPLE, STATUS_SAMPLING, -EIO);
     k_msleep(10);
@@ -610,7 +610,7 @@ ZTEST(acquisition, test_storage_fault_survives_successful_operation_until_storag
     zassert_ok(startup());
     zassert_ok(acquisition_cycle());
     zassert_equal(status_degradation_get().storage_error, -EIO);
-    errors[PARAMS_INIT] = 0; /* The most recent parameter operation now succeeded. */
+    errors[PARAMS_INIT] = 0; /* 最近一次参数操作现已成功。 */
     zassert_ok(acquisition_cycle());
     zassert_equal(status_degradation_get().storage_error, -EIO);
     zassert_false(checkpoint_ready);

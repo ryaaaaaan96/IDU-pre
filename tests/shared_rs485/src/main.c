@@ -121,8 +121,8 @@ static void *setup(void)
     zassert_ok(flash_area_erase(area, 0, area->fa_size));
     flash_area_close(area);
     zassert_ok(protocol_init());
-    /* Real product tasks discover both peers. Disable only periodic requests
-     * afterwards so the focused wire assertions have a quiet starting point. */
+    /* 真实产品任务发现两个远端；随后只禁用周期请求，
+     * 让专门的线路断言从安静状态开始。 */
     for (int attempt = 0; attempt < 200; ++attempt) {
         struct co_device_status first, second;
         zassert_ok(co_device_status(DEVICE_REMOTE_IO, &first));
@@ -135,7 +135,7 @@ static void *setup(void)
     for (size_t i = 0; i < dp_config()->collect_count; ++i) {
         zassert_ok(co_enable_poll(i, false));
     }
-    /* Wait for a transaction already selected by the worker to finish. */
+    /* 等待任务已选中的事务完成。 */
     zassert_ok(co_set_port_mode(0, MODE_TRAN, 500));
     zassert_ok(co_set_mode(0, CO_PORT_POLL));
     zassert_ok(protocol_error());
@@ -232,7 +232,7 @@ ZTEST(shared_rs485, test_z_periodic_worker_updates_cache_on_the_shared_wire)
         zassert_ok(co_enable_poll(i, true));
     }
     k_msleep(1200);
-    /* Wait for the active poll to finish before disabling periodic traffic. */
+    /* 禁用周期通信前，等待活动轮询完成。 */
     zassert_ok(co_set_port_mode(0, MODE_TRAN, 500));
     zassert_ok(co_device_status(DEVICE_REMOTE_IO, &after));
     zassert_ok(co_device_status(DEVICE_REMOTE_IO + 1, &second_after));
@@ -250,7 +250,7 @@ ZTEST(shared_rs485, test_total_budget_includes_northbound_wire_contention)
     int sent = atomic_get(&requests);
     hold_north_send = true;
     k_sem_reset(&north_done);
-    uint8_t data[] = {16, 3, 0x79, 0x18, 0, 1, 0, 0}; /* cached 31000 */
+    uint8_t data[] = {16, 3, 0x79, 0x18, 0, 1, 0, 0}; /* 缓存值为 31000。 */
     sys_put_le16(crc16_ansi(data, 6), data + 6);
     zassert_equal(uart_emul_put_rx_data(uart, data, sizeof(data)), sizeof(data));
     zassert_ok(k_sem_take(&north_sending, K_SECONDS(1)));
@@ -266,8 +266,8 @@ ZTEST(shared_rs485, test_total_budget_includes_northbound_wire_contention)
     zassert_between_inclusive(elapsed, 490, 520);
     zassert_equal(atomic_get(&requests), sent);
     zassert_ok(co_device_status(DEVICE_REMOTE_IO, &after));
-    /* failures counts all failed calls, including local contention. The
-     * error classification and remote liveness must remain distinct. */
+    /* failures 统计所有失败调用，包括本地竞争；
+     * 错误分类必须与远端存活状态分开。 */
     zassert_equal(after.error, -EBUSY);
     zassert_equal(after.state, before.state);
     zassert_equal(after.online, before.online);
@@ -278,7 +278,7 @@ ZTEST(shared_rs485, test_total_budget_includes_northbound_wire_contention)
 ZTEST(shared_rs485, test_zz_terminal_stop_rejects_new_business)
 {
     protocol_stop();
-    protocol_stop(); /* Idempotent even after a partially started lifecycle. */
+    protocol_stop(); /* 生命周期只启动了一部分时，重复调用也应幂等。 */
     uint16_t value;
     struct dp_point_state state;
     zassert_equal(co_read(DEVICE_REMOTE_IO, 4, 8152, &value, 1), -ECANCELED);

@@ -86,7 +86,7 @@ ZTEST(table_registry, test_discovery_and_independent_polling)
     poll = dp_config_collect(cfg, 1, &scratch);
     zassert_not_null(poll);
     zassert_equal(poll->fields[0].sig_id, 4);
-    zassert_equal(poll->period_ms, 2000); /* Same device, independently configured interval. */
+    zassert_equal(poll->period_ms, 2000); /* 同一设备，间隔独立配置。 */
     zassert_equal(devices[0].ptl_tbl_cfg[1].proto_type, PRO_MB_SLAVE);
     /* 协议段不增加 DP 点数、轮询数或普通转发行数。 */
     zassert_equal(devices[0].ptl_tbl_cfg[3].proto_type, PRO_ADDR_SLAVE);
@@ -128,9 +128,9 @@ ZTEST(table_registry, test_volatile_command_does_not_read_or_store)
     zassert_equal(writes, 1); zassert_equal(reads, 0); zassert_equal(flash_writes, 0);
     zassert_equal(value(2), command);
     zassert_ok(dp_params_write_registers(dp_config(), 200, &command, 1));
-    zassert_equal(writes, 2); /* Identical commands still execute once per request. */
+    zassert_equal(writes, 2); /* 相同命令仍须每个请求执行一次。 */
     zassert_ok(dp_params_reload());
-    zassert_equal(value(2), 0); /* Not restored from NVS. */
+    zassert_equal(value(2), 0); /* 不从 NVS 恢复。 */
     zassert_equal(writes, 2);
 }
 ZTEST(table_registry, test_failed_command_preserves_cache_without_replay)
@@ -144,7 +144,7 @@ ZTEST(table_registry, test_failed_command_preserves_cache_without_replay)
     zassert_ok(dp_params_recover());
     zassert_equal(writes, 1);
     zassert_ok(dp_params_sync_device(1));
-    zassert_equal(remote[0], remote_before); /* Sync never replays volatile command registers. */
+    zassert_equal(remote[0], remote_before); /* 同步操作绝不重放非持久命令寄存器。 */
 }
 ZTEST(table_registry, test_poll_feedback_neither_writes_nor_persists)
 {
@@ -159,7 +159,7 @@ ZTEST(table_registry, test_poll_feedback_neither_writes_nor_persists)
     zassert_ok(dp_params_write_registers(dp_config(), 201, &command, 1));
     zassert_equal(remote[1], 61);
     zassert_ok(dp_params_sample(batch.points, 1, 0, batch.sampled_at));
-    zassert_equal(value(3), 61); /* An old queued sample cannot undo a write. */
+    zassert_equal(value(3), 61); /* 旧的排队样本不能撤销写入。 */
 }
 ZTEST(table_registry, test_persistent_feedback_does_not_replace_saved_setting)
 {
@@ -172,7 +172,7 @@ ZTEST(table_registry, test_persistent_feedback_does_not_replace_saved_setting)
     zassert_ok(dp_params_sample(&sample, 1, 0, k_uptime_get()));
     zassert_equal(value(4), 73); zassert_equal(flash_writes, saved_writes);
     zassert_ok(dp_params_sync_device(1));
-    zassert_equal(remote[2], 72); /* Explicit sync sends the desired, not measured value. */
+    zassert_equal(remote[2], 72); /* 显式同步发送期望值，不发送测量值。 */
     zassert_equal(value(4), 73);
     zassert_ok(dp_params_reload());
     zassert_equal(value(4), 72);
@@ -224,7 +224,7 @@ ZTEST(table_registry, test_data_device_bindings_reject_invalid_references)
     zassert_equal(dp_data_device_bind(&cfg, 1, &view), -EINVAL);
     cfg.process_table = 20; cfg.collect_addr = 248;
     zassert_equal(dp_data_device_bind(&cfg, 1, &view), -EINVAL);
-    cfg.collect_table = 0; /* Non-acquiring devices ignore both collect fields. */
+    cfg.collect_table = 0; /* 不采集的设备忽略两个 collect 字段。 */
     zassert_ok(dp_data_device_bind(&cfg, 1, &view));
     struct data_device_cfg duplicate[] = {cfg, cfg};
     DEV_TABLE_S pair[2];

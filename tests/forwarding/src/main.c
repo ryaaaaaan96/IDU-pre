@@ -17,7 +17,7 @@
 #include <dataprocess/process.h>
 #include <transmit/modbus_adapter.h>
 #include <transmit/transmit.h>
-#include "modbus_internal.h" /* TX-state injection; no UART electrical simulation. */
+#include "modbus_internal.h" /* 注入 TX 状态，不模拟 UART 电气行为。 */
 #include <zephyr/drivers/flash.h>
 #include <zephyr/drivers/flash/flash_simulator.h>
 #include <zephyr/kvss/nvs.h>
@@ -48,7 +48,7 @@ void __wrap_dp_params_get_status(struct dp_param_status *status)
         __real_dp_params_get_status(status);
         return;
     }
-    /* Every call observes a new transaction, including a 16-bit carry. */
+    /* 每次调用都观察一个新事务，包括 16 位进位。 */
     uint32_t read = atomic_inc(&status_reads);
     *status = (struct dp_param_status){
         .flags = read ? DP_PARAM_PENDING : DP_PARAM_STORAGE_READY,
@@ -62,7 +62,7 @@ int __wrap_modbus_init_server(int iface, struct modbus_iface_param param)
 {
     if (iface == server && fail_init) { --fail_init; return -EIO; }
     if (iface == server && emulated_tx_context) {
-        /* The native fixture uses RAW again once backend recovery is reached. */
+        /* 后端恢复完成后，原生测试夹具再次使用 RAW。 */
         emulated_tx_context->mode = MODBUS_MODE_RAW;
         emulated_tx_context = NULL;
     }
@@ -129,8 +129,8 @@ static void mount_fixture(struct nvs_fs *fs)
     zassert_ok(nvs_mount(fs));
 }
 
-/* Frozen pre-migration default-profile image: schema fa1be938, four parameters,
- * period 750, label ABC, remote setpoint 700, offset -12, sequence 42. */
+/* 冻结的迁移前默认配置镜像：模式 fa1be938，四个参数；
+ * 周期 750、标签 ABC、远端设定值 700、偏移 -12、序号 42。 */
 static const uint8_t incompatible_snapshot[] = {
     0x49,0x44,0x55,0x50,0x01,0x00,0x04,0x00,0x38,0xe9,0x1b,0xfa,0x2a,0x00,0x00,0x00,
     0x01,0x00,0x18,0x79,0x00,0x01,0xee,0x02,0x01,0x00,0x19,0x79,0x04,0x08,0x42,0x41,
@@ -392,7 +392,7 @@ ZTEST(forwarding, test_stuck_tx_state_can_be_forced_back_to_receive)
 {
     struct modbus_context *ctx = modbus_get_context(server);
     zassert_not_null(ctx);
-    /* Emulate a lost TX-complete event. No native UART driver is involved. */
+    /* 模拟 TX 完成事件丢失，不涉及原生 UART 驱动。 */
     ctx->mode = MODBUS_MODE_RTU;
     atomic_clear_bit(&ctx->state, MODBUS_STATE_RX_ENABLED);
     zassert_ok(tr_modbus_reconfigure(server, server_param, completed, NULL));
@@ -521,7 +521,7 @@ ZTEST(forwarding, test_register_service_retains_segment_callbacks)
     zassert_equal(words[0], 0x1234);
     zassert_equal(modbus_read_holding_regs(client, 16, 33000, words, 2),
                   MODBUS_EXC_ILLEGAL_DATA_VAL);
-    /* Nonsegment requests continue through the process/transmit point tables. */
+    /* 非协议段请求继续经过处理和转发点表。 */
     zassert_ok(modbus_read_holding_regs(client, 16, 32000, words, 1));
     zassert_equal(words[0], DP_PARAM_STORAGE_READY);
     zassert_ok(modbus_write_holding_reg(client, 16, 31000, 750));
@@ -575,12 +575,12 @@ ZTEST(forwarding, test_protocol_segment_receives_complete_adu_before_standard_va
     zassert_ok(modbus_raw_submit_rx(server, &rx));
     zassert_equal(k_sem_take(&captured, K_MSEC(100)), -EAGAIN);
     zassert_equal(atomic_get(&protocol_calls), 2);
-    /* Match the final start address even though a variable payload extends past it. */
+    /* 即使变长载荷超出末地址，也按最后一个起始地址匹配。 */
     rx.unit_id = 16; sys_put_be16(20104, rx.data);
     zassert_ok(modbus_raw_submit_rx(server, &rx));
     zassert_ok(k_sem_take(&captured, K_MSEC(100)));
     zassert_equal(atomic_get(&protocol_calls), 3);
-    /* No protocol segment at either adjacent address. */
+    /* 相邻两侧地址都没有协议段。 */
     static const uint16_t adjacent[] = {20048, 20105};
     for (size_t i = 0; i < ARRAY_SIZE(adjacent); ++i) {
         sys_put_be16(adjacent[i], rx.data);
@@ -589,13 +589,13 @@ ZTEST(forwarding, test_protocol_segment_receives_complete_adu_before_standard_va
         zassert_equal(captured_adu.fc, 16 | 0x80);
     }
     zassert_equal(atomic_get(&protocol_calls), 3);
-    /* Ordinary broadcasts remain side-effect free with protocol broadcasts enabled. */
+    /* 启用协议广播后，普通广播仍不产生副作用。 */
     rx = (struct modbus_adu){.unit_id = 0, .fc = 6, .length = 4};
     sys_put_be16(30459, rx.data); sys_put_be16(45, rx.data + 2);
     zassert_ok(modbus_raw_submit_rx(server, &rx));
     zassert_equal(k_sem_take(&captured, K_MSEC(100)), -EAGAIN);
     zassert_equal(saved(), 1);
-    /* Explicitly disabling protocol broadcasts suppresses callbacks. */
+    /* 显式禁用协议广播会禁止回调。 */
     const struct tr_register_service unicast = {.device = &device};
     zassert_ok(tr_register_attach(server, &unicast));
     rx = (struct modbus_adu){.unit_id = 0, .fc = 16, .length = 1029};
@@ -603,7 +603,7 @@ ZTEST(forwarding, test_protocol_segment_receives_complete_adu_before_standard_va
     zassert_ok(modbus_raw_submit_rx(server, &rx));
     zassert_equal(k_sem_take(&captured, K_MSEC(100)), -EAGAIN);
     zassert_equal(atomic_get(&protocol_calls), 3);
-    /* Reattaching the product service removes the test protocol segments/policy. */
+    /* 重新连接产品服务会移除测试协议段及其策略。 */
     zassert_ok(attach_profile());
     rx.unit_id = 16;
     zassert_ok(modbus_raw_submit_rx(server, &rx));
@@ -651,7 +651,7 @@ ZTEST(forwarding, test_invalid_protocol_segments_preserve_installed_router)
     const struct tr_register_service service = {.device = &device};
     zassert_equal(tr_register_attach(server, &service), -EEXIST);
     segments[1].reg_addr = 103;
-    zassert_equal(tr_register_attach(server, &service), -EINVAL); /* Reversed. */
+    zassert_equal(tr_register_attach(server, &service), -EINVAL); /* 顺序颠倒。 */
     segments[1].end_addr = 104; segments[1].func = NULL;
     zassert_equal(tr_register_attach(server, &service), -EINVAL);
     segments[1].func = unhandled_protocol;

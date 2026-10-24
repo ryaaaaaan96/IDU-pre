@@ -9,48 +9,50 @@ struct tr_modbus_execution {
     struct k_work_q *receive;
     struct k_work_q *configuration;
 };
-/* Startup-only copied binding; queues belong to the application and must be
- * distinct and started before enabling the server. No thread is created here.
+/* 仅在启动期复制绑定。队列归应用持有，必须相互独立，
+ * 且在启用服务端前已启动。此处不创建线程。
  */
 int tr_modbus_bind_execution(int iface, const struct tr_modbus_execution *execution);
 
-/* Called once for a complete FC06/FC16 PDU; return 0 or -errno. Never per-word.
- * isolated=true is required if callback waits for downstream Modbus or flash.
- * A non-isolated fixture callback must not block on protocol transactions.
+/* 每个完整 FC06/FC16 PDU 仅调用一次，返回 0 或 -errno，
+ * 不逐字调用。
+ * 回调等待南向 Modbus 或 Flash 时必须 isolated=true；
+ * 非隔离测试回调不得阻塞等待协议事务。
  */
 typedef int (*tr_modbus_write_fn)(uint16_t address, const uint16_t *words, size_t count);
-/* Startup calls are serialized. An occupied client/server returns -EALREADY
- * without changing its writer or queue. Failed startup releases a newly
- * reserved worker slot. Do not race startup with direct modbus_init_* calls.
+/* 启动调用必须串行执行；已被占用的客户端或服务端返回 -EALREADY，
+ * 不修改写入器或队列。启动失败会释放新预留的任务槽。
+ * 不得与直接 modbus_init_* 调用并发启动。
  */
 int tr_modbus_init_server(int iface, struct modbus_iface_param param,
                            tr_modbus_write_fn write_fn, bool isolated);
-/* Return -ENOENT to continue, TR_MODBUS_SILENT to consume without replying.
- * Broadcasts reach a router only with an explicit per-interface policy.
+/* 返回 -ENOENT 继续处理，
+ * TR_MODBUS_SILENT 表示接收但不回复。仅接口显式启用广播策略时，
+ * 广播才会进入路由器。
  */
 #define TR_MODBUS_SILENT (-ECANCELED)
 typedef int (*tr_modbus_route_fn)(int iface, const struct modbus_adu *request,
                                   struct modbus_adu *response, void *user);
 int tr_modbus_set_router(int iface, tr_modbus_route_fn route, void *user);
 struct tr_modbus_policy {
-    /* NULL keeps the standard own-unit/broadcast filter. */
+    /* NULL 表示保留标准的本站号和广播过滤。 */
     bool (*accept)(const struct modbus_adu *request, uint8_t own_unit, void *user);
-    bool route_broadcast; /* Router owns broadcast handling and reply policy. */
+    bool route_broadcast; /* 路由器负责广播处理和回复策略。 */
     void *user;
 };
-/* Startup only, copied. NULL restores standard unit/broadcast filtering. */
+/* 仅启动期配置，内容会复制；NULL 恢复标准站号和广播过滤。 */
 int tr_modbus_set_policy(int iface, const struct tr_modbus_policy *policy);
 int tr_modbus_request_iface(void);
 uint8_t tr_modbus_request_function(void);
 typedef void (*tr_modbus_config_done_fn)(int iface, int error, void *user);
-/* Copied request; applied after the old response has completed. */
+/* 复制请求，在旧响应发送完成后应用。 */
 int tr_modbus_reconfigure(int iface, struct modbus_iface_param param,
                            tr_modbus_config_done_fn done, void *user);
-/* Reset the current backend even if TX never completed. Executing callbacks
- * must finish first; never cancel a handler in the middle of a flash write. */
+/* 即使 TX 从未完成，也可复位当前后端。必须先等待正在执行的回调结束，
+ * 不得在 Flash 写入中途取消处理函数。 */
 int tr_modbus_recover(int iface, tr_modbus_config_done_fn done, void *user);
-/* Main-loop health service: idle/blocked TX triggers recovery after timeout_ms;
- * a stuck handler returns -ETIMEDOUT so the board watchdog can reset the CPU. */
+/* 主循环健康维护：TX 空闲或阻塞超过 timeout_ms 后触发恢复；
+ * 处理函数卡住返回 -ETIMEDOUT，由板级看门狗复位 CPU。 */
 int tr_modbus_service(int iface, uint32_t timeout_ms);
 struct tr_modbus_health { uint32_t recoveries; int last_error; bool changing; };
 int tr_modbus_get_health(int iface, struct tr_modbus_health *health);

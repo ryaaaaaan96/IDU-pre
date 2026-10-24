@@ -1,6 +1,7 @@
-/* Bounded SGZ/IAP3 container reader for the active MV-IO ARM upgrade path.
- * Format reference: io-interface-board Iapv3 (SUNGROW, 1997-2022),
- * QuickLZ 1.5 level 3, no streaming history. No legacy allocator/RTOS code.
+/* 用于当前 MV-IO ARM 升级路径的有界 SGZ/IAP3 容器读取器。
+ * 格式参考 io-interface-board Iapv3（SUNGROW，
+ * 1997-2022）和 QuickLZ 1.5 级别 3，不保留流式历史，
+ * 不沿用旧分配器或 RTOS 代码。
  */
 #include <iap/sgz.h>
 #include <quicklz/quicklz.h>
@@ -64,7 +65,7 @@ int iap_sgz_unpack(iap_image_read_fn read, void *in, uint32_t received, uint32_t
     uint32_t length = le(hdr + 20, 4), head = le(hdr + 24, 4), nums = le(hdr + 28, 4);
     if (memcmp(hdr, "SungrowIAP3.0", 12) || length < sizeof(hdr) || length > received ||
         received - length >= 16 || head < sizeof(hdr) || head > length) { return -EBADMSG; }
-    /* This legacy transport accepts a single ARM host image (type 2). */
+    /* 此旧版传输仅接收一个 ARM 主机镜像（类型 2）。 */
     if (nums != 1 || le(hdr + 32, 4) != 2) { return -ENOTSUP; }
     uint32_t size = le(hdr + 40, 4), crc = le(hdr + 44, 4);
     uint32_t packed = le(hdr + 120, 4), start = le(hdr + 128, 4);

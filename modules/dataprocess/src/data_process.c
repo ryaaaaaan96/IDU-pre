@@ -15,7 +15,7 @@ static size_t byte_count(const struct dp_point_cfg *point)
            point->type == DP_U8 ? 1 : point->width * 2;
 }
 
-/* Explicit byte assembly also works on a big-endian Zephyr target. */
+/* 显式按字节组装，也适用于大端 Zephyr 目标。 */
 #if defined(CONFIG_DP_PROCESS)
 static void unpack(struct dp_value *value, const uint8_t *bytes, size_t count)
 {
@@ -76,8 +76,8 @@ int32_t dp_get_sig_value(uint16_t dev, uint16_t sig, uint8_t size, uint8_t *byte
 }
 
 #if defined(CONFIG_DP_PROCESS)
-/* The native process lock serializes callbacks. A thread identity check keeps
- * helper calls in other threads (or ISRs) from borrowing the active context.
+/* 原生处理锁串行执行回调；通过线程身份检查，
+ * 防止其他线程或 ISR 的辅助调用借用活动上下文。
  */
 struct callback_scope {
     struct dp_process_ctx *ctx;
@@ -94,7 +94,7 @@ static struct callback_scope *active_callback;
 static struct read_scope *active_read;
 static struct k_spinlock scope_lock;
 K_MUTEX_DEFINE(reference_lock);
-/* Protected by reference_lock; never kept across an asynchronous submit. */
+/* 由 reference_lock 保护；不会跨异步提交持续持有。 */
 struct reference_buffers {
     struct dp_process_request request;
     struct dp_process_result result;
@@ -231,7 +231,7 @@ int dp_reference_read_at(struct dp_key key, uint16_t port, uint8_t function,
 {
     if (dp_stopped()) { return -ECANCELED; }
     int err = reference_read(key, port, function, address, count, state, NULL);
-    /* Nonzero reference READ status is not a native successful transaction. */
+    /* 参考 READ 的非零状态不等于原生事务成功。 */
     return err > 0 ? -EIO : err;
 }
 
@@ -289,7 +289,7 @@ int32_t dp_check_para_set(FUNC_PARA_S *para)
     if (err) { return err; }
     uint8_t flags;
     err = dp_txn_get_flags(ctx, point->key, &flags);
-    /* Setting the existing flags also verifies that this entry is an output. */
+    /* 设置已有标志时，也会校验该条目确实是输出。 */
     return err ? err : dp_txn_set_flags(ctx, point->key, flags);
 }
 
@@ -444,7 +444,7 @@ int dp_reference_process(struct dp_process_ctx *ctx, struct dp_key key)
     return 0;
 }
 #else
-/* Keep the public byte API linkable in a store-only configuration. */
+/* 仅启用存储的配置下，也保持公共字节接口可链接。 */
 int32_t dp_set_sig_value(uint16_t dev, uint16_t sig, uint8_t size, uint8_t *bytes)
 { (void)dev; (void)sig; (void)size; (void)bytes; return -ENOTSUP; }
 int32_t dp_fast_para_set(PARA_DATA_S *data, PARA_SET_STATUS status)
@@ -474,9 +474,9 @@ int32_t dp_set_para_only_dm_no_store(uint16_t dev, uint16_t sig, uint8_t size, u
 { (void)dev; (void)sig; (void)size; (void)bytes; return -ENOTSUP; }
 #endif
 
-/* A copied, single-flight collector request survives an asynchronous completion.
- * On timeout its storage remains reserved until the backend completes, avoiding
- * dangling caller buffers and preventing a late ACK from completing a new job.
+/* 复制后的采集请求同一时间只允许一个在途，存活至异步完成。
+ * 超时后继续预留存储，直到后端完成，避免调用方缓冲悬空，
+ * 也防止迟到 ACK 错误完成新作业。
  */
 static PARA_SET_FUNC reference_collector;
 static struct k_spinlock collector_lock;
@@ -565,7 +565,7 @@ int dp_reference_collect(PARA_DATA_S *data)
     }
     lock = k_spin_lock(&collector_lock);
     collector_waiting = false;
-    /* A backend error means rejection, with no later completion permitted. */
+    /* 后端返回错误表示拒绝，之后不得再发送完成通知。 */
     struct collector_buffers *release = NULL;
     if (!accepted || err != -ETIMEDOUT || collector_done) {
         collector_busy = false; release = collector; collector = NULL;

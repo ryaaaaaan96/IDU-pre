@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-/* Convert a raw ADC value to the wire unit (0.01 A), saturating at U16. */
+/* 将 ADC 原始值换算为通信单位（0.01 A），并按 U16 上限饱和处理。 */
 uint16_t engineering_current_from_raw(uint16_t raw);
 
 #endif

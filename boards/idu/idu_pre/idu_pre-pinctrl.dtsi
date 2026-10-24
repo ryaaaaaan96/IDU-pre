@@ -1,4 +1,4 @@
-/* The E505 and E507 share these E50x AFIO pin/remap encodings. */
+/* E505 与 E507 共用这些 E50x AFIO 引脚和重映射编码。 */
 #include <dt-bindings/pinctrl/gd32e507v(e-c)xx-pinctrl.h>
 
 &pinctrl {

@@ -1,6 +1,6 @@
-"""Exercise debug.sh with real Arm GDB and an in-process remote target.
-
-Requires a built application ELF and its SDK GDB (or IDU_GDB). No probe is used.
+"""使用真实 Arm GDB 和进程内远程目标验证 debug.sh。
+需要已构建的应用 ELF 及其 SDK GDB，
+也可指定 IDU_GDB；不使用探针。
 """
 import os
 from pathlib import Path

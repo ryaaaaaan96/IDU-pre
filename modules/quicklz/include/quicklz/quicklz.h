@@ -4,11 +4,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* Decode one complete QuickLZ 1.5 level-3 block, with no streaming history.
- * Both compressed and stored blocks are supported. Buffers must not overlap;
- * cap must fit in int. No allocation or retained state is used.
- * Returns the decoded byte count, or -EBADMSG for malformed input or an
- * undersized destination. On failure, destination contents are unspecified.
+/* 解码完整的 QuickLZ 1.5 级别 3 数据块，不保留流式历史。
+ * 支持压缩块和原样存储块。缓冲不可重叠，cap 必须能用 int 表示；
+ * 不分配内存或保留状态。返回解码字节数；
+ * 输入格式错误或目标空间不足返回 -EBADMSG。失败时目标内容未定义。
  */
 int qlz_decode_level3(const uint8_t *src, size_t len, uint8_t *dst, size_t cap);
 

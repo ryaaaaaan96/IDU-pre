@@ -20,7 +20,7 @@ env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/points -d "$test_dir/points"
 timeout 30s "$test_dir/points/zephyr/zephyr.exe" -flash_in_ram
 
-# Verify durable state with fresh process memory, not just a remounted NVS.
+# 使用新进程内存验证持久状态，而非仅重新挂载 NVS。
 flash_test_file="$(mktemp "$workspace_dir/$test_dir/reboot-flash.XXXXXX")"
 trap 'rm -f -- "$flash_test_file"' EXIT
 for phase in write recover verify; do
@@ -28,7 +28,7 @@ for phase in write recover verify; do
         -flash="$flash_test_file" -test=points::test_parameters_reboot_probe
 done
 
-# Product register routing, persistence and bounded port recovery.
+# 产品寄存器路由、持久化和有界端口恢复。
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/forwarding -d "$test_dir/forwarding"
 timeout 30s "$test_dir/forwarding/zephyr/zephyr.exe" -flash_in_ram
@@ -46,7 +46,7 @@ env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/image_confirm -d "$test_dir/image_confirm"
 timeout 30s "$test_dir/image_confirm/zephyr/zephyr.exe"
 
-# Public status API, real deadlines and non-returning reset boundary.
+# 公共状态接口、真实期限，以及不返回的复位接口。
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/task_watchdog -d "$test_dir/task_watchdog"
 python3 applications/IDU-pre/tests/task_watchdog/run.py "$test_dir/task_watchdog/zephyr/zephyr.exe"
@@ -55,13 +55,13 @@ bash applications/IDU-pre/tests/runtime/run.sh
 
 bash applications/IDU-pre/tests/iap/run.sh
 
-# ADC contracts, modular telemetry, reusable models and event-driven polling.
+# ADC 契约、模块化遥测、可复用模型和事件驱动轮询。
 for suite in adc io vport modbus_support communication shared_rs485 simulator pipeline models collector collect_state collect_modbus transmit forwarding_devices transmit_port dataprocess reference_dp reference_ports reference_config reference_services; do
     env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
         "applications/IDU-pre/tests/$suite" -d "$test_dir/$suite"
     if [[ "$suite" == forwarding_devices ]]; then
         timeout 30s "$test_dir/$suite/zephyr/zephyr.exe" -flash_in_ram
-        # Persist with the old combined binding; boot with separate forward entries.
+        # 用旧的合并绑定持久化，再以独立转发条目启动。
         rm -f -- "$flash_test_file"
         flash_test_file="$(mktemp "$workspace_dir/$test_dir/binding-reboot.XXXXXX")"
         for phase in legacy_write verify; do
@@ -73,13 +73,13 @@ for suite in adc io vport modbus_support communication shared_rs485 simulator pi
     fi
 done
 
-# The same CO/TR assembly keeps working with unavailable parameter storage.
+# 参数存储不可用时，相同 CO/TR 装配仍可运行。
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/collect_state -d "$test_dir/collect_state-storage-fault" \
     -- -DEXTRA_CONF_FILE=storage-fault.conf
 timeout 30s "$test_dir/collect_state-storage-fault/zephyr/zephyr.exe" -flash_in_ram
 
-# Inline defaults/ranges and a startup-selected country are independent of CO/TR.
+# 行内默认值、范围和启动时选择的国家配置独立于 CO/TR。
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/point_parameters -d "$test_dir/point_parameters"
 timeout 30s "$test_dir/point_parameters/zephyr/zephyr.exe" -flash_in_ram
@@ -88,31 +88,31 @@ env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     -- -DEXTRA_CONF_FILE=country.conf
 timeout 30s "$test_dir/point_parameters-country/zephyr/zephyr.exe" -flash_in_ram
 
-# Callback-only acquisition does not compile the Zephyr client or transmit.
+# 仅回调的采集配置不编译 Zephyr 客户端或转发模块。
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/collector -d "$test_dir/collector-no-adapter" \
     -- -DEXTRA_CONF_FILE=adapter-off.conf
 timeout 30s "$test_dir/collector-no-adapter/zephyr/zephyr.exe"
 
-# IAPv3 uses extended ADUs; exercise RAW/RTU delivery at its configured capacity.
+# IAPv3 使用扩展 ADU，按配置容量验证 RAW/RTU 传输。
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/communication -d "$test_dir/communication-large" \
     -- -DEXTRA_CONF_FILE=large.conf
 timeout 30s "$test_dir/communication-large/zephyr/zephyr.exe"
 
-# Reference parameter policies, per-key width conversion and deferred reboot.
+# 参考参数策略、逐键宽度转换和延迟复位。
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/reference_services -d "$test_dir/reference_services-params" \
     -- -DEXTRA_CONF_FILE=params.conf
 timeout 30s "$test_dir/reference_services-params/zephyr/zephyr.exe" -flash_in_ram
 
-# Byte getters remain available when the processing worker is disabled.
+# 禁用处理任务时，字节读取接口仍可使用。
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/reference_dp -d "$test_dir/reference_dp_off" \
     -- -DEXTRA_CONF_FILE=process_off.conf
 timeout 30s "$test_dir/reference_dp_off/zephyr/zephyr.exe"
 
-# Storage and transport are independently optional in the processing module.
+# 处理模块中的存储和传输可分别选择启用。
 for variant in params transport; do
     env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
         applications/IDU-pre/tests/dataprocess -d "$test_dir/dataprocess-$variant" \
@@ -134,17 +134,17 @@ env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/acquisition -d "$test_dir/acquisition"
 python3 applications/IDU-pre/tests/acquisition/run.py "$test_dir/acquisition/zephyr/zephyr.exe"
 
-# Exact-size allocation, failure cleanup and initialization retry.
+# 精确大小分配、失败清理和初始化重试。
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/point_storage -d "$test_dir/point_storage"
 timeout 30s "$test_dir/point_storage/zephyr/zephyr.exe"
 
-# Cross-file table registration, volatile commands and persistent feedback.
+# 跨文件点表登记、非持久命令和持久参数反馈。
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/table_registry -d "$test_dir/table_registry"
 timeout 30s "$test_dir/table_registry/zephyr/zephyr.exe" -flash_in_ram
 
-# Fresh processes model firmware adding/reordering/removing keys and hash collisions.
+# 使用新进程模拟固件增删键、调整键顺序及哈希冲突。
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/parameter_records -d "$test_dir/parameter_records"
 rm -f -- "$flash_test_file"

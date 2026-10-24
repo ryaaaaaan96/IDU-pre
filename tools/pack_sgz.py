@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Wrap a signed IDU-pre MCUboot BIN for the legacy AES/IAPv3 transport."""
+"""将已签名的 IDU-pre MCUboot BIN 封装为旧版 AES/IAPv3 传输格式。"""
 import argparse
 from pathlib import Path
 import re
@@ -36,8 +36,8 @@ def pack(image, version="IDU-pre", encrypt=True, config=DEFAULT_CONFIG):
     blocks = bytearray()
     for offset in range(0, len(image), 2048):
         block = image[offset:offset + 2048]
-        # Valid QuickLZ 1.5 level-3 STORED frame. Receiver also supports actual
-        # compressed legacy frames; no GPL/commercial encoder is bundled.
+        # 有效的 QuickLZ 1.5 级别 3 原样存储帧；接收器也支持真正的
+        # 旧版压缩帧；此处不捆绑 GPL 或商业编码器。
         frame = struct.pack("<BII", 0x4e, len(block) + 9, len(block)) + block
         blocks += struct.pack("<H", len(frame)) + frame
     sub = struct.pack("<IIII32sII32sIII", 2, 0, len(image), zlib.crc32(image), name,

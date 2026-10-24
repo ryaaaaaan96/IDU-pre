@@ -5,9 +5,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* Source-level reference interfaces, using standard C and Zephyr directly.
- * Byte buffers use the reference ARM little-endian representation. They may be
- * unaligned. This is not a binary ABI for the proprietary platform library.
+/* 参考平台的源码级接口，直接使用标准 C 和 Zephyr。
+ * 字节缓冲区采用参考 ARM 小端表示，允许未对齐；
+ * 不提供专有平台库的二进制 ABI。
  */
 typedef enum {
     DATA_TYPE_NULL = 0, DATA_TYPE_S8, DATA_TYPE_U8, DATA_TYPE_S16,
@@ -83,30 +83,30 @@ typedef enum {
 } while (0)
 
 int32_t dp_init(void);
-/* Thread-only synchronous write: exact configured byte count; 0 or -errno.
- * Local, remote and writable parameter signals are accepted. Callbacks finish
- * before return. Per-device persistence retains the native recovery protocol.
+/* 仅在线程中同步写入，长度必须等于配置字节数，返回 0 或 -errno。
+ * 接受本地、远端及可写参数信号，回调在返回前完成。
+ * 按设备持久化仍使用原生恢复协议。
  */
 int32_t dp_set_sig_value(uint16_t dev_id, uint16_t sig_id, uint8_t size, uint8_t *value);
-/* Direct store read, without READ callbacks. Copies the configured byte count;
- * on success returns supplied capacity, preserving the reference quirk.
+/* 直接读取存储，不运行 READ 回调；复制配置的字节数。
+ * 成功时返回传入容量，以保留参考接口的特殊行为。
  */
 int32_t dp_get_sig_value(uint16_t dev_id, uint16_t sig_id, uint8_t capacity, uint8_t *value);
-/* Values of <=4 bytes live in p_value.str; larger values use p_value.pst.
- * Fast get requires exactly one entry and its exact configured size, and runs
- * an enabled READ callback. A nonzero callback status is returned unchanged;
- * any nonzero status preserves response bytes but aborts derived outputs.
- * Native protocol reads translate a positive READ status to -EIO.
- * Fast set is synchronous; completion is called once
- * after a successful transaction. Only DP_FAST_SET requests are supported.
+/* 不超过 4 字节的值放在 p_value.str，
+ * 较大值使用 p_value.pst。
+ * 快速读取要求恰好一个条目且长度与配置一致，
+ * 并运行已启用的 READ 回调。回调非零状态原样返回：保留响应字节，
+ * 但取消派生输出。原生协议读取将正 READ 状态转换为 -EIO。
+ * 快速设置同步执行，事务成功后仅调用一次完成回调；
+ * 仅支持 DP_FAST_SET 请求。
  */
 int32_t dp_fast_para_set(PARA_DATA_S *data, PARA_SET_STATUS status);
 int32_t dp_fast_para_get(PARA_DATA_S *data);
 int32_t dp_get_sig_data_type(uint16_t dev_id, uint16_t sig_id,
                            uint16_t *data_type, uint16_t *size);
-/* Transaction callback helpers. Values and flags apply to this transaction;
- * outputs are copied, validated and committed after callbacks succeed. These
- * helpers fail outside the current callback thread. No nested engine calls.
+/* 事务回调辅助接口；数值和标志只作用于当前事务。回调成功后，
+ * 输出才被复制、校验并提交。在当前回调线程之外调用会失败，
+ * 禁止嵌套调用处理引擎。
  */
 int32_t dp_get_para_value(FUNC_PARA_S *para);
 int32_t dp_get_para_old_value(FUNC_PARA_S *para);
@@ -114,11 +114,10 @@ int32_t dp_check_para_set(FUNC_PARA_S *para);
 int32_t dp_set_para_value(FUNC_PARA_S *para);
 int32_t dp_set_para_value_flag(FUNC_PARA_S *para, uint8_t flags);
 int32_t dp_set_para_flag(uint16_t dev_id, uint16_t sig_id, uint8_t flags);
-/* Callback-only one-shot action for a single volatile WRITE point. Executed
- * synchronously after all callbacks and value checks succeed, instead of
- * storing the trigger value. No INIT/READ/SAMPLE, derived outputs, parameter
- * writes or finish actions may share this request. No automatic replay.
- * The action returns 0 or -errno; it must not reenter the process engine.
+/* 仅在回调中使用，为单个非持久 WRITE 点登记一次性动作。
+ * 所有回调及数值检查成功后同步执行动作，不存储触发值。
+ * 同一请求不得混入 INIT/READ/SAMPLE、派生输出、参数写入或完成动作，
+ * 也不自动重放。动作返回 0 或 -errno，不得重入处理引擎。
  */
 int dp_defer_para_action(int (*action)(uint16_t argument), uint16_t argument);
 void dp_set_para_no_collect(uint16_t dev_id, uint16_t sig_id);
@@ -129,11 +128,11 @@ int32_t dp_set_para_only_dm_no_store(uint16_t dev_id, uint16_t sig_id,
 
 struct dp_process_ctx;
 struct dp_key;
-/* Global registered INIT/TIMER callbacks run with all four arguments NULL and
- * can emit outputs through the scoped helpers. Call from a Zephyr thread.
+/* 全局登记的 INIT/TIMER 回调以四个 NULL 参数执行，
+ * 可通过当前作用域的辅助接口产生输出。须从 Zephyr 线程调用。
  */
 int dp_reference_invoke(DM_PF_SIG_PROC callback, bool timer);
-/* Nonblocking enqueue; executes on the DP business worker, not system workq. */
+/* 非阻塞入队，在 DP 业务任务上执行，不使用系统工作队列。 */
 int dp_reference_submit(DM_PF_SIG_PROC callback, bool timer);
 int dp_reference_process(struct dp_process_ctx *ctx, struct dp_key key);
 
@@ -142,9 +141,8 @@ typedef struct dev_tbl_cfg_s DEV_TBL_CFG_S;
 typedef struct dm_sig_data_s DM_SIG_DATA_S;
 #include <dataprocess/reference_tables.h>
 
-/* Configuration views are read-only and remain valid for the configuration's
- * lifetime. Native catalogs without original protocol tables return NULL for
- * those tables, never reinterpret a native layout as a reference layout.
+/* 配置视图只读，在配置整个生命周期内有效。原生目录不包含原始协议表时，
+ * 对应表返回 NULL，不得把原生布局强转为参考布局。
  */
 int32_t dp_dev_get_num(void);
 const DEV_TABLE_S *dp_dev_get_tbl(void);
@@ -157,38 +155,38 @@ const DEV_TBL_CFG_S *dp_devid_get_prototbl(uint8_t dev_id, uint16_t protocol);
 const void *dp_sigcfg_get_by_devcfg(const DEV_TBL_CFG_S *tables, uint16_t protocol,
                                    uint16_t *count);
 const void *dp_sigcfg_get_by_devid(uint16_t dev_id, uint16_t protocol, uint16_t *count);
-/* For values over 4 bytes, getter callers supply def_value.pst with room for
- * the configured byte length. Setter copies it into a bounded sparse override;
- * const configuration and current values are unchanged. No NVS persistence.
+/* 超过 4 字节的值，
+ * 读取方须在 def_value.pst 提供足够容纳配置长度的空间。
+ * 设置时复制到有界稀疏覆盖表；不修改常量配置和当前值，也不写入 NVS。
  */
 int32_t dp_get_para_def_range(uint16_t dev_id, uint16_t sig_id, DM_SIG_DATA_S *data);
 int32_t dp_set_para_def_range(uint16_t dev_id, uint16_t sig_id, DM_SIG_DATA_S *data);
-/* Run matching registered INIT functions, then the device's point handlers.
- * Earlier successful initializers are not rolled back on a later failure.
+/* 先运行匹配的已登记 INIT 函数，再运行设备测点处理函数。
+ * 后续初始化失败时，不回滚此前已成功的初始化。
  */
 int32_t dp_set_init(uint16_t dev_id);
 int32_t dp_dm_reset_dev_data(uint8_t dev_id);
-/* Up to three observers; copied changes run on the DP jobs thread. The bounded
- * event queue drops notifications on overflow without undoing committed data.
+/* 最多三个观察者；复制后的变更在 DP 作业线程执行。
+ * 有界事件队列满时丢弃通知，不撤销已提交数据。
  */
 int32_t dp_reg_sig_callback(DM_PF_ATTR_SIG_CHG_PROC callback);
 int32_t dp_para_value_reg(uint16_t type, DATA_SET_S *data);
-/* Reference direct-collector path, separate from durable native transports.
- * Register once. Backend returns 0 when accepted and completes exactly once;
- * an error means rejection with no later completion. Requests are copied.
- * NO_DM waits up to 1 s; timeout holds storage until a late completion arrives.
- * Direct device writes cannot be rolled back by a later transaction failure.
+/* 参考平台的直接采集路径，与原生持久化传输分开。仅登记一次；
+ * 后端返回 0 表示接收，且必须恰好完成一次；错误表示拒绝，
+ * 之后不得再完成。请求会复制。NO_DM 最多等待 1 秒；
+ * 超时后保留存储，直到迟到的完成通知到达。
+ * 后续事务失败不能回滚已执行的设备直接写入。
  */
 int32_t dp_para_reg_set_func(PARA_SET_FUNC callback);
 int32_t dp_set_para_not_dm(PARA_DATA_S *data, PARA_SET_STATUS status);
-/* Callback-only flags, applied after successful transaction commit. */
+/* 仅供回调使用的标志，在事务成功提交后生效。 */
 void dp_flush_para_store(void);
 void dp_set_reboot(void);
-/* Requires DP_PARAMS; flushes and schedules reboot after 100 ms. */
+/* 要求 DP_PARAMS；刷新存储后安排 100 ms 后复位。 */
 void dp_reboot_system(void);
-/* Only RESTORE parameters. Both honor the default policy; factory additionally
- * flushes durable storage, without erasing partitions or implicitly rebooting.
- * Void legacy APIs report failures through logging; native APIs return errno.
+/* 仅处理 RESTORE 参数。两者均遵守默认值策略；
+ * 恢复出厂还会刷新持久存储，但不擦除分区或隐式复位。
+ * 旧版 void 接口通过日志报告失败，原生接口返回 errno。
  */
 void dp_load_def_data(void);
 void dp_reset_factory(void);

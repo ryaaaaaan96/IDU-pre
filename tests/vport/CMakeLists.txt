@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20.0)
-# Deliberately load only vport: no application, DP or Modbus dependency.
+# 有意只加载 vport，不依赖应用、DP 或 Modbus。
 list(APPEND ZEPHYR_EXTRA_MODULES ${CMAKE_CURRENT_SOURCE_DIR}/../../modules/vport)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(vport_tests)

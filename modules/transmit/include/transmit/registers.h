@@ -18,7 +18,7 @@ struct tr_register_service {
     const DEV_TABLE_S *device;
     /* 显式允许协议段收到广播；段外广播始终静默且不执行业务写。 */
     bool route_broadcast;
-    /* Direct ownership for forwarding declarations; mutually exclusive with device. */
+    /* 转发声明直接持有映射所有权，与 device 互斥。 */
     const MB_TABLE_SEG_T *segments;
     size_t segment_count;
     const struct dp_equip_cfg *mapping;
@@ -31,7 +31,7 @@ struct tr_register_service {
  */
 int tr_register_route(int iface, const struct modbus_adu *rx,
                       struct modbus_adu *tx, void *user);
-/* Startup only; installs the router and its broadcast policy. */
+/* 仅在启动期安装路由器及广播策略。 */
 int tr_register_attach(int iface, const void *config);
 int tr_register_write(uint16_t address, const uint16_t *words, size_t count);
 

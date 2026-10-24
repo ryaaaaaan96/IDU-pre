@@ -98,8 +98,8 @@ target="$remote_host:$remote_port"
 [[ "$remote_host" != *:* ]] || target="[$remote_host]:$remote_port"
 commands=$(printf 'target remote %s\nmonitor halt\nmaintenance flush register-cache\n' "$target")
 commands+=$'\n'
-# monitor commands change the target without invalidating GDB's cached registers.
-# A failed memory read stops this command file before any reset/download below.
+# monitor 命令改变目标状态，但不会使 GDB 的寄存器缓存失效。
+# 内存读取失败会终止此命令文件，阻止后续复位或下载。
 commands+=$(cat <<'GDB'
 set $idu_cpuid = *(unsigned int *)0xE000ED00
 if $idu_cpuid == 0 || $idu_cpuid == 0xffffffff
@@ -126,5 +126,5 @@ fi
 command_file=$(mktemp "${TMPDIR:-/tmp}/idu-debug.XXXXXX")
 trap 'rm -f -- "$command_file"' EXIT
 printf '%s\n' "$commands" > "$command_file"
-# An initialization error stops this file before subsequent reset commands.
+# 初始化错误会中止此文件，阻止后续复位命令。
 "$gdb_program" -q -nx "$elf_file" -x "$command_file" "$@"

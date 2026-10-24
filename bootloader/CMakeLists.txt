@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.20.0)
 get_filename_component(IDU_APP ${CMAKE_CURRENT_LIST_DIR}/.. ABSOLUTE)
 list(APPEND BOARD_ROOT ${IDU_APP})
 list(APPEND DTS_ROOT ${IDU_APP})
-# Discover the SoC in Sysbuild and propagate its module to both child images.
+# 在 Sysbuild 中发现 SoC，并将其模块传递给两个子镜像。
 include(${IDU_APP}/modules/hardware.cmake)
 set(ZEPHYR_EXTRA_MODULES "${ZEPHYR_EXTRA_MODULES}" CACHE STRING "IDU hardware modules" FORCE)
 if(NOT DEFINED mcuboot_EXTRA_DTC_OVERLAY_FILE)

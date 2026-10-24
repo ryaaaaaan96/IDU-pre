@@ -3,10 +3,10 @@
 
 #include <collect/collect.h>
 
-/* Reusable downstream MV-IO model. Bind the logical device ID separately from
- * the bus/unit ID and the northbound address base. Expansion produces const
- * tables in flash; instances share the immutable collection field arrays.
- * Register numbers below describe the downstream protocol, not the local BSP.
+/* 可复用的南向 MV-IO 模型。
+ * 逻辑设备 ID 与总线、站号、北向地址基址分别绑定。
+ * 展开后生成 Flash 常量表，各实例共用不可变采集字段数组。
+ * 下方寄存器号描述南向协议，不描述本地 BSP。
  */
 enum idu_mvio_signal {
     IDU_MVIO_DI = 8152,
@@ -15,8 +15,8 @@ enum idu_mvio_signal {
     IDU_MVIO_ADDRESS = 30459,
 };
 
-/* Process point definitions. */
-/* Shared MV-IO signal definitions; expand once per logical device.
+/* 处理测点定义。 */
+/* 共享 MV-IO 信号定义，每个逻辑设备展开一次。
  */
 #define IDU_MVIO_CURRENT_POINT(dev, n, stale) \
     {.key = {dev, IDU_MVIO_CURRENT_1 + (n)}, .source = DP_SOURCE_MODBUS, \
@@ -39,13 +39,13 @@ enum idu_mvio_signal {
      .type = DP_U16, .width = 1, .minimum = 1, .maximum = 247, \
      .stale_ms = identity_stale}
 
-/* Collection fields and blocks. */
-/* Shared MV-IO wire fields and polling blocks; bind device and cadence separately.
+/* 采集字段和报文块。 */
+/* 共享 MV-IO 通信字段和轮询块，设备与周期分别绑定。
  */
 #define IDU_MVIO_CURRENT_FIELD(n) \
     {.sig_id = IDU_MVIO_CURRENT_1 + (n), .offset = n, .width = 1}
 
-/* Declare once in the collect translation unit; reusable across instances. */
+/* 在采集编译单元中声明一次，供多个实例复用。 */
 #define IDU_MVIO_COLLECT_FIELDS(name) \
     static const struct co_field name##_di[] = { \
         {.sig_id = IDU_MVIO_DI, .width = 1}, \
@@ -77,8 +77,8 @@ enum idu_mvio_signal {
      .period_ms = identity_period, .fields = name##_address, \
      .field_count = ARRAY_SIZE(name##_address)}
 
-/* Northbound value and quality mappings. */
-/* MV-IO northbound value and quality mappings; bind address windows separately.
+/* 北向数值与质量映射。 */
+/* MV-IO 北向数值与质量映射，地址窗口分别绑定。
  */
 #define IDU_MVIO_MAP(dev, base, offset, sig, words) \
     {.function = 4, .address = (base) + (offset), .count = words, .key = {dev, sig}}
@@ -90,8 +90,9 @@ enum idu_mvio_signal {
 #define IDU_MVIO_TRANSMIT_QUALITY(dev, base, n) \
     IDU_MVIO_QUALITY(dev, base, 14 + (n), IDU_MVIO_CURRENT_1 + (n))
 
-/* Base+12/+13 remain available to the application; address_reg is a separate
- * FC03 window. Parameter write mappings belong to the application profile.
+/* Base+12/+13 留给应用使用；
+ * address_reg 属于独立 FC03 窗口，
+ * 参数写映射由应用配置定义。
  */
 #define IDU_MVIO_TRANSMIT(dev, base, address_reg) \
     IDU_MVIO_MAP(dev, base, 0, IDU_MVIO_DI, 1), \

@@ -176,7 +176,7 @@ ZTEST(collect_modbus, test_client_contention_is_bounded_without_sending)
     int64_t start = k_uptime_get();
     int err = co_write(1, 100, &value, 1);
     int64_t elapsed = k_uptime_get() - start;
-    /* Release before asserting so a failed test cannot retain ownership. */
+    /* 断言前释放所有权，避免测试失败后继续占用。 */
     k_sem_give(&owner_release);
     zassert_ok(k_thread_join(owner, K_SECONDS(1)));
     zassert_equal(err, -EBUSY);

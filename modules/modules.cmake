@@ -1,4 +1,4 @@
-# Register the reusable modules before find_package(Zephyr).
+# 在 find_package(Zephyr) 前登记通用模块。
 include_guard(GLOBAL)
 include(${CMAKE_CURRENT_LIST_DIR}/hardware.cmake)
 list(APPEND ZEPHYR_EXTRA_MODULES

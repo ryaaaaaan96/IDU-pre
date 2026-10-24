@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
-"""Audit the supplied platform archive without modifying or linking it.
-
-Only declarations and selected disassembly are inventoried, not decompiled C.
-All output belongs in an explicit build directory outside the application and
-reference repositories. ARC symbols are excluded from the public API inventory;
-ARC relocations in selected functions remain evidence of the original backend.
+"""审计给定的平台归档，不修改或链接它。仅盘点声明及选定函数的反汇编，
+不生成反编译 C。所有输出写入应用和参考仓库之外的显式构建目录。
+公共接口清单排除 ARC 符号；
+选定函数中的 ARC 重定位仍保留为原后端证据。
 """
 
 import argparse
@@ -95,7 +93,7 @@ def run(argv, *, binary=False):
 
 
 def discover_tools(prefix):
-    """Prefer PATH/Zephyr SDK settings, then bounded conventional install paths."""
+    """优先使用 PATH 和 Zephyr SDK 设置，再搜索有限的常规安装路径。"""
     candidates = [prefix] if prefix else []
     if not prefix:
         candidates.extend(filter(None, (os.environ.get("CROSS_COMPILE"),)))
@@ -128,7 +126,7 @@ def discover_tools(prefix):
 
 
 def strip_comments(text):
-    # Preserve offsets and line numbers for source references.
+    # 保留偏移与行号，供源码引用使用。
     return re.sub(r"/\*.*?\*/|//[^\n]*", lambda match: re.sub(r"[^\n]", " ", match[0]),
                   text, flags=re.S)
 
@@ -169,7 +167,7 @@ def parse_symbols(text):
 
 
 def selected_disassembly(text, names):
-    """Keep whole requested function sections and their relocation records."""
+    """完整保留指定函数段及其重定位记录。"""
     sections = re.split(r"(?=^Disassembly of section )", text, flags=re.M)
     found = []
     selected = []
@@ -183,7 +181,7 @@ def selected_disassembly(text, names):
 
 
 def references(text, member):
-    """Relocation targets, not unlinked BL display labels, identify callees."""
+    """通过重定位目标确定被调用函数，不依赖未链接 BL 指令显示的标签。"""
     result = []
     function = None
     origin = 0
@@ -258,7 +256,7 @@ def analyze(source, output, prefix):
             if member not in members:
                 evidence.append({"member": member, "missing_member": True})
                 continue
-            # Never extract archive-controlled paths; use only our target basename.
+            # 不得解压归档控制的路径，只使用指定目标的基本文件名。
             obj = Path(temporary) / member
             contents = run([tools["ar"], "p", str(archive), member], binary=True)
             obj.write_bytes(contents)

@@ -48,7 +48,7 @@ static int attach(int iface, const struct tr_forward_cfg *config)
         err = dp_table_registry_find(config->protocol_segments, PRO_ADDR_SLAVE, &segments);
         if (err) { return err; }
     }
-    /* Build only a small reader view: all rows and points stay in Flash/DP. */
+    /* 仅构建小型读取视图，所有表行和测点仍位于 Flash 或 DP。 */
     free->iface = iface;
     free->rows = map->rows;
     free->view = *dp_config();

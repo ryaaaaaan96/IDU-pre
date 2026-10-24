@@ -1,2 +1,2 @@
-/* Must be rejected: PLL still produces 180 MHz. */
+/* 必须拒绝：PLL 仍输出 180 MHz。 */
 &cpu0 { clock-frequency = <120000000>; };

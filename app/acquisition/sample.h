@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-/* Product sample layout; reusable input modules impose no such dimensions. */
+/* 产品样本布局；通用输入模块不限定这些维度。 */
 #define SAMPLE_ANALOG_COUNT 8
 #define SAMPLE_DI_COUNT 16
 

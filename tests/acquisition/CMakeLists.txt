@@ -3,17 +3,17 @@ set(KCONFIG_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/Kconfig)
 set(DTC_OVERLAY_FILE ${CMAKE_CURRENT_SOURCE_DIR}/app.overlay)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(idu_acquisition_tests)
-# Compile product orchestration against public contracts; services are mocked.
+# 按公共契约编译产品编排代码，服务由测试模拟。
 target_include_directories(app PRIVATE ../../app ../../modules/iap/include
   ../../modules/gpio/include ../../modules/watchdog/include ../../modules/transmit/include
   ../../modules/dataprocess/include ../../modules/collect/include ../../modules/vport/include)
 target_sources(app PRIVATE src/main.c ../../app/main.c
   ../../app/acquisition/acquisition.c ../../app/status/status.c
   ../../app/protocol/init.c)
-# Ztest owns main; expose the real application's startup function to the fixture.
+# main 由 Ztest 提供，将真实应用的启动函数提供给测试夹具。
 set_source_files_properties(../../app/main.c PROPERTIES
   COMPILE_DEFINITIONS "main=application_main")
-# Exercise optional orchestration with mocked services, without a bootloader/HAL.
+# 通过服务模拟验证可选编排，不使用引导程序或 HAL。
 target_compile_definitions(app PRIVATE CONFIG_BOOTLOADER_MCUBOOT=1 CONFIG_IDU_IAPV3=1
   CONFIG_DP_POINT_WORDS=16 CONFIG_DP_PROCESS_MAX_OUTPUTS=24 CONFIG_DP_MAX_DEVICES=1
   CONFIG_IDU_COLLECT_RETRIES=2 CONFIG_IDU_COLLECT_EXCEPTION_MS=3000

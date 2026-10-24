@@ -23,7 +23,7 @@ static int read_history(struct nvs_fs *fs, uint16_t id, uint8_t *data, size_t ca
         ssize_t len = nvs_read_hist(fs, id, data, capacity, i);
         if (len == -EIO) { *recovered = true; continue; }
         if (len >= 0 && (size_t)len > capacity) { return -EMSGSIZE; }
-        /* A corrupt latest entry must not become an absent/new key. */
+        /* 最新条目损坏不能当作键不存在或新键处理。 */
         return len == -ENOENT && i ? -EIO : (int)len;
     }
     return -EIO;
@@ -124,7 +124,7 @@ int dp_store_commit(struct nvs_fs *fs, const uint8_t *image, size_t length)
     uint8_t probe;
     ssize_t rc = nvs_read(fs, DP_STORE_COMMIT_ID, &probe, sizeof(probe));
     if (rc != -ENOENT) { return rc < 0 ? (int)rc : -EBUSY; }
-    /* Repeated flushes without changed values must not wear flash. */
+    /* 数值未变化时，重复刷新不应磨损 Flash。 */
     if (!sys_get_le16(image + 6)) {
         uint8_t meta[12];
         rc = nvs_read(fs, DP_STORE_META_ID, meta, sizeof(meta));

@@ -30,7 +30,7 @@ static inline int co_modbus_reconfigure(int iface, struct modbus_iface_param par
 #endif
 
 #ifdef CONFIG_CO_MODBUS_RAW_PORT
-/* Pin device identity for the complete synchronous transaction. */
+/* 在完整的同步事务期间固定设备身份。 */
 int co_modbus_raw_transfer(int iface, uint16_t dev_id, struct modbus_adu *adu,
                           k_timeout_t timeout,
                           int (*transfer)(int, struct modbus_adu *, k_timeout_t));

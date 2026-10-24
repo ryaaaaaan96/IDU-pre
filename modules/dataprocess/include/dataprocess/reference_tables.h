@@ -3,8 +3,8 @@
 
 #include <data_process.h>
 
-/* Table vocabulary from the reference platform, extended for Zephyr products.
- * They describe business data, not an ARC/RTOS abstraction or binary ABI.
+/* 沿用参考平台的点表术语，并针对 Zephyr 产品扩展；描述业务数据，
+ * 不提供 ARC/RTOS 抽象层或二进制 ABI。
  */
 #define MAX_PTL_TBL_NUM 7
 
@@ -72,7 +72,7 @@ typedef struct init_set_s {
     DM_PF_SIG_PROC function;
 } INIT_DATA_SET_S;
 
-/* CO-owned table phase flag, shared with the immutable reference reader. */
+/* 归 CO 管理的表阶段标志，与不可变参考读取器共用。 */
 #define CO_TABLE_INIT 0x10U
 
 typedef struct {
@@ -98,8 +98,8 @@ typedef struct mb_table_cell_t {
     uint8_t byte_order;
 } MB_TABLE_CELL_T, MB_TABLE_CELL_S;
 
-/* UPP model-table subset from upp_m_ex.h. The backend exchanges decoded
- * host-order words; this declares model data, not the UPP serial protocol.
+/* 来自 upp_m_ex.h 的 UPP 模型表子集。
+ * 后端交换已解码的主机字序数据；此处仅声明模型数据，不实现 UPP 串口协议。
  */
 typedef struct upp_m_model_data {
     uint16_t mod_data_offset;
@@ -128,7 +128,7 @@ typedef struct upp_m_model_reg {
     uint32_t cfg_mode;
 } UPP_M_MOD_REG;
 
-/* Numeric encodings are protocol metadata; no arc_byte_order.h is needed. */
+/* 数值编码属于协议元数据，不需要 arc_byte_order.h。 */
 #define BYTE_ORDER_DEFAULT 0
 #define BYTE_ORDER_SMALL 1
 #define BYTE_ORDER_BIGSMALL 2
@@ -136,6 +136,6 @@ typedef struct upp_m_model_reg {
 #define BYTE_ORDER_BIG 4
 
 struct dp_transmit_cfg;
-/* Decode one immutable reference row into a caller-owned execution descriptor. */
+/* 将一行不可变参考表解码到调用方持有的执行描述符。 */
 int dp_transmit_from_reference(const MB_TABLE_CELL_T *row, struct dp_transmit_cfg *map);
 #endif

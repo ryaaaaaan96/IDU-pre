@@ -72,8 +72,8 @@ int tr_read_register(uint8_t function, uint16_t address, uint16_t *value)
     }
     uint16_t selected = port < 0 ? 0 : port;
     const struct dp_equip_cfg *cfg = mapping_config(selected);
-    /* The legacy single-word getter rejects every overlapping word. Bulk
-     * tr_read() retains its separate exact-complete-point compatibility. */
+    /* 旧版单字读取器拒绝任何重叠字；
+     * 批量 tr_read() 保留独立的精确完整测点兼容规则。 */
     if (cfg && cfg->exact_overlapping_reads) {
         size_t matches = 0;
         for (size_t i = 0; i < cfg->transmit_count; ++i) {
@@ -197,9 +197,8 @@ int tr_write(uint16_t port, uint16_t address, const uint16_t *words, size_t coun
         const struct dp_transmit_cfg *m = mapping(cfg, 3, address + offset, &scratch);
         const struct dp_point_cfg *p = m ? dp_find(m->key, &point_scratch) : NULL;
         if (!m || !p || m->kind != DP_MAP_VALUE) { err = -ENOENT; goto out; }
-        /* In original tables FC03 provides write access independently of
-         * FLAG_PERSISTENCE. Volatile local values still run their callback.
-         * Remote samples need an explicit forwarding parameter definition.
+        /* 原始表中的 FC03 独立于 FLAG_PERSISTENCE 提供写权限。
+         * 非持久本地值仍执行回调，远端样本则要求显式转发参数定义。
          */
         bool volatile_reference = p->reference_data_type && p->source == DP_SOURCE_LOCAL;
         if (p->source != DP_SOURCE_PARAMETER && !volatile_reference) { err = -EACCES; goto out; }
@@ -277,7 +276,7 @@ int tr_dispatch(int iface, const struct modbus_adu *rx,
         k_free(words);
         return err;
     }
-    return -ENOENT; /* Ordinary FC06/16 point-table writer. */
+    return -ENOENT; /* 普通 FC06/16 点表写入器。 */
 }
 
 int tr_routes_validate(const struct tr_routes *routes)

@@ -7,6 +7,6 @@
  */
 int tr_modbus_port_bind(uint16_t port, const char *iface_name, const struct vport_io *io);
 int tr_modbus_port_param(int iface, struct modbus_iface_param *param);
-/* Bound interface name, or NULL for an unregistered logical port. */
+/* 已绑定接口名称；逻辑端口未登记时为 NULL。 */
 const char *tr_modbus_port_name(uint16_t port);
 #endif

@@ -11,8 +11,8 @@
 #include <zephyr/sys/crc.h>
 #include <zephyr/ztest.h>
 
-/* Each phase starts a new process against the same simulated flash. Changes to
- * order, defaults, bounds and device count model actual firmware replacements. */
+/* 每个阶段以新进程访问同一份模拟 Flash。
+ * 改变顺序、默认值、范围和设备数量，以模拟实际固件替换。 */
 static struct dp_point_cfg points[4];
 static struct dp_equip_cfg equipment;
 static const struct flash_area *area;

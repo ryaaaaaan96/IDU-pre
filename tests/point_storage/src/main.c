@@ -47,7 +47,7 @@ ZTEST(point_storage, test_allocation_failure_cleanup_and_retry)
     fail_allocation = true;
     zassert_equal(dp_init_config(&config), -ENOMEM);
     zassert_is_null(dp_config());
-    zassert_equal(requested, 4); /* Actual two U16 values, not maximum capacity. */
+    zassert_equal(requested, 4); /* 实际存储两个 U16 值，不按最大容量分配。 */
     zassert_equal(releases, 0);
 
     fail_allocation = false;
@@ -57,7 +57,7 @@ ZTEST(point_storage, test_allocation_failure_cleanup_and_retry)
     zassert_equal(releases, 1);
 
     fail_after_allocation = reader_failed = false;
-    fail_nth = 2; /* The worker batch fails after point-value allocation. */
+    fail_nth = 2; /* 测点值分配成功后，任务批次分配失败。 */
     zassert_equal(dp_init_config(&config), -ENOMEM);
     zassert_is_null(dp_config());
     zassert_equal(releases, 2);

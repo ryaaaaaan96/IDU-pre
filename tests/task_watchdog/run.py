@@ -1,4 +1,4 @@
-"""Run each status scenario in a fresh native process; faults are terminal."""
+"""每个状态场景使用独立 native 进程；故障为终止状态。"""
 import re
 import subprocess
 import sys

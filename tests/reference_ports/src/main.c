@@ -305,7 +305,7 @@ ZTEST(reference_ports, test_global_handlers_apply_to_existing_and_future_ports)
     uint16_t word;
     zassert_ok(modbus_read_input_regs(client, 7, 100, &word, 1));
     zassert_equal(word, 4321);
-    init_server(1); /* Global registration predates this interface. */
+    init_server(1); /* 全局登记早于此接口创建。 */
     target = 1;
     zassert_ok(modbus_read_input_regs(client, 8, 100, &word, 1));
     zassert_equal(word, 4321);
@@ -324,10 +324,10 @@ ZTEST(reference_ports, test_handler_and_filter_return_conventions)
     uint16_t word;
     handler_result = -1;
     zassert_ok(modbus_read_input_regs(client, 7, 100, &word, 1));
-    zassert_equal(word, 2222); /* Mode -1 and filter 0 both continue. */
+    zassert_equal(word, 2222); /* 模式返回 -1、过滤器返回 0 都表示继续处理。 */
     handler_result = 0;
     zassert_ok(modbus_read_input_regs(client, 7, 100, &word, 1));
-    zassert_equal(word, 4321); /* Mode 0 replies; filter 0 does not reply. */
+    zassert_equal(word, 4321); /* 模式返回 0 表示回复，过滤器返回 0 不表示回复。 */
     filter_result = 4;
     zassert_equal(modbus_read_input_regs(client, 7, 100, &word, 1), -ETIMEDOUT);
     zassert_equal(atomic_get(&handler_calls), 2);
@@ -416,7 +416,7 @@ ZTEST(reference_ports, test_fast_write_preflight_conversion_and_no_dm)
     zassert_equal(k_msgq_num_used_get(&transfers), 0);
     zassert_equal(completions, 0);
     data.set_num = 1;
-    items[0].sig_id = 1; /* FC4 input registers are never inferred writable. */
+    items[0].sig_id = 1; /* 不得推断 FC4 输入寄存器可写。 */
     zassert_equal(co_dp_fast_set(&data, write_complete), -ENOTSUP);
     zassert_equal(k_msgq_num_used_get(&transfers), 0);
     items[0].sig_id = 3;

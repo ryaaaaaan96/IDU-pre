@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Start Windows J-Link GDB Server with Zephyr thread awareness."""
+"""启动支持 Zephyr 线程识别的 Windows J-Link GDB Server。"""
 
 import argparse
 import os
@@ -10,14 +10,14 @@ import subprocess
 import sys
 
 
-# Target corrected to GD32E505VET6; this exact name is recognized by J-Link V8.78.
+# 目标已修正为 GD32E505VET6，J-Link V8.78 识别此完整名称。
 DEFAULT_DEVICE = "GD32E505VET6"
 DEFAULT_PORT = 2331
 DEFAULT_SPEED_KHZ = 1000
 
 
 def find_jlink():
-    """Find the native Windows installation without contacting a probe."""
+    """查找原生 Windows 安装目录，不连接探针。"""
     server = shutil.which("JLinkGDBServerCL.exe")
     if server:
         return Path(server).parent

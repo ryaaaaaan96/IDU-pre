@@ -65,7 +65,7 @@ ZTEST(reference_configuration, test_device_scoped_lookup_preserves_table_order)
     zassert_not_null(point);
     zassert_equal(point->key.dev_id, 7);
     zassert_equal(point->initial.words[0], 4);
-    zassert_equal(view_calls, 1); /* Other devices' defaults are never evaluated. */
+    zassert_equal(view_calls, 1); /* 不计算其他设备的默认值。 */
     zassert_equal(dp_config_index(&config, (struct dp_key){40, 2}), 1);
     zassert_equal(dp_config_index(&config, (struct dp_key){40, 99}), -ENOENT);
     zassert_is_null(dp_config_find(&config, (struct dp_key){99, 2}, &scratch));
@@ -127,14 +127,14 @@ static int defaults(uint16_t dev, uint16_t sig, DM_SIG_DATA_S *value, bool *reco
     } else if (dev == 247 && sig == 2) {
         value->def_value.pst = (void *)identifier;
     } else if (dev == 11 && sig == 10) {
-        /* The original checker uses min=max=0 for an unrestricted value. */
+        /* 原始检查器使用 min=max=0 表示数值不受限制。 */
     } else { return -1; }
     return 0;
 }
 
 static int period(uint8_t encoded, uint32_t *milliseconds)
 {
-    /* Product policy in this fixture, not a claimed legacy encoding. */
+    /* 这是测试夹具的产品策略，不宣称属于旧版编码。 */
     if (encoded != 200) { return -EINVAL; }
     *milliseconds = 8000;
     return 0;
@@ -154,7 +154,7 @@ ZTEST(reference_configuration, test_original_tables_validate_before_initializati
     pltcb_reg_cfg_get_timer_reg_num(timer_count);
 
     zassert_ok(dp_register_config_provider(no_native_config));
-    zassert_equal(dp_init(), -1); /* Never silently choose one configuration. */
+    zassert_equal(dp_init(), -1); /* 不得静默选择其中一份配置。 */
     zassert_ok(dp_register_config_provider(NULL));
     zassert_is_null(dp_config());
 
@@ -163,21 +163,21 @@ ZTEST(reference_configuration, test_original_tables_validate_before_initializati
     zassert_is_null(dp_config());
     table[0].ptl_tbl_cfg[1].proto_type = PRO_MB_SLAVE;
     local_signals[0].sig_size = 2;
-    zassert_equal(dp_init(), -1); /* U8 is one byte even in a word store. */
+    zassert_equal(dp_init(), -1); /* 即使存储按字组织，U8 也只有一个字节。 */
     zassert_is_null(dp_config());
     local_signals[0].sig_size = 1;
     local_signals[0].sig_flag = FLAG_COLLECT;
-    zassert_equal(dp_init(), -1); /* No downstream destination or enabled parameter engine. */
+    zassert_equal(dp_init(), -1); /* 没有南向目标，也未启用参数引擎。 */
     local_signals[0].sig_flag = 0;
     acquisition[0].flag = 8;
-    zassert_equal(dp_init(), -1); /* Unsupported FC17 policy fails closed. */
+    zassert_equal(dp_init(), -1); /* 不支持 FC17 策略时直接拒绝。 */
     acquisition[0].flag = 0;
     acquisition[0].byte_order = 7;
     zassert_equal(dp_init(), -1);
     acquisition[0].byte_order = BYTE_ORDER_BIG;
 
-    /* No application conversion is registered: each Modbus row carries its
-     * actual interval, including 60 seconds and the 16-bit maximum. */
+    /* 不登记应用换算函数；各 Modbus 表行携带实际间隔，
+     * 包括 60 秒和 16 位最大值。 */
     const struct dp_equip_cfg *prepared;
     acquisition[0].period_ms = 0;
     zassert_ok(dp_reference_prepare(&prepared));
@@ -196,7 +196,7 @@ ZTEST(reference_configuration, test_original_tables_validate_before_initializati
     acquisition[0].period_ms = 8000;
     acquisition[0].flag = 0;
 
-    /* A model table uses a registry pointer and a total field count. */
+    /* 模型表使用登记表指针及字段总数。 */
     UPP_M_MOD_DATA model_field = {.sig_id = 10, .mod_data_offset = 20,
         .mod_data_len = 4, .mod_data_type = DATA_TYPE_U32,
         .data_len = 4, .data_type = DATA_TYPE_U32, .rw_mode = 1,
@@ -205,7 +205,7 @@ ZTEST(reference_configuration, test_original_tables_validate_before_initializati
     UPP_M_MOD_REG registry = {.p_model_ary = &model, .model_num = 1};
     DEV_TBL_CFG_S original = table[1].ptl_tbl_cfg[1];
     table[1].ptl_tbl_cfg[1] = (DEV_TBL_CFG_S){PRO_UPP_MASTER, 1, &registry};
-    zassert_not_equal(dp_reference_prepare(&prepared), 0); /* Missing cycle policy. */
+    zassert_not_equal(dp_reference_prepare(&prepared), 0); /* 缺少周期策略。 */
     zassert_is_null(prepared);
     zassert_ok(dp_register_model_period(period));
     model_field.dec_p = 2;
@@ -243,7 +243,7 @@ ZTEST(reference_configuration, test_original_tables_validate_before_initializati
     zassert_equal(cfg->collect_count, 1);
     struct co_cfg poll;
     zassert_not_null(dp_config_collect(cfg, 0, &poll));
-    zassert_is_null(cfg->collect); /* No full table copy in RAM. */
+    zassert_is_null(cfg->collect); /* 不在 RAM 中复制整张表。 */
     zassert_equal(poll.address, 500);
     zassert_equal(poll.period_ms, 8000);
     zassert_equal(poll.fields[0].order, DP_HIGH_WORD_FIRST);
@@ -270,7 +270,7 @@ ZTEST(reference_configuration, test_original_tables_validate_before_initializati
     zassert_equal(dp_get_sig_value(11, 10, sizeof(value), value), sizeof(value));
     zassert_mem_equal(value, remote, sizeof(remote));
 
-    /* Overrides use signal keys, not addresses of temporary stack views. */
+    /* 覆盖项使用信号键，不使用临时栈视图的地址。 */
     DM_SIG_DATA_S limits = {.def_value.u16 = 42, .max_value.u16 = 100};
     zassert_ok(dp_set_para_def_range(247, 1, &limits));
     limits = (DM_SIG_DATA_S){.def_value.u32 = 123, .max_value.u32 = UINT32_MAX};
@@ -283,15 +283,15 @@ ZTEST(reference_configuration, test_original_tables_validate_before_initializati
     zassert_equal(local_signals[0].sig_id, 1);
 
     zassert_equal(dp_reference_init(), -ENOTSUP);
-    zassert_equal(init_calls, 0); /* Validate every timer before INIT effects. */
+    zassert_equal(init_calls, 0); /* 产生 INIT 副作用前先校验所有定时器。 */
     timers[0].type = 0;
     zassert_equal(dp_reference_init(), -EIO);
     zassert_equal(init_calls, 1);
     zassert_not_equal(k_sem_take(&timer_fired, K_MSEC(40)), 0);
     zassert_equal(dp_get_sig_value(247, 1, 1, value), 1);
-    zassert_equal(value[0], 31); /* Earlier successful INIT is not rolled back. */
+    zassert_equal(value[0], 31); /* 此前成功的 INIT 不回滚。 */
     zassert_ok(dp_set_init(247));
-    zassert_equal(init_calls, 2); /* Per-device INIT includes the registered table. */
+    zassert_equal(init_calls, 2); /* 按设备执行 INIT 时也包含已登记表。 */
     reject_init = false;
     zassert_ok(dp_reference_init());
     zassert_equal(init_calls, 3);

@@ -14,9 +14,9 @@ target_sources(app PRIVATE src/storage_fault.c)
 
 target_sources(app PRIVATE src/modules.c)
 
-# Inject one backend initialization failure to verify serial rollback.
+# 注入一次后端初始化失败，验证串行回滚。
 zephyr_ld_options(-Wl,--wrap=modbus_init_server)
-# Inject parameter faults at named steps on the external NVS boundary only.
+# 仅在外部 NVS 接口的指定步骤注入参数故障。
 zephyr_ld_options(-Wl,--wrap=nvs_mount -Wl,--wrap=nvs_write -Wl,--wrap=nvs_delete)
 zephyr_ld_options(-Wl,--wrap=k_malloc)
 

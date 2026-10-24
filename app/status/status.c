@@ -13,7 +13,7 @@
 #include <errno.h>
 
 LOG_MODULE_REGISTER(app_status, LOG_LEVEL_INF);
-/* Application lifecycle adapter; status-only tests supply this boundary. */
+/* 应用生命周期适配接口；仅测试状态模块时由测试提供实现。 */
 void protocol_stop(void);
 static const struct led_dt_spec run_led = LED_DT_SPEC_GET(DT_ALIAS(led0));
 static const struct watchdog_config watchdog = {
@@ -53,7 +53,7 @@ static const enum status_action policies[STATUS_FAULT_COUNT] = {
     [STATUS_FAULT_TASK_TIMEOUT] = CONFIG_APP_FAULT_TASK_TIMEOUT_ACTION,
 };
 
-/* Reboot is a hardware boundary. Returning is supported by test adapters. */
+/* 复位属于硬件接口；测试适配实现允许调用返回。 */
 __weak void status_request_reboot(void) { sys_reboot(SYS_REBOOT_COLD); }
 
 enum status_phase status_phase_get(void)
@@ -145,14 +145,14 @@ static void task_expired(void)
                               status_phase_get(), -ETIMEDOUT);
 }
 
-/* Caller holds lock. The task snapshot also closes the brief interval between
- * claiming a timeout and reporting its policy outside this lock. */
+/* 调用方持有锁。
+ * 任务快照也用于封闭“已确定超时、尚未在锁外执行故障策略”的短暂窗口。 */
 static bool task_monitor_stopped(void)
 {
     return application.phase == STATUS_FAULT_LOCKED || application.task_fault.task.name;
 }
 
-/* Caller holds lock. A single one-shot timer follows the earliest deadline. */
+/* 调用方持有锁；用一个单次定时器跟踪最早期限。 */
 static void schedule_next_task(void)
 {
     struct status_task *next = NULL;
@@ -171,7 +171,7 @@ static int task_service_error(void)
     return watchdog_error(&monitor);
 }
 
-/* Caller holds lock. Policy runs after unlocking, including ISR expiry. */
+/* 调用方持有锁；释放锁后执行策略，定时器中断超时也遵循此顺序。 */
 static bool task_trip(struct status_task *task)
 {
     if (task_monitor_stopped()) { return false; }
@@ -320,7 +320,7 @@ static void indicate(struct k_work *work)
         (void)status_report_fault(STATUS_FAULT_LED, phase, err);
     }
     if (status_phase_get() == STATUS_FAULT_LOCKED && !indicator_on) { (void)output(true); }
-    /* Held faults still need a functioning external feed after main stops. */
+    /* main 停止后，故障留驻仍需正常驱动外部看门狗。 */
     k_spinlock_key_t key = k_spin_lock(&lock);
     bool check_watchdog = application.fault.action != STATUS_RESET;
     k_spin_unlock(&lock, key);

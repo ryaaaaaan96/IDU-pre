@@ -6,7 +6,7 @@
 #include <zephyr/sys/byteorder.h>
 #include <modbus_support/transport.h>
 
-/* Standard functions also work on Zephyr RAW loopback client interfaces. */
+/* 标准功能码也可用于 Zephyr RAW 回环客户端接口。 */
 static int transfer(int iface, struct modbus_adu *adu)
 {
     if (adu->length < 4 || adu->length > sizeof(adu->data)) { return -EINVAL; }

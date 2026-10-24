@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate a small signed image with the upstream PUBLIC TEST key."""
+"""使用上游公开测试密钥生成小型签名镜像。"""
 import importlib.util
 from pathlib import Path
 import struct

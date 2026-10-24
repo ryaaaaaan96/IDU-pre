@@ -23,7 +23,7 @@ struct stored_point {
     uint16_t quality;
 };
 static struct stored_point states[CONFIG_DP_POINTS_MAX_POINTS];
-/* One application-owned sample worker; allocated before DP becomes ready. */
+/* 应用持有唯一的样本任务，DP 就绪前完成分配。 */
 static struct dp_point_batch *sample_batch;
 static uint32_t generation;
 static int64_t reset_epoch[CONFIG_DP_MAX_DEVICES];
@@ -41,8 +41,8 @@ K_MUTEX_DEFINE(initialization_lock);
 K_MUTEX_DEFINE(publish_lock);
 K_SEM_DEFINE(sample_slots, CONFIG_DP_POINTS_QUEUE_DEPTH, CONFIG_DP_POINTS_QUEUE_DEPTH);
 static k_tid_t publisher;
-/* zbus needs one temporary buffer and one clone during each publication.
- * Reserved slots + serialized publishers leave these two buffers available.
+/* 每次发布时，zbus 需要一个临时缓冲和一个克隆缓冲。
+ * 预留槽位并串行化发布者，确保这两个缓冲可用。
  */
 NET_BUF_POOL_FIXED_DEFINE(sample_pool, CONFIG_DP_POINTS_QUEUE_DEPTH + 2,
                          sizeof(struct dp_point_batch), sizeof(struct zbus_channel *), NULL);
@@ -56,7 +56,7 @@ ZBUS_CHAN_DEFINE(dp_samples_chan, struct dp_point_batch, batch_valid, NULL,
 ZBUS_CHAN_DEFINE(dp_processed_chan, struct dp_processed_event, NULL, NULL,
                  ZBUS_OBSERVERS_EMPTY, ZBUS_MSG_INIT(0));
 
-/* 4.4.2 checks this global limit even when using an isolated fixed-size pool. */
+/* 即使使用隔离的固定大小池，4.4.2 也会检查此全局限制。 */
 #if defined(CONFIG_ZBUS_MSG_SUBSCRIBER_BUF_ALLOC_STATIC)
 BUILD_ASSERT(sizeof(struct dp_point_batch) <=
              CONFIG_ZBUS_MSG_SUBSCRIBER_NET_BUF_STATIC_DATA_SIZE);
@@ -67,7 +67,7 @@ static bool same_key(struct dp_key a, struct dp_key b)
     return a.dev_id == b.dev_id && a.sig_id == b.sig_id;
 }
 
-/* Caller holds store_lock, including the final commit check after callbacks. */
+/* 调用方持有 store_lock，包括回调后的最终提交检查。 */
 static bool obsolete_samples(const struct dp_point_update *values, size_t count, int64_t sampled_at)
 {
     for (size_t i = 0; i < count; ++i) {
@@ -177,7 +177,7 @@ int dp_validate(const struct dp_equip_cfg *cfg)
                 LOG_ERR("Invalid poll field %u:%u width=%u",c->dev_id,field->sig_id,field->width);
                 return -EINVAL;
             }
-            /* Exactly one collection owner for each signal. */
+            /* 每个信号只能有一个采集所有者。 */
             for (size_t b = 0; b <= i; ++b) {
                 struct co_cfg other_scratch;
                 const struct co_cfg *other = dp_config_collect(cfg, b, &other_scratch);
@@ -313,7 +313,7 @@ static int validate_batch(const struct dp_point_batch *batch)
         (batch->flags & ~DP_QUALITY_SIMULATED)) {
         return -EINVAL;
     }
-    /* Validate the complete batch before publishing any changes. */
+    /* 发布任何变更前，先校验完整批次。 */
     for (size_t i = 0; i < batch->count; ++i) {
         const struct dp_point_update *update = &batch->points[i];
         int index = dp_config_index(equipment, update->key);
@@ -423,8 +423,8 @@ int dp_wait_processed(uint32_t ticket, k_timeout_t timeout)
         }
         err = k_condvar_wait(&completion_changed, &completion_lock,
                              sys_timepoint_timeout(deadline));
-        /* Zephyr 4.4.2 reacquires the mutex only on a successful wake.
-         * Timeout leaves it unlocked; never unlock another thread's mutex.
+        /* Zephyr 4.4.2 仅在成功唤醒后重新获取互斥锁。
+         * 超时返回时锁未持有，不得解锁其他线程的互斥锁。
          */
         if (err) { return -ETIMEDOUT; }
     }
@@ -535,8 +535,7 @@ void dp_samples_task(void *a, void *b, void *c)
                 complete_ticket(batch->ticket);
                 continue;
             }
-            /* Callback validation rejects this transaction before the usual
-             * sample commit. Expose invalid input quality, retaining old values. */
+            /* 回调校验在正常样本提交前拒绝此事务；保留旧值，并公开无效的输入质量。 */
             for (size_t i = 0; i < batch->count; ++i) {
                 batch->points[i].error = err; quality[i] = DP_QUALITY_BAD_VALUE;
             }
@@ -644,8 +643,8 @@ int dp_commit(const struct dp_point_update *values, size_t count)
     return dp_commit_sample(values, count, 0, k_uptime_get());
 }
 
-/* Reset only registered remote acquisition devices. Samples already queued at
- * reset time cannot overwrite the reset state; later fresh polls resume it.
+/* 仅重置已登记的远端采集设备；重置时已排队的样本不能覆盖重置后的状态，
+ * 后续新轮询才能恢复。
  */
 int dp_store_reset_device(uint16_t dev)
 {
@@ -709,8 +708,9 @@ int dp_invalidate_acquired_device(uint16_t dev, int error, int64_t observed_at)
     }
     k_mutex_unlock(&store_lock);
 #if defined(CONFIG_DP_PARAMS)
-    /* Never hold store_lock while entering the parameter cache. Parameter sample
-     * commits check the epoch under cache_lock, so no pre-offline sample escapes.
+    /* 进入参数缓存时不得持有 store_lock。
+     * 参数样本在 cache_lock 内检查代次，
+     * 防止离线前的样本绕过失效处理。
      */
     dp_params_invalidate_acquired_device(dev, error, observed_at);
 #endif

@@ -1,7 +1,7 @@
-"""Build-local Zephyr 4.4.2 adaptations. Never modifies the west checkout.
-
-Keep anchors strict: a Zephyr upgrade must review RX scheduling, whole-PDU
-writes, and RAW exception validation before accepting a different source.
+"""仅在构建目录中适配 Zephyr 4.4.2，
+绝不修改 West 检出的源码。锚点须严格匹配；Zephyr 升级时，
+必须先审查 RX 调度、完整 PDU 写入和 RAW 异常校验，
+才能接受不同的源码。
 """
 from pathlib import Path
 import hashlib
@@ -48,8 +48,8 @@ for name in EXPECTED_SHA256:
     if name == "modbus_core.c":
         source = replace_once(source, "K_USEC(ctx->rxwait_to)",
                               "mb_client_response_timeout(ctx)")
-        # Ordinary missing peers are reported by application state transitions;
-        # retain per-attempt detail at debug level without flooding the console.
+        # 普通远端无响应由应用状态转换报告；
+        # 每次尝试的详细信息保留在调试级别，避免刷屏。
         source = replace_once(source, 'LOG_WRN("Client wait-for-RX timeout");',
                               'LOG_DBG("Client wait-for-RX timeout");')
         source = replace_once(source, "static void modbus_rx_handler", '#include "core_io.h"\n\nstatic void modbus_rx_handler')

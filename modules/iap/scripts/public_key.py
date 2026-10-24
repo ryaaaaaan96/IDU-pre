@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate public MCUboot verification material and the legacy transport key."""
+"""生成 MCUboot 公钥验签材料和旧版传输密钥。"""
 import hashlib
 from pathlib import Path
 import sys

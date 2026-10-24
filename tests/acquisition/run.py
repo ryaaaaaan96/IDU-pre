@@ -1,11 +1,11 @@
-"""Run acquisition lifecycle cases with one product startup per native process."""
+"""在独立 native 进程中运行采样生命周期场景，每个进程仅启动产品一次。"""
 import re
 import subprocess
 import sys
 
 executable = sys.argv[1]
 listing = subprocess.run([executable, "-list"], capture_output=True, text=True, timeout=30)
-# Ztest may report an unrun suite on -list; validate the discovered cases instead.
+# Ztest 的 -list 可能报告套件未运行，应校验实际发现的用例列表。
 cases = re.findall(r"^acquisition::test_\w+$", listing.stdout, re.M)
 if not cases:
     raise SystemExit("No acquisition cases found: " + listing.stdout + listing.stderr)

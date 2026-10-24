@@ -31,10 +31,9 @@ typedef struct {
 typedef void (*PARA_WRITE_LOG)(DP_PARA_LOG_DATA *data);
 typedef void (*PARA_RECOVER_FINISH)(void);
 
-/* Register before dp_init. Callbacks are optional. Range/load/migration
- * callbacks may also run during configuration lookup. They must be deterministic,
- * nonblocking, and must not change configuration or reenter DP APIs.
- * Change/log callbacks are delivered asynchronously by the DP worker.
+/* 在 dp_init 前登记；回调可选。
+ * 范围、加载和迁移回调也可能在查询配置时执行，必须确定、非阻塞，
+ * 不得修改配置或重入 DP 接口。变更和日志回调由 DP 任务异步调用。
  */
 void pltcb_reg_para_is_load_def_cb(PARA_GET_IS_LOAD_DEF callback);
 bool pltcb_para_get_is_load_def(uint16_t dev, uint16_t sig, uint8_t size, uint8_t *value);
@@ -47,14 +46,14 @@ void pltcb_para_write_log(DP_PARA_LOG_DATA *data);
 void pltcb_reg_para_recover_finish_cb(PARA_RECOVER_FINISH callback);
 void pltcb_para_recover_fininsh(void);
 
-/* Register before dp_init(). Successful initialization freezes registration.
- * Device table and legacy default/range callbacks retain their contracts.
- * New products put data directly in DM_SIG_CFG_S, controlling range checks and
- * default restoration with FLAG_RANGE_CHECK / FLAG_NO_RESTORE in sig_flag. The
- * default/range callback overrides row data and is incompatible with country
- * overrides. Without it, pltcb_para_get_range_def reads the selected row data
- * and reports recover_default=false, never forcing defaults over NVS.
- * CONFIG_DP_REFERENCE_TABLES exposes supported const tables to the engine.
+/* 在 dp_init() 前登记，成功初始化后冻结登记。
+ * 设备表和旧版默认值、范围回调保留原契约。
+ * 新产品直接将数据写入 DM_SIG_CFG_S，
+ * 通过 sig_flag 中的 FLAG_RANGE_CHECK / FLAG_NO_RESTORE 控制范围检查和默认值恢复。
+ * 默认值、范围回调覆盖行数据，与国家覆盖配置互斥。未提供回调时，
+ * pltcb_para_get_range_def 读取所选行的数据并报告 recover_default=false，
+ * 不会强制用默认值覆盖 NVS。
+ * CONFIG_DP_REFERENCE_TABLES 向引擎提供受支持的常量表。
  */
 void pltcb_reg_cfg_get_dev_tbl(CFG_GET_DEV_TBL callback);
 const DEV_TABLE_S *pltcb_cfg_get_dev_tbl(void);
@@ -72,31 +71,30 @@ const INIT_DATA_SET_S *pltcb_cfg_get_init_reg_tbl(void);
 void pltcb_reg_cfg_get_init_reg_num(CFG_GET_INIT_REG_NUM callback);
 uint16_t pltcb_cfg_get_init_reg_num(void);
 
-/* Explicit Zephyr startup stage after parameter recovery. Validate all global
- * INIT/TIMER registrations, execute INIT in table order, then enable timers.
- * Callbacks receive four NULL arguments and use dp_* transaction helpers.
- * type=0 periodic timers are supported; other types are rejected. Timer work
- * only submits copied requests to the DP business worker. Successful initialization is
- * one-time; after INIT failure, earlier successful effects are not rolled back.
+/* 参数恢复后的显式 Zephyr 启动阶段。
+ * 校验所有全局 INIT/TIMER 登记项，按表顺序执行 INIT，
+ * 再启用定时器。回调接收四个 NULL 参数，
+ * 使用 dp_* 事务辅助接口。仅支持 type=0 周期定时器，
+ * 其他类型被拒绝。定时工作只向 DP 业务任务提交已复制请求。
+ * 成功初始化仅允许一次；INIT 失败时不回滚此前已成功的副作用。
  */
 int dp_reference_init(void);
 
 struct dp_equip_cfg;
-/* Explicit Zephyr configuration extension for products already using native
- * tables (including persistence/migration hooks). Mutually exclusive with the
- * original DEV_TABLE_S provider; no table pointer casts or ARC wrapper.
+/* 为已使用原生表的产品提供显式 Zephyr 配置扩展，
+ * 包含持久化与迁移钩子。与原始 DEV_TABLE_S 提供器互斥，
+ * 不强转表指针，也不增加 ARC 包装层。
  */
 typedef const struct dp_equip_cfg *(*dp_config_provider_fn)(void);
 int dp_register_config_provider(dp_config_provider_fn provider);
 
-/* UPP model rqst_cyl retains its encoded scheduling policy. Modbus tables
- * configure period_ms directly and require no conversion registration.
+/* UPP 模型的 rqst_cyl 保留编码后的调度策略。
+ * Modbus 表直接配置 period_ms，无需登记换算函数。
  */
 typedef int (*dp_model_period_fn)(uint8_t encoded, uint32_t *period_ms);
 int dp_register_model_period(dp_model_period_fn convert);
-/* Validate and expose immutable reference table views before starting workers.
- * The returned configuration belongs to DP and is valid until reset. No copies
- * of point/collect/transmit descriptors are allocated. Register providers first.
+/* 启动任务前校验并提供不可变参考表视图。返回配置归 DP 所有，
+ * 复位前有效；不分配测点、采集或转发描述符副本。须先登记提供器。
  */
 int dp_reference_prepare(const struct dp_equip_cfg **cfg);
 

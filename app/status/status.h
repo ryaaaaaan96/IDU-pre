@@ -4,13 +4,13 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-/* Status owns this cadence; it does not indicate sampling progress. */
+/* 指示节奏归 status 管理，不表示采样进度。 */
 #define STATUS_LED_HALF_PERIOD_MS 100
 
 enum status_phase {
     STATUS_UNCONFIGURED,
     STATUS_STARTING,
-    STATUS_RUN, /* Initialization complete; acquisition cycles may start. */
+    STATUS_RUN, /* 初始化完成，可以开始采样周期。 */
     STATUS_SAMPLING,
     STATUS_PUBLISHING,
     STATUS_SERVICING_COMMUNICATION,
@@ -32,30 +32,30 @@ struct status_application_fault {
     int error;
     int64_t occurred_ms;
 };
-/* Consistent RAM diagnosis, including faults reported from an ISR. */
+/* 一致的 RAM 诊断快照，也覆盖 ISR 报告的故障。 */
 int status_application_fault_get(struct status_application_fault *snapshot);
 
 struct status_degradation {
     uint16_t remote_offline, remote_initializing;
     int storage_error;
 };
-/* Protocol diagnostics do not clear terminal faults or stop local sampling. */
+/* 协议诊断不会清除终止故障，也不会停止本地采样。 */
 void status_update_degradation(uint16_t offline, uint16_t initializing, int storage_error);
 struct status_degradation status_degradation_get(void);
 
-/* One private product status, initialized once per boot. Repeated init returns -EALREADY.
- * Fast acquisition phases only record progress; LED policy lives in status.c.
- * Faults retain their first phase/error and cannot be cleared without reset.
+/* 产品状态为私有单例，每次上电仅初始化一次；
+ * 重复初始化返回 -EALREADY。采样阶段切换仅记录进度，
+ * LED 策略归 status.c。故障保留首次阶段和错误，
+ * 复位前不可清除。
  */
-/* Initializes status, LED and (unless APP_DEBUG_SKIP_WATCHDOG) watchdog.
- * The application enters STATUS_RUN
- * after all startup services succeed. */
+/* 初始化状态、LED 和看门狗（启用 APP_DEBUG_SKIP_WATCHDOG 时跳过看门狗）。
+ * 所有启动服务成功后，应用进入 STATUS_RUN。 */
 int status_init(void);
 void status_set_phase(enum status_phase phase);
 int status_progress(void);
 enum status_phase status_phase_get(void);
-/* ISR-safe, retains the first error. Continue returns 0; terminal returns error
- * if reset did not take control. Watchdog failure can escalate a held fault. */
+/* 可在 ISR 中调用，并保留首个错误。继续策略返回 0；
+ * 终止策略在复位未接管时返回错误。喂狗失败可将留驻故障升级为复位。 */
 int status_report_fault(enum status_fault fault,
                         enum status_phase phase, int error);
 
@@ -73,8 +73,8 @@ struct status_task_snapshot {
     int64_t last_feed_ms;
     uint32_t flags;
 };
-/* Caller-owned, zero-initialize once and keep alive. Fields are private state;
- * access through the snapshot APIs, not by modifying this object. */
+/* 对象由调用方持有，仅清零一次并保持存活。字段属于内部状态，
+ * 应通过快照接口访问，不得直接修改。 */
 struct status_task {
     struct status_task_snapshot state;
     int64_t deadline_ticks;
@@ -87,18 +87,17 @@ struct status_fault_snapshot {
     int error;
     int feed_error;
 };
-/* Configuration values are copied; the task and name remain caller-owned.
- * Register/feed/sleep are thread APIs. Snapshot queries are also ISR-safe. */
-/* Register immediately starts the deadline. Active duplicates return -EALREADY.
- * No fixed slots or allocation: each caller supplies its own context.
- * Failures leave the context unchanged. A global
- * latched failure rejects register/feed/sleep with -ECANCELED until reset. */
+/* 配置值会复制，任务对象和名称仍归调用方持有。
+ * 登记、心跳和休眠仅在线程中调用；快照查询也可在 ISR 中调用。 */
+/* 登记后立即开始计时；重复登记活动任务返回 -EALREADY。
+ * 没有固定槽位或动态分配，每个调用方提供自己的上下文。失败不修改上下文；
+ * 全局故障锁存后，登记、心跳和休眠返回 -ECANCELED，直到复位。 */
 int status_register(struct status_task *task, const struct status_task_config *config);
 int status_feed(struct status_task *task);
-/* Cancel this task's deadline only, keep STATUS_TASK_SLEEP_FOREVER and diagnostic
- * values. Idempotent; status_feed cannot resume it. Register again to resume. */
+/* 仅取消此任务的期限，保留 STATUS_TASK_SLEEP_FOREVER 和诊断值；
+ * 操作幂等。status_feed 不能恢复监控，须重新登记。 */
 int status_sleep_forever(struct status_task *task);
-/* -ENOENT if never registered / no task fault. No query mutates state. */
+/* 从未登记或没有任务故障时返回 -ENOENT；查询不修改状态。 */
 int status_task_get(const struct status_task *task, struct status_task_snapshot *snapshot);
 int status_fault_get(struct status_fault_snapshot *snapshot);
 

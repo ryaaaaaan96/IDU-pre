@@ -1,4 +1,4 @@
-/* IAP staging and independent NVS result journal. */
+/* IAP 暂存区和独立的 NVS 结果日志。 */
 / {
     chosen {
         iap,staging = &iap_staging;

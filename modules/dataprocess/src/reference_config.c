@@ -177,8 +177,8 @@ static void timer_due(struct k_work *work)
     struct reference_timer *timer = CONTAINER_OF(k_work_delayable_from_work(work),
                                                  struct reference_timer, work);
     int err = dp_reference_submit(timer->function, true);
-    /* Do not execute application callbacks on the system workqueue. A full
-     * business queue retains this timer for a bounded retry, without spinning.
+    /* 不得在系统工作队列执行应用回调。业务队列满时保留此定时器，进行有界重试，
+     * 避免忙等。
      */
     k_work_reschedule(&timer->work, K_MSEC(err ? MIN(timer->period_ms, 10U) :
                                                timer->period_ms));
@@ -239,8 +239,8 @@ out:
 }
 
 #if defined(CONFIG_DP_REFERENCE_TABLES)
-/* Only transport identities and the configuration object need writable storage.
- * All three source tables and defaults stay in application-owned flash.
+/* 仅传输标识和配置对象需要可写存储；
+ * 三张源表及默认值均保留在应用持有的 Flash 中。
  */
 static struct dp_device_cfg devices[CONFIG_DP_MAX_DEVICES];
 static struct dp_equip_cfg compiled;
@@ -261,8 +261,8 @@ static int point_values(uint8_t dev, const DM_SIG_CFG_S *signal, struct dp_point
 {
     if (!signal->sig_size || signal->sig_size > DP_POINT_WORDS * 2 ||
         signal->sig_size > 144 || !signal->sig_id) { return -EINVAL; }
-    /* A reference parameter that is also live telemetry needs an explicit
-     * product model; importing it must not silently change persistence rules.
+    /* 同时作为实时遥测的参考参数需要明确的产品模型；
+     * 导入时不得悄悄改变持久化规则。
      */
     if (signal->sig_flag & ~(FLAG_PERSISTENCE | FLAG_COLLECT | FLAG_RT_STORE |
                             FLAG_READ_CALLBACK | FLAG_PERSISTENCE_SYNC |
@@ -316,8 +316,8 @@ static int point_values(uint8_t dev, const DM_SIG_CFG_S *signal, struct dp_point
         defaults = (DM_SIG_DATA_S){0};
         if (get_range(dev, signal->sig_id, &defaults, &recover_default)) { return -EINVAL; }
     }
-    /* Forcing defaults over an existing NVS record is a product migration
-     * decision, not a safe generic interpretation of this callback flag.
+    /* 强制以默认值覆盖现有 NVS 记录属于产品迁移决策，
+     * 不能将此回调标志普遍理解为可安全覆盖。
      */
     if (recover_default && (signal->sig_flag & FLAG_PERSISTENCE)) {
         return -ENOTSUP;
@@ -446,7 +446,7 @@ static int reference_collect(const struct dp_equip_cfg *cfg, size_t index,
                     if (index) { --index; continue; }
                     if (!sig || row->reg_num != (sig->sig_size + 1U) / 2U ||
                         (row->reg_type != 3 && row->reg_type != 4)) { return -EINVAL; }
-                    /* Each row is an exact request, so FRAME already holds. */
+                    /* 每行都是精确请求，因此已满足 FRAME 约束。 */
                     if ((row->flag & ~(((sig->sig_flag & FLAG_COLLECT) ? 7U : 1U) | CO_TABLE_INIT)) ||
                         row->data_type || row->scan_pri) { return -ENOTSUP; }
                     *poll = (struct co_cfg){.dev_id = dev->dev_id,
@@ -472,8 +472,8 @@ static int reference_collect(const struct dp_equip_cfg *cfg, size_t index,
                         (uint32_t)row->mod_data_offset + row->mod_data_len > 65536U) {
                         return -EINVAL;
                     }
-                    /* The model backend provides decoded words; scale/type
-                     * conversion and UPP wire framing are deliberately absent.
+                    /* 模型后端提供已解码的字数据；此处不执行比例、类型转换，
+                     * 也不封装 UPP 通信报文。
                      */
                     if ((row->rw_mode != 1 && row->rw_mode != 3) ||
                         row->byte_order != 0 || row->set_pri ||
@@ -534,9 +534,9 @@ static int compile_tables(void)
         .reference_devices = table, .reference_device_count = count,
         .point_get = reference_point, .collect_get = reference_collect,
         .transmit_get = reference_transmit,
-        /* Preserve exact complete-point reads for overlapping legacy tables. */
+        /* 对旧版重叠表保留精确且完整的测点读取规则。 */
         .exact_overlapping_reads = true};
-    /* Validate every catalog pointer before any cross-table lookup. */
+    /* 跨表查找前先校验所有目录指针。 */
     for (size_t d = 0; d < count; ++d) {
         const DEV_TABLE_S *dev = &table[d];
         if (!dev->dev_id || dev->ptl_tbl_cfg[0].proto_type != PRO_DATA_PROCESS) { return -EINVAL; }
@@ -549,7 +549,7 @@ static int compile_tables(void)
             if (!group->sig_num || !group->pst_table) { return -EINVAL; }
             if (!t) { compiled.point_count += group->sig_num; continue; }
             if (group->proto_type == PRO_MB_SLAVE) { compiled.transmit_count += group->sig_num; }
-            else if (group->proto_type == PRO_MB_MASTER) { /* Count below. */ }
+            else if (group->proto_type == PRO_MB_MASTER) { /* 在下方计数。 */ }
             /* 协议段由 TR 校验/执行，不生成 DP 测点或普通转发行。 */
             else if (group->proto_type == PRO_ADDR_SLAVE) { continue; }
             else if (group->proto_type == PRO_UPP_MASTER) {

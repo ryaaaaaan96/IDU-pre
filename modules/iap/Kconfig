@@ -1,4 +1,4 @@
-# Modules are loaded before subsystem defaults; the first matching range wins.
+# 模块先于子系统默认值加载，第一个匹配的范围生效。
 config MODBUS_BUFFER_SIZE
     range 64 1100 if IAP
 

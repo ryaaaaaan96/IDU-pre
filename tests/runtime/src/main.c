@@ -106,7 +106,7 @@ ZTEST(runtime, test_real_main_fault_policy)
     else if (!strcmp(scenario, "task-timeout")) { expected_fault = STATUS_FAULT_TASK_TIMEOUT; }
     else if (!strcmp(scenario, "storage-degraded")) { expected_fault = STATUS_FAULT_NONE; }
     else { zassert_unreachable("Unknown scenario"); }
-    /* A disconnected peer still consumes UART TX bytes on the physical wire. */
+    /* 即使远端断开，UART 仍会在物理线上发送字节。 */
     uart_emul_callback_tx_data_ready_set(DEVICE_DT_GET(DT_NODELABEL(uart_test)),
                                         discard_transmitted, NULL);
     k_thread_create(&application_thread, application_stack, K_THREAD_STACK_SIZEOF(application_stack),
@@ -153,7 +153,7 @@ ZTEST(runtime, test_real_main_fault_policy)
         zassert_equal(point.quality, DP_QUALITY_GOOD);
     } else {
         zassert_true(terminal_result(STATUS_HOLD), "normal RESET must have exited via reboot");
-        k_msleep(150); /* Current operations reach their cancellation boundary. */
+        k_msleep(150); /* 等待当前操作到达可取消的安全位置。 */
         int before = atomic_get(&samples);
         int sent = atomic_get(&transmitted_bytes);
         const struct device *gpio = DEVICE_DT_GET(DT_NODELABEL(gpio_test));

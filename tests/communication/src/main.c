@@ -238,7 +238,7 @@ ZTEST(communication, test_heap_failure_releases_receive_and_transaction_ownershi
     for (unsigned nth = 1; nth <= 2; ++nth) {
         struct modbus_adu adu = {.unit_id = 1, .fc = 4, .length = 4,
             .data = {0, 7, 0, 1}};
-        fail_allocation(nth); /* Register conversion, then RAW transmit frame. */
+        fail_allocation(nth); /* 先换算寄存器，再发送 RAW 报文。 */
         zassert_equal(co_modbus_transfer(client, 42, &adu), -ENOMEM);
         zassert_is_null(allocation_owner);
         zassert_ok(co_modbus_transfer(client, 43, &adu));
@@ -248,7 +248,7 @@ ZTEST(communication, test_heap_failure_releases_receive_and_transaction_ownershi
     uint16_t word;
     zassert_ok(modbus_read_input_regs(client, 1, 8, &word, 1));
     zassert_equal(word, 0x123c);
-    k_msleep(5); /* Allow protocol completion bookkeeping to release RX copies. */
+    k_msleep(5); /* 等待协议完成记录释放 RX 副本。 */
     key = k_spin_lock(&allocation_lock);
     track_allocations = false;
     size_t outstanding = 0;
@@ -293,7 +293,7 @@ ZTEST(communication, test_device_identity_roundtrip_and_failure_cleanup)
     zassert_equal(sent_device, 45);
     uint16_t word;
     zassert_ok(modbus_read_input_regs(client, 1, 7, &word, 1));
-    zassert_equal(sent_device, 0); /* No identity leaks to direct Zephyr callers. */
+    zassert_equal(sent_device, 0); /* 身份信息不能泄露给直接调用 Zephyr 的使用者。 */
 }
 
 static K_THREAD_STACK_ARRAY_DEFINE(client_stacks, 2, 2048);

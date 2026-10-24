@@ -123,7 +123,7 @@ static void change(uint16_t dev, uint16_t sig, uint8_t size, uint32_t type, cons
 {
     ARG_UNUSED(dev); ARG_UNUSED(sig); ARG_UNUSED(size); ARG_UNUSED(type); ARG_UNUSED(value);
     struct dp_point_state state;
-    zassert_ok(dp_read((struct dp_key){1, 1}, &state)); /* No store/transaction lock held. */
+    zassert_ok(dp_read((struct dp_key){1, 1}, &state)); /* 未持有存储锁或事务锁。 */
     atomic_inc(&changed); k_sem_give(&event_received);
 }
 static int collect(PARA_DATA_S *data, PARA_SET_STATUS done)
@@ -147,8 +147,8 @@ static void mount_test_nvs(struct nvs_fs *fs)
         .sector_size = page.size, .sector_count = area->fa_size / page.size};
     zassert_ok(nvs_mount(fs)); flash_area_close(area);
 }
-/* Seed only individual v2 records. Width conversion is a per-key policy,
- * independent of table order, routes or a global schema fingerprint. */
+/* 仅植入独立的 v2 记录；宽度转换是按键策略，
+ * 与表顺序、路由或全局模式指纹无关。 */
 static void seed_previous_values(void)
 {
     struct nvs_fs fs; mount_test_nvs(&fs);
@@ -207,7 +207,7 @@ ZTEST(reference_services, test_a_per_key_width_conversion)
     zassert_mem_equal(state.value.words, ((uint16_t[]){0x1111, 0x2222, 0x3333}), 6);
     zassert_equal(atomic_get(&migrated), 1);
     zassert_ok(dp_params_reload());
-    zassert_equal(atomic_get(&migrated), 1); /* Converted value saved exactly once. */
+    zassert_equal(atomic_get(&migrated), 1); /* 转换后的值恰好保存一次。 */
 #else
     zassert_false(pltcb_para_size_mismatch_pro(NULL));
 #endif
@@ -215,7 +215,7 @@ ZTEST(reference_services, test_a_per_key_width_conversion)
 
 ZTEST(reference_services, test_native_catalog_and_query_contract)
 {
-    zassert_equal(dp_dev_get_num(), 2); /* Includes local device 1. */
+    zassert_equal(dp_dev_get_num(), 2); /* 包含本地设备 1。 */
     zassert_not_null(dp_dev_get_tbl());
     zassert_equal(dp_dev_get_from_devid(2)->dev_code, 42);
     zassert_equal(dp_dev_get_code(2), 42); zassert_equal(dp_dev_get_port(2), 1);
@@ -226,7 +226,7 @@ ZTEST(reference_services, test_native_catalog_and_query_contract)
     zassert_equal(dp_dev_get_from_portid(900, &copy), -EINVAL);
     uint16_t count = 123;
     zassert_is_null(dp_sigcfg_get_by_devid(2, PRO_DATA_PROCESS, &count));
-    zassert_equal(count, 0); /* Native structs are never cast to original tables. */
+    zassert_equal(count, 0); /* 不得将原生结构强转为原始表。 */
     zassert_is_null(dp_devid_get_prototbl(2, PRO_MB_MASTER));
     int previous = init_calls;
     zassert_ok(dp_set_init(1)); zassert_equal(init_calls, previous + 1);

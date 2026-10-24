@@ -1,5 +1,5 @@
-# Fail during configuration if a required application service was disabled.
-# Modules remain independently optional for their other consumers and tests.
+# 必需的应用服务被禁用时，在配置阶段报错。
+# 各模块供其他调用方和测试使用时，仍可独立选择启用。
 set(required_services
   BOOTLOADER_MCUBOOT
   DATAPROCESS DP_PROCESS DP_REFERENCE_TABLES DP_TABLE_REGISTRY DP_PARAMS COLLECT CO_MODBUS_ADAPTER CO_MODBUS_RAW_PORT TRANSMIT
@@ -11,8 +11,8 @@ foreach(feature IN LISTS required_services)
   endif()
 endforeach()
 
-# The legacy IAP receiver intentionally ignores unit 247. Reject that product
-# combination before opening services, while keeping non-IAP station 247 usable.
+# 旧版 IAP 接收器会忽略站号 247；此产品组合应在
+# 开放服务前拒绝，但不限制未启用 IAP 时使用站号 247。
 if(CONFIG_IDU_IAPV3 AND CONFIG_IDU_FORWARD_UNIT EQUAL 247)
   message(FATAL_ERROR "IDU-pre IAPv3 does not support CONFIG_IDU_FORWARD_UNIT=247")
 endif()

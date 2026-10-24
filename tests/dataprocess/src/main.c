@@ -171,7 +171,7 @@ static void on_complete(const struct dp_process_result *result, void *user)
     k_sem_give(&completed);
 }
 
-/* A later FIFO ticket also waits for calls that deliberately omit the ticket. */
+/* 后续 FIFO 票据也会等待此前有意省略票据的调用完成。 */
 static void setter_barrier(void)
 {
     const uint16_t words[] = {0, 0};
@@ -185,7 +185,7 @@ ZTEST(dataprocess, test_setter_copies_u32_words_and_runs_handler)
 {
     uint16_t words[] = {0xffff, 0x1234};
     uint32_t ticket = 0;
-    /* Keep the consumer from reading until the caller has reused its buffer. */
+    /* 调用方复用缓冲之前，先阻止消费者读取。 */
     k_sched_lock();
     int err = dp_submit_sig_value(setter_input, words, ARRAY_SIZE(words), K_NO_WAIT, &ticket);
     words[0] = words[1] = 0;
@@ -432,7 +432,7 @@ ZTEST(dataprocess, test_declarative_lifecycle_rolls_back_timers_and_starts_once)
         .init_keys = init_keys, .init_count = ARRAY_SIZE(init_keys),
         .timers = &timer, .timer_count = 1,
     };
-    /* Invalid plans cannot run INIT or reserve timers. */
+    /* 无效计划不得运行 INIT，也不得预留定时器。 */
     plan.initialize_all = true;
     zassert_equal(dp_process_init(&plan), -EINVAL);
     zassert_equal(init_count, 0);
@@ -460,7 +460,7 @@ ZTEST(dataprocess, test_declarative_lifecycle_rolls_back_timers_and_starts_once)
     zassert_equal(init_order[1], 3);
     k_sleep(K_MSEC(50));
     zassert_equal(timer_count, 0);
-    /* A failed initialization returns every reserved slot. */
+    /* 初始化失败后释放所有预留槽位。 */
     for (size_t i = 0; i < ARRAY_SIZE(occupied); ++i) {
         occupied[i] = dp_process_timer_start(input, 1000, 0);
         zassert_true(occupied[i] >= 0);

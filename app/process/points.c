@@ -8,8 +8,8 @@
 #include <string.h>
 #include <zephyr/sys/byteorder.h>
 
-/* One retained heap workspace; a publisher owns it through zbus's copy.
- * This does not share the DP consumer's buffer or put a batch on main's stack. */
+/* 保留一份堆工作区；发布者持续持有它，直到 zbus 完成复制。
+ * 不共用 DP 消费者的缓冲区，也不把批次放在 main 栈上。 */
 static struct dp_point_batch *local_batch;
 K_MUTEX_DEFINE(local_publish_lock);
 
@@ -61,7 +61,7 @@ int32_t points_default_callback(FUNC_PARA_ALL *in, FUNC_PARA_ALL *out,
     if (!in || in->para_num != 1 || !in->para_all) {
         return -EINVAL;
     }
-    /* DP already loaded the registered default. INIT marks identities ready. */
+    /* DP 已加载登记的默认值；INIT 将标识信息标记为就绪。 */
     return in->type == DP_PARA_INIT ? dp_set_para_value(in->para_all) :
            in->type == DP_PARA_SET ? -EACCES : 0;
 }

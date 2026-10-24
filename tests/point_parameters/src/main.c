@@ -41,7 +41,7 @@ static int country_override(uint16_t country, uint16_t dev, uint16_t sig,
                              DM_SIG_DATA_S *data, bool *restore)
 {
     ARG_UNUSED(dev);
-    if (country == 2) { return 7; } /* Positive status is not a successful override. */
+    if (country == 2) { return 7; } /* 正状态码不表示成功覆盖。 */
     if (country == 3) { return -EIO; }
     if (country != 1) { return -ENOTSUP; }
     if (sig == 1) {
@@ -49,7 +49,7 @@ static int country_override(uint16_t country, uint16_t dev, uint16_t sig,
         *restore = true;
         return 0;
     }
-    /* A declined override must not leak partial modifications. */
+    /* 拒绝覆盖时不得泄露部分修改。 */
     memset(data, 0xaa, sizeof(*data)); *restore = false;
     return -ENOENT;
 }
@@ -79,7 +79,7 @@ static void *setup(void)
     pltcb_reg_para_range_def_cb(NULL);
     zassert_equal(dp_register_parameter_country(1, NULL), -EINVAL);
     zassert_ok(dp_register_parameter_country(2, country_override));
-    zassert_equal(dp_init(), -1); /* Invalid provider status cannot initialize DP. */
+    zassert_equal(dp_init(), -1); /* 提供器返回无效状态时不能初始化 DP。 */
     zassert_ok(dp_register_parameter_country(IS_ENABLED(CONFIG_TEST_COUNTRY_OVERRIDE) ? 1 : 0,
                                              country_override));
     zassert_ok(dp_init()); fixture_start_dp();
@@ -103,7 +103,7 @@ ZTEST(point_parameters, test_country_lookup_is_read_only_and_sparse)
     zassert_ok(dp_point_parameters_get(1, 1, 1, &data, &restore));
     zassert_equal(data.def_value.u16, 33); zassert_equal(data.max_value.u16, 50);
     zassert_ok(dp_point_parameters_get(1, 2, 1, &data, &restore));
-    zassert_equal(data.def_value.u16, 33); /* Shared table, distinct device identity. */
+    zassert_equal(data.def_value.u16, 33); /* 共用点表，但设备身份不同。 */
     zassert_ok(dp_point_parameters_get(1, 1, 2, &data, &restore));
     zassert_equal(data.def_value.u16, 11); zassert_false(restore);
     zassert_equal(value(1), selected_default());
@@ -135,7 +135,7 @@ ZTEST(point_parameters, test_zero_arrays_and_signed_limits)
     zassert_equal(dp_set_sig_value(1, 4, 4, bytes), -ERANGE);
     sys_put_le32((uint32_t)-100, bytes);
     zassert_ok(dp_set_sig_value(1, 4, 4, bytes));
-    write_word(3, UINT16_MAX); /* Omitted bounds retain the full type range. */
+    write_word(3, UINT16_MAX); /* 省略范围时保留类型的完整取值范围。 */
 }
 ZTEST(point_parameters, test_restore_policy_and_nvs_priority)
 {
@@ -144,8 +144,8 @@ ZTEST(point_parameters, test_restore_policy_and_nvs_priority)
     zassert_equal(value(1), 20); zassert_equal(value(2), 21); zassert_equal(value(3), 22);
     zassert_ok(dp_params_restore(1));
     zassert_equal(value(1), selected_default());
-    zassert_equal(value(2), 21); /* Explicit opt-out remains saved and writable. */
-    zassert_equal(value(3), 0); /* Omitted policy retains legacy restore behavior. */
+    zassert_equal(value(2), 21); /* 显式退出恢复的参数仍可保存和写入。 */
+    zassert_equal(value(3), 0); /* 省略策略时保留旧版恢复行为。 */
     zassert_ok(dp_params_reload()); zassert_equal(value(2), 21);
 }
 ZTEST(point_parameters, test_range_flag_supports_zero_only_and_can_be_disabled)
@@ -154,7 +154,7 @@ ZTEST(point_parameters, test_range_flag_supports_zero_only_and_can_be_disabled)
     sys_put_le16(1, bytes);
     zassert_equal(dp_set_sig_value(1, 8, 2, bytes), -ERANGE);
     sys_put_le16(0, bytes); zassert_ok(dp_set_sig_value(1, 8, 2, bytes));
-    write_word(9, UINT16_MAX); /* Nonzero configured bounds are inactive without the flag. */
+    write_word(9, UINT16_MAX); /* 未设置标志时，配置的非零范围不生效。 */
     sys_put_le16(75, bytes);
     zassert_equal(dp_set_sig_value(1, 1, 2, bytes),
                   IS_ENABLED(CONFIG_TEST_COUNTRY_OVERRIDE) ? -ERANGE : 0);

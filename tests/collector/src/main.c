@@ -153,19 +153,19 @@ static void *setup(void)
         zassert_equal(co_port_open(&port), -ENOTSUP);
         zassert_equal(co_init(&equipment, 0, false), -ENOTSUP);
     }
-    /* Reject a table that references a later bus outside the configured pool,
-     * even when the bus currently being registered has a valid ID.
+    /* 表中引用稍后登记但超出配置池范围的总线时，必须拒绝，
+     * 即使当前登记总线 ID 有效。
      */
     struct dp_device_cfg invalid_device = devices[0];
     invalid_device.bus_id = CONFIG_CO_MAX_BUSES;
     struct dp_equip_cfg invalid = equipment;
     invalid.devices = &invalid_device;
-    zassert_ok(dp_validate(&invalid)); /* DP does not own collector capacity. */
+    zassert_ok(dp_validate(&invalid)); /* 采集器容量不归 DP 管理。 */
     zassert_equal(co_init_bus(&invalid, &bus), -EINVAL);
     struct co_bus_cfg invalid_bus = bus;
     invalid_bus.id = CONFIG_CO_MAX_BUSES;
     zassert_equal(co_init_bus(&equipment, &invalid_bus), -EINVAL);
-    /* Neither rejection reserves a worker or installs the invalid equipment. */
+    /* 两种拒绝都不能预留任务或安装无效设备。 */
     fixture_connect_points();
     zassert_ok(co_init_bus(&equipment, &bus));
     zassert_ok(co_enable_poll(0, false));
@@ -242,7 +242,7 @@ ZTEST(collector, test_aging_and_matching_modes)
     zassert_equal(k_msgq_num_used_get(&completions), 0);
     set_mode(CO_PORT_INIT);
     expect_completion(22, 0);
-    /* No deadlines in this mode: a new request must wake the blocked worker. */
+    /* 此模式没有期限，新请求必须唤醒阻塞的任务。 */
     k_sleep(K_MSEC(20));
     zassert_ok(submit(23, CO_PORT_INIT, 0));
     expect_completion(23, 0);
@@ -301,10 +301,10 @@ ZTEST(collector, test_initialization_owns_bus_and_wakes_restored_mode)
     zassert_equal(co_set_mode(0, CO_PORT_SLEEP), -EBUSY);
     finish_initialization(0);
     expect_completion(31, 0);
-    expect_transfer(200, K_NO_WAIT); /* Owning INIT context may perform reads. */
-    expect_transfer(300, K_NO_WAIT); /* Initialization-only table entry. */
+    expect_transfer(200, K_NO_WAIT); /* 持有初始化所有权的 INIT 上下文允许读取。 */
+    expect_transfer(300, K_NO_WAIT); /* 仅用于初始化的表条目。 */
     expect_transfer(31, K_NO_WAIT);
-    zassert_equal(atomic_get(&init_callbacks), 1); /* No NVS dependency. */
+    zassert_equal(atomic_get(&init_callbacks), 1); /* 不依赖 NVS。 */
     enum co_port_mode mode;
     zassert_ok(co_get_mode(0, &mode));
     zassert_equal(mode, CO_PORT_UPDATE);

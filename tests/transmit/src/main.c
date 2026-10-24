@@ -139,7 +139,7 @@ static void *setup(void)
     zassert_true(client >= 0 && servers[0] >= 0 && servers[1] >= 0);
     server_callbacks = *tr_callbacks();
     server_callbacks.coil_wr = write_coil;
-    /* More failed interfaces than worker slots must not exhaust the pool. */
+    /* 失败接口数量超过任务槽位时，也不得耗尽池。 */
     struct modbus_iface_param invalid = {
         .mode = (enum modbus_mode)99,
         .server = {.unit_id = 7, .user_cb = &server_callbacks},
@@ -358,7 +358,7 @@ ZTEST(transmit, test_managed_servers_reconfigure_independently)
     };
     zassert_equal(tr_server_service(&duplicate, 7), -EEXIST);
     zassert_ok(tr_server_service(&managed[0], 42));
-    /* A newer desired setting is retried after the in-flight change. */
+    /* 在途变更完成后，再尝试更新的期望设定值。 */
     zassert_ok(tr_server_service(&managed[0], 43));
     wait_config(servers[0]);
     zassert_ok(tr_server_service(&managed[0], 43));
@@ -384,7 +384,7 @@ ZTEST(transmit, test_duplicate_initialization_preserves_active_writer)
     zassert_ok(modbus_write_holding_reg(client, 7, 100, 6));
     zassert_equal(atomic_get(&writes), 2);
 
-    /* A client interface also retains its existing role and callback. */
+    /* 客户端接口也保留已有角色和回调。 */
     zassert_equal(tr_modbus_init_server(client, config, NULL, true), -EALREADY);
     zassert_ok(modbus_write_holding_reg(client, 7, 100, 7));
     zassert_equal(atomic_get(&writes), 3);
@@ -397,7 +397,7 @@ ZTEST(transmit, test_legacy_register_getter_rejects_overlapping_word)
     uint16_t words[2];
     zassert_ok(tr_read(0, 4, 300, words, 2));
     zassert_equal(words[0], 0x1234); zassert_equal(words[1], 0x5678);
-    zassert_ok(tr_read(0, 4, 301, words, 1)); /* Exact complete-point selection. */
+    zassert_ok(tr_read(0, 4, 301, words, 1)); /* 精确选择完整测点。 */
     zassert_equal(words[0], 0x1234);
     zassert_equal(tr_read_register(4, 301, words), -ERANGE);
 }

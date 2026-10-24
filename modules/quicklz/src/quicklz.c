@@ -1,4 +1,4 @@
-/* Bounded QuickLZ 1.5 level-3 decoder with no streaming history. */
+/* 有界 QuickLZ 1.5 级别 3 解码器，不保留流式历史。 */
 #include <quicklz/quicklz.h>
 #include <errno.h>
 #include <string.h>
@@ -52,7 +52,7 @@ int qlz_decode_level3(const uint8_t *src, size_t len, uint8_t *dst, size_t cap)
         }
         pos += bytes; control >>= 1;
     }
-    /* QLZ pads very small compressed streams to nine payload bytes. */
+    /* QLZ 会将很短的压缩流填充至九个载荷字节。 */
     if (pos != len && !(len == header + 9 && pos < len)) { return -EBADMSG; }
     return (int)size;
 }

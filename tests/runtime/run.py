@@ -1,4 +1,4 @@
-"""Execute real application fault scenarios in fresh native processes."""
+"""在独立 native 进程中执行真实应用故障场景。"""
 import os
 import subprocess
 import sys

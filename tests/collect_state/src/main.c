@@ -519,7 +519,7 @@ ZTEST(collect_state, test_l_offline_north_exception_partial_recovery_and_diagnos
     while (!k_msgq_get(&requests, &event, K_NO_WAIT)) {
         zassert_not_equal(event.dev, 10, "North reads and diagnostic clear must not trigger downstream reads");
     }
-    atomic_set(&timeout_peer, 5); /* First initialization packet works, next packet has an exception. */
+    atomic_set(&timeout_peer, 5); /* 第一个初始化报文成功，下一报文返回异常。 */
     for (unsigned i = 0; i < 150; ++i) {
         zassert_ok(dp_read((struct dp_key){10, 2}, &cached));
         if ((cached.quality & 0xff) == DP_QUALITY_GOOD) { break; }

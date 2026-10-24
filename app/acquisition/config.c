@@ -2,7 +2,7 @@
 #include <input_sampler/input_sampler.h>
 #include <errno.h>
 
-/* Product hardware selection lives here; reusable modules receive descriptors. */
+/* 产品硬件选择集中在此处；通用模块只接收描述信息。 */
 #define IO_NODE DT_NODELABEL(idu_io)
 #define ADC_SPEC(node, prop, idx) ADC_DT_SPEC_GET_BY_IDX(node, idx),
 #define GPIO_SPEC(node, prop, idx) GPIO_DT_SPEC_GET_BY_IDX(node, prop, idx),
@@ -48,7 +48,7 @@ static const struct input_sampler_config inputs = {
 
 int acquisition_inputs_init(void)
 {
-    /* These electrical assumptions belong to the product current conversion. */
+    /* 这些电气假设属于产品的电流换算规则。 */
     for (size_t i = 0; i < ARRAY_SIZE(analog_channels); ++i) {
         const struct adc_dt_spec *channel = &analog_channels[i];
         if (channel->vref_mv != 3300 || channel->resolution != 12 ||

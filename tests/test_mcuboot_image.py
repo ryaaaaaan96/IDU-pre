@@ -1,4 +1,4 @@
-"""Validate the current MCUboot export layout and build selection."""
+"""校验当前 MCUboot 导出布局和构建选择。"""
 import importlib.util
 import struct
 import tempfile
@@ -34,7 +34,7 @@ class ImageExport(unittest.TestCase):
         image.write_hex_file(str(self.boot / "zephyr.hex"))
 
     def export(self):
-        # Cryptographic verification runs with real imgtool in the firmware build.
+        # 固件构建时使用真实 imgtool 执行密码学验证。
         with patch.object(builder, "run") as run:
             builder.export(self.root, self.root / "key.pem", self.root / "out")
             self.assertEqual(run.call_args_list[0].args[2], "verify")

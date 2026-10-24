@@ -1,6 +1,6 @@
 mainmenu "Modbus transport integration tests"
 
-# The large variant tests the IAPv3 ADU capacity without enabling image storage.
+# 大报文变体验证 IAPv3 ADU 容量，不启用镜像存储。
 config MODBUS_BUFFER_SIZE
     range 64 1100
 

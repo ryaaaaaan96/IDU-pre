@@ -30,8 +30,8 @@ static void device_state_changed(const struct zbus_channel *channel)
     const struct co_device_status *status = zbus_chan_const_msg(channel);
     const struct dp_equip_cfg *config = dp_config();
     if (!config) { return; }
-    /* The channel serializes listener calls. Counters and repeated errors
-     * remain queryable, but only a device state transition prints a line. */
+    /* 通道串行调用监听器。计数器和重复错误仍可查询，
+     * 仅设备状态转换时输出一条日志。 */
     for (size_t i = 0; i < config->device_count; ++i) {
         if (config->devices[i].dev_id != status->dev_id) { continue; }
         if (reported_states[i] != status->state) {

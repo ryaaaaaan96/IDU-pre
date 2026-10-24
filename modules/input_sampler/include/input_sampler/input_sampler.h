@@ -19,10 +19,10 @@ struct input_sampler_sample {
     bool valid;
 };
 
-/* Thread APIs; the caller owns immutable configuration and output buffers and
- * serializes hardware access. Either analog or digital groups may be omitted.
- * Output order follows configuration. On any error valid is false; partial
- * output must not be consumed. Capacity errors occur before sampling starts.
+/* 仅在线程中调用；调用方持有不可变配置与输出缓冲，并串行访问硬件。
+ * 模拟量组或数字量组均可省略。输出顺序与配置一致；
+ * 任一错误都使 valid 为 false，不得消费部分输出。
+ * 容量错误在开始采样前报告。
  */
 int input_sampler_init(const struct input_sampler_config *config);
 int input_sampler_read(const struct input_sampler_config *config,

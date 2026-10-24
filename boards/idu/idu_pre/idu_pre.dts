@@ -12,7 +12,7 @@
     hxtal: hxtal-clock {
         compatible = "fixed-clock";
         #clock-cells = <0>;
-        clock-frequency = <20000000>; /* Active oscillator into OSC_IN; bypass required. */
+        clock-frequency = <20000000>; /* 有源振荡器接入 OSC_IN，必须启用旁路。 */
     };
 
     pll: pll {
@@ -39,7 +39,7 @@
         idu-settings = &idu_settings;
         led0 = &run_led;
         idu-forward = &modbus0;
-        /* CO/TR share this RS485 link for single-bus performance testing. */
+        /* CO/TR 共用此 RS485 链路，用于单总线性能测试。 */
     };
 
     leds {
@@ -97,7 +97,7 @@
                 spi-max-frequency = <10000000>;
                 spi-cpol;
                 spi-cpha;
-                size = <33554432>; /* W25Q32: 32 Mbit, check fitted part. */
+                size = <33554432>; /* W25Q32：32 Mbit，需核对实际装配型号。 */
                 partitions {
                     compatible = "fixed-partitions";
                     #address-cells = <1>;
@@ -114,8 +114,8 @@
 
 &flash0 {
     reg = <0x08000000 DT_SIZE_K(512)>;
-    write-block-size = <4>; /* E505 FMC supports word programming. */
-    erase-block-size = <8192>; /* GD32E50x user manual, section 2.3.1. */
+    write-block-size = <4>; /* E505 FMC 支持按字编程。 */
+    erase-block-size = <8192>; /* 参见 GD32E50x 用户手册第 2.3.1 节。 */
 };
 &sram0 { reg = <0x20000000 DT_SIZE_K(128)>; };
 &gpioa { status = "okay"; };
@@ -213,5 +213,5 @@
     };
 };
 
-/* Product image layout, shared by the application and MCUboot. */
+/* 产品镜像布局，由应用和 MCUboot 共用。 */
 #include "../../../bootloader/partitions.dtsi"

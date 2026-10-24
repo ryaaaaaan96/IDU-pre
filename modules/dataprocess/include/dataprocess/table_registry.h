@@ -41,8 +41,9 @@ int dp_table_bind(const struct dp_device_binding *devices, size_t count,
                   DEV_TABLE_S *output);
 int dp_table_registry_bind(const struct dp_device_binding *devices, size_t count,
                            DEV_TABLE_S *output);
-/* Compact product declaration; table rows stay in ROM. Zero collect_table
- * means no acquisition target; collect_port/address are then ignored. */
+/* 精简的产品声明，表行留在 ROM。
+ * collect_table 为零表示没有采集目标，
+ * 此时忽略 collect_port/address。 */
 #define DP_DATA_DEFAULT_COLLECT_TABLE 0U
 struct data_device_cfg {
     uint8_t dev_id;
@@ -53,7 +54,7 @@ struct data_device_cfg {
 };
 int dp_data_device_bind(const struct data_device_cfg *devices, size_t count,
                          DEV_TABLE_S *output);
-/* Returns a permanent registry entry; rejects duplicate IDs and wrong types. */
+/* 返回常驻登记条目，拒绝重复 ID 和错误类型。 */
 int dp_table_registry_find(uint16_t id, uint16_t type,
                            const struct dp_registered_table **table);
 #endif

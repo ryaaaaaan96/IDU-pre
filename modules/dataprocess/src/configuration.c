@@ -58,7 +58,7 @@ const struct dp_transmit_cfg *dp_config_transmit(const struct dp_equip_cfg *cfg,
 int dp_config_index(const struct dp_equip_cfg *cfg, struct dp_key key)
 {
     if (!cfg) { return -EINVAL; }
-    /* Reference catalogs allow key lookup without evaluating every default. */
+    /* 参考目录支持按键查找，无需计算每个默认值。 */
     if (cfg->point_get && cfg->reference_devices) {
         size_t offset = 0;
         for (size_t d = 0; d < cfg->reference_device_count; ++d) {

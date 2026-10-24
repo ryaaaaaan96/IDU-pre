@@ -59,7 +59,7 @@ ZTEST(adc_application, test_sampling_error_is_propagated_and_retry_works)
 ZTEST(adc_application, test_unified_sampling_preserves_digital_and_address_bit_order)
 {
     const struct device *gpio = DEVICE_DT_GET(DT_NODELABEL(gpio0));
-    /* Active-low DI1/DI16, and switches 0110 -> address 7. */
+    /* 低电平有效的 DI1/DI16，拨码 0110 对应地址 7。 */
     zassert_ok(gpio_emul_input_set_masked(gpio, BIT_MASK(21) & ~BIT(0),
         (BIT_MASK(17) & ~(BIT(0) | BIT(1) | BIT(16))) | BIT(17) | BIT(20)));
     struct acquisition_sample sample;

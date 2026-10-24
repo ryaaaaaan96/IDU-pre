@@ -30,7 +30,7 @@ if [[ -z "${VIRTUAL_ENV:-}" && -f .venv/bin/activate ]]; then
     source .venv/bin/activate
 fi
 
-# --mcuboot remains an optional selector for existing command lines.
+# 保留 --mcuboot，兼容已有命令行中的可选选择参数。
 if [[ "${1:-}" == --mcuboot ]]; then
     shift
 fi

@@ -12,8 +12,8 @@ struct co_schedule {
     uint8_t retries;
     uint32_t replies;
 };
-/* The bus worker executes this decision without interpreting device states.
- * snapshot is a completion token, including the concurrent-reply generation. */
+/* 总线任务只执行此决策，不再解释设备状态。snapshot 是完成令牌，
+ * 其中包含并发应答代次。 */
 struct co_poll_plan {
     bool eligible, synchronous;
     int64_t due, deadline;

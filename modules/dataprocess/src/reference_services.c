@@ -23,8 +23,8 @@ void dp_reference_unpack(struct dp_value *value, const uint8_t *bytes, size_t si
     for (size_t i = 0; i < size; ++i) { value->words[i / 2] |= (uint16_t)bytes[i] << (8 * (i % 2)); }
 }
 
-/* Original catalogs are retained by pointer in flash. Only native configurations
- * without a catalog need bounded identity descriptors (not copied point tables).
+/* 原始目录通过指针引用 Flash。
+ * 只有缺少目录的原生配置才需要有界的身份描述符，不复制点表。
  */
 static DEV_TABLE_S native_devices[CONFIG_DP_MAX_DEVICES + 2];
 static size_t native_count;
@@ -364,7 +364,7 @@ void dp_reference_notify(const struct dp_point_cfg *p, const struct dp_value *ol
                 item->reference_address_valid) { event.address = item->reference_address; break; }
         }
     }
-    /* No wall clock is required by DP; zero explicitly denotes unavailable UTC. */
+    /* DP 不要求墙上时钟；0 明确表示 UTC 不可用。 */
     if (k_msgq_put(&change_events, &event, K_NO_WAIT)) {
         LOG_WRN("Change notification queue full for %u:%u", p->key.dev_id, p->key.sig_id);
     }

@@ -1,4 +1,4 @@
-/* Synchronous ADC0 backend; policy and sample averaging belong to the caller. */
+/* 同步 ADC0 后端；采样策略和平均处理归调用方。 */
 #define DT_DRV_COMPAT gd_gd32e50x_adc
 
 #include <errno.h>
@@ -30,7 +30,7 @@ struct gd32_adc_data {
     bool calibrated;
 };
 
-/* Integral ticks follow the GD32 driver's rounded-up convention. */
+/* 整数时钟周期遵循 GD32 驱动向上取整的约定。 */
 static const uint16_t acquisition_ticks[] = {2, 8, 14, 29, 42, 56, 72, 240};
 static const uint8_t sample_times[] = {
     ADC_SAMPLETIME_1POINT5, ADC_SAMPLETIME_7POINT5,
@@ -69,7 +69,7 @@ static int gd32_adc_calibrate(const struct device *dev)
     return err;
 }
 
-/* Also resets an unfinished conversion/calibration before the next request. */
+/* 下次请求前，也会复位未完成的转换或校准。 */
 static int gd32_adc_prepare(const struct device *dev)
 {
     const struct gd32_adc_config *cfg = dev->config;
@@ -253,7 +253,7 @@ static int gd32_adc_init(const struct device *dev)
     return err;
 }
 
-/* ADC mode and prescaler are shared; don't silently claim multi-instance support. */
+/* ADC 模式和预分频器共用，不得隐式宣称支持多个实例。 */
 BUILD_ASSERT(DT_NUM_INST_STATUS_OKAY(DT_DRV_COMPAT) <= 1);
 
 #define GD32_ADC_DEFINE(n)                                                        \

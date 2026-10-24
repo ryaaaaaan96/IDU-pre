@@ -45,7 +45,7 @@ int analog_input_read(const struct analog_input_config *config,
         for (uint32_t n = 0; n < config->average_count; ++n) {
             err = adc_read_dt(&config->channels[i], &sequence);
             if (err) { return err; }
-            sum += sample; /* UINT16_MAX samples of UINT16_MAX fit in uint32_t. */
+            sum += sample; /* UINT16_MAX 个 UINT16_MAX 样本的总和可存入 uint32_t。 */
         }
         values[i] = sum / config->average_count;
     }

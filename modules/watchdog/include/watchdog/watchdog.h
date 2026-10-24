@@ -18,11 +18,12 @@ struct watchdog {
     bool active;
 };
 
-/* Zero-initialize each instance once. The instance and const config must outlive
- * the timer. Serialize initialization; error query/stop are safe against timer execution.
- * The feed GPIO must support ISR-safe toggle (on-chip GPIO, not a sleeping bus).
- * GPIO failure and explicit stop are terminal until the device resets.
- * Stop leaves the pin driven at its last level so the external watchdog expires.
+/* 各实例仅清零一次，实例和常量配置须比定时器存活更久。初始化须串行，
+ * 错误查询和停止可与定时器并发。
+ * 喂狗 GPIO 必须支持 ISR 安全翻转，
+ * 应使用片上 GPIO 而非可休眠总线。
+ * GPIO 失败及显式停止在设备复位前不可恢复；停止后引脚保持最后电平，
+ * 让外部看门狗到期。
  */
 int watchdog_init(struct watchdog *monitor,
                   const struct watchdog_config *config);

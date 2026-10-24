@@ -1,16 +1,16 @@
-# Generated build trees and test output
+# 生成的构建目录和测试输出
 build/
 build-*/
 twister-out*/
 
-# Local Python environments and caches
+# 本地 Python 环境和缓存
 .venv/
 venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/
 
-# Local credentials / signing material (keep a separate private backup)
+# 本地凭据和签名材料（请另行私密备份）
 .env
 .env.*
 !.env.example
@@ -18,7 +18,7 @@ keys/
 *-private.pem
 *-dev.pem
 
-# Editor / OS temporary files
+# 编辑器和操作系统的临时文件
 *.swp
 *.swo
 *~

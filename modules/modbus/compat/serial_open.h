@@ -18,7 +18,7 @@ int mb_serial_open(const char *name, struct modbus_serial_param param,
     k_mutex_init(&io->lock); k_sem_init(&io->transmitted, 0, 1);
     io->next_tx = sys_timepoint_calc(K_NO_WAIT);
     io->user = user; io->receive = receive; io->param = param;
-    ctx->client = false; /* Receive continuously; dispatch bypasses the server parser. */
+    ctx->client = false; /* 持续接收，分发时绕过服务端解析器。 */
     struct modbus_iface_param settings = {.mode = MODBUS_MODE_RTU, .serial = param};
     int err = modbus_serial_init(ctx, settings);
     if (err) {

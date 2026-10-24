@@ -18,16 +18,16 @@ static void before(void *fixture)
 
 ZTEST(image_confirm, test_trial_only_confirmed_after_continuous_health)
 {
-    /* Simply waiting at boot cannot confirm an image. */
+    /* 仅在启动后等待不能确认镜像。 */
     zassert_ok(checkpoint(30000, true));
     zassert_equal(writes, 0);
     for (int64_t now = 30500; now < 40000; now += 500) {
         zassert_ok(checkpoint(now, true));
     }
-    /* One failed cycle discards accumulated health. */
+    /* 一个失败周期会清除已累计的健康时长。 */
     zassert_ok(checkpoint(40000, false));
     zassert_ok(checkpoint(40500, true));
-    /* A stalled loop also restarts the qualification period. */
+    /* 循环停滞也会重新开始资格判定周期。 */
     zassert_ok(checkpoint(45000, true));
     for (int64_t now = 45500; now < 55000; now += 500) {
         zassert_ok(checkpoint(now, true));
@@ -36,7 +36,7 @@ ZTEST(image_confirm, test_trial_only_confirmed_after_continuous_health)
     write_error = -EIO;
     zassert_equal(checkpoint(55000, true), -EIO);
     zassert_equal(writes, 1);
-    /* A storage error is returned to the main loop, never reported as success. */
+    /* 存储错误返回主循环，不得报告成功。 */
     write_error = 0;
     zassert_ok(checkpoint(55500, true));
     zassert_equal(writes, 2);

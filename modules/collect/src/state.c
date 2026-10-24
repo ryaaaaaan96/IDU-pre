@@ -233,7 +233,7 @@ void co_state_poll_plan(size_t block, struct co_poll_plan *plan)
     const struct co_cfg *poll = dp_config_collect(equipment, block, &scratch);
     *plan = (struct co_poll_plan){.due = INT64_MAX, .deadline = INT64_MAX};
     k_mutex_lock(&state_lock, K_FOREVER);
-    /* Keep the schedule snapshot and row deadline in one critical section. */
+    /* 在同一临界区内处理调度快照与表行期限。 */
     schedule_locked(poll->dev_id, &plan->snapshot);
     const struct co_schedule *schedule = &plan->snapshot;
     plan->retries = schedule->retries;

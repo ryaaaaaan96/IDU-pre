@@ -20,7 +20,7 @@ static unsigned timer_count;
 static struct dp_process_result completion;
 static K_SEM_DEFINE(done, 0, 1);
 static K_SEM_DEFINE(timer_done, 0, 1);
-/* Fault injection: hold the DP consumer to exercise completion waiters. */
+/* 故障注入：阻塞 DP 消费者，验证等待处理完成的调用方。 */
 static atomic_t hold_sample;
 static K_SEM_DEFINE(sample_entered, 0, 1);
 static K_SEM_DEFINE(sample_release, 0, 1);

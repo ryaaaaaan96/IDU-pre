@@ -10,7 +10,7 @@ set(IAP_FIXTURE_ADDRESS 0x08010000)
 set(IAP_FIXTURE_RAM_END 0x20020000)
 set(IAP_FIXTURE_CONFIG ${IDU_APP}/conf/iapv3.conf)
 if(CONFIG_IAP_CONFIGURED)
-  # Deliberately different addresses/key/limits exercise configuration, not IDU constants.
+  # 有意采用不同地址、密钥和限制，验证配置能力而非 IDU 固定常量。
   set(IAP_FIXTURE_ADDRESS 0x10000)
   set(IAP_FIXTURE_RAM_END 0x30020000)
   set(IAP_FIXTURE_CONFIG ${PROJECT_BINARY_DIR}/zephyr/.config)
