@@ -40,6 +40,7 @@ for phase in write verify; do
 done
 python3 applications/IDU-pre/tests/test_mcuboot_image.py
 python3 applications/IDU-pre/tests/test_build_configuration.py
+python3 applications/IDU-pre/tests/test_debug_session.py
 
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/image_confirm -d "$test_dir/image_confirm"

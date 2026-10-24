@@ -59,6 +59,7 @@ def main():
     parser.add_argument("--speed", type=int, default=DEFAULT_SPEED_KHZ, help="SWD clock in kHz")
     parser.add_argument("--serial", help="Select a specific USB J-Link")
     parser.add_argument("--localhost-only", action="store_true", help="For mirrored WSL")
+    parser.add_argument("--no-rtos", action="store_true", help="Debug the core without the Zephyr thread plugin")
     parser.add_argument("--dry-run", action="store_true", help="Print command without accessing the probe")
     args = parser.parse_args()
     if not 1 <= args.port <= 65535:
@@ -76,7 +77,7 @@ def main():
         parser.error("J-Link installation not found; supply --jlink-dir")
     server = directory / "JLinkGDBServerCL.exe"
     plugin = directory / "GDBServer" / "RTOSPlugin_Zephyr.dll"
-    for required in (server, plugin):
+    for required in ([server] if args.no_rtos else [server, plugin]):
         if not required.is_file():
             parser.error(f"Required file not found: {required}")
 
@@ -84,8 +85,10 @@ def main():
         str(server), "-device", device, "-if", "SWD", "-endian", "little",
         "-speed", str(args.speed), "-port", str(args.port),
         "-LocalhostOnly", "1" if args.localhost_only else "0",
-        "-noir", "-noreset", "-halt", "-rtos", str(plugin),
+        "-noir", "-noreset", "-halt",
     ]
+    if not args.no_rtos:
+        command.extend(["-rtos", str(plugin)])
     if args.serial:
         command.extend(["-USB", args.serial])
     print(f"Zephyr GDB Server: TCP {args.port}, device {device}, SWD {args.speed} kHz", flush=True)

@@ -31,6 +31,7 @@ NAT WSL: pass --host with the Windows address from `ip route show default`.
 Downloads the signed application HEX, reloads ELF symbols and resets into
 the installed MCUboot, then stays halted in GDB. No build or automatic run.
 Requires a matching MCUboot/key; first install it with flash.sh.
+Checks target CPUID access before reset/download; failed access stops startup.
 See docs/wsl-jlink.md for Zephyr thread support and external watchdog handling.
 EOF
 }
@@ -95,13 +96,26 @@ gdb_program=$resolved_gdb
 
 target="$remote_host:$remote_port"
 [[ "$remote_host" != *:* ]] || target="[$remote_host]:$remote_port"
-commands=$(printf 'target remote %s\nmonitor halt' "$target")
+commands=$(printf 'target remote %s\nmonitor halt\nmaintenance flush register-cache\n' "$target")
+commands+=$'\n'
+# monitor commands change the target without invalidating GDB's cached registers.
+# A failed memory read stops this command file before any reset/download below.
+commands+=$(cat <<'GDB'
+set $idu_cpuid = *(unsigned int *)0xE000ED00
+if $idu_cpuid == 0 || $idu_cpuid == 0xffffffff
+  echo debug.sh: invalid target CPUID; reconnect J-Link before downloading.\n
+  disconnect
+  quit 1
+end
+printf "Target CPUID: 0x%08x\n", $idu_cpuid
+GDB
+)
 if "$download"; then
     quoted_elf=${elf_file//\\/\\\\}
     quoted_elf=${quoted_elf//\"/\\\"}
     quoted_hex=${hex_file//\\/\\\\}
     quoted_hex=${quoted_hex//\"/\\\"}
-    commands+=$(printf '\nmonitor reset\nmonitor exec SetVerifyDownload = 1\nload "%s"\nsymbol-file "%s"\nmonitor reset' "$quoted_hex" "$quoted_elf")
+    commands+=$(printf '\nmonitor reset\nmonitor exec SetVerifyDownload = 1\nload "%s"\nsymbol-file "%s"\nmonitor reset\nmaintenance flush register-cache' "$quoted_hex" "$quoted_elf")
 fi
 printf 'GDB target: %s\nELF: %s\n' "$target" "$elf_file" >&2
 if "$download"; then printf 'Signed application HEX: %s\n' "$hex_file" >&2; fi

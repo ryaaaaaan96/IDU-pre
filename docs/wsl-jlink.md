@@ -71,6 +71,15 @@ mirrored 模式可直接 `./scripts/debug.sh`。查看 Zephyr 线程仍需用下
 py .\scripts\debug-server.py
 ```
 
+只做核心断点、寄存器和源码调试，或固件没有 `CONFIG_DEBUG_THREAD_INFO=y` 时使用：
+
+```powershell
+py .\scripts\debug-server.py --no-rtos
+```
+
+它仍启动 `JLinkGDBServerCL.exe`，省略 RTOS 插件；当前调试用的 `conf/debug.conf`
+关闭看门狗，但不自动打开线程调试元数据。
+
 按用户最新说明，目标型号及脚本默认调试器件名均为 `GD32E505VET6`，端口 2331、SWD 1000 kHz，自动查找 J-Link。无需交互输入；默认值集中在脚本顶部，可手动修改。
 当前 V8.78 设备库已识别此完整名称，可用 `--device` 显式覆盖；脚本不自动重试其他设备名称。
 直接指定并预览参数：
@@ -114,6 +123,10 @@ Linux 默认使用当前 MCUboot + IAPv3 应用构建，读取其 `.config` 识�
 两端端口必须一致。Linux 默认连接并 halt，复位后下载签名应用 HEX，重新执行 `symbol-file ELF` 保留源码符号，再次复位使 CPU 从 MCUboot 启动入口开始，停留在 GDB 中等待操作。
 不自动构建或运行。`--attach` 只连接、halt，不下载、不复位。使用 `-nx` 跳过 GDB 初始化文件，`--` 后可追加 GDB 参数。
 初始化命令放在独立 GDB 命令文件中，任何一步报错都会停止其后续步骤。
+脚本在连接、暂停后先读取 CPUID（`0xE000ED00`）；读取失败或返回全零／全一时，
+停止启动流程，不继续复位或下载。这个检查证明当时可访问目标，不等同于镜像验签。
+`monitor halt/reset` 不会自动刷新 GDB 的寄存器缓存；脚本在暂停和最终复位后执行
+`maintenance flush register-cache`，防止把连接时的无效寄存器沿用到后续调试。
 
 默认文件为：
 
@@ -484,7 +497,42 @@ UsageFault 处理函数会清除 UFSR，因此在最终停机循环读到 CFSR �
 | 一暂停就复位 | 外部看门狗，按第 6 节处理 |
 | 跳转地址异常或 MCUboot 拒绝启动 | 用匹配密钥和本次签名 HEX，检查外部镜像交换状态，不用裸 ELF 覆盖 slot0 |
 | 源码行/变量不对应 | 板上固件与 ELF 是否同次构建；编译优化与源文件版本 |
+| 所有寄存器是同一异常值，CPUID 也读失败 | 先保存 Server 日志并重建调试会话；不能据这些值判断栈损坏，也不要继续下载 |
 | 串口看不到日志 | USART0 PA9/PA10，115200 8N1；USB-UART 接 Windows COM 口即可，与 J-Link TCP 调试独立 |
 
 usbipd 是后备路线：需要 Linux 直接占用探针时才转接，届时在 WSL 安装 Linux J-Link 包；设备转接后 Windows 不能同时使用。
 当前推荐路线无需 usbipd、无需 Linux J-Link Server，也不需要改动 Zephyr 上游或增加板级 runner。
+
+### 寄存器异常时的最小诊断
+
+`Ctrl+C` 后停在 `arch_cpu_idle()` 的 `SIGTRAP` 本身不是程序故障证据。
+若 PC、SP、LR、xPSR 同时变成相同异常值，在当前 GDB 会话依次执行：
+
+```gdb
+monitor halt
+maintenance flush register-cache
+monitor regs
+x/wx 0xE000ED00
+x/wx 0xE000EDF0
+info registers pc lr sp xpsr
+```
+
+`x/wx` 分别读取 CPUID 和 DHCSR。若使用 J-Link 的 `monitor memU32`，只写地址；
+不要追加数量参数，第二个数值会被解释成写入数据。命令语法见
+[SEGGER GDB Server](https://kb.segger.com/J-Link_GDB_Server#memU32)。
+长期暂停前仍须处理第 6 节的外部看门狗。
+
+CPUID 可读、`monitor regs` 正常而 GDB 显示异常时，先刷新寄存器缓存；
+CPUID 也无法访问时，刷新缓存不能恢复底层连接。退出当前 GDB，重新启动 Windows
+J-Link GDB Server，再用 `./scripts/debug.sh --attach` 验证目标访问。
+重连恢复不等于已经解决复发原因；保存 Server 日志，分别验证速度、连接和复位条件。
+
+访问恢复后仍需核对板上应用与当前 ELF。`compare-sections -r` 可辅助比对代码与常量；
+签名过程会修改 MCUboot 头，不能仅因包含头部的 `rom_start` 不同就判定整个应用不匹配。
+代码段 `text` 也不一致时，不据源码行和局部变量继续判断程序故障；重新下载匹配的签名镜像，
+或使用匹配板上镜像的 ELF。仅有 `Transfer rate` / `Resetting target` 文本不是独立校验结果。
+
+脚本回归：先构建 Arm 应用，再运行 `python3 tests/test_debug_session.py -v`。
+测试使用真实 SDK GDB 与本机模拟远程目标，不接触探针，覆盖缓存刷新和读取失败时禁止下载；
+缺少 SDK GDB 或应用 ELF 时明确跳过。实板诊断记录见
+[2026-10-24 验证记录](../.scratch/gdb-access/validation.md)。
