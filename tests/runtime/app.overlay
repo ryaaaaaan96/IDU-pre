@@ -23,7 +23,10 @@
 / { aliases { idu-forward = &modbus_test; idu-settings = &storage_partition; }; };
 / {
     aliases { led0 = &status_led; };
-    status_leds: status-leds { status_led: run {}; };
+    status_leds: status-leds {
+        compatible = "gpio-leds";
+        status_led: run { gpios = <&gpio_test 2 GPIO_ACTIVE_LOW>; };
+    };
     idu_io: zephyr,user {
         watchdog-gpios = <&gpio_test 1 GPIO_ACTIVE_HIGH>;
         watchdog-feed-ms = <20>;

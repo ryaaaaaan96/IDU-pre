@@ -5,9 +5,8 @@
 #include <dataprocess/points.h>
 #include <dataprocess/params.h>
 #include <collect/collect.h>
-#include <zephyr/drivers/gpio/gpio_emul.h>
+#include <zephyr/drivers/gpio.h>
 #include <zephyr/storage/flash_map.h>
-#include <zephyr/drivers/led.h>
 #include <zephyr/drivers/serial/uart_emul.h>
 #include <zephyr/modbus/modbus.h>
 #include <zephyr/sys/reboot.h>
@@ -56,20 +55,54 @@ void *__wrap_k_malloc(size_t size)
         !strcmp(scenario, "publish")) { return NULL; }
     return __real_k_malloc(size);
 }
-static int output(bool on)
+static struct gpio_driver_data gpio_data;
+static const struct gpio_driver_config gpio_config = {.port_pin_mask = BIT_MASK(4)};
+static gpio_port_value_t gpio_levels;
+static unsigned indicator_writes;
+
+static void record_levels(gpio_port_pins_t mask, gpio_port_value_t value)
 {
-    if (atomic_get(&samples) && !strcmp(scenario, "led")) { return -EIO; }
-    if (on != indicator_on) { atomic_inc(&led_edges); }
-    indicator_on = on;
+    gpio_levels = (gpio_levels & ~mask) | (value & mask);
+    if (mask & BIT(2)) {
+        bool on = !!((gpio_levels ^ gpio_data.invert) & BIT(2));
+        if (on != indicator_on) { atomic_inc(&led_edges); }
+        indicator_on = on;
+    }
+}
+
+static int configure(const struct device *dev, gpio_pin_t pin, gpio_flags_t flags)
+{
+    ARG_UNUSED(dev);
+    if (pin == 2 && scenario && !strcmp(scenario, "led-init")) { return -EIO; }
+    record_levels(BIT(pin), (flags & GPIO_OUTPUT_INIT_HIGH) ? BIT(pin) : 0);
     return 0;
 }
-static int on(const struct device *device, uint32_t index)
-{ ARG_UNUSED(device); ARG_UNUSED(index); return output(true); }
-static int off(const struct device *device, uint32_t index)
-{ ARG_UNUSED(device); ARG_UNUSED(index); return output(false); }
-static DEVICE_API(led, indicator_api) = {.on = on, .off = off};
-DEVICE_DT_DEFINE(DT_NODELABEL(status_leds), NULL, NULL, NULL, NULL,
-                 POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE, &indicator_api);
+
+static int set(const struct device *dev, gpio_port_pins_t mask, gpio_port_value_t value)
+{
+    ARG_UNUSED(dev);
+    if (mask & BIT(2)) {
+        ++indicator_writes;
+        if (atomic_get(&samples) && !strcmp(scenario, "led")) { return -EIO; }
+    }
+    record_levels(mask, value);
+    return 0;
+}
+static int set_bits(const struct device *dev, gpio_port_pins_t pins)
+{ return set(dev, pins, pins); }
+static int clear_bits(const struct device *dev, gpio_port_pins_t pins)
+{ return set(dev, pins, 0); }
+static int toggle(const struct device *dev, gpio_port_pins_t pins)
+{ return set(dev, pins, gpio_levels ^ pins); }
+static int get(const struct device *dev, gpio_port_value_t *value)
+{ ARG_UNUSED(dev); *value = gpio_levels; return 0; }
+static DEVICE_API(gpio, gpio_api) = {
+    .pin_configure = configure, .port_set_masked_raw = set,
+    .port_set_bits_raw = set_bits, .port_clear_bits_raw = clear_bits,
+    .port_toggle_bits = toggle, .port_get_raw = get,
+};
+DEVICE_DT_DEFINE(DT_NODELABEL(gpio_test), NULL, NULL, &gpio_data, &gpio_config,
+                 POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE, &gpio_api);
 
 static bool terminal_result(enum status_action action)
 {
@@ -99,7 +132,7 @@ ZTEST(runtime, test_real_main_fault_policy)
     if (!scenario) { scenario = "publish"; }
     if (!strcmp(scenario, "publish")) { expected_fault = STATUS_FAULT_PUBLISH; }
     else if (!strcmp(scenario, "sample")) { expected_fault = STATUS_FAULT_SAMPLE; }
-    else if (!strcmp(scenario, "led")) { expected_fault = STATUS_FAULT_LED; }
+    else if (!strcmp(scenario, "led") || !strcmp(scenario, "led-init")) { expected_fault = STATUS_FAULT_LED; }
     else if (!strcmp(scenario, "input-init")) { expected_fault = STATUS_FAULT_INPUT_INIT; }
     else if (!strcmp(scenario, "protocol-init")) { expected_fault = STATUS_FAULT_PROTOCOL_INIT; }
     else if (!strcmp(scenario, "maintenance")) { expected_fault = STATUS_FAULT_PROTOCOL; }
@@ -148,6 +181,7 @@ ZTEST(runtime, test_real_main_fault_policy)
         int before = atomic_get(&samples);
         k_msleep(1100);
         zassert_true(atomic_get(&samples) > before);
+        if (!strcmp(scenario, "led-init")) { zassert_equal(indicator_writes, 0); }
         struct dp_point_state point;
         zassert_ok(dp_read((struct dp_key){DEVICE_LOCAL, SIGNAL_DI}, &point));
         zassert_equal(point.quality, DP_QUALITY_GOOD);
@@ -157,10 +191,10 @@ ZTEST(runtime, test_real_main_fault_policy)
         int before = atomic_get(&samples);
         int sent = atomic_get(&transmitted_bytes);
         const struct device *gpio = DEVICE_DT_GET(DT_NODELABEL(gpio_test));
-        int previous = gpio_emul_output_get(gpio, 1), edges = 0;
+        int previous = gpio_pin_get_raw(gpio, 1), edges = 0;
         for (int i = 0; i < 60; ++i) {
             k_msleep(10);
-            int value = gpio_emul_output_get(gpio, 1);
+            int value = gpio_pin_get_raw(gpio, 1);
             edges += value != previous; previous = value;
         }
         zassert_equal(atomic_get(&samples), before);

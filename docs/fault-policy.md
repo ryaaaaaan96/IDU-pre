@@ -8,6 +8,9 @@
 报告、`status_application_fault_get()` 读取副本。协议层通过 `status_update_degradation()`
 提交离线数量和存储诊断，`status_degradation_get()` 返回一致快照；不暴露内部可写指针。
 LED 首次调度由离开 `STATUS_STARTING` 的阶段转换决定，不另存 `running` 标志。
+指示灯直接使用 GPIO：`status_init()` 检查就绪并配置逻辑有效输出，之后仅记录初始化
+是否成功，不缓存亮灭状态。运行时按到期周期的奇偶调用翻转，故障强制设置逻辑有效电平。
+引脚就绪或配置失败后，若策略允许继续则跳过后续指示灯访问，健康检查仍执行。
 
 初始化不再取消旧 LED 工作；产品没有同进程重新启动状态的功能。
 采样生命周期测试使用 `tests/acquisition/run.py` 为每个场景启动独立 native 进程，

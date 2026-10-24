@@ -990,3 +990,11 @@ CO 后端回调和 Modbus 事务接口显式接收 `dev_id`；vport 来源结构
   IDU Flash 124400 B、RAM 102764 B；相对此前分别减少 148 B 和 8 B。
 
 日志位于工作区 `build/IDU-pre/collect-period/{tests.log,build.log}`；未进行实板时序测量。
+
+## 指示灯统一使用 GPIO（2026-10-24）
+
+`app/status/status.c` 直接使用 GPIO 接口，删除 LED 驱动依赖、`indicator_on` 缓存和
+`output()` 包装。设备树保留 `led0` 对应的引脚与有效极性；设备树的 `gpio-leds`
+硬件描述可继续使用，应用不启用 LED 驱动。初始化失败按故障策略处理，允许继续时
+禁止后续访问未成功初始化的引脚。当前验证见
+[GPIO 指示灯验收记录](../.scratch/gpio-indicator/validation.md)。

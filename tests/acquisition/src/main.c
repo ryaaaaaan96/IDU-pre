@@ -10,11 +10,12 @@
 #include <platform_callback.h>
 #include <acquisition/sample.h>
 #include <iap/iap.h>
-#include <zephyr/drivers/led.h>
+#include <zephyr/drivers/gpio.h>
 #include <watchdog/watchdog.h>
 #include <zephyr/ztest.h>
 #include <zephyr/storage/flash_map.h>
 #include <string.h>
+#include <stdlib.h>
 #include "status/image_confirm/image_confirm.h"
 
 /* main.c 将 startup 保留在应用入口内，不提供公共头文件。 */
@@ -150,27 +151,60 @@ void watchdog_stop(struct watchdog *monitor) { ++stops; }
 void status_request_reboot(void) {}
 void iap_stop(void) {}
 
-static int output_led(bool on)
+static struct gpio_driver_data indicator_data;
+static const struct gpio_driver_config indicator_config = {.port_pin_mask = UINT32_MAX};
+static bool indicator_level;
+static unsigned indicator_writes;
+
+static void record_level(bool high)
 {
-    int err = status_phase_get() == STATUS_STARTING ? service(LED_START) :
-              status_phase_get() == STATUS_CHECKING_HEALTH ? service(LED) : 0;
+    bool on = high ^ !!(indicator_data.invert & BIT(0));
+    indicator_edges += indicator_on != on;
+    indicator_on = on;
+    indicator_level = high;
+}
+
+static int configure_indicator(const struct device *dev, gpio_pin_t pin, gpio_flags_t flags)
+{
+    ARG_UNUSED(dev); zassert_equal(pin, 0);
+    int err = service(LED_START);
     if (!err) { err = led_set_error; }
-    if (!err) { indicator_edges += indicator_on != on; indicator_on = on; }
+    if (!err) { record_level(flags & GPIO_OUTPUT_INIT_HIGH); }
     return err;
 }
-static int output_on(const struct device *dev, uint32_t led)
+
+static int write_indicator(bool high)
 {
-    ARG_UNUSED(dev); zassert_equal(led, 0);
-    return output_led(true);
+    ++indicator_writes;
+    int err = status_phase_get() == STATUS_CHECKING_HEALTH ? service(LED) : 0;
+    if (!err) { err = led_set_error; }
+    if (!err) { record_level(high); }
+    return err;
 }
-static int output_off(const struct device *dev, uint32_t led)
+
+static int set_indicator(const struct device *dev, gpio_port_pins_t pins)
+{ ARG_UNUSED(dev); zassert_equal(pins, BIT(0)); return write_indicator(true); }
+static int clear_indicator(const struct device *dev, gpio_port_pins_t pins)
+{ ARG_UNUSED(dev); zassert_equal(pins, BIT(0)); return write_indicator(false); }
+static int toggle_indicator(const struct device *dev, gpio_port_pins_t pins)
+{ ARG_UNUSED(dev); zassert_equal(pins, BIT(0)); return write_indicator(!indicator_level); }
+
+static int indicator_device_init(const struct device *dev)
 {
-    ARG_UNUSED(dev); zassert_equal(led, 0);
-    return output_led(false);
+    ARG_UNUSED(dev);
+    const char *test = getenv("IDU_ACQUISITION_CASE");
+    return test && strstr(test, "unready_indicator") ? -ENODEV : 0;
 }
-static DEVICE_API(led, status_led_api) = {.on = output_on, .off = output_off};
-DEVICE_DT_DEFINE(DT_NODELABEL(status_leds), NULL, NULL, NULL, NULL,
-                  POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE, &status_led_api);
+
+static DEVICE_API(gpio, indicator_api) = {
+    .pin_configure = configure_indicator,
+    .port_set_bits_raw = set_indicator,
+    .port_clear_bits_raw = clear_indicator,
+    .port_toggle_bits = toggle_indicator,
+};
+DEVICE_DT_DEFINE(DT_NODELABEL(gpio0), indicator_device_init, NULL,
+                 &indicator_data, &indicator_config,
+                 POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE, &indicator_api);
 DEVICE_DT_DEFINE(DT_NODELABEL(external_flash), NULL, NULL, NULL, NULL,
                  POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE, NULL);
 void dp_params_get_status(struct dp_param_status *status)
@@ -485,10 +519,12 @@ ZTEST(acquisition, test_led_tracks_startup_healthy_cycles_and_fault)
 {
     zassert_ok(startup());
     zassert_true(indicator_on);
+    zassert_false(indicator_level); /* 设备树指定低电平点亮。 */
     zassert_ok(acquisition_cycle());
     zassert_true(indicator_on); /* 采样不再决定闪烁速度。 */
     k_sleep(K_MSEC(STATUS_LED_HALF_PERIOD_MS));
     zassert_false(indicator_on);
+    zassert_true(indicator_level);
     zassert_ok(acquisition_cycle());
     zassert_false(indicator_on);
     k_sleep(K_MSEC(STATUS_LED_HALF_PERIOD_MS));
@@ -539,6 +575,29 @@ ZTEST(acquisition, test_late_indicator_skips_edges_and_fault_takes_priority)
     k_msleep(250);
     zassert_true(indicator_on);
     zassert_equal(indicator_edges, fault_edges);
+}
+
+ZTEST(acquisition, test_late_indicator_skips_even_periods_without_toggle)
+{
+    zassert_ok(startup());
+    unsigned before = indicator_edges;
+    k_work_submit(&indicator_queue_blocker);
+    zassert_ok(k_sem_take(&indicator_queue_entered, K_SECONDS(1)));
+    k_msleep(250);
+    k_sem_give(&indicator_queue_release);
+    k_msleep(10);
+    zassert_true(indicator_on);
+    zassert_equal(indicator_edges, before);
+}
+
+ZTEST(acquisition, test_unready_indicator_stops_startup_without_gpio_access)
+{
+    zassert_equal(startup(), -ENODEV);
+    zassert_equal(calls[LED_START], 0);
+    zassert_equal(calls[INPUTS_INIT], 0);
+    zassert_equal(fault_snapshot().first, STATUS_FAULT_LED);
+    k_msleep(250);
+    zassert_equal(indicator_writes, 0);
 }
 
 ZTEST(acquisition, test_initial_led_output_failure_stops_startup)

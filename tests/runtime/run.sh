@@ -10,7 +10,7 @@ for variant in reset hold debug continue bad-uart; do
     case "$variant" in
         hold) arguments=(-DEXTRA_CONF_FILE=hold.conf);;
         debug) arguments=(-DEXTRA_CONF_FILE=../../conf/debug.conf);;
-        continue) arguments=(-DEXTRA_CONF_FILE=continue.conf); cases=(led);;
+        continue) arguments=(-DEXTRA_CONF_FILE=continue.conf); cases=(led led-init);;
         bad-uart) arguments=(-DEXTRA_DTC_OVERLAY_FILE=bad-uart.overlay); policy=reset; cases=(protocol-init);;
     esac
     directory="build/IDU-pre/tests/runtime-$variant"

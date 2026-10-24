@@ -5,7 +5,7 @@ import sys
 
 executable, policy, *cases = sys.argv[1:]
 if not cases:
-    cases = ["publish", "sample", "led", "input-init", "maintenance"]
+    cases = ["publish", "sample", "led", "led-init", "input-init", "maintenance"]
     if policy != "debug":
         cases.append("task-timeout")
 marker = "RUNTIME_RESET_PASS" if policy == "reset" else "RUNTIME_POLICY_PASS"

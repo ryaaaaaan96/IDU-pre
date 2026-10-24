@@ -7,7 +7,7 @@
 #include <iap/iap.h>
 #endif
 #include <watchdog/watchdog.h>
-#include <zephyr/drivers/led.h>
+#include <zephyr/drivers/gpio.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/reboot.h>
 #include <errno.h>
@@ -15,7 +15,7 @@
 LOG_MODULE_REGISTER(app_status, LOG_LEVEL_INF);
 /* 应用生命周期适配接口；仅测试状态模块时由测试提供实现。 */
 void protocol_stop(void);
-static const struct led_dt_spec run_led = LED_DT_SPEC_GET(DT_ALIAS(led0));
+static const struct gpio_dt_spec run_led = GPIO_DT_SPEC_GET(DT_ALIAS(led0), gpios);
 static const struct watchdog_config watchdog = {
     .feed = GPIO_DT_SPEC_GET(DT_NODELABEL(idu_io), watchdog_gpios),
     .feed_interval_ms = DT_PROP(DT_NODELABEL(idu_io), watchdog_feed_ms),
@@ -34,7 +34,7 @@ static struct {
 } application;
 static void task_timer_expired(struct k_timer *timer);
 static K_TIMER_DEFINE(task_timer, task_timer_expired, NULL);
-static bool indicator_on;
+static bool indicator_ready;
 static int64_t next_toggle_ms;
 static void indicate(struct k_work *work);
 static K_WORK_DELAYABLE_DEFINE(indicator, indicate);
@@ -293,39 +293,35 @@ int status_sleep_forever(struct status_task *task)
     return err;
 }
 
-static int output(bool on)
-{
-    int err = !led_is_ready_dt(&run_led) ? -ENODEV :
-              on ? led_on_dt(&run_led) : led_off_dt(&run_led);
-    if (!err) { indicator_on = on; }
-    return err;
-}
-
 static void indicate(struct k_work *work)
 {
     ARG_UNUSED(work);
     enum status_phase phase = status_phase_get();
     if (phase == STATUS_UNCONFIGURED) { return; }
-    int64_t now = k_uptime_get();
-    bool on = true;
-    if (phase >= STATUS_RUN && phase < STATUS_FAULT_LOCKED) {
-        if (now >= next_toggle_ms) {
-            int64_t periods = (now - next_toggle_ms) / STATUS_LED_HALF_PERIOD_MS + 1;
-            on = (periods & 1) ? !indicator_on : indicator_on;
-            next_toggle_ms += periods * STATUS_LED_HALF_PERIOD_MS;
-        } else { on = indicator_on; }
+    if (indicator_ready) {
+        int err = 0;
+        if (phase >= STATUS_RUN && phase < STATUS_FAULT_LOCKED) {
+            int64_t now = k_uptime_get();
+            if (now >= next_toggle_ms) {
+                int64_t periods = (now - next_toggle_ms) / STATUS_LED_HALF_PERIOD_MS + 1;
+                next_toggle_ms += periods * STATUS_LED_HALF_PERIOD_MS;
+                if (periods & 1) { err = gpio_pin_toggle_dt(&run_led); }
+            }
+        } else { err = gpio_pin_set_dt(&run_led, 1); }
+        if (err && phase != STATUS_FAULT_LOCKED) {
+            (void)status_report_fault(STATUS_FAULT_LED, phase, err);
+        }
+        /* 运行中的翻转或报错不能覆盖同时到达的故障常亮要求。 */
+        if (phase != STATUS_FAULT_LOCKED && status_phase_get() == STATUS_FAULT_LOCKED) {
+            (void)gpio_pin_set_dt(&run_led, 1);
+        }
     }
-    int err = output(on);
-    if (err && phase != STATUS_FAULT_LOCKED) {
-        (void)status_report_fault(STATUS_FAULT_LED, phase, err);
-    }
-    if (status_phase_get() == STATUS_FAULT_LOCKED && !indicator_on) { (void)output(true); }
     /* main 停止后，故障留驻仍需正常驱动外部看门狗。 */
     k_spinlock_key_t key = k_spin_lock(&lock);
     bool check_watchdog = application.fault.action != STATUS_RESET;
     k_spin_unlock(&lock, key);
     if (!IS_ENABLED(CONFIG_APP_DEBUG_SKIP_WATCHDOG) && check_watchdog) {
-        err = watchdog_error(&monitor);
+        int err = watchdog_error(&monitor);
         if (err) { (void)status_report_fault(STATUS_FAULT_WATCHDOG, phase, err); }
     }
     k_work_reschedule(&indicator, K_MSEC(STATUS_LED_HALF_PERIOD_MS));
@@ -345,7 +341,10 @@ int status_init(void)
         err = watchdog_init(&monitor, &watchdog);
         if (err) { return status_report_fault(STATUS_FAULT_WATCHDOG, STATUS_STARTING, err); }
     }
-    err = output(true);
+    err = !gpio_is_ready_dt(&run_led) ? -ENODEV :
+          gpio_pin_configure_dt(&run_led, GPIO_OUTPUT_ACTIVE);
+    /* 初始化失败但允许继续时，后续工作只检查健康，不访问该引脚。 */
+    indicator_ready = !err;
     return err ? status_report_fault(STATUS_FAULT_LED, STATUS_STARTING, err) : 0;
 }
 

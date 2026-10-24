@@ -1,5 +1,6 @@
 """在独立 native 进程中运行采样生命周期场景，每个进程仅启动产品一次。"""
 import re
+import os
 import subprocess
 import sys
 
@@ -10,7 +11,8 @@ cases = re.findall(r"^acquisition::test_\w+$", listing.stdout, re.M)
 if not cases:
     raise SystemExit("No acquisition cases found: " + listing.stdout + listing.stderr)
 for case in cases:
-    result = subprocess.run([executable, "-test=" + case], capture_output=True, text=True, timeout=30)
+    result = subprocess.run([executable, "-test=" + case], env={**os.environ, "IDU_ACQUISITION_CASE": case},
+                            capture_output=True, text=True, timeout=30)
     if result.returncode or "PROJECT EXECUTION SUCCESSFUL" not in result.stdout:
         print(result.stdout, end="")
         print(result.stderr, end="", file=sys.stderr)
