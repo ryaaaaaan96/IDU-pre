@@ -116,6 +116,9 @@ static bool terminal_result(enum status_action action)
 FUNC_NORETURN void __wrap_sys_reboot(int type)
 {
     bool ok = type == SYS_REBOOT_COLD && terminal_result(STATUS_RESET);
+    if (!strcmp(scenario, "led-init")) {
+        ok = ok && atomic_get(&samples) == 0 && indicator_writes == 0;
+    }
     printk("RUNTIME_RESET_%s\n", ok ? "PASS" : "FAIL");
     nsi_exit(ok ? 0 : 1);
     CODE_UNREACHABLE;
@@ -181,7 +184,7 @@ ZTEST(runtime, test_real_main_fault_policy)
         int before = atomic_get(&samples);
         k_msleep(1100);
         zassert_true(atomic_get(&samples) > before);
-        if (!strcmp(scenario, "led-init")) { zassert_equal(indicator_writes, 0); }
+
         struct dp_point_state point;
         zassert_ok(dp_read((struct dp_key){DEVICE_LOCAL, SIGNAL_DI}, &point));
         zassert_equal(point.quality, DP_QUALITY_GOOD);

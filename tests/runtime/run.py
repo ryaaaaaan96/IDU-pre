@@ -8,8 +8,10 @@ if not cases:
     cases = ["publish", "sample", "led", "led-init", "input-init", "maintenance"]
     if policy != "debug":
         cases.append("task-timeout")
-marker = "RUNTIME_RESET_PASS" if policy == "reset" else "RUNTIME_POLICY_PASS"
 for case in cases:
+    # 运行期 LED 允许继续的配置也不能放过启动期引脚初始化失败。
+    reset = policy == "reset" or (policy == "continue" and case == "led-init")
+    marker = "RUNTIME_RESET_PASS" if reset else "RUNTIME_POLICY_PASS"
     result = subprocess.run([executable, "-flash_in_ram"],
                             env={**os.environ, "IDU_RUNTIME_CASE": case},
                             capture_output=True, text=True, timeout=30)

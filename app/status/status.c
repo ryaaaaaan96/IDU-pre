@@ -98,7 +98,7 @@ int status_report_fault(enum status_fault fault,
 {
     if (fault <= STATUS_FAULT_NONE || fault >= STATUS_FAULT_COUNT || !error) { return -EINVAL; }
     enum status_action action = policies[fault];
-    if ((fault != STATUS_FAULT_LED && action == STATUS_CONTINUE) ||
+    if (((fault != STATUS_FAULT_LED || phase == STATUS_STARTING) && action == STATUS_CONTINUE) ||
         action > STATUS_RESET || fault == STATUS_FAULT_WATCHDOG) { action = STATUS_RESET; }
     if (action == STATUS_RESET && fault != STATUS_FAULT_WATCHDOG &&
         IS_ENABLED(CONFIG_APP_DEBUG_SKIP_WATCHDOG)) { action = STATUS_HOLD; }
@@ -341,11 +341,15 @@ int status_init(void)
         err = watchdog_init(&monitor, &watchdog);
         if (err) { return status_report_fault(STATUS_FAULT_WATCHDOG, STATUS_STARTING, err); }
     }
-    err = !gpio_is_ready_dt(&run_led) ? -ENODEV :
-          gpio_pin_configure_dt(&run_led, GPIO_OUTPUT_ACTIVE);
-    /* 初始化失败但允许继续时，后续工作只检查健康，不访问该引脚。 */
-    indicator_ready = !err;
-    return err ? status_report_fault(STATUS_FAULT_LED, STATUS_STARTING, err) : 0;
+    if (!gpio_is_ready_dt(&run_led)) {
+        return status_report_fault(STATUS_FAULT_LED, STATUS_STARTING, -ENODEV);
+    }
+    err = gpio_pin_configure_dt(&run_led, GPIO_OUTPUT_ACTIVE);
+    if (err) {
+        return status_report_fault(STATUS_FAULT_LED, STATUS_STARTING, err);
+    }
+    indicator_ready = true;
+    return 0;
 }
 
 void status_set_phase(enum status_phase phase)

@@ -73,11 +73,12 @@ struct status_degradation status_degradation_get(void);
 
 /**
  * @brief 初始化状态单例、LED 和看门狗。
- * @retval 0 初始化流程允许继续。
+ * @retval 0 指示灯及所需看门狗初始化成功。
  * @retval -EALREADY 本次上电已调用过初始化。
  * @return 其他错误码表示初始化故障；复位策略可能不返回。
  * @note 仅由启动线程调用；APP_DEBUG_SKIP_WATCHDOG 禁用看门狗。
  * @note 所有启动服务成功后，调用方须设置 STATUS_RUN。
+ * @note 指示灯初始化失败必须终止启动，运行期 LED 继续策略对此不生效。
  */
 int status_init(void);
 

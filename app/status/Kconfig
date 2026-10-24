@@ -42,6 +42,9 @@ config APP_FAULT_LED_ACTION
     int "Status indicator output action"
     default 2
     range 0 2
+    help
+      此选项的继续策略仅用于运行期输出错误。指示灯初始化失败必须终止启动；
+      若选择继续则升级为复位，调试配置将可转换的复位改为留驻。
 
 config APP_FAULT_IMAGE_CONFIRM_ACTION
     int "Trial image confirmation action"
