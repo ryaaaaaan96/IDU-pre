@@ -107,6 +107,11 @@ Zephyr core，沿用原串口配置、定时器、CRC、UART IRQ 和 DE 控制�
 写入超时仍不自动重试，因为不能据此判断远端是否已执行。
 
 `CO_MODBUS_TX_TIMEOUT_MS` / `TR_MODBUS_TX_TIMEOUT_MS` 约束发送预算。
+南向 `CO_EXCHANGE_TIMEOUT_MS=500` 从每次 ADU 竞争总线锁前开始，覆盖共线锁、RAW、
+Zephyr 客户端锁、发送与响应；响应同时受 `CO_TIMEOUT_MS=100` 限制。未发送的竞争到期
+返回 `-EBUSY`，不计远端无回复；自动重试每次重新计时，显式下发不重试。
+业务排队、参数事务及多帧操作不属于同一 500 ms 承诺。模拟测试允许内核 tick 调度余量，
+实板竞争时限另测；配置依据见 [ADR 0011](adr/0011-terminal-faults-and-runtime-budgets.md)。
 `CONFIG_MODBUS_BUFFER_SIZE` 决定完整帧上限；IAPv3 当前为 1100 字节。
 vport 不再分配与此大小相同的共享接收池。
 

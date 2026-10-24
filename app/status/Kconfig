@@ -1,0 +1,57 @@
+config APP_DEBUG_SKIP_WATCHDOG
+    bool "Skip application watchdog initialization for debugging"
+    help
+      Leave the external watchdog feed GPIO in the state established by
+      MCUboot, which floats PC13 on this board. Do not start physical feeding
+      or task deadline monitoring, and skip watchdog health checks.
+      Disable this option to restore normal watchdog protection.
+
+menu "Local fault actions (0 continue, 1 hold, 2 reset)"
+
+config APP_FAULT_INPUT_INIT_ACTION
+    int "Required input initialization action"
+    default 2
+    range 1 2
+
+config APP_FAULT_IAP_INIT_ACTION
+    int "Required IAP initialization action"
+    default 2
+    range 1 2
+
+config APP_FAULT_PROTOCOL_INIT_ACTION
+    int "Protocol assembly action"
+    default 2
+    range 1 2
+
+config APP_FAULT_SAMPLE_ACTION
+    int "Local sampling action"
+    default 2
+    range 1 2
+
+config APP_FAULT_PUBLISH_ACTION
+    int "Local sample publication action"
+    default 2
+    range 1 2
+
+config APP_FAULT_PROTOCOL_ACTION
+    int "Protocol maintenance action"
+    default 2
+    range 1 2
+
+config APP_FAULT_LED_ACTION
+    int "Status indicator output action"
+    default 2
+    range 0 2
+
+config APP_FAULT_IMAGE_CONFIRM_ACTION
+    int "Trial image confirmation action"
+    default 2
+    range 1 2
+
+config APP_FAULT_TASK_TIMEOUT_ACTION
+    int "Registered task deadline action"
+    default 2
+    range 1 2
+
+comment "Watchdog output failure always resets; debug converts other resets to hold"
+endmenu

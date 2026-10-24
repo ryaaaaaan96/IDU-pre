@@ -42,6 +42,9 @@ static struct modbus_adu rx, tx;
 static bool confirmed = true;
 static int freeze_error, pending_error, pending_calls, fail_writes;
 static bool frozen;
+static bool stop_on_prepare, stop_on_commit;
+static K_SEM_DEFINE(stop_observed, 0, 1);
+static K_SEM_DEFINE(stop_cancelled, 0, 1);
 static int hook_context;
 static K_SEM_DEFINE(rebooted, 0, 1);
 static const struct flash_area *stage, *slot, *primary;
@@ -51,6 +54,7 @@ int __real_boot_request_upgrade(int permanent);
 int __wrap_boot_request_upgrade(int permanent)
 {
     zassert_equal(permanent, BOOT_UPGRADE_TEST); ++pending_calls;
+    if (stop_on_commit) { iap_stop(); k_sem_give(&stop_observed); }
     return pending_error ? pending_error : __real_boot_request_upgrade(permanent);
 }
 FUNC_NORETURN void __wrap_sys_reboot(int type)
@@ -62,9 +66,14 @@ static int prepare_reboot(void *user)
 {
     zassert_equal(user, &hook_context);
     if (!freeze_error) { frozen = true; }
+    if (stop_on_prepare) { iap_stop(); k_sem_give(&stop_observed); }
     return freeze_error;
 }
-static void cancel_reboot(void *user) { zassert_equal(user, &hook_context); frozen = false; }
+static void cancel_reboot(void *user)
+{
+    zassert_equal(user, &hook_context); frozen = false;
+    if (stop_on_prepare) { k_sem_give(&stop_cancelled); }
+}
 static int inject_write(const struct device *dev, off_t off, uint8_t byte)
 { ARG_UNUSED(dev); ARG_UNUSED(off); return fail_writes ? -EIO : byte; }
 static const struct flash_simulator_cb flash_cb = {.write_byte = inject_write};
@@ -347,5 +356,30 @@ ZTEST(iap, test_z_signed_image_staged_and_test_boot)
     zassert_ok(flash_area_read(primary, 0, data, sizeof(data)));
     for (size_t i = 0; i < sizeof(data); ++i) { zassert_equal(data[i], 0xff); }
     zassert_equal(command(20083, 0xaa), IAP_ROUTE_SILENT);
+}
+ZTEST(iap, test_terminal_stop_at_upgrade_commit)
+{
+    const char *mode = getenv("IDU_IAP_STOP");
+    if (!mode || IS_ENABLED(CONFIG_IAP_CONFIGURED)) { ztest_test_skip(); }
+    stop_on_prepare = !strcmp(mode, "before");
+    stop_on_commit = !strcmp(mode, "during");
+    zassert_true(stop_on_prepare || stop_on_commit);
+    full_receive();
+    zassert_equal(word(20103), 0); /* This read queues the finish job. */
+    zassert_ok(k_sem_take(&stop_observed, K_SECONDS(3)));
+    if (stop_on_prepare) {
+        zassert_ok(k_sem_take(&stop_cancelled, K_SECONDS(1)));
+        zassert_equal(pending_calls, 0);
+        zassert_false(frozen);
+        zassert_equal(mcuboot_swap_type(), BOOT_SWAP_TYPE_NONE);
+    } else {
+        k_msleep(600); /* The existing post-commit reboot delay has elapsed. */
+        zassert_equal(pending_calls, 1);
+        zassert_equal(mcuboot_swap_type(), BOOT_SWAP_TYPE_TEST);
+    }
+    zassert_not_equal(k_sem_take(&rebooted, K_NO_WAIT), 0);
+    zassert_equal(command(20083, 0xaa), IAP_ROUTE_SILENT);
+    zassert_equal(read_regs(20103, 1), IAP_ROUTE_SILENT);
+    iap_stop();
 }
 ZTEST_SUITE(iap, NULL, setup, NULL, NULL, NULL);

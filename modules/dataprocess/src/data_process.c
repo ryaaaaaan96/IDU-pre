@@ -195,6 +195,7 @@ static int reference_read(struct dp_key key, uint16_t port, uint8_t function,
                          uint16_t address, uint16_t count, struct dp_point_state *state,
                          bool *response)
 {
+    if (dp_stopped()) { return -ECANCELED; }
     if (response) { *response = false; }
     if (!state) { return -EINVAL; }
     int err = enter();
@@ -228,6 +229,7 @@ static int reference_read(struct dp_key key, uint16_t port, uint8_t function,
 int dp_reference_read_at(struct dp_key key, uint16_t port, uint8_t function,
                          uint16_t address, uint16_t count, struct dp_point_state *state)
 {
+    if (dp_stopped()) { return -ECANCELED; }
     int err = reference_read(key, port, function, address, count, state, NULL);
     /* Nonzero reference READ status is not a native successful transaction. */
     return err > 0 ? -EIO : err;
@@ -519,6 +521,7 @@ static void collected(PARA_DATA_S *data)
 
 int dp_reference_collect(PARA_DATA_S *data)
 {
+    if (dp_stopped()) { return -ECANCELED; }
     if (!data || !data->p_set_data || !data->set_num ||
         data->set_num > ARRAY_SIZE(collector->items) || k_is_in_isr()) { return -EINVAL; }
     if (data->type != DP_FAST_SET && data->type != DP_TIMER_SET && data->type != DP_NO_DM_SET) { return -ENOTSUP; }
@@ -552,6 +555,7 @@ int dp_reference_collect(PARA_DATA_S *data)
             collector->items[i].p_value.pst = collector->bytes[i];
         }
     }
+    if (!err && dp_stopped()) { err = -ECANCELED; }
     bool accepted = false;
     if (!err) {
         err = callback(&collector->request, collected);

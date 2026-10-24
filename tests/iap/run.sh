@@ -10,6 +10,10 @@ env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/iap -d build/IDU-pre/tests/iap
 executable=build/IDU-pre/tests/iap/zephyr/zephyr.exe
 timeout 30s "$executable" -flash_in_ram
+for stop in before during; do
+    env IDU_IAP_STOP="$stop" timeout 30s "$executable" -flash_in_ram \
+        -test=iap::test_terminal_stop_at_upgrade_commit
+done
 flash_test_file="$(mktemp "$workspace_dir/build/IDU-pre/tests/iap/reboot.XXXXXX")"
 trap 'rm -f -- "$flash_test_file"' EXIT
 for phase in receive recover; do

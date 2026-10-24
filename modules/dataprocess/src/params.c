@@ -195,6 +195,7 @@ static void notify_result(int error)
 
 int dp_params_read(struct dp_key key, struct dp_point_state *out)
 {
+    if (dp_stopped()) { return -ECANCELED; }
     int i = index_of(key);
     if (i < 0 || !out) {
         return i < 0 ? i : -EINVAL;
@@ -600,6 +601,7 @@ int dp_params_init(const struct dp_equip_cfg *cfg, uint8_t area_id)
 
 static int begin_transaction(bool allow_pending)
 {
+    if (dp_stopped()) { return -ECANCELED; }
     if (!equipment) {
         return -EACCES;
     }
@@ -613,6 +615,7 @@ static int begin_transaction(bool allow_pending)
         k_mutex_unlock(&transaction_lock);
         return -EBUSY;
     }
+    if (dp_stopped()) { k_mutex_unlock(&transaction_lock); return -ECANCELED; }
     if (!allow_pending && (status.flags & DP_PARAM_PENDING)) {
         int err = -EBUSY;
         k_mutex_unlock(&transaction_lock);
@@ -903,6 +906,7 @@ int dp_params_recover(void)
 
 int dp_params_reload(void)
 {
+    if (dp_stopped()) { return -ECANCELED; }
     if (!equipment || k_current_get() == &k_sys_work_q.thread) {
         return -EACCES;
     }
@@ -919,6 +923,7 @@ int dp_params_reload(void)
 
 int dp_params_flush_due(void)
 {
+    if (dp_stopped()) { return -ECANCELED; }
     if (!equipment || k_mutex_lock(&transaction_lock, K_NO_WAIT)) { return -EBUSY; }
     bool due = flush_at && k_uptime_get() >= flush_at;
     k_mutex_unlock(&transaction_lock);
@@ -950,6 +955,7 @@ int dp_params_sync_device(uint16_t dev_id)
 int dp_params_sample(const struct dp_point_update *values, size_t count,
                      uint16_t flags, int64_t sampled_at)
 {
+    if (dp_stopped()) { return -ECANCELED; }
     if (!equipment || !values || !count || count > CONFIG_DP_PARAMS_MAX_COUNT ||
         (flags & ~DP_QUALITY_SIMULATED) || sampled_at < 0 ||
         sampled_at > k_uptime_get() || k_is_in_isr()) { return -EINVAL; }

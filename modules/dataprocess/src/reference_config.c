@@ -173,6 +173,7 @@ static struct reference_timer reference_timers[CONFIG_DP_REFERENCE_MAX_TIMERS];
 
 static void timer_due(struct k_work *work)
 {
+    if (dp_stopped()) { return; }
     struct reference_timer *timer = CONTAINER_OF(k_work_delayable_from_work(work),
                                                  struct reference_timer, work);
     int err = dp_reference_submit(timer->function, true);

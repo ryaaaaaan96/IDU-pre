@@ -21,13 +21,13 @@ Q9/Q10 均已接受。设计前沿为空，开始实现，不重复请求五项�
 
 | 任务 | 状态 | 任务依赖 |
 | --- | --- | --- |
-| [01 本地终止故障收敛](issues/01-terminal-fault.md) | pending | None |
-| [02 真实协议装配集成验证](issues/02-real-assembly-tests.md) | pending | None |
-| [03 南向事务总等待预算](issues/03-transfer-budget.md) | pending | None |
-| [04 关键采样工作区与压力策略](issues/04-sample-resources.md) | pending | None |
-| [05 LED 调度归属](issues/05-status-indicator.md) | pending | None |
+| [01 本地终止故障收敛](issues/01-terminal-fault.md) | resolved | None |
+| [02 真实协议装配集成验证](issues/02-real-assembly-tests.md) | resolved | None |
+| [03 南向事务总等待预算](issues/03-transfer-budget.md) | resolved | None |
+| [04 关键采样工作区与压力策略](issues/04-sample-resources.md) | resolved | None |
+| [05 LED 调度归属](issues/05-status-indicator.md) | resolved | None |
 
-各项没有人为串行的任务依赖；开始实现前须解决其产品行为前提。02 的最终验收会随 01/03/04/05 的变化补齐。
+五项软件修复与本地验收已完成，结论见各任务 Answer 和 [验证记录](validation.md)。实板验证范围单独保留，不把编译和模拟通过等同于实物验收。
 
 ## Comments
 

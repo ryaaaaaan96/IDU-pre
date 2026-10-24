@@ -25,6 +25,9 @@ static atomic_t requests, writes, fault;
 static uint16_t setpoint = 100;
 static uint16_t second_setpoint = 100;
 static K_SEM_DEFINE(north_done, 0, 1);
+static K_SEM_DEFINE(north_sending, 0, 1);
+static K_SEM_DEFINE(north_release, 0, 1);
+static bool hold_north_send;
 static struct k_work_delayable respond;
 
 enum { NORMAL, NO_REPLY, WRONG_UNIT, WRONG_FUNCTION, WRONG_LENGTH, BAD_CRC, EXCEPTION, NORTH_REQUEST };
@@ -49,6 +52,10 @@ static void transmitted(const struct device *dev, size_t bytes, void *user)
     zassert_equal(crc16_ansi(outgoing, length - 2), sys_get_le16(outgoing + length - 2));
     if (!south) {
         memcpy(reply, outgoing, length); reply_size = length; outgoing_size = 0;
+        if (hold_north_send) {
+            k_sem_give(&north_sending);
+            zassert_ok(k_sem_take(&north_release, K_SECONDS(1)));
+        }
         k_sem_give(&north_done); return;
     }
     atomic_inc(&requests);
@@ -235,5 +242,61 @@ ZTEST(shared_rs485, test_z_periodic_worker_updates_cache_on_the_shared_wire)
     int count = atomic_get(&requests);
     request(4, 10000, 1); zassert_equal(reply[1], 4);
     zassert_equal(atomic_get(&requests), count);
+}
+ZTEST(shared_rs485, test_total_budget_includes_northbound_wire_contention)
+{
+    struct co_device_status before, after;
+    zassert_ok(co_device_status(DEVICE_REMOTE_IO, &before));
+    int sent = atomic_get(&requests);
+    hold_north_send = true;
+    k_sem_reset(&north_done);
+    uint8_t data[] = {16, 3, 0x79, 0x18, 0, 1, 0, 0}; /* cached 31000 */
+    sys_put_le16(crc16_ansi(data, 6), data + 6);
+    zassert_equal(uart_emul_put_rx_data(uart, data, sizeof(data)), sizeof(data));
+    zassert_ok(k_sem_take(&north_sending, K_SECONDS(1)));
+    uint16_t value;
+    int64_t start = k_uptime_get();
+    int err = co_read(DEVICE_REMOTE_IO, 4, 8152, &value, 1);
+    int64_t elapsed = k_uptime_get() - start;
+    hold_north_send = false;
+    k_sem_give(&north_release);
+    zassert_ok(k_sem_take(&north_done, K_SECONDS(1)));
+    k_msleep(20);
+    zassert_equal(err, -EBUSY);
+    zassert_between_inclusive(elapsed, 490, 520);
+    zassert_equal(atomic_get(&requests), sent);
+    zassert_ok(co_device_status(DEVICE_REMOTE_IO, &after));
+    /* failures counts all failed calls, including local contention. The
+     * error classification and remote liveness must remain distinct. */
+    zassert_equal(after.error, -EBUSY);
+    zassert_equal(after.state, before.state);
+    zassert_equal(after.online, before.online);
+    zassert_equal(after.last_response, before.last_response);
+    zassert_ok(co_read(DEVICE_REMOTE_IO, 4, 8152, &value, 1));
+    request(3, 31000, 1);
+}
+ZTEST(shared_rs485, test_zz_terminal_stop_rejects_new_business)
+{
+    protocol_stop();
+    protocol_stop(); /* Idempotent even after a partially started lifecycle. */
+    uint16_t value;
+    struct dp_point_state state;
+    zassert_equal(co_read(DEVICE_REMOTE_IO, 4, 8152, &value, 1), -ECANCELED);
+    zassert_equal(dp_read((struct dp_key){DEVICE_REMOTE_IO, SIGNAL_DI}, &state), -ECANCELED);
+    zassert_equal(dp_submit_sig_value((struct dp_key){DEVICE_LOCAL, SIGNAL_DI},
+                                     &value, 1, K_MSEC(20), NULL), -ECANCELED);
+    k_msleep(20);
+    int sent = atomic_get(&requests);
+    uint8_t data[] = {16, 6, 0x7b, 0x0c, 0, 42, 0, 0}; /* 31500 */
+    sys_put_le16(crc16_ansi(data, 6), data + 6);
+    k_sem_reset(&north_done);
+    zassert_equal(uart_emul_put_rx_data(uart, data, sizeof(data)), sizeof(data));
+    zassert_equal(k_sem_take(&north_done, K_MSEC(200)), -EAGAIN);
+    zassert_equal(atomic_get(&requests), sent);
+    zassert_equal(protocol_init(), -ECANCELED);
+    zassert_equal(dp_set_para_not_dm(NULL, NULL), -ECANCELED);
+    zassert_equal(co_dp_fast_set(NULL, NULL), -ECANCELED);
+    zassert_equal(co_anlysis_mb_pkg(DEVICE_REMOTE_IO, 0, NULL, 0), -ECANCELED);
+    zassert_equal(co_reconfigure(0, (struct modbus_iface_param){0}), -ECANCELED);
 }
 ZTEST_SUITE(shared_rs485, NULL, setup, NULL, NULL, NULL);

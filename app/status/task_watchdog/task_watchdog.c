@@ -6,6 +6,7 @@
 
 static struct k_spinlock lock;
 static struct watchdog *physical;
+static void (*on_expired)(void);
 static bool initialized, terminal, fault_valid;
 static struct status_fault_snapshot fault;
 static struct status_task *active;
@@ -30,7 +31,7 @@ static int service_error(void)
     return watchdog_error(physical);
 }
 
-/* Caller holds lock. Stop the physical backend before requesting reset. */
+/* Caller holds lock. Policy runs after unlocking, including ISR expiry. */
 static bool trip(struct status_task *task)
 {
     if (terminal) { return false; }
@@ -42,7 +43,6 @@ static bool trip(struct status_task *task)
     };
     fault_valid = true;
     k_timer_stop(&timer);
-    watchdog_stop(physical);
     return true;
 }
 
@@ -59,29 +59,30 @@ static void expired(struct k_timer *expired_timer)
     bool reset = first && trip(first);
     if (!terminal) { schedule_next(); }
     k_spin_unlock(&lock, key);
-    if (reset) { sys_reboot(SYS_REBOOT_COLD); }
+    if (reset) { on_expired(); }
 }
 
-int status_tasks_init(struct watchdog *monitor)
+int status_tasks_init(struct watchdog *monitor, void (*expired_callback)(void))
 {
-    if (!monitor) { return -EINVAL; }
+    if (!monitor || !expired_callback) { return -EINVAL; }
     k_spinlock_key_t key = k_spin_lock(&lock);
     int err = terminal ? -ECANCELED : initialized ? -EALREADY : 0;
     if (!err) {
         k_timer_init(&timer, expired, NULL);
         physical = monitor;
+        on_expired = expired_callback;
         initialized = true;
     }
     k_spin_unlock(&lock, key);
     return err;
 }
 
-void status_tasks_stop(struct watchdog *monitor)
+void status_tasks_halt(struct watchdog *monitor, bool stop_feeding)
 {
     k_spinlock_key_t key = k_spin_lock(&lock);
     terminal = true;
     if (initialized) { k_timer_stop(&timer); }
-    watchdog_stop(monitor);
+    if (stop_feeding) { watchdog_stop(monitor); }
     k_spin_unlock(&lock, key);
 }
 
@@ -129,7 +130,7 @@ int status_feed(struct status_task *task)
         schedule_next();
     }
     k_spin_unlock(&lock, key);
-    if (reset) { sys_reboot(SYS_REBOOT_COLD); }
+    if (reset) { on_expired(); }
     return err;
 }
 
@@ -174,6 +175,6 @@ int status_sleep_forever(struct status_task *task)
         }
     }
     k_spin_unlock(&lock, key);
-    if (reset) { sys_reboot(SYS_REBOOT_COLD); }
+    if (reset) { on_expired(); }
     return err;
 }

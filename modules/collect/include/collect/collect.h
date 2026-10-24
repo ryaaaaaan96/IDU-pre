@@ -83,6 +83,9 @@ int co_poll(size_t block);
  * application-owned worker per bus, passing (void *)(uintptr_t)bus_id.
  */
 int co_polling_init(void);
+/* ISR-safe terminal request. Workers cancel queued requests; current exchanges
+ * release their normal ownership. No mode change can resume a stopped bus. */
+void co_stop(void);
 void co_bus_task(void *bus_id, void *unused1, void *unused2);
 /* All device bus IDs must fit CONFIG_CO_MAX_BUSES, including buses registered
  * later. Invalid configurations are rejected before installing callbacks.

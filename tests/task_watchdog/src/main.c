@@ -6,6 +6,7 @@
 #include "nsi_cpu_es_if.h"
 
 static atomic_t edges;
+void protocol_stop(void) {}
 static struct gpio_driver_data gpio_data;
 static const struct gpio_driver_config gpio_config = {.port_pin_mask = UINT32_MAX};
 static int configure(const struct device *dev, gpio_pin_t pin, gpio_flags_t flags)
@@ -126,14 +127,14 @@ ZTEST(task_watchdog, test_registration_validation_without_fixed_capacity)
     zassert_equal(status_task_get(NULL, &after), -EINVAL);
     zassert_equal(status_fault_get(NULL), -EINVAL);
 }
-ZTEST(task_watchdog, test_explicit_fault_stays_stopped_with_no_task_fault)
+ZTEST(task_watchdog, test_explicit_hold_keeps_feed_without_task_fault)
 {
     const struct status_task_config config = {.name = "first", .timeout_ms = 2000};
     zassert_ok(status_register(&first, &config));
-    status_fail(&application, STATUS_STARTING, -EIO);
+    (void)status_report_fault(&application, STATUS_FAULT_INPUT_INIT, STATUS_STARTING, -EIO);
     atomic_val_t before = atomic_get(&edges);
     k_sleep(K_MSEC(40));
-    zassert_equal(atomic_get(&edges), before);
+    zassert_true(atomic_get(&edges) > before);
     zassert_equal(status_feed(&first), -ECANCELED);
     zassert_equal(status_register(&extra, &config), -ECANCELED);
     struct status_fault_snapshot fault;

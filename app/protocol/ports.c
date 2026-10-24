@@ -1,4 +1,5 @@
 #include "ports.h"
+#include "inc/protocol.h"
 #include "signal_ids.h"
 #include <collect/collect.h>
 #include <collect/port.h>
@@ -140,7 +141,7 @@ static int receive(void *user, const uint8_t *data, size_t size)
     } else { matches = false; }
     k_spin_unlock(&response_lock, key);
     int err = collecting ? (matches ? co_port_input(PORT_ACQUISITION, &source, &frame) : -ENOMSG) :
-                           tr_port_input(PORT_FORWARD, &source, &frame);
+                           (protocol_stopped() ? -ECANCELED : tr_port_input(PORT_FORWARD, &source, &frame));
     /* RAW 输入已复制报文。共享口必须立即恢复 RX，允许北向写处理期间接收南向回复。 */
     mb_serial_release(serial);
     return err;

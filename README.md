@@ -118,8 +118,9 @@ app/main.c                         启动顺序、采样周期与休眠
 采样字段到测点的映射由 `process/points.c` 完成，点表定义仍在 `app/protocol/`。
 
 LED 操作直接放在 `app/status/status.c`，通过 Zephyr LED API 控制：
-启动和故障时常亮，运行时亮/灭各 100 ms；主循环按灯与采样的最近期限休眠，
-闪烁不改变采样周期。输出失败阻止喂狗与镜像确认。
+启动和终止故障时常亮，运行时标称亮/灭各 100 ms，由 status 在系统工作队列独立调度，允许普通调度抖动。
+主循环只维护采样周期；LED 不用于证明采样仍在推进。输出失败按[故障策略](docs/fault-policy.md)处理。
+常规构建默认启用看门狗；单步调试显式使用 `./scripts/build.sh --extra-conf "$PWD/conf/debug.conf"`。
 后续状态闪烁也在 `status` 中实现，有多个产品复用需求时再抽取模块。
 
 ## 仓库布局

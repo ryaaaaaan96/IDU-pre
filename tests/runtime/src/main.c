@@ -1,0 +1,174 @@
+#include "acquisition/sample.h"
+#include "protocol/inc/protocol.h"
+#include "protocol/inc/signal_ids.h"
+#include "status/status.h"
+#include "status/task_watchdog/task_watchdog.h"
+#include <dataprocess/points.h>
+#include <dataprocess/params.h>
+#include <collect/collect.h>
+#include <zephyr/drivers/gpio/gpio_emul.h>
+#include <zephyr/storage/flash_map.h>
+#include <zephyr/drivers/led.h>
+#include <zephyr/drivers/serial/uart_emul.h>
+#include <zephyr/modbus/modbus.h>
+#include <zephyr/sys/reboot.h>
+#include <zephyr/ztest.h>
+#include <stdlib.h>
+#include <string.h>
+#include "nsi_cpu_es_if.h"
+
+int application_main(void);
+static const char *scenario;
+static enum status_fault expected_fault;
+static atomic_t samples, led_edges;
+static bool indicator_on;
+static k_tid_t application_thread_id;
+static struct k_thread application_thread;
+static struct status_task monitored;
+int __real_flash_area_open(uint8_t id, const struct flash_area **area);
+int __wrap_flash_area_open(uint8_t id, const struct flash_area **area)
+{
+    if (scenario && !strcmp(scenario, "storage-degraded") &&
+        id == DT_FIXED_PARTITION_ID(DT_ALIAS(idu_settings))) { return -EIO; }
+    return __real_flash_area_open(id, area);
+}
+static atomic_t transmitted_bytes;
+static void discard_transmitted(const struct device *device, size_t size, void *user)
+{
+    ARG_UNUSED(user);
+    atomic_add(&transmitted_bytes, size);
+    uint8_t bytes[64];
+    while (uart_emul_get_tx_data(device, bytes, sizeof(bytes)) > 0) {}
+}
+K_THREAD_STACK_DEFINE(application_stack, 4096);
+DEVICE_DT_DEFINE(DT_NODELABEL(modbus_test), NULL, NULL, NULL, NULL, POST_KERNEL, 90, NULL);
+
+int acquisition_inputs_init(void) { return !strcmp(scenario, "input-init") ? -EIO : 0; }
+int acquisition_inputs_sample(struct acquisition_sample *sample)
+{
+    atomic_inc(&samples);
+    *sample = (struct acquisition_sample){.valid = true, .address = 16, .di = 0x1234};
+    return !strcmp(scenario, "sample") ? -EIO : 0;
+}
+void *__real_k_malloc(size_t size);
+void *__wrap_k_malloc(size_t size)
+{
+    if (application_thread_id == k_current_get() && atomic_get(&samples) &&
+        !strcmp(scenario, "publish")) { return NULL; }
+    return __real_k_malloc(size);
+}
+static int output(bool on)
+{
+    if (atomic_get(&samples) && !strcmp(scenario, "led")) { return -EIO; }
+    if (on != indicator_on) { atomic_inc(&led_edges); }
+    indicator_on = on;
+    return 0;
+}
+static int on(const struct device *device, uint32_t index)
+{ ARG_UNUSED(device); ARG_UNUSED(index); return output(true); }
+static int off(const struct device *device, uint32_t index)
+{ ARG_UNUSED(device); ARG_UNUSED(index); return output(false); }
+static DEVICE_API(led, indicator_api) = {.on = on, .off = off};
+DEVICE_DT_DEFINE(DT_NODELABEL(status_leds), NULL, NULL, NULL, NULL,
+                 POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE, &indicator_api);
+
+static bool terminal_result(enum status_action action)
+{
+    struct status_application_fault fault;
+    struct dp_point_state point;
+    return !status_application_fault_get(&fault) && fault.first == expected_fault &&
+        fault.terminal == expected_fault && fault.error < 0 && fault.action == action &&
+        protocol_stopped() &&
+        dp_read((struct dp_key){DEVICE_LOCAL, SIGNAL_DI}, &point) == -ECANCELED;
+}
+FUNC_NORETURN void __wrap_sys_reboot(int type)
+{
+    bool ok = type == SYS_REBOOT_COLD && terminal_result(STATUS_RESET);
+    printk("RUNTIME_RESET_%s\n", ok ? "PASS" : "FAIL");
+    nsi_exit(ok ? 0 : 1);
+    CODE_UNREACHABLE;
+}
+static void run_application(void *a, void *b, void *c)
+{
+    ARG_UNUSED(a); ARG_UNUSED(b); ARG_UNUSED(c);
+    application_thread_id = k_current_get();
+    (void)application_main();
+}
+ZTEST(runtime, test_real_main_fault_policy)
+{
+    scenario = getenv("IDU_RUNTIME_CASE");
+    if (!scenario) { scenario = "publish"; }
+    if (!strcmp(scenario, "publish")) { expected_fault = STATUS_FAULT_PUBLISH; }
+    else if (!strcmp(scenario, "sample")) { expected_fault = STATUS_FAULT_SAMPLE; }
+    else if (!strcmp(scenario, "led")) { expected_fault = STATUS_FAULT_LED; }
+    else if (!strcmp(scenario, "input-init")) { expected_fault = STATUS_FAULT_INPUT_INIT; }
+    else if (!strcmp(scenario, "protocol-init")) { expected_fault = STATUS_FAULT_PROTOCOL_INIT; }
+    else if (!strcmp(scenario, "maintenance")) { expected_fault = STATUS_FAULT_PROTOCOL; }
+    else if (!strcmp(scenario, "task-timeout")) { expected_fault = STATUS_FAULT_TASK_TIMEOUT; }
+    else if (!strcmp(scenario, "storage-degraded")) { expected_fault = STATUS_FAULT_NONE; }
+    else { zassert_unreachable("Unknown scenario"); }
+    /* A disconnected peer still consumes UART TX bytes on the physical wire. */
+    uart_emul_callback_tx_data_ready_set(DEVICE_DT_GET(DT_NODELABEL(uart_test)),
+                                        discard_transmitted, NULL);
+    k_thread_create(&application_thread, application_stack, K_THREAD_STACK_SIZEOF(application_stack),
+                     run_application, NULL, NULL, NULL, 10, 0, K_NO_WAIT);
+    bool maintenance_injected = false;
+    struct status_application_fault fault;
+    if (expected_fault == STATUS_FAULT_NONE) {
+        k_msleep(1800);
+        zassert_true(atomic_get(&samples) >= 3);
+        zassert_false(protocol_stopped());
+        zassert_equal(status_application_fault_get(&fault), -ENOENT);
+        struct dp_param_status storage;
+        dp_params_get_status(&storage);
+        zassert_true(storage.storage_error < 0);
+        struct co_device_status remote;
+        zassert_ok(co_device_status(DEVICE_REMOTE_IO, &remote));
+        zassert_equal(remote.state, CO_DEVICE_OFFLINE);
+        printk("RUNTIME_POLICY_PASS\n");
+        return;
+    }
+    for (int i = 0; i < 300; ++i) {
+        if (!strcmp(scenario, "maintenance") && atomic_get(&samples) && !maintenance_injected) {
+            zassert_ok(modbus_disable(modbus_iface_get_by_name("RAW_1")));
+            maintenance_injected = true;
+        }
+        if (!strcmp(scenario, "task-timeout") && atomic_get(&samples) && !maintenance_injected) {
+            const struct status_task_config config = {.name = "test-task", .timeout_ms = 50};
+            zassert_ok(status_register(&monitored, &config));
+            maintenance_injected = true;
+        }
+        if (!status_application_fault_get(&fault)) { break; }
+        k_msleep(10);
+    }
+    zassert_ok(status_application_fault_get(&fault));
+    if (fault.terminal == STATUS_FAULT_NONE) {
+        zassert_equal(expected_fault, STATUS_FAULT_LED);
+        zassert_equal(fault.first, STATUS_FAULT_LED);
+        zassert_false(protocol_stopped());
+        int before = atomic_get(&samples);
+        k_msleep(1100);
+        zassert_true(atomic_get(&samples) > before);
+        struct dp_point_state point;
+        zassert_ok(dp_read((struct dp_key){DEVICE_LOCAL, SIGNAL_DI}, &point));
+        zassert_equal(point.quality, DP_QUALITY_GOOD);
+    } else {
+        zassert_true(terminal_result(STATUS_HOLD), "normal RESET must have exited via reboot");
+        k_msleep(150); /* Current operations reach their cancellation boundary. */
+        int before = atomic_get(&samples);
+        int sent = atomic_get(&transmitted_bytes);
+        const struct device *gpio = DEVICE_DT_GET(DT_NODELABEL(gpio_test));
+        int previous = gpio_emul_output_get(gpio, 1), edges = 0;
+        for (int i = 0; i < 60; ++i) {
+            k_msleep(10);
+            int value = gpio_emul_output_get(gpio, 1);
+            edges += value != previous; previous = value;
+        }
+        zassert_equal(atomic_get(&samples), before);
+        zassert_equal(atomic_get(&transmitted_bytes), sent);
+        zassert_equal(edges > 0, !IS_ENABLED(CONFIG_APP_DEBUG_SKIP_WATCHDOG));
+        if (expected_fault != STATUS_FAULT_LED) { zassert_true(indicator_on); }
+    }
+    printk("RUNTIME_POLICY_PASS\n");
+}
+ZTEST_SUITE(runtime, NULL, NULL, NULL, NULL, NULL);

@@ -49,6 +49,10 @@ static struct receiver_buffers *buffers;
 static uint16_t packet_length;
 K_MUTEX_DEFINE(lock);
 K_SEM_DEFINE(wake, 0, 1);
+enum { STOP_REQUESTED = BIT(0), COMMIT_ADMITTED = BIT(1), REBOOT_ADMITTED = BIT(2) };
+static atomic_t lifecycle;
+void iap_stop(void) { atomic_or(&lifecycle, STOP_REQUESTED); k_sem_give(&wake); }
+static bool stopped(void) { return (atomic_get(&lifecycle) & STOP_REQUESTED) != 0; }
 static struct k_thread thread;
 K_THREAD_STACK_DEFINE(stack, 6144);
 
@@ -58,7 +62,7 @@ static void state_set(uint8_t state, uint8_t cause) { receiver.state = state; re
 static int area_read(void *ctx, uint32_t off, void *buf, size_t len)
 { return flash_area_read(ctx, off, buf, len); }
 static int image_write(void *ctx, const void *buf, size_t len)
-{ return flash_img_buffered_write(ctx, buf, len, false); }
+{ return stopped() ? -ECANCELED : flash_img_buffered_write(ctx, buf, len, false); }
 
 static int journal_save(uint32_t phase, uint32_t size, const uint8_t *hash)
 {
@@ -105,6 +109,7 @@ static int finish(void)
     uint32_t size = 0;
     uint8_t hash[32];
     bool frozen = false;
+    if (stopped()) { return -ECANCELED; }
     if (!may_upload()) { return -EBUSY; }
     int err = flash_img_init_id(&buffers->image, secondary->fa_id);
     if (err) { return err; }
@@ -119,18 +124,26 @@ static int finish(void)
         k_mutex_lock(&lock, K_FOREVER); state_set(IAP_UPGRADING, NO_CAUSE); k_mutex_unlock(&lock);
     }
     /* Freeze parameter transactions only for the short commit/reboot window. */
+    if (!err && stopped()) { err = -ECANCELED; }
     if (!err && config.prepare_reboot) {
         err = config.prepare_reboot(config.user); frozen = !err;
     }
+    /* One atomic admission point: stop wins before this point; afterwards the
+     * journal/MCUboot pair reaches its existing durable completion path. */
+    if (!err && !atomic_cas(&lifecycle, 0, COMMIT_ADMITTED)) { err = -ECANCELED; }
     if (!err) { err = journal_save(2, size, hash); }
     if (!err) { err = boot_request_upgrade(BOOT_UPGRADE_TEST); }
-    if (err) { if (frozen) { config.cancel_reboot(config.user); } return err; }
+    if (err) {
+        atomic_and(&lifecycle, ~COMMIT_ADMITTED);
+        if (frozen) { config.cancel_reboot(config.user); }
+        return err;
+    }
     k_mutex_lock(&lock, K_FOREVER);
     state_set(IAP_JUMP, NO_CAUSE);
     k_mutex_unlock(&lock);
     LOG_INF("Verified SGZ image staged (%u bytes); MCUboot test boot requested", size);
     k_sleep(K_MSEC(500)); /* Allow the host to read status / release RS485 DE. */
-    sys_reboot(SYS_REBOOT_COLD);
+    if (atomic_cas(&lifecycle, COMMIT_ADMITTED, REBOOT_ADMITTED)) { sys_reboot(SYS_REBOOT_COLD); }
     return 0;
 }
 
@@ -152,6 +165,10 @@ static void worker(void *a, void *b, void *c)
     for (;;) {
         k_sem_take(&wake, K_SECONDS(1));
         k_mutex_lock(&lock, K_FOREVER);
+        if (stopped()) {
+            receiver.job = JOB_NONE; receiver.busy = false;
+            k_mutex_unlock(&lock); return;
+        }
         uint8_t job = receiver.job;
         if (!job && (receiver.state == IAP_LOGIN || receiver.state == IAP_TRANSFER) &&
             k_uptime_get() >= receiver.deadline) { state_set(IAP_FAULT, COMM_ERROR); }
@@ -223,6 +240,7 @@ static bool overlap(const struct flash_area *a, const struct flash_area *b)
 
 int iap_init_config(const struct iap_config *cfg)
 {
+    if (stopped()) { return -ECANCELED; }
     if (receiver.ready) { return -EALREADY; }
     if (!cfg || !cfg->aes_key || !cfg->image.public_key || !cfg->image.key_hash ||
         cfg->image.max_size < 544 ||
@@ -405,6 +423,7 @@ static int write_regs(int iface, uint16_t address, const uint8_t *data, size_t b
 
 int iap_route(int iface, const struct modbus_adu *rx, struct modbus_adu *tx)
 {
+    if (stopped()) { return IAP_ROUTE_SILENT; }
     if (!rx || !tx || iface < 0) { return -EINVAL; }
     if (rx->length < 2 || rx->length > sizeof(rx->data)) { return -ENOENT; }
     uint16_t address = sys_get_be16(rx->data);
@@ -430,6 +449,7 @@ int iap_route(int iface, const struct modbus_adu *rx, struct modbus_adu *tx)
         (rx->unit_id == 0 && rx->fc != 4 && rx->fc != 16)) { return IAP_ROUTE_SILENT; }
     k_mutex_lock(&lock, K_FOREVER);
     int err = IAP_ROUTE_SILENT;
+    if (stopped()) { k_mutex_unlock(&lock); return IAP_ROUTE_SILENT; }
     if (rx->fc == 3 || rx->fc == 4) {
         if (rx->length == 4 && count && count <= 55 &&
             (receiver.owner < 0 || receiver.owner == iface)) { err = read_regs(address, count, tx); }

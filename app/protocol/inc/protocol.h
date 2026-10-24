@@ -11,6 +11,10 @@ int protocol_register_point_tables(void);
 int protocol_init(void);
 /* 已锁存的本地通信维护故障，不驱动首次启动或采样。 */
 int protocol_error(void);
+/* Terminal, idempotent, ISR-safe. Allows already admitted operations to finish
+ * or leave durable recovery intent; does not suspend threads holding locks. */
+void protocol_stop(void);
+bool protocol_stopped(void);
 struct application_status;
 /* Called by the application owner of status; remote outages are diagnostics. */
 void protocol_update_status(struct application_status *status);

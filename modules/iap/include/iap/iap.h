@@ -28,6 +28,9 @@ struct iap_config {
  * Reboot health confirmation remains the application's responsibility. */
 int iap_init_config(const struct iap_config *config);
 bool iap_ready(void);
+/* ISR-safe, terminal until reset. Rejects new routes/jobs; current Flash
+ * operations finish safely. An admitted upgrade commit is not rolled back. */
+void iap_stop(void);
 /* CONFIG_IAP_CONFIGURED: same explicit initialization, using devicetree, generated
  * verification/transport keys and the selected reboot policy. */
 int iap_init(void);

@@ -30,6 +30,14 @@ struct bus_state {
 static struct bus_state buses[CONFIG_CO_MAX_BUSES];
 static const struct dp_equip_cfg *equipment;
 static bool started;
+static atomic_t stopped;
+void co_stop(void)
+{
+    atomic_set(&stopped, 1);
+    for (size_t i = 0; i < ARRAY_SIZE(buses); ++i) {
+        if (buses[i].ready) { k_sem_give(&buses[i].wake); }
+    }
+}
 static struct co_data_callbacks data_callbacks;
 
 int co_set_data_callbacks(const struct co_data_callbacks *callbacks)
@@ -71,12 +79,14 @@ static int exchange(uint16_t dev_id, enum co_port_mode mode, struct modbus_adu *
                      struct co_outcome *outcome)
 {
     *outcome = (struct co_outcome){0};
+    if (atomic_get(&stopped)) { return -ECANCELED; }
     struct bus_state *bus = bus_for(dev_id);
     int d = device_index(dev_id);
     if (!bus || !adu || (unsigned)mode >= CO_PORT_SLEEP || adu->length > sizeof(adu->data)) { return -EINVAL; }
     if (k_current_get() == &k_sys_work_q.thread || k_is_in_isr()) { return -EWOULDBLOCK; }
     k_timepoint_t deadline = sys_timepoint_calc(K_MSEC(CONFIG_CO_EXCHANGE_TIMEOUT_MS));
     if (k_mutex_lock(&bus->lock, sys_timepoint_timeout(deadline))) { return -EBUSY; }
+    if (atomic_get(&stopped)) { k_mutex_unlock(&bus->lock); return -ECANCELED; }
     if ((bus->mode != mode && !(bus->mode == CO_PORT_INIT && bus->init_owner == k_current_get())) ||
         (bus->init_owner && bus->init_owner != k_current_get())) {
         k_mutex_unlock(&bus->lock); return -EBUSY;
@@ -200,6 +210,7 @@ const struct dp_params_transport *co_parameter_transport(void)
 
 int co_init_bus(const struct dp_equip_cfg *cfg, const struct co_bus_cfg *config)
 {
+    if (atomic_get(&stopped)) { return -ECANCELED; }
     if (!config || config->id >= ARRAY_SIZE(buses) || (!config->transfer && !config->read_model && config->iface < 0) ||
         !cfg || cfg->device_count > CONFIG_DP_MAX_DEVICES) { return -EINVAL; }
     if (!IS_ENABLED(CONFIG_CO_MODBUS_ADAPTER) && !config->transfer && !config->read_model) {
@@ -254,7 +265,7 @@ static int collect_request(const struct co_cfg *cfg, bool sync, struct co_outcom
     int err;
     if (cfg->model_protocol) {
         k_mutex_lock(&bus->lock, K_FOREVER);
-        err = (bus->mode != CO_PORT_POLL &&
+        err = atomic_get(&stopped) ? -ECANCELED : (bus->mode != CO_PORT_POLL &&
                !(bus->mode == CO_PORT_INIT && bus->init_owner == k_current_get())) ? -EBUSY :
               !bus->cfg.read_model ? -ENOTSUP :
               bus->cfg.read_model(bus->cfg.user, cfg->dev_id, cfg->model_id, cfg->address, registers, cfg->count);
@@ -458,6 +469,7 @@ int co_device_status(uint16_t dev_id, struct co_device_status *status)
 
 int co_initialize_device(uint16_t dev_id)
 {
+    if (atomic_get(&stopped)) { return -ECANCELED; }
     struct bus_state *bus = bus_for(dev_id);
     if (!bus) { return -ENODEV; }
     if (k_mutex_lock(&bus->lock, K_NO_WAIT)) { return -EBUSY; }
@@ -497,9 +509,11 @@ int co_initialize_device(uint16_t dev_id)
 
 int co_submit(const struct co_request *request, co_done_fn done, void *user)
 {
+    if (atomic_get(&stopped)) { return -ECANCELED; }
     struct bus_state *bus = request ? bus_for(request->dev_id) : NULL;
     if (!bus || !done || request->priority > 3 || (unsigned)request->mode >= CO_PORT_SLEEP || k_is_in_isr() || request->adu.length > sizeof(request->adu.data)) { return -EINVAL; }
     k_mutex_lock(&schedule_lock, K_FOREVER);
+    if (atomic_get(&stopped)) { k_mutex_unlock(&schedule_lock); return -ECANCELED; }
     int err = -ENOSPC;
     for (size_t i = 0; i < ARRAY_SIZE(bus->queue); ++i) {
         if (!bus->queue[i]) {
@@ -530,6 +544,7 @@ int co_cancel(uint8_t id)
 
 int co_reconfigure(uint8_t id, struct modbus_iface_param param)
 {
+    if (atomic_get(&stopped)) { return -ECANCELED; }
     if (id >= ARRAY_SIZE(buses) || !buses[id].ready || buses[id].cfg.transfer || buses[id].cfg.iface < 0) { return -EINVAL; }
     struct bus_state *bus = &buses[id];
     if (k_mutex_lock(&bus->lock, K_NO_WAIT)) { return -EBUSY; }
@@ -555,6 +570,7 @@ void co_bus_task(void *arg, void *b, void *c)
     bus->running = true;
     k_mutex_unlock(&schedule_lock);
     while (true) {
+        if (atomic_get(&stopped)) { co_cancel(id); return; }
         co_state_tick();
         int poll = -1, queued = -1; int64_t best = INT64_MIN, now = k_uptime_get();
         int64_t deadline = INT64_MAX;
@@ -617,6 +633,7 @@ void co_bus_task(void *arg, void *b, void *c)
 
 int co_polling_init(void)
 {
+    if (atomic_get(&stopped)) { return -ECANCELED; }
     if (!equipment) { return -EACCES; }
     if (started) { return -EALREADY; }
     for (size_t i = 0; i < equipment->device_count; ++i) {
@@ -654,6 +671,7 @@ K_MUTEX_DEFINE(reference_write_lock);
 
 int co_dp_fast_set(PARA_DATA_S *data, PARA_SET_STATUS status)
 {
+    if (atomic_get(&stopped)) { return -ECANCELED; }
     if (!data || !data->p_set_data || !data->set_num || data->set_num > ARRAY_SIZE(reference_writes) ||
         k_is_in_isr()) { return -EINVAL; }
     if (data->type > DP_NO_DM_SET) { return -ENOTSUP; }
@@ -720,6 +738,7 @@ int co_dp_fast_set(PARA_DATA_S *data, PARA_SET_STATUS status)
 
 int co_anlysis_mb_pkg(uint8_t dev, uint16_t address, uint8_t *frame, uint16_t length)
 {
+    if (atomic_get(&stopped)) { return -ECANCELED; }
     struct bus_state *bus = bus_for(dev);
     int device = device_index(dev);
     if (!bus || !frame || device < 0 || length < 5 || length > 256 || k_is_in_isr()) { return -EINVAL; }

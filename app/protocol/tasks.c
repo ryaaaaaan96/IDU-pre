@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <transmit/forward.h>
 #include <transmit/modbus.h>
+#include <transmit/modbus_adapter.h>
 #include <zephyr/sys/atomic.h>
 
 static struct k_thread samples, business;
@@ -16,6 +17,18 @@ static struct k_thread collect;
 K_THREAD_STACK_DEFINE(collect_stack, CONFIG_CO_STACK_SIZE);
 static bool collect_prepared;
 static atomic_t maintenance_error;
+static atomic_t stopped;
+
+bool protocol_stopped(void) { return atomic_get(&stopped) != 0; }
+
+void protocol_stop(void)
+{
+    atomic_set(&stopped, 1);
+    dp_stop();
+    co_stop();
+    const char *name = tr_modbus_port_name(protocol_forwarding.port_id);
+    if (name) { (void)tr_port_set_mode(modbus_iface_get_by_name(name), TR_MODE_SLEEP); }
+}
 
 int protocol_error(void)
 {
@@ -24,6 +37,7 @@ int protocol_error(void)
 
 int protocol_dp_tasks_init(void)
 {
+    if (protocol_stopped()) { return -ECANCELED; }
     if (prepared) { return -EALREADY; }
     k_thread_create(&samples, sample_stack, K_THREAD_STACK_SIZEOF(sample_stack),
                     dp_samples_task, NULL, NULL, NULL, 5, 0, K_FOREVER);
@@ -35,13 +49,14 @@ int protocol_dp_tasks_init(void)
 
 void protocol_dp_tasks_start(void)
 {
-    if (!prepared) { return; }
+    if (!prepared || protocol_stopped()) { return; }
     k_thread_start(&samples);
     k_thread_start(&business);
 }
 
 int protocol_co_tasks_init(void)
 {
+    if (protocol_stopped()) { return -ECANCELED; }
     if (collect_prepared) { return -EALREADY; }
     k_thread_create(&collect, collect_stack, K_THREAD_STACK_SIZEOF(collect_stack),
                     co_bus_task, (void *)(uintptr_t)protocol_collect_bus.id,
@@ -52,7 +67,7 @@ int protocol_co_tasks_init(void)
 
 void protocol_co_tasks_start(void)
 {
-    if (collect_prepared) { k_thread_start(&collect); }
+    if (collect_prepared && !protocol_stopped()) { k_thread_start(&collect); }
 }
 
 #if defined(CONFIG_TR_FORWARD_CONFIG)
@@ -66,6 +81,7 @@ static bool forwarding_prepared;
 static void maintain_forwarding(struct k_work *work)
 {
     ARG_UNUSED(work);
+    if (protocol_stopped()) { return; }
     int err = tr_forward_service(&protocol_forwarding, CONFIG_IDU_FORWARD_UNIT);
     if (err) { atomic_cas(&maintenance_error, 0, err); }
     k_work_reschedule_for_queue(&configuration_queue, &maintenance,
@@ -74,6 +90,7 @@ static void maintain_forwarding(struct k_work *work)
 
 int protocol_forwarding_init(void)
 {
+    if (protocol_stopped()) { return -ECANCELED; }
     if (forwarding_started) { return -EALREADY; }
     const char *name = tr_modbus_port_name(protocol_forwarding.port_id);
     if (!name) { return -ENOTCONN; }
@@ -93,6 +110,10 @@ int protocol_forwarding_init(void)
     };
     int err = tr_modbus_bind_execution(iface, &execution);
     if (!err) { err = tr_forward_init(&protocol_forwarding, CONFIG_IDU_FORWARD_UNIT); }
+    if (protocol_stopped()) {
+        (void)tr_port_set_mode(iface, TR_MODE_SLEEP);
+        return -ECANCELED;
+    }
     if (err) { return err; }
     forwarding_started = true;
     k_work_init_delayable(&maintenance, maintain_forwarding);

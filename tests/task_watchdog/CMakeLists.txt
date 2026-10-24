@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.20.0)
+set(KCONFIG_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/Kconfig)
 get_filename_component(APP_ROOT ../.. ABSOLUTE)
 list(APPEND ZEPHYR_EXTRA_MODULES ${APP_ROOT}/modules/watchdog)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})

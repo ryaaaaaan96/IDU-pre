@@ -50,6 +50,8 @@ env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/task_watchdog -d "$test_dir/task_watchdog"
 python3 applications/IDU-pre/tests/task_watchdog/run.py "$test_dir/task_watchdog/zephyr/zephyr.exe"
 
+bash applications/IDU-pre/tests/runtime/run.sh
+
 bash applications/IDU-pre/tests/iap/run.sh
 
 # ADC contracts, modular telemetry, reusable models and event-driven polling.

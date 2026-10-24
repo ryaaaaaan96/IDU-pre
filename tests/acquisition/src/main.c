@@ -30,6 +30,10 @@ static bool healthy, boot_ready, checkpoint_ready;
 static unsigned dp_health_checks;
 static int led_set_error;
 static bool indicator_on;
+static unsigned indicator_edges, sample_delay_ms;
+static bool protocol_halted;
+void protocol_stop(void) { protocol_halted = true; }
+bool protocol_stopped(void) { return protocol_halted; }
 static struct acquisition_sample published;
 static struct application_status acquisition;
 static int previous_startup_service;
@@ -142,17 +146,21 @@ int co_polling_init(void) { return service(COLLECT_START); }
 uint16_t points_sample_period_ms(void) { return 500; }
 int iap_init(void) { return service(IAP_INIT); }
 int protocol_forwarding_init(void) { return service(FORWARD_INIT); }
-int watchdog_error(struct watchdog *monitor) { ++checks; return service(WATCHDOG_CHECK); }
+int watchdog_error(struct watchdog *monitor) { ++checks; ++calls[WATCHDOG_CHECK]; return errors[WATCHDOG_CHECK]; }
 void watchdog_stop(struct watchdog *monitor) { ++stops; }
-int status_tasks_init(struct watchdog *monitor) { ARG_UNUSED(monitor); return 0; }
-void status_tasks_stop(struct watchdog *monitor) { watchdog_stop(monitor); }
+int status_tasks_init(struct watchdog *monitor, void (*expired)(void))
+{ ARG_UNUSED(monitor); ARG_UNUSED(expired); return 0; }
+void status_tasks_halt(struct watchdog *monitor, bool stop_feeding)
+{ if (stop_feeding) { watchdog_stop(monitor); } }
+void status_request_reboot(void) {}
+void iap_stop(void) {}
 
 static int output_led(bool on)
 {
     int err = acquisition.phase == STATUS_STARTING ? service(LED_START) :
               acquisition.phase == STATUS_CHECKING_HEALTH ? service(LED) : 0;
     if (!err) { err = led_set_error; }
-    if (!err) { indicator_on = on; }
+    if (!err) { indicator_edges += indicator_on != on; indicator_on = on; }
     return err;
 }
 static int output_on(const struct device *dev, uint32_t led)
@@ -187,6 +195,7 @@ bool dp_healthy(uint32_t max_idle_ms)
 
 int acquisition_inputs_sample(struct acquisition_sample *snapshot)
 {
+    if (sample_delay_ms) { k_msleep(sample_delay_ms); }
     snapshot->di = 0x1234;
     snapshot->address = 7;
     for (size_t i = 0; i < SAMPLE_ANALOG_COUNT; ++i) { snapshot->raw[i] = 100 + i; }
@@ -226,6 +235,8 @@ static void reset(void)
     checkpoint_ready = false;
     led_set_error = 0;
     indicator_on = false;
+    indicator_edges = sample_delay_ms = 0;
+    protocol_halted = false;
     previous_startup_service = -1;
     parameter_flags = DP_PARAM_STORAGE_READY;
     parameter_storage_error = 0;
@@ -312,7 +323,7 @@ ZTEST(acquisition, test_failed_acquisition_publishes_invalid_quality_and_preserv
 
 ZTEST(acquisition, test_cycle_errors_cannot_feed_or_confirm_and_stop_is_terminal)
 {
-    const enum service failures[] = {PUBLISH, PROTOCOL, LED};
+    const enum service failures[] = {PUBLISH, PROTOCOL};
     for (size_t i = 0; i < ARRAY_SIZE(failures); ++i) {
         reset();
         zassert_ok(startup(&acquisition));
@@ -377,7 +388,7 @@ ZTEST(acquisition, test_status_retains_original_fault_despite_indicator_failure)
     led_set_error = -ENODEV; /* Fault indication itself cannot hide sampling error. */
     errors[SAMPLE] = -EIO;
     zassert_equal(acquisition_cycle(&acquisition), -EIO);
-    status_fail(&acquisition, STATUS_CHECKING_HEALTH, -ETIMEDOUT);
+    (void)status_report_fault(&acquisition, STATUS_FAULT_TASK_TIMEOUT, STATUS_CHECKING_HEALTH, -ETIMEDOUT);
     status_set_phase(&acquisition, STATUS_RUN);
     zassert_equal(acquisition.phase, STATUS_FAULT_LOCKED);
     zassert_equal(acquisition.fault_phase, STATUS_SAMPLING);
@@ -390,24 +401,60 @@ ZTEST(acquisition, test_led_tracks_startup_healthy_cycles_and_fault)
 {
     zassert_ok(startup(&acquisition));
     zassert_true(indicator_on);
-    zassert_true(acquisition.led_on);
     zassert_ok(acquisition_cycle(&acquisition));
     zassert_true(indicator_on); /* Sampling no longer determines blink speed. */
     k_sleep(K_MSEC(STATUS_LED_HALF_PERIOD_MS));
-    zassert_ok(status_led_update(&acquisition));
     zassert_false(indicator_on);
-    zassert_false(acquisition.led_on);
     zassert_ok(acquisition_cycle(&acquisition));
     zassert_false(indicator_on);
     k_sleep(K_MSEC(STATUS_LED_HALF_PERIOD_MS));
-    zassert_ok(status_led_update(&acquisition));
     zassert_true(indicator_on);
-    status_fail(&acquisition, STATUS_SAMPLING, -EIO);
+    (void)status_report_fault(&acquisition, STATUS_FAULT_SAMPLE, STATUS_SAMPLING, -EIO);
     zassert_true(indicator_on);
     k_sleep(K_MSEC(STATUS_LED_HALF_PERIOD_MS));
-    zassert_equal(status_led_update(&acquisition), -EACCES);
     zassert_true(indicator_on);
     zassert_equal(stops, 1);
+}
+
+ZTEST(acquisition, test_indicator_progresses_during_blocking_sampling)
+{
+    zassert_ok(startup(&acquisition));
+    unsigned before = indicator_edges;
+    sample_delay_ms = 350;
+    zassert_ok(acquisition_cycle(&acquisition));
+    zassert_true(indicator_edges >= before + 3);
+}
+
+K_SEM_DEFINE(indicator_queue_entered, 0, 1);
+K_SEM_DEFINE(indicator_queue_release, 0, 1);
+static void delay_indicator_queue(struct k_work *work)
+{
+    ARG_UNUSED(work);
+    k_sem_give(&indicator_queue_entered);
+    (void)k_sem_take(&indicator_queue_release, K_FOREVER);
+}
+static K_WORK_DEFINE(indicator_queue_blocker, delay_indicator_queue);
+
+ZTEST(acquisition, test_late_indicator_skips_edges_and_fault_takes_priority)
+{
+    zassert_ok(startup(&acquisition));
+    unsigned before = indicator_edges;
+    k_work_submit(&indicator_queue_blocker);
+    zassert_ok(k_sem_take(&indicator_queue_entered, K_SECONDS(1)));
+    k_msleep(350);
+    unsigned while_delayed = indicator_edges;
+    k_sem_give(&indicator_queue_release);
+    k_msleep(10);
+    zassert_equal(while_delayed, before);
+    zassert_equal(indicator_edges, before + 1); /* Skip, rather than replay, three missed edges. */
+    zassert_false(indicator_on);
+    (void)status_report_fault(&acquisition, STATUS_FAULT_SAMPLE, STATUS_SAMPLING, -EIO);
+    k_msleep(10);
+    zassert_true(indicator_on);
+    unsigned fault_edges = indicator_edges;
+    k_msleep(250);
+    zassert_true(indicator_on);
+    zassert_equal(indicator_edges, fault_edges);
 }
 
 ZTEST(acquisition, test_initial_led_output_failure_stops_startup)

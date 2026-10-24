@@ -16,11 +16,12 @@ int startup(struct application_status *status)
     if (!status) {
         return -EINVAL;
     }
-    if (status->phase != STATUS_UNCONFIGURED) {
+    if (status_phase_get(status) != STATUS_UNCONFIGURED) {
         return -EALREADY;
     }
 
     int err = status_init(status);
+    enum status_fault fault = STATUS_FAULT_INPUT_INIT;
 
     if (!err) {
         err = acquisition_inputs_init();
@@ -28,14 +29,18 @@ int startup(struct application_status *status)
 #ifdef CONFIG_IDU_IAPV3
     if (!err) {
         err = iap_init();
+        fault = STATUS_FAULT_IAP_INIT;
     }
 #endif
     if (!err) {
         err = protocol_init();
+        fault = STATUS_FAULT_PROTOCOL_INIT;
     }
     if (err) {
-        status_fail(status, STATUS_STARTING, err);
-        LOG_ERR("Startup failed: %d; watchdog feeding stopped", err);
+        if (status_phase_get(status) != STATUS_FAULT_LOCKED) {
+            (void)status_report_fault(status, fault, STATUS_STARTING, err);
+        }
+        LOG_ERR("Startup failed: %d", err);
         return err;
     }
 
@@ -45,7 +50,7 @@ int startup(struct application_status *status)
 
 int main(void)
 {
-    struct application_status status = {0};
+    static struct application_status status;
     int err = startup(&status);
 
     if (err) {
@@ -58,18 +63,8 @@ int main(void)
         if (err) {
             return err;
         }
-        while (true) {
-            int64_t delay = next_sample - k_uptime_get();
-
-            if (delay <= 0) { break; }
-            err = status_led_update(&status);
-            if (err) {
-                status_fail(&status, STATUS_CHECKING_HEALTH, err);
-                LOG_ERR("Run LED update failed: %d", err);
-                return err;
-            }
-            delay = MIN(next_sample, status.next_led_toggle_ms) - k_uptime_get();
-            if (delay > 0) { k_sleep(K_MSEC(delay)); }
-        }
+        /* An overrun starts the next cycle without replaying missed samples. */
+        int64_t delay = next_sample - k_uptime_get();
+        if (delay > 0) { k_sleep(K_MSEC(delay)); }
     }
 }

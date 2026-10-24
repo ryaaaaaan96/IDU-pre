@@ -184,7 +184,11 @@ int dp_process_execute(const struct dp_process_request *request,
         (request->quality_flags & ~DP_QUALITY_SIMULATED) ||
         k_is_in_isr()) { return -EINVAL; }
     *result = (struct dp_process_result){.id = request->id};
+    if (dp_stopped()) { result->error = -ECANCELED; return -ECANCELED; }
     if (k_mutex_lock(&process_lock, request->operation == DP_OP_SAMPLE ? K_FOREVER : K_NO_WAIT)) { result->error = -EBUSY; return -EBUSY; }
+    if (dp_stopped()) {
+        k_mutex_unlock(&process_lock); result->error = -ECANCELED; return -ECANCELED;
+    }
     if (owner == k_current_get()) {
         k_mutex_unlock(&process_lock); result->error = -EDEADLK; return -EDEADLK;
     }
@@ -324,6 +328,7 @@ out:
 int dp_process_submit(const struct dp_process_request *request,
                        dp_process_done_fn done, void *user)
 {
+    if (dp_stopped()) { return -ECANCELED; }
     if (!request || !done || (!request->count && !request->callback) ||
         (request->callback && (request->count ||
             (request->operation != DP_OP_INIT && request->operation != DP_OP_TIMER))) ||
@@ -532,6 +537,7 @@ int dp_process_init(const struct dp_process_plan *plan)
 
 int dp_process_timer_start(struct dp_key key, uint32_t delay_ms, uint32_t period_ms)
 {
+    if (dp_stopped()) { return -ECANCELED; }
     struct dp_point_cfg p_scratch;
     const struct dp_point_cfg *p = dp_find(key, &p_scratch);
     if (!p || !p->handler) { return -EINVAL; }
@@ -564,6 +570,7 @@ int dp_process_timer_cancel(int slot)
 
 int dp_process_save_reboot(uint32_t delay_ms)
 {
+    if (dp_stopped()) { return -ECANCELED; }
 #if defined(CONFIG_DP_PARAMS)
     if (delay_ms < 100) { return -EINVAL; }
     k_mutex_lock(&timer_lock, K_FOREVER);
@@ -590,6 +597,7 @@ void dp_business_task(void *a, void *b, void *c)
             dp_process_execute(&job->request, &result);
             job->done(&result, job->user);
         }
+        if (dp_stopped()) { k_free(job); continue; }
         for (size_t i = 0; i < ARRAY_SIZE(timers); ++i) {
             k_mutex_lock(&timer_lock, K_FOREVER);
             bool due = timers[i].active && k_uptime_get() >= timers[i].due;
@@ -617,7 +625,7 @@ void dp_business_task(void *a, void *b, void *c)
         bool reboot = reboot_at && k_uptime_get() >= reboot_at;
         if (reboot) { reboot_at = 0; }
         k_mutex_unlock(&timer_lock);
-        if (reboot && !dp_params_flush()) { dp_process_reboot(); }
+        if (reboot && !dp_params_flush() && !dp_stopped()) { dp_process_reboot(); }
         dp_params_flush_due();
 #endif
         k_free(job);

@@ -374,6 +374,7 @@ void dp_reference_drain_events(void)
 {
     struct change_event event;
     for (size_t n = 0; n < CONFIG_DP_REFERENCE_EVENTS && !k_msgq_get(&change_events, &event, K_NO_WAIT); ++n) {
+        if (dp_stopped()) { continue; }
         struct dp_point_cfg scratch;
         const struct dp_point_cfg *p = dp_find(event.key, &scratch);
         if (!p) { continue; }

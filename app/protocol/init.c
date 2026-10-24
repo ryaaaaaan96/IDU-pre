@@ -66,6 +66,7 @@ static int connect_point_services(void)
 
 int protocol_init(void)
 {
+    if (protocol_stopped()) { return -ECANCELED; }
     int err = protocol_register_point_tables();
 
     if (!err) {

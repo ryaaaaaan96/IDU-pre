@@ -28,6 +28,9 @@ static struct dp_point_batch *sample_batch;
 static uint32_t generation;
 static int64_t reset_epoch[CONFIG_DP_MAX_DEVICES];
 static atomic_t ready;
+static atomic_t stopped;
+void dp_stop(void) { atomic_set(&stopped, 1); }
+bool dp_stopped(void) { return atomic_get(&stopped) != 0; }
 static atomic_t last_progress;
 static uint32_t published_ticket;
 static atomic_t consumed_ticket;
@@ -239,6 +242,7 @@ int dp_validate(const struct dp_equip_cfg *cfg)
 
 int dp_init_config(const struct dp_equip_cfg *cfg)
 {
+    if (dp_stopped()) { return -ECANCELED; }
     if (k_is_in_isr()) { return -EWOULDBLOCK; }
     k_mutex_lock(&initialization_lock, K_FOREVER);
     if (atomic_get(&ready)) {
@@ -300,6 +304,7 @@ int dp_init_config(const struct dp_equip_cfg *cfg)
 
 static int validate_batch(const struct dp_point_batch *batch)
 {
+    if (dp_stopped()) { return -ECANCELED; }
     if (!atomic_get(&ready)) {
         return -EACCES;
     }
@@ -345,6 +350,7 @@ int dp_submit_sig_values(const struct dp_point_update *values, size_t count,
     if (ticket) { *ticket = 0; }
     if (k_is_in_isr()) { return -EWOULDBLOCK; }
     if (!values || !count || count > DP_BATCH_POINTS) { return -EINVAL; }
+    if (dp_stopped()) { return -ECANCELED; }
 
     struct dp_point_batch *batch = k_malloc(sizeof(*batch));
     if (!batch) { return -ENOMEM; }
@@ -383,11 +389,14 @@ int dp_publish(struct dp_point_batch *batch, k_timeout_t timeout)
     }
     err = k_mutex_lock(&publish_lock, sys_timepoint_timeout(deadline));
     if (!err) {
-        batch->ticket = ++published_ticket;
-        if (!batch->ticket) { batch->ticket = ++published_ticket; }
-        publisher = k_current_get();
-        err = zbus_chan_pub(&dp_samples_chan, batch, sys_timepoint_timeout(deadline));
-        publisher = NULL;
+        if (dp_stopped()) { err = -ECANCELED; }
+        else {
+            batch->ticket = ++published_ticket;
+            if (!batch->ticket) { batch->ticket = ++published_ticket; }
+            publisher = k_current_get();
+            err = zbus_chan_pub(&dp_samples_chan, batch, sys_timepoint_timeout(deadline));
+            publisher = NULL;
+        }
         k_mutex_unlock(&publish_lock);
     }
     if (err) {
@@ -398,12 +407,16 @@ int dp_publish(struct dp_point_batch *batch, k_timeout_t timeout)
 
 int dp_wait_processed(uint32_t ticket, k_timeout_t timeout)
 {
+    if (dp_stopped()) { return -ECANCELED; }
     if (!ticket || k_is_in_isr()) { return -EINVAL; }
     if ((int32_t)((uint32_t)atomic_get(&consumed_ticket) - ticket) >= 0) { return 0; }
     k_timepoint_t deadline = sys_timepoint_calc(timeout);
     int err = k_mutex_lock(&completion_lock, sys_timepoint_timeout(deadline));
     if (err) { return -ETIMEDOUT; }
     while ((int32_t)((uint32_t)atomic_get(&consumed_ticket) - ticket) < 0) {
+        if (dp_stopped()) {
+            k_mutex_unlock(&completion_lock); return -ECANCELED;
+        }
         if (sys_timepoint_expired(deadline)) {
             k_mutex_unlock(&completion_lock);
             return -ETIMEDOUT;
@@ -416,7 +429,7 @@ int dp_wait_processed(uint32_t ticket, k_timeout_t timeout)
         if (err) { return -ETIMEDOUT; }
     }
     k_mutex_unlock(&completion_lock);
-    return 0;
+    return dp_stopped() ? -ECANCELED : 0;
 }
 
 static void complete_ticket(uint32_t ticket)
@@ -441,6 +454,7 @@ static uint16_t effective_quality(size_t index)
 
 int dp_read(struct dp_key key, struct dp_point_state *state)
 {
+    if (dp_stopped()) { return -ECANCELED; }
     if (!atomic_get(&ready) || !state) {
         return -EINVAL;
     }
@@ -466,7 +480,7 @@ int dp_read(struct dp_key key, struct dp_point_state *state)
 
 bool dp_healthy(uint32_t max_idle_ms)
 {
-    return atomic_get(&ready) &&
+    return !dp_stopped() && atomic_get(&ready) &&
            (uint32_t)(k_uptime_get_32() - (uint32_t)atomic_get(&last_progress)) <
            max_idle_ms;
 }
@@ -485,6 +499,7 @@ void dp_samples_task(void *a, void *b, void *c)
             continue;
         }
         k_sem_give(&sample_slots);
+        if (dp_stopped()) { complete_ticket(batch->ticket); continue; }
         if (channel != &dp_samples_chan || !atomic_get(&ready)) {
             continue;
         }
@@ -591,6 +606,7 @@ int dp_check_value(const struct dp_point_cfg *p, const struct dp_value *v)
 int dp_commit_sample(const struct dp_point_update *values, size_t count,
                               uint16_t flags, int64_t sampled_at)
 {
+    if (dp_stopped()) { return -ECANCELED; }
     if (!equipment || !values || !count) { return -EINVAL; }
     for (size_t i = 0; i < count; ++i) {
         struct dp_point_cfg p_scratch;
