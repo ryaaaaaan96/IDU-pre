@@ -49,6 +49,41 @@ device list
 ```
 
 日志通过 Shell 后端共用调试口，避免两个日志后端重复输出。
+`prj.conf` 启用 `CONFIG_LOG_CMDS` 和 `CONFIG_LOG_RUNTIME_FILTERING`，下载新固件后可在串口 Shell 中调整：
+
+| 命令 | 效果 |
+| --- | --- |
+| `log status` | 列出模块、当前级别 `current` 与编译上限 `built-in` |
+| `log enable wrn` | 所有模块仅输出 WARNING 和 ERROR |
+| `log enable inf app_protocol` | 将协议装配模块调整到 INFO |
+| `log disable app_acquisition` | 关闭指定模块 |
+| `log enable inf` | 所有模块调整到 INFO，受各自编译上限限制 |
+| `log halt` / `log go` | 停止 / 恢复当前 Shell 后端日志输出，命令仍可输入 |
+| `log mem` | 查看日志消息缓冲使用情况 |
+
+级别使用 `none`、`err`、`wrn`、`inf`、`dbg`，包含所选级别及更严重的消息。
+运行时修改只保存在 RAM，重启后恢复启动配置；不影响 MCUboot 自己的启动日志。
+按模块过滤针对 `LOG_*`，不能用它关闭任意 `printk()` 或 Shell 命令的回复。
+
+当前 `app_main`、`app_acquisition`、`app_protocol`、`app_status` 显式以 `LOG_LEVEL_INF` 注册。
+`log enable dbg app_acquisition` 无法恢复已在编译时删除的 `LOG_DBG()`；先通过
+`log status` 查看 `built-in`。若需要一次编入所有模块的 DEBUG 日志，创建额外 `.conf`：
+
+```ini
+CONFIG_LOG_OVERRIDE_LEVEL=4
+CONFIG_LOG_MAX_LEVEL=4
+CONFIG_LOG_RUNTIME_DEFAULT_LEVEL=3
+CONFIG_SHELL_BACKEND_SERIAL_LOG_LEVEL_INF=y
+```
+
+从应用目录执行 `./scripts/build.sh --extra-conf /绝对路径/log-debug.conf`，下载对应固件。
+这样启动仍按 INFO 输出，需要时输入 `log enable dbg app_acquisition`，结束后输入
+`log enable inf app_acquisition`。DEBUG 编译范围会增加镜像和日志处理开销；仅需个别模块时，
+也可调整该模块的注册级别或已有的模块日志 Kconfig。`CONFIG_LOG_DEFAULT_LEVEL=4` 不会覆盖
+源码里显式指定的 INFO，`CONFIG_LOG_MAX_LEVEL=4` 本身也不会提高模块级别。
+命令及过滤规则已对照本地 Zephyr v4.4.2 的 `subsys/logging/log_cmds.c`、`Kconfig.filtering`；
+参考 [Zephyr Logging 文档](https://docs.zephyrproject.org/latest/services/logging/index.html)。
+
 `kernel heap` 查看共享系统堆占用，`kernel thread stacks` 查看线程栈使用估计。
 GDB 的 `p`、`bt` 等命令仍在主机 GDB 中执行。
 可选 `--smp-uart` 固件将 USART0 RX 交给专用 SMP 升级传输，因此关闭串口 Shell 后端；
