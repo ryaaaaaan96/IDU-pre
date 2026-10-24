@@ -39,6 +39,9 @@ static unsigned workers_started;
 static struct dp_device_cfg remote_device[] = {{.dev_id = 10, .unit_id = 1}};
 static const struct dp_equip_cfg point_config = {.devices = remote_device, .device_count = 1};
 static enum co_device_online remote_state;
+/* The orchestration fixture supplies the same event contract as real CO. */
+ZBUS_CHAN_DEFINE(co_device_events, struct co_device_status, NULL, NULL,
+                 ZBUS_OBSERVERS_EMPTY, ZBUS_MSG_INIT(0));
 const struct co_bus_cfg protocol_collect_bus = {0};
 const struct co_port_config protocol_collect_port;
 

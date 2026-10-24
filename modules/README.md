@@ -29,6 +29,7 @@ compatibility.
 | [`input_sampler`](input_sampler/README.md) | `input_sampler/input_sampler.h` | Caller-configured analog/digital sampling with caller-owned buffers |
 | `watchdog` | `watchdog/watchdog.h` | Periodic GPIO feeding and terminal stop for external watchdogs |
 | [`vport`](vport/README.md) | `vport/vport.h` | Generic complete-message callbacks, ownership isolation and per-port send serialization |
+| [`modbus`](modbus/README.md) | `modbus_support/{rtu,transport}.h` | Allocation-free RTU conversion, shared serial access and reviewed Zephyr compatibility; optional forwarding hooks |
 | `dataprocess` | `data_process.h`, `platform_callback.h`, `dataprocess/{points,process,params}.h` | Shared data contracts/store, `dp_*` processing, optional NVS |
 | `collect` | `collect_lib.h`, `collect/{collect,port,simulator,model_simulator}.h` | `co_*` acquisition, bus scheduling, client initialization and optional simulation |
 | `transmit` | `transmit_lib.h`, `transmit/{transmit,message,modbus,modbus_adapter,server,registers}.h` | `tr_*` mappings, server lifecycle, register services, protocol handlers and optional vport adaptation |

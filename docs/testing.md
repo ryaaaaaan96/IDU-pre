@@ -8,6 +8,27 @@ AIDC 产品代码、专用测试及导入工具已移除；下方日期章节保
 其中的旧构建命令和文件路径不再作为当前操作入口。
 当前构建入口为 `./applications/IDU-pre/scripts/build.sh`（从工作区根目录运行）；旧记录中的根目录 `build.sh` 已移入 `scripts/`。
 
+## 2026-10-24 采集决策集中与公共 Modbus 支持
+
+`modules/modbus` 独立提供无分配 RTU 校验/编解码、公共串口接入及构建期兼容；
+CO/TR 保留各自事务和接收生命周期，转发专用钩子由 transmit 提供。
+collect 状态实现集中管理阶段、周期期限、重试预算及恢复推进；总线任务执行计划。
+
+新增独立编解码套件关闭 collect/transmit，验证已知线报文、CRC/长度拒绝、容量不足、
+失败时输出不变、满容量及异常帧。现有 communication/large、纯 collect、共享 RS485、
+状态/恢复和存储故障套件继续通过。
+
+完整 `tests/run.sh` 套件分段验收，共 72 次 native 成功执行、394 项 Ztest 通过；
+12 个任务看门狗场景、主机 C、IAP 畸形输入及镜像回归通过，Python 23 项中跳过 3 个外部样本。
+过程补齐 IAP 独立模块清单和应用编排测试的容量/事件通道夹具；前段成功后在夹具编译失败处
+停止，修复后从 acquisition 继续至脚本末尾。原始日志保留，非一次命令运行通过。
+成功验收段无编译警告；ASan/UBSan 保持原配置，沙箱中使用 `ASAN_OPTIONS=detect_leaks=0`。
+
+默认 MCUboot + IAPv3 构建、签名验证和 SGZ 导出通过；应用 Flash 146472 B、RAM 119532 B，
+MCUboot Flash 36704 B、RAM 18096 B。日志位于工作区 `build/IDU-pre/architecture-*.log`，
+具体对应关系见[验收记录](../.scratch/architecture-deepening/discussion.md#实施与验收)。
+未执行实板串口、共享 RS485 时序、IAP 上传或运行时栈高水位验证。
+
 ## 2026-10-23 离线单包探测与状态日志
 
 离线自动发现每周期只发送首包一次；正常初始化、正常轮询继续使用原重试预算。

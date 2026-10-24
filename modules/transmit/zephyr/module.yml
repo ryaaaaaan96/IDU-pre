@@ -2,5 +2,6 @@ name: transmit
 build:
   depends:
     - dataprocess
+    - modbus_support
   cmake: .
   kconfig: Kconfig

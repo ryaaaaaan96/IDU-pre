@@ -1,8 +1,8 @@
 # 完整报文端口与 RAW 串口接入
 
 应用通过 collect/transmit 注册端口及收发回调；它们的 `src/message.c` 使用
-内部通用 `vport`。协议适配分别归 `protocols/modbus/raw.c`，不新增
-`modbus_transport` 模块，也不在 vport 中设置 UART/CAN/socket 后端。
+内部通用 `vport`。协议角色适配分别归 `protocols/modbus/raw.c`，公共转换和
+Zephyr 接入归 `modules/modbus`；vport 不设置 UART/CAN/socket 后端。
 
 ## 分层与报文格式
 
@@ -10,7 +10,8 @@
 | --- | --- |
 | `app/protocol/ports.c` | 虚拟口、来源标识、实际发送接口的编排，以及物理接收回调 |
 | `collect/src/message.c`、`transmit/src/message.c` | 端口注册、输入、发送和完成通知；隔离各自拥有的端口 |
-| 各模块 `protocols/modbus/raw.c` | RAW ADU 与完整 RTU 报文的转换、CRC 校验、请求来源保持 |
+| 各模块 `protocols/modbus/raw.c` | 事务/请求来源、接收占用、内存所有权与完成通知，调用公共编解码 |
+| `modules/modbus` | 无分配 RTU 编解码、公共串口接入、构建期兼容及可选扩展钩子 |
 | `modules/vport` | 通用端口登记、回调调用、载荷长度检查、每个逻辑口的发送互斥 |
 | Zephyr Modbus 构建期适配 | RAW 接收保护、发送错误传递、串口完整帧接入、DE 与 TX 完成 |
 
@@ -82,13 +83,18 @@ IDU 拨码应使用 3–16 中的另一个地址。实板双设备性能尚待�
 ## 串口时序与构建期兼容
 
 当前 Zephyr 4.4.2 没有公开独立的 RTU 收帧/发送接口，因此继续由
-`modules/transmit/protocols/modbus/compat` 生成构建目录内的适配源码。
-collect 的协议目录也会加载这套构建适配，不因此启用 transmit 的服务或线程。
+`modules/modbus/compat` 生成构建目录内的适配源码。
+CO/TR 的协议适配选择 `MODBUS_SUPPORT`，不互相包含目录；纯采集不启用转发扩展。
 源文件 SHA-256 和替换锚点保持严格检查，West 管理的源码不修改。
 
-`modbus_io.h` 暴露串口完整帧接口及 RAW 完成通知。共享实现插入生成的
+`modbus_support/transport.h` 暴露串口完整帧接口及 RAW 完成通知。共享实现插入生成的
 Zephyr core，沿用原串口配置、定时器、CRC、UART IRQ 和 DE 控制，不新增
 第二套 UART 驱动。`core_io.h`、`serial_open.h` 是该构建适配的私有实现片段。
+
+`modbus_support/rtu.h` 提供编解码；Zephyr RAW 使用 `struct modbus_adu`，
+当前版本的 RTU 转换是串口内部静态函数，不能作为独立公开接口直接复用。
+转发专用请求处理保留在 transmit，通过 `MODBUS_SUPPORT_SERVER_HOOKS` 连接；
+公共模块自身不识别转发表、DP 测点或应用路由。
 
 串口接收完成后交给应用回调，由应用调用 CO/TR 的输入入口。RAW 请求处理
 结束时，完成通知恢复串口接收，覆盖正常响应、静默请求和失败路径。

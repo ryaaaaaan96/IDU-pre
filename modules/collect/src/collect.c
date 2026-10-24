@@ -29,8 +29,6 @@ struct bus_state {
 };
 static struct bus_state buses[CONFIG_CO_MAX_BUSES];
 static const struct dp_equip_cfg *equipment;
-static int64_t next_poll[CONFIG_DP_POINTS_MAX_POLLS];
-static bool disabled[CONFIG_DP_POINTS_MAX_POLLS];
 static bool started;
 static struct co_data_callbacks data_callbacks;
 
@@ -316,7 +314,7 @@ static int collect_group(size_t first, bool sync, bool due_only, size_t *rows,
             request.count + next->count > CO_MAX_REGS ||
             1U + (request.count + next->count) * 2U > sizeof(((struct modbus_adu *)0)->data) ||
             request.field_count + next->field_count > ARRAY_SIZE(fields) ||
-            (due_only && (disabled[i] || next_poll[i] > now))) { break; }
+            (due_only && !co_state_poll_due(i, now))) { break; }
         for (size_t f = 0; f < next->field_count; ++f) {
             struct co_field *field = &fields[request.field_count++];
             *field = next->fields[f];
@@ -429,8 +427,7 @@ int co_set_scan_pkg_flag(uint8_t dev_id, uint16_t address_model,
         if (p->dev_id != dev_id ||
             (model ? p->model_id != address_model || p->address != function_offset :
                      p->address != address_model || p->function != function_offset)) { continue; }
-        disabled[i] = flag == CO_SCAN_PKG_OFF;
-        next_poll[i] = k_uptime_get();
+        co_state_poll_enable(i, flag == CO_SCAN_PKG_ON);
         matched = true;
     }
     k_mutex_unlock(&schedule_lock);
@@ -442,7 +439,7 @@ int co_enable_poll(size_t block, bool enabled)
 {
     if (!equipment || block >= equipment->collect_count) { return -EINVAL; }
     k_mutex_lock(&schedule_lock, K_FOREVER);
-    disabled[block] = !enabled; next_poll[block] = k_uptime_get();
+    co_state_poll_enable(block, enabled);
     k_mutex_unlock(&schedule_lock);
     struct co_cfg scratch;
     const struct co_cfg *poll = dp_config_collect(equipment, block, &scratch);
@@ -574,21 +571,12 @@ void co_bus_task(void *arg, void *b, void *c)
                 struct co_cfg p_scratch;
                 const struct co_cfg *p = dp_config_collect(equipment, i, &p_scratch);
                 if (bus_for(p->dev_id) != bus) { continue; }
-                struct co_schedule schedule;
-                co_state_schedule(p->dev_id, &schedule);
-                int64_t due = next_poll[i];
-                if (schedule.managed && (schedule.state == CO_DEVICE_INITIALIZING ||
-                                          schedule.state == CO_DEVICE_OFFLINE)) {
-                    if (i != schedule.cursor) { continue; }
-                    due = schedule.due;
-                } else {
-                    if (schedule.managed && schedule.state == CO_DEVICE_EXCEPTION) {
-                        deadline = MIN(deadline, schedule.due);
-                    }
-                    if (disabled[i] || p->init_only) { continue; }
-                }
-                if (now < due) { deadline = MIN(deadline, due); continue; }
-                int64_t score = now - due + p->priority * 1000;
+                struct co_poll_plan plan;
+                co_state_poll_plan(i, &plan);
+                deadline = MIN(deadline, plan.deadline);
+                if (!plan.eligible) { continue; }
+                if (now < plan.due) { deadline = MIN(deadline, plan.due); continue; }
+                int64_t score = now - plan.due + p->priority * 1000;
                 if (score > best) { best = score; poll = i; queued = -1; }
             }
         }
@@ -599,14 +587,8 @@ void co_bus_task(void *arg, void *b, void *c)
             job->done(&job->request, err, job->user);
             k_free(job);
         } else if (poll >= 0) {
-            struct co_cfg scratch;
-            const struct co_cfg *cfg = dp_config_collect(equipment, poll, &scratch);
-            uint16_t dev = cfg->dev_id;
-            uint32_t period = cfg->period_ms;
-            struct co_schedule before;
-            co_state_schedule(dev, &before);
-            bool initializing = before.managed &&
-                (before.state == CO_DEVICE_INITIALIZING || before.state == CO_DEVICE_OFFLINE);
+            struct co_poll_plan plan;
+            co_state_poll_plan(poll, &plan);
             struct co_outcome outcome = {0};
             size_t rows = 1;
             k_mutex_lock(&bus->lock, K_FOREVER);
@@ -614,25 +596,10 @@ void co_bus_task(void *arg, void *b, void *c)
             k_mutex_unlock(&bus->lock);
             /* exchange() serializes each physical transaction. Never retain
              * the bus lock while waiting for DP SAMPLE/business completion. */
-            /* Offline discovery is one low-rate probe, not a retry burst.
-             * Once reachable, subsequent initialization uses its normal budget. */
-            uint8_t retries = before.state == CO_DEVICE_OFFLINE ? 0 : before.retries;
-            int err = running ? collect_group(poll, initializing, !initializing, &rows,
-                                              retries, &outcome) : -EBUSY;
+            int err = running ? collect_group(poll, plan.synchronous, !plan.synchronous,
+                                              &rows, plan.retries, &outcome) : -EBUSY;
             if (!running) { continue; }
-            co_state_complete(dev, &before, poll, rows, err, outcome);
-            struct co_schedule after;
-            co_state_schedule(dev, &after);
-            k_mutex_lock(&schedule_lock, K_FOREVER);
-            int64_t next = k_uptime_get() + period;
-            for (size_t i = 0; i < rows; ++i) { next_poll[poll + i] = next; }
-            if (initializing && after.state == CO_DEVICE_ONLINE) {
-                for (size_t i = 0; i < equipment->collect_count; ++i) {
-                    const struct co_cfg *p = dp_config_collect(equipment, i, &scratch);
-                    if (p->dev_id == dev) { next_poll[i] = k_uptime_get(); }
-                }
-            }
-            k_mutex_unlock(&schedule_lock);
+            co_state_poll_complete(poll, rows, &plan, err, outcome);
         } else {
             /* Updates give a latched semaphore after changing the schedule.
              * A wake racing this scan is retained, including before take().

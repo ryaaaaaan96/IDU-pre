@@ -1,5 +1,5 @@
-#ifndef MODBUS_IO_H
-#define MODBUS_IO_H
+#ifndef MODBUS_SUPPORT_TRANSPORT_H
+#define MODBUS_SUPPORT_TRANSPORT_H
 #include <zephyr/modbus/modbus.h>
 #include <zephyr/kernel.h>
 /* Zephyr 4.4.2 构建期适配；不依赖 transmit 服务或业务表。 */

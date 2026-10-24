@@ -1,0 +1,14 @@
+config MODBUS_SUPPORT
+    bool "Zephyr Modbus shared transport support"
+    depends on MODBUS
+    help
+      Shared RTU conversion and reviewed build-local Zephyr Modbus fixes.
+      Does not create workers or register application routing.
+
+config MODBUS_SUPPORT_SERVER_HOOKS
+    bool
+    depends on MODBUS_SUPPORT
+    help
+      Internal contract selected by the forwarding adapter. The selecting
+      adapter supplies request routing and execution hooks; otherwise the
+      shared compatibility code uses Zephyr's ordinary handling.

@@ -13,6 +13,7 @@
 | 在 WSL 调试实板 | [Windows J-Link 远程调试](wsl-jlink.md) | Windows USB/GDB Server、WSL GDB、签名烧录与断点限制 |
 | 调整代码命名或采样配置 | [命名与采样边界](naming.md) | 职责前缀、通用采样、产品配置与兼容范围 |
 | 理解框架 | [采集、处理与转发架构](collect-process-transmit.md) | 模块职责、数据流、Zephyr 调度、初始化顺序 |
+| 核对采集决策和公共 Modbus 职责 | [ADR 0010](adr/0010-collection-decisions-and-modbus-support.md) | 采集决策集中、公共传输适配、转发扩展与依赖方向 |
 | 使用任务健康监控 | [多任务看门狗方案](task-watchdog.md) | 已实施；显式登记、永久休眠、复位与 RAM 诊断，现有任务尚未接入 |
 | 维护点表 | [配置指南](../app/protocol/README.md) | 文件职责、新增设备/点、分散登记与参数配置 |
 | 规划多张转发表 | [转发表与北向服务](forwarding-model.md) | 挂表设备、数据来源、站号、寄存器地址及当前服务隔离限制 |

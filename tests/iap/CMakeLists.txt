@@ -1,7 +1,8 @@
 cmake_minimum_required(VERSION 3.20.0)
 get_filename_component(IDU_APP ../.. ABSOLUTE)
 list(APPEND ZEPHYR_EXTRA_MODULES ${IDU_APP}/modules/quicklz ${IDU_APP}/modules/iap
-  ${IDU_APP}/modules/dataprocess ${IDU_APP}/modules/transmit ${IDU_APP}/modules/vport)
+  ${IDU_APP}/modules/dataprocess ${IDU_APP}/modules/modbus
+  ${IDU_APP}/modules/transmit ${IDU_APP}/modules/vport)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(iap_receiver_tests)
 target_include_directories(app PRIVATE ${CMAKE_CURRENT_BINARY_DIR})

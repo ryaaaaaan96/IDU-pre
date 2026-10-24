@@ -1,4 +1,5 @@
 menuconfig CO_MODBUS_ADAPTER
+    select MODBUS_SUPPORT
     bool "Zephyr Modbus client adapter"
     depends on MODBUS_CLIENT
     default y

@@ -1,6 +1,6 @@
 #ifndef MODBUS_IO_HOOKS_H
 #define MODBUS_IO_HOOKS_H
-#include <modbus_io.h>
+#include <modbus_support/transport.h>
 struct modbus_context;
 int mb_raw_rx_begin(struct modbus_context *ctx);
 void mb_raw_rx_end(struct modbus_context *ctx);

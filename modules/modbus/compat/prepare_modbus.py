@@ -30,7 +30,7 @@ for name in EXPECTED_SHA256:
                           '#include <modbus_internal.h>\n#include "modbus_hooks.h"')
     if name in ("modbus_raw.c", "modbus_serial.c"):
         source = replace_once(source, "k_work_submit(&ctx->server_work)",
-                              "tr_modbus_submit_work(&ctx->server_work)",
+                              "mb_support_submit_work(&ctx->server_work)",
                               1 if name == "modbus_raw.c" else 3)
     if name == "modbus_raw.c":
         source = replace_once(source, "(MODBUS_RTU_MIN_MSG_SIZE - 2)", "1")
@@ -41,8 +41,8 @@ for name in EXPECTED_SHA256:
         source = replace_once(source, "\tctx->rx_adu.trans_id = adu->trans_id;",
             "\tif (!adu || adu->length > sizeof(ctx->rx_adu.data)) { return -EMSGSIZE; }\n"
             "\tint err = mb_raw_rx_begin(ctx);\n\tif (err) { return err; }\n\tctx->rx_adu.trans_id = adu->trans_id;")
-        source = replace_once(source, "\ttr_modbus_submit_work(&ctx->server_work);\n\n\treturn 0;",
-            "\terr = tr_modbus_submit_work(&ctx->server_work);\n"
+        source = replace_once(source, "\tmb_support_submit_work(&ctx->server_work);\n\n\treturn 0;",
+            "\terr = mb_support_submit_work(&ctx->server_work);\n"
             "\tif (err < 0) { mb_raw_rx_end(ctx); return err; }\n\treturn 0;")
         source = replace_once(source, "\tctx->rx_adu.fc = adu->fc;", "\tctx->rx_adu.fc = adu->fc;\n\tctx->rx_adu.crc = adu->crc;")
     if name == "modbus_core.c":
@@ -66,7 +66,7 @@ for name in EXPECTED_SHA256:
             "\tk_work_cancel_sync(&ctx->server_work, &work_sync);\n\tmb_raw_rx_end(ctx);")
         source += "\n" + (Path(__file__).parent / "serial_open.h").read_text()
         source += """
-int tr_modbus_check_available(int iface)
+int mb_support_check_available(int iface)
 {
     if (iface < 0 || iface >= ARRAY_SIZE(mb_ctx_tbl)) { return -EINVAL; }
     return atomic_test_bit(&mb_ctx_tbl[iface].state, MODBUS_STATE_CONFIGURED) ? -EALREADY : 0;
@@ -94,11 +94,11 @@ void mb_serial_abort(struct modbus_context *ctx)
 """
     if name == "modbus_server.c":
         source = replace_once(source, "if (addr != 0 && addr != ctx->unit_id)",
-                              "if (!tr_modbus_accept_request(ctx))")
-        source = replace_once(source, "\tswitch (fc) {", "\tif (!tr_modbus_write_request(ctx, &send_reply)) {\n\tswitch (fc) {")
+                              "if (!mb_support_accept_request(ctx))")
+        source = replace_once(source, "\tswitch (fc) {", "\tif (!mb_support_write_request(ctx, &send_reply)) {\n\tswitch (fc) {")
         source = replace_once(source, "\n\tif (addr == 0) {",
-                              "\n\t}\n\tif (tr_modbus_suppress_broadcast(ctx)) {")
+                              "\n\t}\n\tif (mb_support_suppress_broadcast(ctx)) {")
         source = replace_once(source, "\n\treturn send_reply;",
-                              "\n\ttr_modbus_complete_request(ctx, send_reply);\n\treturn send_reply;")
+                              "\n\tmb_support_complete_request(ctx, send_reply);\n\treturn send_reply;")
     (output / name).write_text(source)
     (output / (name + ".sha256")).write_text(hashlib.sha256(original.encode()).hexdigest() + "\n")

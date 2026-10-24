@@ -4,6 +4,8 @@ config TR_CONN_TIMEOUT_MS
     range 10 3600000
 
 config TR_MODBUS_ADAPTER
+    select MODBUS_SUPPORT
+    select MODBUS_SUPPORT_SERVER_HOOKS
     bool "Whole-PDU Modbus routing and isolated forwarding workers"
     default y if DP_PARAMS
     help

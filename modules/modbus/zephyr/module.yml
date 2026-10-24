@@ -1,0 +1,4 @@
+name: modbus_support
+build:
+  cmake: .
+  kconfig: Kconfig

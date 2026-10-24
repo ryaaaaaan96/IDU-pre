@@ -1,7 +1,6 @@
 #include <transmit/modbus.h>
-#include <modbus_io.h>
-#include <zephyr/sys/byteorder.h>
-#include <zephyr/sys/crc.h>
+#include <modbus_support/transport.h>
+#include <modbus_support/rtu.h>
 #include <string.h>
 #include <errno.h>
 
@@ -28,21 +27,15 @@ static int receive(void *user, const struct vport_source *source,
                     const struct vport_frame *frame)
 {
     struct raw_port *port = user;
-    if (frame->size < 4 || frame->size > CONFIG_MODBUS_BUFFER_SIZE) { return -EMSGSIZE; }
-    if (crc16_ansi(frame->data, frame->size - 2) != sys_get_le16(frame->data + frame->size - 2)) {
-        return -EBADMSG;
-    }
+    int err = mb_rtu_validate(frame->data, frame->size);
+    if (err) { return err; }
 
     if (!atomic_cas(&port->receiving, 0, 1)) { return -EBUSY; }
     port->source = *source;
     struct modbus_adu *adu = k_malloc(sizeof(*adu));
     if (!adu) { finished(port); return -ENOMEM; }
-    memset(adu, 0, sizeof(*adu));
-    adu->unit_id = frame->data[0]; adu->fc = frame->data[1];
-    adu->length = frame->size - 4;
-    adu->crc = sys_get_le16(frame->data + frame->size - 2);
-    memcpy(adu->data, frame->data + 2, adu->length);
-    int err = modbus_raw_submit_rx(port->iface, adu);
+    err = mb_rtu_decode(frame->data, frame->size, adu);
+    if (!err) { err = modbus_raw_submit_rx(port->iface, adu); }
     k_free(adu); /* Zephyr copies the complete ADU before returning. */
     if (err) { finished(port); }
     return err;
@@ -55,11 +48,11 @@ static int send(int iface, const struct modbus_adu *adu, void *user)
     if (adu->length > sizeof(adu->data)) { return -EMSGSIZE; }
     uint8_t *data = k_malloc(adu->length + 4U);
     if (!data) { return -ENOMEM; }
-    data[0] = adu->unit_id; data[1] = adu->fc;
-    memcpy(data + 2, adu->data, adu->length);
-    sys_put_le16(crc16_ansi(data, adu->length + 2), data + adu->length + 2);
-    const struct vport_frame frame = {.data = data, .size = adu->length + 4};
-    int err = tr_port_send(port->binding.port, &port->source, &frame,
+    size_t size;
+    int err = mb_rtu_encode(adu, data, adu->length + 4U, &size);
+    if (err) { k_free(data); return err; }
+    const struct vport_frame frame = {.data = data, .size = size};
+    err = tr_port_send(port->binding.port, &port->source, &frame,
                              K_MSEC(CONFIG_TR_MODBUS_TX_TIMEOUT_MS));
     k_free(data); /* The send callback completes or copies the frame. */
     return err;

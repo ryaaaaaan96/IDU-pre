@@ -10,6 +10,8 @@
 
 独立的 [`modules/vport`](../modules/vport/README.md) 提供通用完整报文端口。
 CO/TR 的 `src/message.c` 使用它，协议适配各自放在 `protocols/modbus/`。
+公共 RTU 转换、串口接入及构建兼容由独立的 `modules/modbus`（`modbus_support`）提供；
+转发扩展实现留在 transmit，公共模块不反向依赖业务模块。
 应用在 `app/protocol/ports.c` 注册回调并选择实际发送接口；RAW 协议处理与
 Zephyr RTU 串口接入分开，详见[通信端口](communication-ports.md)。
 

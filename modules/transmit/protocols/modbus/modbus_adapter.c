@@ -269,7 +269,7 @@ int tr_modbus_init_server(int iface, struct modbus_iface_param param,
     k_mutex_lock(&config_lock, K_FOREVER);
     struct forwarding_port *port = port_for(iface);
     if (port && port->changing) { k_mutex_unlock(&config_lock); return -EBUSY; }
-    int err = tr_modbus_check_available(iface);
+    int err = mb_support_check_available(iface);
     if (err) { k_mutex_unlock(&config_lock); return err; }
     if (isolated && (!executions[iface].receive || !executions[iface].configuration)) {
         k_mutex_unlock(&config_lock); return -ENOTCONN;
@@ -345,7 +345,7 @@ int tr_modbus_set_policy(int iface, const struct tr_modbus_policy *policy)
     return 0;
 }
 
-bool tr_modbus_accept_request(struct modbus_context *ctx)
+bool mb_support_accept_request(struct modbus_context *ctx)
 {
     int iface = modbus_iface_get_by_ctx(ctx);
     if (iface < 0 || iface >= IFACE_LIMIT) { return false; }
@@ -362,7 +362,7 @@ bool tr_modbus_accept_request(struct modbus_context *ctx)
     return accepted;
 }
 
-bool tr_modbus_suppress_broadcast(struct modbus_context *ctx)
+bool mb_support_suppress_broadcast(struct modbus_context *ctx)
 {
     int iface = modbus_iface_get_by_ctx(ctx);
     return ctx->rx_adu.unit_id == 0 && (iface < 0 || iface >= IFACE_LIMIT ||
@@ -461,7 +461,7 @@ int tr_modbus_service(int iface, uint32_t timeout_ms)
     return err;
 }
 
-int tr_modbus_submit_work(struct k_work *work)
+int mb_support_submit_work(struct k_work *work)
 {
     struct modbus_context *ctx = CONTAINER_OF(work, struct modbus_context, server_work);
     k_spinlock_key_t key = k_spin_lock(&submission_lock);
@@ -529,7 +529,7 @@ static bool callback_reply(struct modbus_context *ctx, int routed, bool *reply)
     return true;
 }
 
-void tr_modbus_complete_request(struct modbus_context *ctx, bool reply)
+void mb_support_complete_request(struct modbus_context *ctx, bool reply)
 {
     int iface = modbus_iface_get_by_ctx(ctx);
     if (iface < 0 || iface >= IFACE_LIMIT || !reply) { return; }
@@ -538,7 +538,7 @@ void tr_modbus_complete_request(struct modbus_context *ctx, bool reply)
     k_spin_unlock(&control_lock, key);
 }
 
-bool tr_modbus_write_request(struct modbus_context *ctx, bool *reply)
+bool mb_support_write_request(struct modbus_context *ctx, bool *reply)
 {
     int iface = modbus_iface_get_by_ctx(ctx);
     const struct modbus_adu *rx = &ctx->rx_adu;

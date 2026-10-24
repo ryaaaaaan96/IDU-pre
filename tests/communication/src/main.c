@@ -3,7 +3,7 @@
 #include <collect/port.h>
 #include <transmit/modbus.h>
 #include <transmit/modbus_adapter.h>
-#include <modbus_io.h>
+#include <modbus_support/transport.h>
 #include <zephyr/ztest.h>
 #include <zephyr/drivers/uart.h>
 #include <zephyr/drivers/serial/uart_emul.h>

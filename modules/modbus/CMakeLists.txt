@@ -1,0 +1,6 @@
+zephyr_include_directories(include)
+if(CONFIG_MODBUS_SUPPORT)
+  zephyr_library()
+  zephyr_library_sources(src/rtu.c)
+  include(compat/modbus.cmake)
+endif()

@@ -11,6 +11,8 @@ static struct {
     uint32_t replies;
 } devices[CONFIG_DP_MAX_DEVICES];
 static bool armed;
+static int64_t next_poll[CONFIG_DP_POINTS_MAX_POLLS];
+static bool disabled[CONFIG_DP_POINTS_MAX_POLLS];
 static int (*offline_callback)(uint16_t, int, int64_t);
 K_MUTEX_DEFINE(state_lock);
 
@@ -125,10 +127,9 @@ void co_state_record(uint16_t dev, int error, struct co_outcome outcome)
     notify(&event, -1);
 }
 
-void co_state_schedule(uint16_t dev, struct co_schedule *schedule)
+static void schedule_locked(uint16_t dev, struct co_schedule *schedule)
 {
     *schedule = (struct co_schedule){.cursor = SIZE_MAX, .due = INT64_MAX};
-    k_mutex_lock(&state_lock, K_FOREVER);
     int i = index_of(dev);
     if (i >= 0 && devices[i].policy) {
         *schedule = (struct co_schedule){.managed = true, .state = devices[i].status.state,
@@ -138,6 +139,12 @@ void co_state_schedule(uint16_t dev, struct co_schedule *schedule)
             schedule->due = devices[i].exception_since + devices[i].policy->exception_ms;
         }
     }
+}
+
+void co_state_schedule(uint16_t dev, struct co_schedule *schedule)
+{
+    k_mutex_lock(&state_lock, K_FOREVER);
+    schedule_locked(dev, schedule);
     k_mutex_unlock(&state_lock);
 }
 
@@ -164,7 +171,7 @@ void co_state_tick(void)
     }
 }
 
-void co_state_complete(uint16_t dev, const struct co_schedule *before,
+static void co_state_complete(uint16_t dev, const struct co_schedule *before,
                        size_t first, size_t rows, int error, struct co_outcome outcome)
 {
     if (!before->managed) { return; }
@@ -202,6 +209,70 @@ void co_state_complete(uint16_t dev, const struct co_schedule *before,
     struct co_device_status event = devices[i].status;
     k_mutex_unlock(&state_lock);
     notify(&event, offline_at);
+}
+
+void co_state_poll_enable(size_t block, bool enabled)
+{
+    k_mutex_lock(&state_lock, K_FOREVER);
+    disabled[block] = !enabled;
+    next_poll[block] = k_uptime_get();
+    k_mutex_unlock(&state_lock);
+}
+
+bool co_state_poll_due(size_t block, int64_t now)
+{
+    k_mutex_lock(&state_lock, K_FOREVER);
+    bool due = !disabled[block] && next_poll[block] <= now;
+    k_mutex_unlock(&state_lock);
+    return due;
+}
+
+void co_state_poll_plan(size_t block, struct co_poll_plan *plan)
+{
+    struct co_cfg scratch;
+    const struct co_cfg *poll = dp_config_collect(equipment, block, &scratch);
+    *plan = (struct co_poll_plan){.due = INT64_MAX, .deadline = INT64_MAX};
+    k_mutex_lock(&state_lock, K_FOREVER);
+    /* Keep the schedule snapshot and row deadline in one critical section. */
+    schedule_locked(poll->dev_id, &plan->snapshot);
+    const struct co_schedule *schedule = &plan->snapshot;
+    plan->retries = schedule->retries;
+    if (schedule->managed && (schedule->state == CO_DEVICE_INITIALIZING ||
+                              schedule->state == CO_DEVICE_OFFLINE)) {
+        plan->eligible = block == schedule->cursor;
+        plan->synchronous = true;
+        plan->due = schedule->due;
+        if (schedule->state == CO_DEVICE_OFFLINE) { plan->retries = 0; }
+    } else {
+        plan->eligible = !disabled[block] && !poll->init_only;
+        plan->due = next_poll[block];
+        if (schedule->managed && schedule->state == CO_DEVICE_EXCEPTION) {
+            plan->deadline = schedule->due;
+        }
+    }
+    k_mutex_unlock(&state_lock);
+}
+
+void co_state_poll_complete(size_t block, size_t rows, const struct co_poll_plan *plan,
+                            int error, struct co_outcome outcome)
+{
+    struct co_cfg scratch;
+    const struct co_cfg *poll = dp_config_collect(equipment, block, &scratch);
+    uint16_t dev = poll->dev_id;
+    uint32_t period = poll->period_ms;
+    co_state_complete(dev, &plan->snapshot, block, rows, error, outcome);
+
+    k_mutex_lock(&state_lock, K_FOREVER);
+    int64_t now = k_uptime_get();
+    for (size_t i = 0; i < rows; ++i) { next_poll[block + i] = now + period; }
+    int d = index_of(dev);
+    if (plan->synchronous && d >= 0 && devices[d].status.state == CO_DEVICE_ONLINE) {
+        for (size_t i = 0; i < equipment->collect_count; ++i) {
+            poll = dp_config_collect(equipment, i, &scratch);
+            if (poll->dev_id == dev) { next_poll[i] = now; }
+        }
+    }
+    k_mutex_unlock(&state_lock);
 }
 
 void co_state_initialized(uint16_t dev, int error)

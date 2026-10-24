@@ -5,7 +5,7 @@
 #include <collect/modbus.h>
 #include <transmit/modbus.h>
 #include <dataprocess/points.h>
-#include <modbus_io.h>
+#include <modbus_support/transport.h>
 #include <zephyr/device.h>
 #include <zephyr/sys/byteorder.h>
 #include <errno.h>
