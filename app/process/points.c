@@ -5,17 +5,33 @@
 #include <acquisition/sample.h>
 #include <dataprocess/params.h>
 #include <errno.h>
+#include <string.h>
 #include <zephyr/sys/byteorder.h>
+
+/* One retained heap workspace; a publisher owns it through zbus's copy.
+ * This does not share the DP consumer's buffer or put a batch on main's stack. */
+static struct dp_point_batch *local_batch;
+K_MUTEX_DEFINE(local_publish_lock);
 
 int points_publish_snapshot(const struct acquisition_sample *snapshot)
 {
-    if (!snapshot) {
+    if (!snapshot || k_is_in_isr()) {
         return -EINVAL;
     }
-    /* Product mapping stays here; DP owns batching and sample processing. */
+    k_timepoint_t deadline = sys_timepoint_calc(K_MSEC(20));
+    int err = k_mutex_lock(&local_publish_lock, sys_timepoint_timeout(deadline));
+    if (err) { return err; }
     const size_t count = 2 + SAMPLE_ANALOG_COUNT;
-    struct dp_point_update *values = k_malloc(count * sizeof(*values));
-    if (!values) { return -ENOMEM; }
+    BUILD_ASSERT(2 + SAMPLE_ANALOG_COUNT <= DP_BATCH_POINTS);
+    if (!local_batch) { local_batch = k_malloc(sizeof(*local_batch)); }
+    if (!local_batch) {
+        k_mutex_unlock(&local_publish_lock);
+        return -ENOMEM;
+    }
+    memset(local_batch, 0, sizeof(*local_batch));
+    local_batch->source = DP_SOURCE_LOCAL;
+    local_batch->count = count;
+    struct dp_point_update *values = local_batch->points;
     values[0] = (struct dp_point_update){
         .key = {DEVICE_LOCAL, SIGNAL_ADDRESS}, .width = 1,
         .value.words = {snapshot->address}, .error = snapshot->valid ? 0 : -EIO,
@@ -31,8 +47,8 @@ int points_publish_snapshot(const struct acquisition_sample *snapshot)
             .error = !snapshot->valid ? -EIO : snapshot->raw[i] > 4095 ? -ERANGE : 0,
         };
     }
-    int err = dp_submit_sig_values(values, count, K_MSEC(20), NULL);
-    k_free(values);
+    err = dp_publish(local_batch, sys_timepoint_timeout(deadline));
+    k_mutex_unlock(&local_publish_lock);
     return err;
 }
 

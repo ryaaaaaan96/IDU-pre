@@ -47,6 +47,14 @@ static int north_server;
 static int south_client;
 static struct modbus_adu north_reply;
 
+/* Fail only the publisher's heap boundary; other real workers keep running. */
+static k_tid_t allocation_failure_thread;
+void *__real_k_malloc(size_t size);
+void *__wrap_k_malloc(size_t size)
+{
+    return allocation_failure_thread == k_current_get() ? NULL : __real_k_malloc(size);
+}
+
 static struct dp_point_state state_of(struct dp_key key)
 {
     struct dp_point_state state;
@@ -174,6 +182,12 @@ static void *setup(void)
     };
     module_add_points(&test_cfg, test_points, test_transmit);
     zassert_ok(dp_init_config(&test_cfg)); fixture_start_dp();
+    /* First-use allocation failure releases ownership and permits a retry. */
+    struct acquisition_sample initial_sample = {.valid = true};
+    allocation_failure_thread = k_current_get();
+    int publish_error = points_publish_snapshot(&initial_sample);
+    allocation_failure_thread = NULL;
+    zassert_equal(publish_error, -ENOMEM);
     zassert_equal(state_of(remote_di).quality, DP_QUALITY_UNINITIALIZED);
     uint16_t initial;
     zassert_equal(tr_read_register(4, 10000, &initial), -EIO);
@@ -257,6 +271,32 @@ ZTEST(points, test_local_point_registers)
         assert_exception(modbus_read_input_regs(north_client, 16, unmapped[i], wire, 1),
                          4, MODBUS_EXC_ILLEGAL_DATA_ADDR);
     }
+}
+
+ZTEST(points, test_local_samples_reuse_workspace_under_heap_pressure)
+{
+    /* before() has already published a sample and initialized the workspace. */
+    uint32_t old = state_of(local_di).generation;
+    local_sample.di = 0x1357;
+    allocation_failure_thread = k_current_get();
+    int err = points_publish_snapshot(&local_sample);
+    allocation_failure_thread = NULL;
+    zassert_ok(err, "local publication must reuse its established workspace");
+    wait_after(local_di, old);
+    struct dp_point_state state = state_of(local_di);
+    zassert_equal(state.value.words[0], 0x1357);
+    zassert_equal(state.quality, DP_QUALITY_GOOD);
+
+    old = state.generation;
+    local_sample.valid = false;
+    allocation_failure_thread = k_current_get();
+    err = points_publish_snapshot(&local_sample);
+    allocation_failure_thread = NULL;
+    zassert_ok(err);
+    wait_after(local_di, old);
+    state = state_of(local_di);
+    zassert_not_equal(state.quality, DP_QUALITY_GOOD);
+    zassert_equal(state.error, -EIO);
 }
 
 ZTEST(points, test_end_to_end_remote_forwarding)
