@@ -17,7 +17,7 @@
 
 int application_main(void);
 static const char *scenario;
-static enum status_fault expected_fault;
+static const char *expected_description;
 static atomic_t samples, led_edges;
 static bool indicator_on;
 static k_tid_t application_thread_id;
@@ -108,8 +108,8 @@ static bool terminal_result(enum status_action action)
 {
     struct status_application_fault fault;
     struct dp_point_state point;
-    return !status_application_fault_get(&fault) && fault.first == expected_fault &&
-        fault.terminal == expected_fault && fault.error < 0 && fault.action == action &&
+    return !status_application_fault_get(&fault) && fault.description && !strcmp(fault.description, expected_description) &&
+        fault.terminal_description && !strcmp(fault.terminal_description, expected_description) && fault.error < 0 && fault.action == action &&
         protocol_stopped() &&
         dp_read((struct dp_key){DEVICE_LOCAL, SIGNAL_DI}, &point) == -ECANCELED;
 }
@@ -133,14 +133,16 @@ ZTEST(runtime, test_real_main_fault_policy)
 {
     scenario = getenv("IDU_RUNTIME_CASE");
     if (!scenario) { scenario = "publish"; }
-    if (!strcmp(scenario, "publish")) { expected_fault = STATUS_FAULT_PUBLISH; }
-    else if (!strcmp(scenario, "sample")) { expected_fault = STATUS_FAULT_SAMPLE; }
-    else if (!strcmp(scenario, "led") || !strcmp(scenario, "led-init")) { expected_fault = STATUS_FAULT_LED; }
-    else if (!strcmp(scenario, "input-init")) { expected_fault = STATUS_FAULT_INPUT_INIT; }
-    else if (!strcmp(scenario, "protocol-init")) { expected_fault = STATUS_FAULT_PROTOCOL_INIT; }
-    else if (!strcmp(scenario, "maintenance")) { expected_fault = STATUS_FAULT_PROTOCOL; }
-    else if (!strcmp(scenario, "task-timeout")) { expected_fault = STATUS_FAULT_TASK_TIMEOUT; }
-    else if (!strcmp(scenario, "storage-degraded")) { expected_fault = STATUS_FAULT_NONE; }
+    if (!strcmp(scenario, "publish")) { expected_description = "样本发布失败"; }
+    else if (!strcmp(scenario, "sample")) { expected_description = "输入采样失败"; }
+    else if (!strcmp(scenario, "led")) { expected_description = "指示灯输出失败"; }
+    else if (!strcmp(scenario, "led-init")) { expected_description = "指示灯初始化失败"; }
+    else if (!strcmp(scenario, "input-init")) { expected_description = "输入初始化失败"; }
+    else if (!strcmp(scenario, "protocol-init")) { expected_description = "协议初始化失败"; }
+    else if (!strcmp(scenario, "maintenance")) { expected_description = "协议维护失败"; }
+    else if (!strcmp(scenario, "task-timeout")) { expected_description = "任务心跳超时"; }
+    else if (!strcmp(scenario, "force-reset")) { expected_description = "显式复位测试"; }
+    else if (!strcmp(scenario, "storage-degraded")) { expected_description = NULL; }
     else { zassert_unreachable("Unknown scenario"); }
     /* 即使远端断开，UART 仍会在物理线上发送字节。 */
     uart_emul_callback_tx_data_ready_set(DEVICE_DT_GET(DT_NODELABEL(uart_test)),
@@ -149,7 +151,7 @@ ZTEST(runtime, test_real_main_fault_policy)
                      run_application, NULL, NULL, NULL, 10, 0, K_NO_WAIT);
     bool maintenance_injected = false;
     struct status_application_fault fault;
-    if (expected_fault == STATUS_FAULT_NONE) {
+    if (!expected_description) {
         k_msleep(1800);
         zassert_true(atomic_get(&samples) >= 3);
         zassert_false(protocol_stopped());
@@ -164,6 +166,9 @@ ZTEST(runtime, test_real_main_fault_policy)
         return;
     }
     for (int i = 0; i < 300; ++i) {
+        if (!strcmp(scenario, "force-reset") && atomic_get(&samples)) {
+            (void)status_report_fault(STATUS_RUNTIME, -EIO, "显式复位测试", STATUS_RESET);
+        }
         if (!strcmp(scenario, "maintenance") && atomic_get(&samples) && !maintenance_injected) {
             zassert_ok(modbus_disable(modbus_iface_get_by_name("RAW_1")));
             maintenance_injected = true;
@@ -177,9 +182,9 @@ ZTEST(runtime, test_real_main_fault_policy)
         k_msleep(10);
     }
     zassert_ok(status_application_fault_get(&fault));
-    if (fault.terminal == STATUS_FAULT_NONE) {
-        zassert_equal(expected_fault, STATUS_FAULT_LED);
-        zassert_equal(fault.first, STATUS_FAULT_LED);
+    if (!fault.terminal_description) {
+        zassert_str_equal(expected_description, "指示灯输出失败");
+        zassert_str_equal(fault.description, expected_description);
         zassert_false(protocol_stopped());
         int before = atomic_get(&samples);
         k_msleep(1100);
@@ -203,7 +208,7 @@ ZTEST(runtime, test_real_main_fault_policy)
         zassert_equal(atomic_get(&samples), before);
         zassert_equal(atomic_get(&transmitted_bytes), sent);
         zassert_equal(edges > 0, !IS_ENABLED(CONFIG_APP_DEBUG_SKIP_WATCHDOG));
-        if (expected_fault != STATUS_FAULT_LED) { zassert_true(indicator_on); }
+        if (strcmp(scenario, "led") && strcmp(scenario, "led-init")) { zassert_true(indicator_on); }
     }
     printk("RUNTIME_POLICY_PASS\n");
 }

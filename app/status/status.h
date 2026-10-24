@@ -26,21 +26,17 @@ enum status_phase {
     STATUS_FAULT_LOCKED, /**< 已锁存终止故障，业务不可恢复。 */
 };
 
-/** @brief 用于选择构建期处理策略的故障来源。 */
-enum status_fault {
-    STATUS_FAULT_NONE, STATUS_FAULT_INPUT_INIT, STATUS_FAULT_IAP_INIT,
-    STATUS_FAULT_PROTOCOL_INIT, STATUS_FAULT_SAMPLE, STATUS_FAULT_PUBLISH,
-    STATUS_FAULT_PROTOCOL, STATUS_FAULT_LED, STATUS_FAULT_WATCHDOG,
-    STATUS_FAULT_IMAGE_CONFIRM, STATUS_FAULT_TASK_TIMEOUT, STATUS_FAULT_COUNT,
-};
+/** @brief 故障发生于初始化或运行阶段，与细分业务阶段独立。 */
+enum status_fault_phase { STATUS_INIT, STATUS_RUNTIME };
 /** @brief 故障处理动作：记录继续、停止业务留驻或请求复位。 */
 enum status_action { STATUS_CONTINUE, STATUS_HOLD, STATUS_RESET };
 
 /** @brief 整机首错及终止动作的一致快照。 */
 struct status_application_fault {
-    enum status_fault first, terminal; /**< 首个故障来源和当前终止故障来源。 */
-    enum status_phase phase; /**< 首个故障发生时的阶段。 */
-    enum status_action action; /**< 当前锁存的终止动作，可由喂狗故障升级。 */
+    const char *description; /**< 首个故障的常驻描述字符串。 */
+    const char *terminal_description; /**< 当前终止故障的常驻描述，无终止故障时为空。 */
+    enum status_fault_phase phase; /**< 首个故障发生于初始化或运行阶段。 */
+    enum status_action action; /**< 当前锁存的终止动作，显式复位请求可将留驻升级。 */
     int error; /**< 首个故障的错误码。 */
     int64_t occurred_ms; /**< 首个故障发生时的系统运行时间，单位为毫秒。 */
 };
@@ -101,18 +97,20 @@ int status_progress(void);
 enum status_phase status_phase_get(void);
 
 /**
- * @brief 保留首错，并按故障来源执行继续、留驻或复位策略。
- * @param[in] fault 故障来源，不得为 STATUS_FAULT_NONE 或越界值。
- * @param[in] phase 故障发生时的业务阶段。
- * @param[in] error 非零错误码。
- * @retval 0 策略允许记录后继续。
- * @retval -EINVAL 来源无效或错误码为零。
+ * @brief 记录首错并执行调用方指定的最终动作。
+ * @param[in] phase 初始化或运行阶段。
+ * @param[in] error 非零错误码，通常为负 errno。
+ * @param[in] description 非空的常驻描述字符串；记录时保留指针，不复制或格式化。
+ * @param[in] action 记录继续、停止业务留驻或请求复位。
+ * @retval 0 仅记录后继续。
+ * @retval -EINVAL 参数无效，或初始化阶段选择继续。
  * @retval -EACCES 状态尚未初始化。
- * @return 终止策略在复位未接管时返回传入的错误码。
- * @note 可在 ISR 中调用；喂狗输出故障可将留驻升级为复位。
+ * @return 终止动作在复位未接管时返回传入的错误码。
+ * @note 可在 ISR 中调用；不按描述字符串选择策略，不隐式转换调试动作。
+ * @note 首错不覆盖；终止后不可恢复，显式 RESET 可将 HOLD 升级为复位。
  */
-int status_report_fault(enum status_fault fault,
-                        enum status_phase phase, int error);
+int status_report_fault(enum status_fault_phase phase, int error,
+                        const char *description, enum status_action action);
 
 /** @brief 任务处于活动期限监控状态。 */
 #define STATUS_TASK_ACTIVE UINT32_C(1)

@@ -26,7 +26,7 @@ enum service { WATCHDOG_INIT, LED_START, INPUTS_INIT, IAP_INIT, TABLES_INIT, DP_
                PROCESS_INIT, REFERENCE_INIT, COLLECT_START, FORWARD_INIT,
                SAMPLE, PUBLISH, PROTOCOL, LED, CHECKPOINT, WATCHDOG_CHECK, SERVICES };
 static int errors[SERVICES];
-static unsigned calls[SERVICES], checks, stops;
+static unsigned calls[SERVICES], checks, stops, reboots;
 static bool healthy, boot_ready, checkpoint_ready;
 static unsigned dp_health_checks;
 static int led_set_error;
@@ -148,7 +148,7 @@ int iap_init(void) { return service(IAP_INIT); }
 int protocol_forwarding_init(void) { return service(FORWARD_INIT); }
 int watchdog_error(struct watchdog *monitor) { ++checks; ++calls[WATCHDOG_CHECK]; return errors[WATCHDOG_CHECK]; }
 void watchdog_stop(struct watchdog *monitor) { ++stops; }
-void status_request_reboot(void) {}
+void status_request_reboot(void) { ++reboots; }
 void iap_stop(void) {}
 
 static struct gpio_driver_data indicator_data;
@@ -257,7 +257,7 @@ static void initialize_fixture(void)
     memset(errors, 0, sizeof(errors));
     memset(calls, 0, sizeof(calls));
     published = (struct acquisition_sample){0};
-    checks = stops = 0;
+    checks = stops = reboots = 0;
     healthy = boot_ready = true;
     dp_health_checks = 0;
     checkpoint_ready = false;
@@ -294,8 +294,15 @@ static void check_startup_failure(enum service failed)
     errors[failed] = -EIO;
     zassert_equal(startup(), -EIO);
     zassert_equal(status_phase_get(), STATUS_FAULT_LOCKED);
-    zassert_equal(fault_snapshot().phase, STATUS_STARTING);
+    zassert_equal(fault_snapshot().phase, STATUS_INIT);
     zassert_equal(fault_snapshot().error, -EIO);
+    const char *description = "协议初始化失败";
+    if (failed == WATCHDOG_INIT) { description = "看门狗初始化失败"; }
+    else if (failed == LED_START) { description = "指示灯初始化失败"; }
+    else if (failed == INPUTS_INIT) { description = "输入初始化失败"; }
+    else if (failed == IAP_INIT) { description = "升级服务初始化失败"; }
+    zassert_str_equal(fault_snapshot().description, description);
+    zassert_str_equal(fault_snapshot().terminal_description, description);
     for (enum service s = WATCHDOG_INIT; s <= FORWARD_INIT; ++s) {
         zassert_equal(calls[s], s <= failed ? 1 : 0);
     }
@@ -420,15 +427,16 @@ ZTEST(acquisition, test_failed_acquisition_publishes_invalid_quality_and_preserv
     zassert_equal(acquisition_cycle(), -ENODEV);
     zassert_equal(calls[PUBLISH], 1);
     zassert_false(published.valid);
-    zassert_equal(fault_snapshot().phase, STATUS_SAMPLING);
+    zassert_equal(fault_snapshot().phase, STATUS_RUNTIME);
     zassert_equal(fault_snapshot().error, -ENODEV);
+    zassert_str_equal(fault_snapshot().description, "输入采样失败");
     zassert_equal(calls[PROTOCOL], 0);
     zassert_equal(calls[CHECKPOINT], 0);
     zassert_equal(checks, 0);
     zassert_equal(stops, 1);
 }
 
-static void check_cycle_failure(enum service failed, enum status_phase phase)
+static void check_cycle_failure(enum service failed, const char *description)
 {
     zassert_ok(startup());
     errors[failed] = -EIO;
@@ -436,19 +444,20 @@ static void check_cycle_failure(enum service failed, enum status_phase phase)
     zassert_equal(checks, 0);
     zassert_equal(calls[CHECKPOINT], 0);
     zassert_equal(stops, 1);
-    zassert_equal(fault_snapshot().phase, phase);
+    zassert_equal(fault_snapshot().phase, STATUS_RUNTIME);
+    zassert_str_equal(fault_snapshot().description, description);
     zassert_equal(acquisition_cycle(), -EACCES);
     zassert_equal(calls[PUBLISH], 1);
 }
 
 ZTEST(acquisition, test_publish_failure_is_terminal)
 {
-    check_cycle_failure(PUBLISH, STATUS_PUBLISHING);
+    check_cycle_failure(PUBLISH, "样本发布失败");
 }
 
 ZTEST(acquisition, test_protocol_failure_is_terminal)
 {
-    check_cycle_failure(PROTOCOL, STATUS_SERVICING_COMMUNICATION);
+    check_cycle_failure(PROTOCOL, "协议维护失败");
 }
 
 ZTEST(acquisition, test_unregistered_dp_has_no_implicit_deadline)
@@ -476,7 +485,7 @@ ZTEST(acquisition, test_gpio_watchdog_error_prevents_trial_confirmation)
     zassert_ok(startup());
     errors[WATCHDOG_CHECK] = -EIO;
     zassert_equal(acquisition_cycle(), -EIO);
-    zassert_equal(fault_snapshot().phase, STATUS_CHECKING_HEALTH);
+    zassert_equal(fault_snapshot().phase, STATUS_RUNTIME);
     zassert_equal(calls[CHECKPOINT], 0);
     zassert_equal(stops, 1);
 }
@@ -485,7 +494,7 @@ ZTEST(acquisition, test_lifecycle_guards)
 {
     zassert_equal(status_phase_get(), STATUS_UNCONFIGURED);
     zassert_equal(status_progress(), -EACCES);
-    zassert_equal(status_report_fault(STATUS_FAULT_SAMPLE, STATUS_SAMPLING, -EIO), -EACCES);
+    zassert_equal(status_report_fault(STATUS_RUNTIME, -EIO, "输入采样失败", STATUS_RESET), -EACCES);
     zassert_equal(acquisition_cycle(), -EACCES);
     zassert_equal(calls[SAMPLE], 0);
     zassert_ok(startup());
@@ -499,6 +508,59 @@ ZTEST(acquisition, test_lifecycle_guards)
     zassert_equal(calls[LED_START], 1);
 }
 
+ZTEST(acquisition, test_fault_arguments_do_not_change_state)
+{
+    zassert_ok(startup());
+    zassert_equal(status_report_fault((enum status_fault_phase)-1, -EIO, "无效阶段", STATUS_RESET), -EINVAL);
+    zassert_equal(status_report_fault(STATUS_RUNTIME, 0, "无效错误码", STATUS_RESET), -EINVAL);
+    zassert_equal(status_report_fault(STATUS_RUNTIME, -EIO, NULL, STATUS_RESET), -EINVAL);
+    zassert_equal(status_report_fault(STATUS_RUNTIME, -EIO, "", STATUS_RESET), -EINVAL);
+    zassert_equal(status_report_fault(STATUS_RUNTIME, -EIO, "无效动作", (enum status_action)-1), -EINVAL);
+    zassert_equal(status_report_fault(STATUS_RUNTIME, -EIO, "无效动作", (enum status_action)3), -EINVAL);
+    zassert_equal(status_report_fault(STATUS_INIT, -EIO, "初始化不可继续", STATUS_CONTINUE), -EINVAL);
+    struct status_application_fault fault;
+    zassert_equal(status_application_fault_get(&fault), -ENOENT);
+    zassert_equal(status_phase_get(), STATUS_RUN);
+    zassert_equal(reboots, 0);
+    zassert_equal(stops, 0);
+}
+
+ZTEST(acquisition, test_explicit_fault_actions_preserve_first_error)
+{
+    zassert_ok(startup());
+    static const char first[] = "辅助输出错误";
+    zassert_ok(status_report_fault(STATUS_RUNTIME, -EIO, first, STATUS_CONTINUE));
+    struct status_application_fault fault = fault_snapshot();
+    zassert_equal_ptr(fault.description, first);
+    zassert_is_null(fault.terminal_description);
+    zassert_equal(fault.action, STATUS_CONTINUE);
+    zassert_equal(status_phase_get(), STATUS_RUN);
+    zassert_false(protocol_halted);
+
+    zassert_equal(status_report_fault(STATUS_RUNTIME, -ETIMEDOUT, "输入失效", STATUS_HOLD), -ETIMEDOUT);
+    fault = fault_snapshot();
+    zassert_equal_ptr(fault.description, first);
+    zassert_equal(fault.error, -EIO);
+    zassert_str_equal(fault.terminal_description, "输入失效");
+    zassert_equal(fault.action, STATUS_HOLD);
+    zassert_equal(status_phase_get(), STATUS_FAULT_LOCKED);
+    zassert_true(protocol_halted);
+    zassert_equal(stops, 0);
+    zassert_equal(reboots, 0);
+
+    zassert_equal(status_report_fault(STATUS_RUNTIME, -ECANCELED, "后续取消", STATUS_HOLD), -ECANCELED);
+    zassert_str_equal(fault_snapshot().terminal_description, "输入失效");
+    zassert_equal(status_report_fault(STATUS_RUNTIME, -EIO, "请求复位", STATUS_RESET), -EIO);
+    fault = fault_snapshot();
+    zassert_equal_ptr(fault.description, first);
+    zassert_str_equal(fault.terminal_description, "请求复位");
+    zassert_equal(fault.action, STATUS_RESET);
+    zassert_equal(stops, 1);
+    zassert_equal(reboots, 1);
+    zassert_equal(status_report_fault(STATUS_RUNTIME, -EIO, "重复复位", STATUS_RESET), -EIO);
+    zassert_equal(reboots, 1);
+}
+
 ZTEST(acquisition, test_status_retains_original_fault_despite_indicator_failure)
 {
     zassert_ok(startup());
@@ -506,10 +568,10 @@ ZTEST(acquisition, test_status_retains_original_fault_despite_indicator_failure)
     led_set_error = -ENODEV; /* 故障指示本身失败不能覆盖采样错误。 */
     errors[SAMPLE] = -EIO;
     zassert_equal(acquisition_cycle(), -EIO);
-    (void)status_report_fault(STATUS_FAULT_TASK_TIMEOUT, STATUS_CHECKING_HEALTH, -ETIMEDOUT);
+    (void)status_report_fault(STATUS_RUNTIME, -ETIMEDOUT, "任务心跳超时", STATUS_RESET);
     status_set_phase(STATUS_RUN);
     zassert_equal(status_phase_get(), STATUS_FAULT_LOCKED);
-    zassert_equal(fault_snapshot().phase, STATUS_SAMPLING);
+    zassert_equal(fault_snapshot().phase, STATUS_RUNTIME);
     zassert_equal(fault_snapshot().error, -EIO);
     zassert_equal(status_progress(), -EACCES);
     zassert_equal(stops, 1);
@@ -529,7 +591,7 @@ ZTEST(acquisition, test_led_tracks_startup_healthy_cycles_and_fault)
     zassert_false(indicator_on);
     k_sleep(K_MSEC(STATUS_LED_HALF_PERIOD_MS));
     zassert_true(indicator_on);
-    (void)status_report_fault(STATUS_FAULT_SAMPLE, STATUS_SAMPLING, -EIO);
+    (void)status_report_fault(STATUS_RUNTIME, -EIO, "输入采样失败", STATUS_RESET);
     zassert_true(indicator_on);
     k_sleep(K_MSEC(STATUS_LED_HALF_PERIOD_MS));
     zassert_true(indicator_on);
@@ -568,7 +630,7 @@ ZTEST(acquisition, test_late_indicator_skips_edges_and_fault_takes_priority)
     zassert_equal(while_delayed, before);
     zassert_equal(indicator_edges, before + 1); /* 跳过错过的三次边沿，不补放。 */
     zassert_false(indicator_on);
-    (void)status_report_fault(STATUS_FAULT_SAMPLE, STATUS_SAMPLING, -EIO);
+    (void)status_report_fault(STATUS_RUNTIME, -EIO, "输入采样失败", STATUS_RESET);
     k_msleep(10);
     zassert_true(indicator_on);
     unsigned fault_edges = indicator_edges;
@@ -595,7 +657,7 @@ ZTEST(acquisition, test_unready_indicator_stops_startup_without_gpio_access)
     zassert_equal(startup(), -ENODEV);
     zassert_equal(calls[LED_START], 0);
     zassert_equal(calls[INPUTS_INIT], 0);
-    zassert_equal(fault_snapshot().first, STATUS_FAULT_LED);
+    zassert_str_equal(fault_snapshot().description, "指示灯初始化失败");
     k_msleep(250);
     zassert_equal(indicator_writes, 0);
 }
@@ -606,7 +668,7 @@ ZTEST(acquisition, test_initial_led_output_failure_stops_startup)
     zassert_equal(startup(), -EIO);
     zassert_equal(calls[INPUTS_INIT], 0);
     zassert_equal(stops, 1);
-    zassert_equal(fault_snapshot().phase, STATUS_STARTING);
+    zassert_equal(fault_snapshot().phase, STATUS_INIT);
 }
 
 ZTEST(acquisition, test_storage_failure_keeps_sampling_without_confirmation)

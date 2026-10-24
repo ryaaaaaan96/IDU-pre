@@ -39,20 +39,6 @@ static int64_t next_toggle_ms;
 static void indicate(struct k_work *work);
 static K_WORK_DELAYABLE_DEFINE(indicator, indicate);
 
-static const enum status_action policies[STATUS_FAULT_COUNT] = {
-    [STATUS_FAULT_NONE] = STATUS_RESET,
-    [STATUS_FAULT_INPUT_INIT] = CONFIG_APP_FAULT_INPUT_INIT_ACTION,
-    [STATUS_FAULT_IAP_INIT] = CONFIG_APP_FAULT_IAP_INIT_ACTION,
-    [STATUS_FAULT_PROTOCOL_INIT] = CONFIG_APP_FAULT_PROTOCOL_INIT_ACTION,
-    [STATUS_FAULT_SAMPLE] = CONFIG_APP_FAULT_SAMPLE_ACTION,
-    [STATUS_FAULT_PUBLISH] = CONFIG_APP_FAULT_PUBLISH_ACTION,
-    [STATUS_FAULT_PROTOCOL] = CONFIG_APP_FAULT_PROTOCOL_ACTION,
-    [STATUS_FAULT_LED] = CONFIG_APP_FAULT_LED_ACTION,
-    [STATUS_FAULT_WATCHDOG] = STATUS_RESET,
-    [STATUS_FAULT_IMAGE_CONFIRM] = CONFIG_APP_FAULT_IMAGE_CONFIRM_ACTION,
-    [STATUS_FAULT_TASK_TIMEOUT] = CONFIG_APP_FAULT_TASK_TIMEOUT_ACTION,
-};
-
 /* 复位属于硬件接口；测试适配实现允许调用返回。 */
 __weak void status_request_reboot(void) { sys_reboot(SYS_REBOOT_COLD); }
 
@@ -85,7 +71,7 @@ int status_application_fault_get(struct status_application_fault *snapshot)
 {
     if (!snapshot) { return -EINVAL; }
     k_spinlock_key_t key = k_spin_lock(&lock);
-    int err = application.fault.first == STATUS_FAULT_NONE ? -ENOENT : 0;
+    int err = !application.fault.description ? -ENOENT : 0;
     if (!err) {
         *snapshot = application.fault;
     }
@@ -93,38 +79,37 @@ int status_application_fault_get(struct status_application_fault *snapshot)
     return err;
 }
 
-int status_report_fault(enum status_fault fault,
-                        enum status_phase phase, int error)
+int status_report_fault(enum status_fault_phase phase, int error,
+                        const char *description, enum status_action action)
 {
-    if (fault <= STATUS_FAULT_NONE || fault >= STATUS_FAULT_COUNT || !error) { return -EINVAL; }
-    enum status_action action = policies[fault];
-    if (((fault != STATUS_FAULT_LED || phase == STATUS_STARTING) && action == STATUS_CONTINUE) ||
-        action > STATUS_RESET || fault == STATUS_FAULT_WATCHDOG) { action = STATUS_RESET; }
-    if (action == STATUS_RESET && fault != STATUS_FAULT_WATCHDOG &&
-        IS_ENABLED(CONFIG_APP_DEBUG_SKIP_WATCHDOG)) { action = STATUS_HOLD; }
+    if ((phase != STATUS_INIT && phase != STATUS_RUNTIME) || !error ||
+        !description || !description[0] || (unsigned int)action > STATUS_RESET ||
+        (phase == STATUS_INIT && action == STATUS_CONTINUE)) {
+        return -EINVAL;
+    }
     k_spinlock_key_t key = k_spin_lock(&lock);
     if (application.phase == STATUS_UNCONFIGURED) {
         k_spin_unlock(&lock, key);
         return -EACCES;
     }
-    bool first = application.fault.first == STATUS_FAULT_NONE;
+    bool first = !application.fault.description;
     if (first) {
-        application.fault.first = fault;
+        application.fault.description = description;
         application.fault.phase = phase;
         application.fault.error = error;
         application.fault.occurred_ms = k_uptime_get();
     }
     bool terminal = action != STATUS_CONTINUE;
     bool act = terminal && (application.phase != STATUS_FAULT_LOCKED ||
-                             (fault == STATUS_FAULT_WATCHDOG && application.fault.action != STATUS_RESET));
+                             (action == STATUS_RESET && application.fault.action == STATUS_HOLD));
     if (act) {
         application.phase = STATUS_FAULT_LOCKED;
-        application.fault.terminal = fault;
+        application.fault.terminal_description = description;
         application.fault.action = action;
         k_timer_stop(&task_timer);
     }
     k_spin_unlock(&lock, key);
-    if (first || act) { LOG_ERR("Fault %d phase %d error %d action %d", fault, phase, error, action); }
+    if (first || act) { LOG_ERR("%s: phase %d error %d action %d", description, phase, error, action); }
     if (act) {
         protocol_stop();
 #ifdef CONFIG_IDU_IAPV3
@@ -136,13 +121,16 @@ int status_report_fault(enum status_fault fault,
         k_work_reschedule(&indicator, K_NO_WAIT);
         if (action == STATUS_RESET) { status_request_reboot(); }
     }
-    return terminal ? error : 0;
+    if (terminal) { return error; }
+    return 0;
 }
 
 static void task_expired(void)
 {
-    (void)status_report_fault(STATUS_FAULT_TASK_TIMEOUT,
-                              status_phase_get(), -ETIMEDOUT);
+    enum status_fault_phase phase = STATUS_RUNTIME;
+    if (status_phase_get() == STATUS_STARTING) { phase = STATUS_INIT; }
+    (void)status_report_fault(phase, -ETIMEDOUT, "任务心跳超时",
+                              CONFIG_APP_FAULT_TASK_TIMEOUT_ACTION);
 }
 
 /* 调用方持有锁。
@@ -298,6 +286,8 @@ static void indicate(struct k_work *work)
     ARG_UNUSED(work);
     enum status_phase phase = status_phase_get();
     if (phase == STATUS_UNCONFIGURED) { return; }
+    enum status_fault_phase fault_phase = STATUS_RUNTIME;
+    if (phase == STATUS_STARTING) { fault_phase = STATUS_INIT; }
     if (indicator_ready) {
         int err = 0;
         if (phase >= STATUS_RUN && phase < STATUS_FAULT_LOCKED) {
@@ -309,7 +299,8 @@ static void indicate(struct k_work *work)
             }
         } else { err = gpio_pin_set_dt(&run_led, 1); }
         if (err && phase != STATUS_FAULT_LOCKED) {
-            (void)status_report_fault(STATUS_FAULT_LED, phase, err);
+            (void)status_report_fault(fault_phase, err, "指示灯输出失败",
+                                      CONFIG_APP_FAULT_LED_ACTION);
         }
         /* 运行中的翻转或报错不能覆盖同时到达的故障常亮要求。 */
         if (phase != STATUS_FAULT_LOCKED && status_phase_get() == STATUS_FAULT_LOCKED) {
@@ -322,7 +313,7 @@ static void indicate(struct k_work *work)
     k_spin_unlock(&lock, key);
     if (!IS_ENABLED(CONFIG_APP_DEBUG_SKIP_WATCHDOG) && check_watchdog) {
         int err = watchdog_error(&monitor);
-        if (err) { (void)status_report_fault(STATUS_FAULT_WATCHDOG, phase, err); }
+        if (err) { (void)status_report_fault(fault_phase, err, "喂狗输出失败", STATUS_RESET); }
     }
     k_work_reschedule(&indicator, K_MSEC(STATUS_LED_HALF_PERIOD_MS));
 }
@@ -339,14 +330,16 @@ int status_init(void)
     int err = 0;
     if (!IS_ENABLED(CONFIG_APP_DEBUG_SKIP_WATCHDOG)) {
         err = watchdog_init(&monitor, &watchdog);
-        if (err) { return status_report_fault(STATUS_FAULT_WATCHDOG, STATUS_STARTING, err); }
+        if (err) { return status_report_fault(STATUS_INIT, err, "看门狗初始化失败", STATUS_RESET); }
     }
     if (!gpio_is_ready_dt(&run_led)) {
-        return status_report_fault(STATUS_FAULT_LED, STATUS_STARTING, -ENODEV);
+        return status_report_fault(STATUS_INIT, -ENODEV, "指示灯初始化失败",
+                                   CONFIG_APP_FAULT_LED_INIT_ACTION);
     }
     err = gpio_pin_configure_dt(&run_led, GPIO_OUTPUT_ACTIVE);
     if (err) {
-        return status_report_fault(STATUS_FAULT_LED, STATUS_STARTING, err);
+        return status_report_fault(STATUS_INIT, err, "指示灯初始化失败",
+                                   CONFIG_APP_FAULT_LED_INIT_ACTION);
     }
     indicator_ready = true;
     return 0;
@@ -373,7 +366,7 @@ int status_progress(void)
     if (status_phase_get() != STATUS_CHECKING_HEALTH) { return -EACCES; }
     if (!IS_ENABLED(CONFIG_APP_DEBUG_SKIP_WATCHDOG)) {
         int err = watchdog_error(&monitor);
-        if (err) { return status_report_fault(STATUS_FAULT_WATCHDOG, STATUS_CHECKING_HEALTH, err); }
+        if (err) { return status_report_fault(STATUS_RUNTIME, err, "喂狗输出失败", STATUS_RESET); }
     }
 #ifdef CONFIG_BOOTLOADER_MCUBOOT
     const struct device *flash = DEVICE_DT_GET(DT_NODELABEL(external_flash));
@@ -382,7 +375,8 @@ int status_progress(void)
     bool ready = device_is_ready(flash) && (parameters.flags & DP_PARAM_STORAGE_READY) &&
                  !(parameters.flags & DP_PARAM_PENDING);
     int err = image_confirm_checkpoint(&application.image_confirm, k_uptime_get(), ready);
-    if (err) { return status_report_fault(STATUS_FAULT_IMAGE_CONFIRM, STATUS_CHECKING_HEALTH, err); }
+    if (err) { return status_report_fault(STATUS_RUNTIME, err, "镜像确认失败",
+                                             CONFIG_APP_FAULT_IMAGE_CONFIRM_ACTION); }
 #endif
     return 0;
 }

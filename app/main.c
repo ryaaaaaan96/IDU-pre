@@ -11,22 +11,25 @@ int startup(void)
 {
     int err = status_init();
     if (err) { return err; }
-    enum status_fault fault = STATUS_FAULT_INPUT_INIT;
+    const char *description = "输入初始化失败";
+    enum status_action action = CONFIG_APP_FAULT_INPUT_INIT_ACTION;
 
     err = acquisition_inputs_init();
 #ifdef CONFIG_IDU_IAPV3
     if (!err) {
         err = iap_init();
-        fault = STATUS_FAULT_IAP_INIT;
+        description = "升级服务初始化失败";
+        action = CONFIG_APP_FAULT_IAP_INIT_ACTION;
     }
 #endif
     if (!err) {
         err = protocol_init();
-        fault = STATUS_FAULT_PROTOCOL_INIT;
+        description = "协议初始化失败";
+        action = CONFIG_APP_FAULT_PROTOCOL_INIT_ACTION;
     }
     if (err) {
         if (status_phase_get() != STATUS_FAULT_LOCKED) {
-            (void)status_report_fault(fault, STATUS_STARTING, err);
+            (void)status_report_fault(STATUS_INIT, err, description, action);
         }
         return err;
     }

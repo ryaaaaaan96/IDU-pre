@@ -10,51 +10,68 @@ menu "Local fault actions (0 continue, 1 hold, 2 reset)"
 
 config APP_FAULT_INPUT_INIT_ACTION
     int "Required input initialization action"
+    default 1 if APP_DEBUG_SKIP_WATCHDOG
     default 2
     range 1 2
 
 config APP_FAULT_IAP_INIT_ACTION
     int "Required IAP initialization action"
+    default 1 if APP_DEBUG_SKIP_WATCHDOG
     default 2
     range 1 2
 
 config APP_FAULT_PROTOCOL_INIT_ACTION
     int "Protocol assembly action"
+    default 1 if APP_DEBUG_SKIP_WATCHDOG
     default 2
     range 1 2
 
 config APP_FAULT_SAMPLE_ACTION
     int "Local sampling action"
+    default 1 if APP_DEBUG_SKIP_WATCHDOG
     default 2
     range 1 2
 
 config APP_FAULT_PUBLISH_ACTION
     int "Local sample publication action"
+    default 1 if APP_DEBUG_SKIP_WATCHDOG
     default 2
     range 1 2
 
 config APP_FAULT_PROTOCOL_ACTION
     int "Protocol maintenance action"
+    default 1 if APP_DEBUG_SKIP_WATCHDOG
     default 2
     range 1 2
 
 config APP_FAULT_LED_ACTION
     int "Status indicator output action"
+    default 1 if APP_DEBUG_SKIP_WATCHDOG
     default 2
     range 0 2
     help
-      此选项的继续策略仅用于运行期输出错误。指示灯初始化失败必须终止启动；
-      若选择继续则升级为复位，调试配置将可转换的复位改为留驻。
+      仅控制运行期输出错误；指示灯初始化失败使用 APP_FAULT_LED_INIT_ACTION。
+
+config APP_FAULT_LED_INIT_ACTION
+    int "Status indicator initialization action"
+    default 2 if APP_FAULT_LED_ACTION = 0
+    default APP_FAULT_LED_ACTION
+    range 1 2
+    help
+      指示灯初始化失败只能留驻或复位。默认沿用运行期 LED 动作，
+      但运行期选择继续时，初始化动作默认为复位。
 
 config APP_FAULT_IMAGE_CONFIRM_ACTION
     int "Trial image confirmation action"
+    default 1 if APP_DEBUG_SKIP_WATCHDOG
     default 2
     range 1 2
 
 config APP_FAULT_TASK_TIMEOUT_ACTION
     int "Registered task deadline action"
+    default 1 if APP_DEBUG_SKIP_WATCHDOG
     default 2
     range 1 2
 
-comment "Watchdog output failure always resets; debug converts other resets to hold"
+comment "Watchdog failures request reset; other actions use the selected configuration"
 endmenu
