@@ -1,11 +1,15 @@
+/**
+ * @file
+ * @brief 参考平台点表类型与原生执行描述符。
+ *
+ * 沿用参考平台的点表术语，并针对 Zephyr 产品扩展；描述业务数据， 不提供 ARC/RTOS 抽象层或二进制 ABI。
+ */
 #ifndef DP_REFERENCE_TABLES_H
 #define DP_REFERENCE_TABLES_H
 
 #include <data_process.h>
 
-/* 沿用参考平台的点表术语，并针对 Zephyr 产品扩展；描述业务数据，
- * 不提供 ARC/RTOS 抽象层或二进制 ABI。
- */
+/** @brief 参考协议表槽位数量。 */
 #define MAX_PTL_TBL_NUM 7
 
 typedef enum {
@@ -24,9 +28,10 @@ typedef struct dm_sig_data_s {
     DATA_U max_value;
 } DM_SIG_DATA_S;
 
-/* DP 可选字段的编译期默认值。应用逐字段填写，不用整行初始化宏。
- * 数组默认指针由 DP 按 sig_size 解释为全零；零初值不表示已有有效采样。
- * 信号 ID、类型、长度及业务范围仍须由应用明确配置。
+/**
+ * @brief DP 可选字段的编译期默认值。
+ *
+ * 应用逐字段填写，不用整行初始化宏。 数组默认指针由 DP 按 sig_size 解释为全零；零初值不表示已有有效采样。 信号 ID、类型、长度及业务范围仍须由应用明确配置。
  */
 #define DP_POINT_DEFAULT_VALUE 0
 #define DP_POINT_DEFAULT_FLAGS 0U
@@ -39,10 +44,11 @@ typedef struct dm_sig_cfg_s {
     uint8_t sig_flag;
     uint32_t data_type;
     DM_PF_SIG_PROC pf_sig_proc;
-    /* 默认值和范围常驻 Flash；FLAG_RANGE_CHECK 开启配置上下限检查。
-     * 未开启时使用类型范围；开启且双零时只允许零。仅支持标量整数。
-     * 大于四字节时 def_value.pst 指向静态 const 数据，NULL 表示全零。
-     * FLAG_NO_RESTORE 禁止主动恢复默认，不影响启动加载 NVS。
+    /**
+     * @brief 默认值和范围常驻 Flash；FLAG_RANGE_CHECK 开启配置上下限检查。
+     *
+     * 未开启时使用类型范围；开启且双零时只允许零。仅支持标量整数。 大于四字节时 def_value.pst 指向静态 const 数据，
+     * NULL 表示全零。 FLAG_NO_RESTORE 禁止主动恢复默认，不影响启动加载 NVS。
      */
     DM_SIG_DATA_S data;
 } DM_SIG_CFG_S;
@@ -72,7 +78,9 @@ typedef struct init_set_s {
     DM_PF_SIG_PROC function;
 } INIT_DATA_SET_S;
 
-/* 归 CO 管理的表阶段标志，与不可变参考读取器共用。 */
+/**
+ * @brief 归 CO 管理的表阶段标志，与不可变参考读取器共用。
+ */
 #define CO_TABLE_INIT 0x10U
 
 typedef struct {
@@ -80,7 +88,9 @@ typedef struct {
     uint16_t reg_addr;
     uint8_t reg_num;
     uint8_t reg_type;
-    /* 毫秒范围 0–65535；初始化须显式设置 CO_TABLE_INIT，不由 0 推断。 */
+    /**
+     * @brief 毫秒范围 0–65535；初始化须显式设置 CO_TABLE_INIT，不由 0 推断。
+     */
     uint16_t period_ms;
     uint8_t flag;
     uint8_t priority : 2;
@@ -98,7 +108,9 @@ typedef struct mb_table_cell_t {
     uint8_t byte_order;
 } MB_TABLE_CELL_T, MB_TABLE_CELL_S;
 
-/* 来自 upp_m_ex.h 的 UPP 模型表子集。
+/**
+ * @brief 来自 upp_m_ex.h 的 UPP 模型表子集。
+ *
  * 后端交换已解码的主机字序数据；此处仅声明模型数据，不实现 UPP 串口协议。
  */
 typedef struct upp_m_model_data {
@@ -128,7 +140,9 @@ typedef struct upp_m_model_reg {
     uint32_t cfg_mode;
 } UPP_M_MOD_REG;
 
-/* 数值编码属于协议元数据，不需要 arc_byte_order.h。 */
+/**
+ * @brief 数值编码属于协议元数据，不需要 arc_byte_order.h。
+ */
 #define BYTE_ORDER_DEFAULT 0
 #define BYTE_ORDER_SMALL 1
 #define BYTE_ORDER_BIGSMALL 2
@@ -136,6 +150,8 @@ typedef struct upp_m_model_reg {
 #define BYTE_ORDER_BIG 4
 
 struct dp_transmit_cfg;
-/* 将一行不可变参考表解码到调用方持有的执行描述符。 */
+/**
+ * @brief 将一行不可变参考表解码到调用方持有的执行描述符。
+ */
 int dp_transmit_from_reference(const MB_TABLE_CELL_T *row, struct dp_transmit_cfg *map);
 #endif

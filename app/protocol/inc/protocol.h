@@ -1,3 +1,7 @@
+/**
+ * @file
+ * @brief 产品协议装配和运行维护接口。
+ */
 #ifndef APPLICATION_PROTOCOL_H
 #define APPLICATION_PROTOCOL_H
 
@@ -5,17 +9,28 @@
 #include <collect_lib.h>
 #include <transmit_lib.h>
 
-/* 注册产品点表回调；随后由调用者执行通用模块 dp_init()。 */
+/**
+ * @brief 注册产品点表回调；随后由调用者执行通用模块 dp_init()。
+ */
 int protocol_register_point_tables(void);
-/* 完成本地协议装配后放行任务，不等待远端上线。 */
+/**
+ * @brief 完成本地协议装配后放行任务，不等待远端上线。
+ */
 int protocol_init(void);
-/* 已锁存的本地通信维护故障，不驱动首次启动或采样。 */
+/**
+ * @brief 已锁存的本地通信维护故障，不驱动首次启动或采样。
+ */
 int protocol_error(void);
-/* 终止操作具有幂等性，可在 ISR 中调用。
- * 允许已准入的操作完成或留下持久恢复意图，不挂起持锁线程。 */
+/**
+ * @brief 终止操作具有幂等性，可在 ISR 中调用。
+ *
+ * 允许已准入的操作完成或留下持久恢复意图，不挂起持锁线程。
+ */
 void protocol_stop(void);
 bool protocol_stopped(void);
-/* 向应用状态单例提交远端和存储诊断。 */
+/**
+ * @brief 向应用状态单例提交远端和存储诊断。
+ */
 void protocol_update_status(void);
 const DEV_TABLE_S *protocol_device_table(void);
 uint16_t protocol_device_count(void);
@@ -23,7 +38,9 @@ struct tr_forward_cfg;
 struct co_port_config;
 struct co_bus_cfg;
 
-/* 启动期注册路由和回调，须先于采集/转发启动；可重复调用。 */
+/**
+ * @brief 启动期注册路由和回调，须先于采集/转发启动；可重复调用。
+ */
 int protocol_ports_init(void);
 extern const struct co_port_config protocol_collect_port;
 extern const struct co_bus_cfg protocol_collect_bus;

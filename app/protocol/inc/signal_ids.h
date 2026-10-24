@@ -1,20 +1,28 @@
+/**
+ * @file
+ * @brief 产品设备与信号标识。
+ */
 #ifndef SIGNAL_IDS_H
 #define SIGNAL_IDS_H
 
 #define DEVICE_TYPE 0x2221
 #define PROTOCOL_VERSION 0x01000101U
 
-/* 逻辑设备与信号 ID；协议寄存器地址由采集表和转发表分别指定。 */
+/**
+ * @brief 逻辑设备与信号 ID；协议寄存器地址由采集表和转发表分别指定。
+ */
 #define DEVICE_LOCAL 1
 #define DEVICE_REMOTE_IO 10
 
-/* 本地与南向设备共用这些信号 ID，通过设备 ID 区分测点。 */
+/**
+ * @brief 本地与南向设备共用这些信号 ID，通过设备 ID 区分测点。
+ */
 #define SIGNAL_DI 8152
 #define SIGNAL_CURRENT_1 8163
 #define SIGNAL_PROTOCOL 8150
 #define SIGNAL_ADDRESS 30459
 
-#define SIGNAL_SAVED_ADDRESS 30461 /* 内部键；通信地址为 30459。 */
+#define SIGNAL_SAVED_ADDRESS 30461 /**< 内部键；通信地址为 30459。 */
 #define SIGNAL_VIRTUAL_MODE 10012
 #define SIGNAL_SAMPLE_PERIOD 31000
 #define SIGNAL_LABEL 31001
@@ -24,6 +32,6 @@
 #define SIGNAL_RESTORE_REMOTE 31091
 #define SIGNAL_FLUSH_PARAMETERS 31092
 #define SIGNAL_RECOVER_PARAMETERS 31093
-#define SIGNAL_PARAMETER_STATUS 32000 /* 四字：标志、错误、序号低字、高字。 */
+#define SIGNAL_PARAMETER_STATUS 32000 /**< 四字：标志、错误、序号低字、高字。 */
 
 #endif

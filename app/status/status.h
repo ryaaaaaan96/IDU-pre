@@ -1,104 +1,211 @@
+/**
+ * @file
+ * @brief 整机状态、故障策略及显式登记的任务看门狗接口。
+ *
+ * 状态由模块内部单例持有，每次上电只初始化一次，故障复位前不可清除。
+ * 业务线程推进阶段，LED 指示独立调度，不表示采样进度。
+ */
 #ifndef STATUS_H
 #define STATUS_H
 
 #include <stdint.h>
 #include <stdbool.h>
 
-/* 指示节奏归 status 管理，不表示采样进度。 */
+/** @brief 运行指示灯的标称翻转间隔，单位为毫秒。 */
 #define STATUS_LED_HALF_PERIOD_MS 100
 
+/** @brief 整机启动、采样和终止故障阶段。 */
 enum status_phase {
-    STATUS_UNCONFIGURED,
-    STATUS_STARTING,
-    STATUS_RUN, /* 初始化完成，可以开始采样周期。 */
-    STATUS_SAMPLING,
-    STATUS_PUBLISHING,
-    STATUS_SERVICING_COMMUNICATION,
-    STATUS_CHECKING_HEALTH,
-    STATUS_FAULT_LOCKED,
+    STATUS_UNCONFIGURED, /**< 尚未初始化。 */
+    STATUS_STARTING, /**< 正在初始化本地服务。 */
+    STATUS_RUN, /**< 初始化完成，可以开始采样周期。 */
+    STATUS_SAMPLING, /**< 正在采样。 */
+    STATUS_PUBLISHING, /**< 正在发布样本。 */
+    STATUS_SERVICING_COMMUNICATION, /**< 正在维护通信状态。 */
+    STATUS_CHECKING_HEALTH, /**< 正在检查健康状态和镜像确认条件。 */
+    STATUS_FAULT_LOCKED, /**< 已锁存终止故障，业务不可恢复。 */
 };
 
+/** @brief 用于选择构建期处理策略的故障来源。 */
 enum status_fault {
     STATUS_FAULT_NONE, STATUS_FAULT_INPUT_INIT, STATUS_FAULT_IAP_INIT,
     STATUS_FAULT_PROTOCOL_INIT, STATUS_FAULT_SAMPLE, STATUS_FAULT_PUBLISH,
     STATUS_FAULT_PROTOCOL, STATUS_FAULT_LED, STATUS_FAULT_WATCHDOG,
     STATUS_FAULT_IMAGE_CONFIRM, STATUS_FAULT_TASK_TIMEOUT, STATUS_FAULT_COUNT,
 };
+/** @brief 故障处理动作：记录继续、停止业务留驻或请求复位。 */
 enum status_action { STATUS_CONTINUE, STATUS_HOLD, STATUS_RESET };
+
+/** @brief 整机首错及终止动作的一致快照。 */
 struct status_application_fault {
-    enum status_fault first, terminal;
-    enum status_phase phase;
-    enum status_action action;
-    int error;
-    int64_t occurred_ms;
+    enum status_fault first, terminal; /**< 首个故障来源和当前终止故障来源。 */
+    enum status_phase phase; /**< 首个故障发生时的阶段。 */
+    enum status_action action; /**< 当前锁存的终止动作，可由喂狗故障升级。 */
+    int error; /**< 首个故障的错误码。 */
+    int64_t occurred_ms; /**< 首个故障发生时的系统运行时间，单位为毫秒。 */
 };
-/* 一致的 RAM 诊断快照，也覆盖 ISR 报告的故障。 */
+
+/**
+ * @brief 读取整机故障快照，可在线程或 ISR 中调用。
+ * @param[out] snapshot 接收快照的存储；失败时保持原值。
+ * @retval 0 已复制故障快照。
+ * @retval -EINVAL 输出指针为空。
+ * @retval -ENOENT 尚未记录故障。
+ */
 int status_application_fault_get(struct status_application_fault *snapshot);
 
+/** @brief 远端和存储的降级诊断，与本地终止故障独立。 */
 struct status_degradation {
-    uint16_t remote_offline, remote_initializing;
-    int storage_error;
+    uint16_t remote_offline, remote_initializing; /**< 离线和正在初始化的远端设备数量。 */
+    int storage_error; /**< 当前存储故障原因，恢复就绪后清零。 */
 };
-/* 协议诊断不会清除终止故障，也不会停止本地采样。 */
+
+/**
+ * @brief 原子更新降级诊断，不清除终止故障或停止本地采样。
+ * @param[in] offline 离线远端设备数。
+ * @param[in] initializing 正在初始化的远端设备数。
+ * @param[in] storage_error 存储故障原因，无故障时为 0。
+ */
 void status_update_degradation(uint16_t offline, uint16_t initializing, int storage_error);
+
+/** @brief 读取一致的降级诊断副本，可在线程或 ISR 中调用。 */
 struct status_degradation status_degradation_get(void);
 
-/* 产品状态为私有单例，每次上电仅初始化一次；
- * 重复初始化返回 -EALREADY。采样阶段切换仅记录进度，
- * LED 策略归 status.c。故障保留首次阶段和错误，
- * 复位前不可清除。
+/**
+ * @brief 初始化状态单例、LED 和看门狗。
+ * @retval 0 初始化流程允许继续。
+ * @retval -EALREADY 本次上电已调用过初始化。
+ * @return 其他错误码表示初始化故障；复位策略可能不返回。
+ * @note 仅由启动线程调用；APP_DEBUG_SKIP_WATCHDOG 禁用看门狗。
+ * @note 所有启动服务成功后，调用方须设置 STATUS_RUN。
  */
-/* 初始化状态、LED 和看门狗（启用 APP_DEBUG_SKIP_WATCHDOG 时跳过看门狗）。
- * 所有启动服务成功后，应用进入 STATUS_RUN。 */
 int status_init(void);
+
+/**
+ * @brief 记录业务阶段，首次离开启动阶段时启动 LED 周期指示。
+ * @param[in] phase STATUS_RUN 至 STATUS_CHECKING_HEALTH 之间的阶段。
+ * @note 未初始化、终止故障已锁存或目标阶段无效时，不修改状态。
+ */
 void status_set_phase(enum status_phase phase);
+
+/**
+ * @brief 检查喂狗错误，并推进试运行镜像的健康确认。
+ * @retval 0 检查通过，或故障策略允许继续。
+ * @retval -EACCES 当前不处于 STATUS_CHECKING_HEALTH。
+ * @return 其他错误码表示已报告故障；复位策略可能不返回。
+ */
 int status_progress(void);
+
+/** @brief 读取当前阶段，可在线程或 ISR 中调用。 */
 enum status_phase status_phase_get(void);
-/* 可在 ISR 中调用，并保留首个错误。继续策略返回 0；
- * 终止策略在复位未接管时返回错误。喂狗失败可将留驻故障升级为复位。 */
+
+/**
+ * @brief 保留首错，并按故障来源执行继续、留驻或复位策略。
+ * @param[in] fault 故障来源，不得为 STATUS_FAULT_NONE 或越界值。
+ * @param[in] phase 故障发生时的业务阶段。
+ * @param[in] error 非零错误码。
+ * @retval 0 策略允许记录后继续。
+ * @retval -EINVAL 来源无效或错误码为零。
+ * @retval -EACCES 状态尚未初始化。
+ * @return 终止策略在复位未接管时返回传入的错误码。
+ * @note 可在 ISR 中调用；喂狗输出故障可将留驻升级为复位。
+ */
 int status_report_fault(enum status_fault fault,
                         enum status_phase phase, int error);
 
+/** @brief 任务处于活动期限监控状态。 */
 #define STATUS_TASK_ACTIVE UINT32_C(1)
+/** @brief 任务已显式退出期限监控。 */
 #define STATUS_TASK_SLEEP_FOREVER UINT32_C(2)
+/** @brief 任务已触发超时故障。 */
 #define STATUS_TASK_FAULT UINT32_C(4)
 
+/** @brief 任务登记配置，字段值在登记时复制。 */
 struct status_task_config {
-    const char *name;
-    uint32_t timeout_ms;
+    const char *name; /**< 非空名称字符串，登记后须持续有效。 */
+    uint32_t timeout_ms; /**< 最大心跳间隔，单位为毫秒，必须大于零。 */
 };
+
+/** @brief 任务监控状态的只读快照。 */
 struct status_task_snapshot {
-    const char *name;
-    uint32_t timeout_ms;
-    int64_t last_feed_ms;
-    uint32_t flags;
+    const char *name; /**< 调用方持有的任务名称。 */
+    uint32_t timeout_ms; /**< 最大心跳间隔，单位为毫秒。 */
+    int64_t last_feed_ms; /**< 最近登记或心跳时的系统运行时间，单位为毫秒。 */
+    uint32_t flags; /**< STATUS_TASK_* 状态标志。 */
 };
-/* 对象由调用方持有，仅清零一次并保持存活。字段属于内部状态，
- * 应通过快照接口访问，不得直接修改。 */
+
+/**
+ * @brief 调用方持有的常驻任务上下文。
+ * @note 首次使用前清零；登记后通过快照接口查询，不得修改内部字段。
+ */
 struct status_task {
-    struct status_task_snapshot state;
-    int64_t deadline_ticks;
-    struct status_task *next;
-    bool registered;
+    struct status_task_snapshot state; /**< 内部维护的诊断状态。 */
+    int64_t deadline_ticks; /**< 内部维护的绝对到期时刻，单位为系统时钟节拍。 */
+    struct status_task *next; /**< 内部活动任务链表链接。 */
+    bool registered; /**< 是否曾成功登记。 */
 };
+
+/** @brief 首个任务超时和当前外部喂狗错误的快照。 */
 struct status_fault_snapshot {
-    struct status_task_snapshot task;
-    int64_t occurred_ms;
-    int error;
-    int feed_error;
+    struct status_task_snapshot task; /**< 超时任务的诊断状态。 */
+    int64_t occurred_ms; /**< 超时发生时的系统运行时间，单位为毫秒。 */
+    int error; /**< 任务超时错误码。 */
+    int feed_error; /**< 查询时的底层看门狗错误码。 */
 };
-/* 配置值会复制，任务对象和名称仍归调用方持有。
- * 登记、心跳和休眠仅在线程中调用；快照查询也可在 ISR 中调用。 */
-/* 登记后立即开始计时；重复登记活动任务返回 -EALREADY。
- * 没有固定槽位或动态分配，每个调用方提供自己的上下文。失败不修改上下文；
- * 全局故障锁存后，登记、心跳和休眠返回 -ECANCELED，直到复位。 */
+
+/**
+ * @brief 登记任务并立即开始期限监控，也可重新启用已退出监控的任务。
+ * @param[in,out] task 首次使用前已清零的常驻任务上下文。
+ * @param[in] config 任务名称和超时配置；名称须持续有效。
+ * @retval 0 登记成功。
+ * @retval -EINVAL 参数、名称或超时间隔无效。
+ * @retval -EALREADY 任务已处于活动监控状态。
+ * @retval -ECANCELED 已锁存终止故障或任务超时。
+ * @return 其他负错误码表示服务尚不可用或底层喂狗失败。
+ * @note 仅在线程中调用；失败保持上下文不变，不分配内存或占用固定槽位。
+ */
 int status_register(struct status_task *task, const struct status_task_config *config);
+
+/**
+ * @brief 报告活动任务进展并刷新期限。
+ * @param[in,out] task 已登记且处于活动状态的任务上下文。
+ * @retval 0 心跳已接收。
+ * @retval -EACCES 任务未启用监控或服务不可用。
+ * @retval -ETIMEDOUT 心跳到达时已经超时，并触发故障策略。
+ * @retval -ECANCELED 已锁存终止故障或任务超时。
+ * @return 其他负错误码表示参数、调用上下文或底层喂狗错误。
+ * @note 仅在线程中调用；不能通过迟到心跳撤销故障。
+ */
 int status_feed(struct status_task *task);
-/* 仅取消此任务的期限，保留 STATUS_TASK_SLEEP_FOREVER 和诊断值；
- * 操作幂等。status_feed 不能恢复监控，须重新登记。 */
+
+/**
+ * @brief 取消任务的期限监控，保留休眠标志和诊断值。
+ * @param[in,out] task 已登记的任务上下文。
+ * @retval 0 已退出监控，或此前已经退出。
+ * @retval -ETIMEDOUT 退出前已超时，并触发故障策略。
+ * @retval -ECANCELED 已锁存终止故障或任务超时。
+ * @return 其他负错误码表示参数、服务状态或底层喂狗错误。
+ * @note 仅在线程中调用，不使业务线程实际休眠；须重新登记才能恢复监控。
+ */
 int status_sleep_forever(struct status_task *task);
-/* 从未登记或没有任务故障时返回 -ENOENT；查询不修改状态。 */
+
+/**
+ * @brief 读取任务快照，不修改状态，可在线程或 ISR 中调用。
+ * @param[in] task 待查询的任务上下文。
+ * @param[out] snapshot 接收快照的存储；失败时保持原值。
+ * @retval 0 查询成功。
+ * @retval -EINVAL 参数为空。
+ * @retval -ENOENT 此任务从未登记。
+ */
 int status_task_get(const struct status_task *task, struct status_task_snapshot *snapshot);
+
+/**
+ * @brief 读取首个任务超时快照，不修改状态，可在线程或 ISR 中调用。
+ * @param[out] snapshot 接收快照的存储；失败时保持原值。
+ * @retval 0 查询成功。
+ * @retval -EINVAL 输出指针为空。
+ * @retval -ENOENT 尚未发生任务超时。
+ */
 int status_fault_get(struct status_fault_snapshot *snapshot);
 
 

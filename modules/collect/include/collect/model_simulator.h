@@ -1,3 +1,7 @@
+/**
+ * @file
+ * @brief 模型采集协议的模拟后端。
+ */
 #ifndef CO_MODEL_SIMULATOR_H
 #define CO_MODEL_SIMULATOR_H
 #include <platform_callback.h>
@@ -8,7 +12,9 @@ struct co_model_simulator {
     PARA_GET_RANGE_DEF defaults;
 };
 
-/* co_bus_cfg.read_model 回调，user 指向常驻 co_model_simulator 配置。
+/**
+ * @brief co_bus_cfg.read_model 回调，user 指向常驻 co_model_simulator 配置。
+ *
  * 只返回模型默认值，不实现 UPP 线上协议。
  */
 int co_model_simulator_read(void *user, uint16_t dev, uint16_t model,
