@@ -2,7 +2,6 @@
 #include "protocol/inc/protocol.h"
 #include "protocol/inc/signal_ids.h"
 #include "status/status.h"
-#include "status/task_watchdog/task_watchdog.h"
 #include <dataprocess/points.h>
 #include <dataprocess/params.h>
 #include <collect/collect.h>

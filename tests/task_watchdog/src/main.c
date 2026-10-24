@@ -1,5 +1,4 @@
 #include "status/status.h"
-#include "status/task_watchdog/task_watchdog.h"
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/sys/reboot.h>
 #include <zephyr/ztest.h>

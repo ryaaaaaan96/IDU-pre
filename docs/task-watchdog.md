@@ -3,12 +3,18 @@
 状态：已按用户要求将期限检测迁入应用层，当前验证见[应用层实现记录](../.scratch/task-watchdog/application-timer.md)；实板验证未执行。依据[正式规格](../.scratch/task-watchdog/spec.md)、
 [边界问答](../.scratch/task-watchdog/discussion.md)与 [ADR 0009](adr/0009-opt-in-task-watchdog.md)。
 本轮没有给现有业务任务登记；监控仅由调用者显式启用。
+2026-10-24 按用户要求合并到 status 单例，验证见[合并记录](../.scratch/status-watchdog-merge/validation.md)。
 
 ## 管理职责
 
 `app/status` 统一编排任务监控、RAM 诊断、故障锁存及重启动作。
 任务登记、心跳、永久休眠和超时检测均由应用层实现；仅复用 Zephyr 内核定时器和锁，GPIO 喂狗继续由底层模块执行。
 任务通过 `status` 接口显式登记和报告进展；通用模块后续通过应用注册的健康回调接入，保持与产品头文件分离。
+
+任务监控与故障策略共用 status 的锁和私有实例，不再维护独立硬件指针、超时回调或
+初始化／终止标志。任务定时器静态初始化；登记前通过整机阶段、调试配置和底层
+看门狗状态检查可用性。故障锁存时停止期限定时器，释放状态锁后再停止业务、停喂或复位。
+任务超时快照同时阻止超时已经确定、故障处理尚未执行期间的迟到心跳和重新登记。
 
 GPIO 喂狗周期与任务超时时间分别配置。任务期限由调用者在登记时传入，
 活动任务通过调用者提供的常驻上下文串联，不预留固定通道、不分配堆内存，不需要任务看门狗功能或容量配置。
@@ -63,7 +69,7 @@ stateDiagram-v2
 
 ## 接口形态
 
-`app/status/task_watchdog/` 提供能力，接口围绕显式登记、心跳、永久休眠和查询组织：
+`app/status/status.c` 提供能力，接口围绕显式登记、心跳、永久休眠和查询组织：
 
 ```c
 status_register(&task, &config); /* 配置包含常驻名称和允许的最大心跳间隔。 */
@@ -73,7 +79,7 @@ status_register(&task, &config); /* 永久休眠后的恢复。 */
 ```
 
 调用者持有常驻的任务上下文和名称，检查登记结果；活动链表及期限由 `status` 管理。
-公开头文件为 `status/task_watchdog/task_watchdog.h`。任务配置包含 `name` 和 `timeout_ms`，
+公开头文件为 `status/status.h`。任务配置包含 `name` 和 `timeout_ms`，
 任务上下文只需零初始化一次，其字段由接口维护；配置值被复制，但名称必须保持有效。
 `status_task_get()` 返回任务快照，`status_fault_get()` 返回首个故障及物理后端错误。
 两种查询均不改变状态，也可在 ISR 中使用；没有相应记录时返回 `-ENOENT`。
@@ -115,4 +121,4 @@ LED 操作交给已有工作队列，不等待其他任务、工作队列或日�
 - 现有任务保持未登记，不产生隐藏的主循环或 DP 任务超时约束。
 - 区分主机/native 验证与实板 GPIO 波形、外部看门狗和复位链验证。
 
-实现位于 `app/status/task_watchdog/`；不改动上游 Zephyr 或通用 GPIO 看门狗模块。
+实现位于 `app/status/status.c`；不改动上游 Zephyr 或通用 GPIO 看门狗模块。

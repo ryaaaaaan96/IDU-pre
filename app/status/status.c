@@ -1,5 +1,4 @@
 #include "status/status.h"
-#include "task_watchdog/internal.h"
 #ifdef CONFIG_BOOTLOADER_MCUBOOT
 #include <dataprocess/params.h>
 #include "status/image_confirm/image_confirm.h"
@@ -27,10 +26,14 @@ static struct {
     enum status_phase phase;
     struct status_application_fault fault;
     struct status_degradation degradation;
+    struct status_task *active;
+    struct status_fault_snapshot task_fault;
 #ifdef CONFIG_BOOTLOADER_MCUBOOT
     struct image_confirm image_confirm;
 #endif
 } application;
+static void task_timer_expired(struct k_timer *timer);
+static K_TIMER_DEFINE(task_timer, task_timer_expired, NULL);
 static bool indicator_on;
 static int64_t next_toggle_ms;
 static void indicate(struct k_work *work);
@@ -118,6 +121,7 @@ int status_report_fault(enum status_fault fault,
         application.phase = STATUS_FAULT_LOCKED;
         application.fault.terminal = fault;
         application.fault.action = action;
+        k_timer_stop(&task_timer);
     }
     k_spin_unlock(&lock, key);
     if (first || act) { LOG_ERR("Fault %d phase %d error %d action %d", fault, phase, error, action); }
@@ -126,8 +130,8 @@ int status_report_fault(enum status_fault fault,
 #ifdef CONFIG_IDU_IAPV3
         iap_stop();
 #endif
-        if (!IS_ENABLED(CONFIG_APP_DEBUG_SKIP_WATCHDOG)) {
-            status_tasks_halt(&monitor, action == STATUS_RESET);
+        if (!IS_ENABLED(CONFIG_APP_DEBUG_SKIP_WATCHDOG) && action == STATUS_RESET) {
+            watchdog_stop(&monitor);
         }
         k_work_reschedule(&indicator, K_NO_WAIT);
         if (action == STATUS_RESET) { status_request_reboot(); }
@@ -139,6 +143,154 @@ static void task_expired(void)
 {
     (void)status_report_fault(STATUS_FAULT_TASK_TIMEOUT,
                               status_phase_get(), -ETIMEDOUT);
+}
+
+/* Caller holds lock. The task snapshot also closes the brief interval between
+ * claiming a timeout and reporting its policy outside this lock. */
+static bool task_monitor_stopped(void)
+{
+    return application.phase == STATUS_FAULT_LOCKED || application.task_fault.task.name;
+}
+
+/* Caller holds lock. A single one-shot timer follows the earliest deadline. */
+static void schedule_next_task(void)
+{
+    struct status_task *next = NULL;
+    for (struct status_task *task = application.active; task; task = task->next) {
+        if (!next || task->deadline_ticks < next->deadline_ticks) { next = task; }
+    }
+    if (task_monitor_stopped() || !next) { k_timer_stop(&task_timer); }
+    else { k_timer_start(&task_timer, K_TIMEOUT_ABS_TICKS(next->deadline_ticks), K_NO_WAIT); }
+}
+
+static int task_service_error(void)
+{
+    if (task_monitor_stopped()) { return -ECANCELED; }
+    if (k_is_in_isr()) { return -EWOULDBLOCK; }
+    if (application.phase == STATUS_UNCONFIGURED || IS_ENABLED(CONFIG_APP_DEBUG_SKIP_WATCHDOG)) { return -EACCES; }
+    return watchdog_error(&monitor);
+}
+
+/* Caller holds lock. Policy runs after unlocking, including ISR expiry. */
+static bool task_trip(struct status_task *task)
+{
+    if (task_monitor_stopped()) { return false; }
+    task->state.flags = STATUS_TASK_FAULT;
+    application.task_fault = (struct status_fault_snapshot){
+        .task = task->state, .occurred_ms = k_uptime_get(),
+        .error = -ETIMEDOUT, .feed_error = 0,
+    };
+    k_timer_stop(&task_timer);
+    return true;
+}
+
+static void task_timer_expired(struct k_timer *expired_timer)
+{
+    ARG_UNUSED(expired_timer);
+    k_spinlock_key_t key = k_spin_lock(&lock);
+    struct status_task *first = NULL;
+    int64_t now = k_uptime_ticks();
+    for (struct status_task *task = application.active; task; task = task->next) {
+        if (task->deadline_ticks <= now &&
+            (!first || task->deadline_ticks < first->deadline_ticks)) { first = task; }
+    }
+    bool expired_task = first && task_trip(first);
+    if (!task_monitor_stopped()) { schedule_next_task(); }
+    k_spin_unlock(&lock, key);
+    if (expired_task) { task_expired(); }
+}
+
+int status_register(struct status_task *task, const struct status_task_config *config)
+{
+    if (!task || !config || !config->name || !config->name[0] || !config->timeout_ms) {
+        return -EINVAL;
+    }
+    k_spinlock_key_t key = k_spin_lock(&lock);
+    int err = task_service_error();
+    if (!err && task->registered && (task->state.flags & STATUS_TASK_ACTIVE)) {
+        err = -EALREADY;
+    }
+    if (!err) {
+        task->state = (struct status_task_snapshot){
+            .name = config->name, .timeout_ms = config->timeout_ms,
+            .last_feed_ms = k_uptime_get(), .flags = STATUS_TASK_ACTIVE,
+        };
+        task->deadline_ticks = k_uptime_ticks() + k_ms_to_ticks_ceil64(config->timeout_ms);
+        task->next = application.active;
+        application.active = task;
+        task->registered = true;
+        schedule_next_task();
+    }
+    k_spin_unlock(&lock, key);
+    return err;
+}
+
+int status_feed(struct status_task *task)
+{
+    if (!task) { return -EINVAL; }
+    k_spinlock_key_t key = k_spin_lock(&lock);
+    int err = task_service_error();
+    bool expired_task = false;
+    if (!err && (!task->registered || !(task->state.flags & STATUS_TASK_ACTIVE))) {
+        err = -EACCES;
+    }
+    if (!err && k_uptime_ticks() >= task->deadline_ticks) {
+        expired_task = task_trip(task);
+        err = -ETIMEDOUT;
+    }
+    if (!err) {
+        task->state.last_feed_ms = k_uptime_get();
+        task->deadline_ticks = k_uptime_ticks() + k_ms_to_ticks_ceil64(task->state.timeout_ms);
+        schedule_next_task();
+    }
+    k_spin_unlock(&lock, key);
+    if (expired_task) { task_expired(); }
+    return err;
+}
+
+int status_task_get(const struct status_task *task, struct status_task_snapshot *snapshot)
+{
+    if (!task || !snapshot) { return -EINVAL; }
+    k_spinlock_key_t key = k_spin_lock(&lock);
+    int err = task->registered ? 0 : -ENOENT;
+    if (!err) { *snapshot = task->state; }
+    k_spin_unlock(&lock, key);
+    return err;
+}
+
+int status_fault_get(struct status_fault_snapshot *snapshot)
+{
+    if (!snapshot) { return -EINVAL; }
+    k_spinlock_key_t key = k_spin_lock(&lock);
+    int err = application.task_fault.task.name ? 0 : -ENOENT;
+    if (!err) { *snapshot = application.task_fault; snapshot->feed_error = watchdog_error(&monitor); }
+    k_spin_unlock(&lock, key);
+    return err;
+}
+
+int status_sleep_forever(struct status_task *task)
+{
+    if (!task) { return -EINVAL; }
+    k_spinlock_key_t key = k_spin_lock(&lock);
+    int err = task_service_error();
+    bool expired_task = false;
+    if (!err && !task->registered) { err = -EACCES; }
+    if (!err && (task->state.flags & STATUS_TASK_ACTIVE)) {
+        if (k_uptime_ticks() >= task->deadline_ticks) {
+            expired_task = task_trip(task);
+            err = -ETIMEDOUT;
+        } else {
+            struct status_task **link = &application.active;
+            while (*link != task) { link = &(*link)->next; }
+            *link = task->next;
+            task->next = NULL;
+            task->state.flags = STATUS_TASK_SLEEP_FOREVER;
+            schedule_next_task();
+        }
+    }
+    k_spin_unlock(&lock, key);
+    if (expired_task) { task_expired(); }
+    return err;
 }
 
 static int output(bool on)
@@ -191,7 +343,6 @@ int status_init(void)
     int err = 0;
     if (!IS_ENABLED(CONFIG_APP_DEBUG_SKIP_WATCHDOG)) {
         err = watchdog_init(&monitor, &watchdog);
-        if (!err) { err = status_tasks_init(&monitor, task_expired); }
         if (err) { return status_report_fault(STATUS_FAULT_WATCHDOG, STATUS_STARTING, err); }
     }
     err = output(true);
