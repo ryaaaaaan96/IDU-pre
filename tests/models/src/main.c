@@ -38,8 +38,10 @@ struct peer_state {
 };
 static struct peer_state peers[] = {{.value = 17}, {.value = 29}};
 
-static int transfer(void *user, uint16_t dev_id, struct modbus_adu *adu)
+static int transfer(void *user, uint16_t dev_id, struct modbus_adu *adu,
+                     k_timeout_t timeout)
 {
+    ARG_UNUSED(timeout);
     ARG_UNUSED(dev_id);
     struct peer_state *peer_state = user;
     zassert_equal(adu->unit_id, 1);

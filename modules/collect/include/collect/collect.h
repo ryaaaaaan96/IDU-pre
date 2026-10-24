@@ -42,7 +42,10 @@ struct co_bus_cfg {
     /* Optional protocol backend. In-place request/response; called under bus lock.
      * Without CO_MODBUS_ADAPTER, provide transfer and/or read_model.
      */
-    int (*transfer)(void *user, uint16_t dev_id, struct modbus_adu *adu);
+    /* Honor the remaining total timeout. Return EBUSY for pre-send contention;
+     * ETIMEDOUT denotes a transmitted request with no response. */
+    int (*transfer)(void *user, uint16_t dev_id, struct modbus_adu *adu,
+                    k_timeout_t timeout);
     int (*initialize)(void *user, uint16_t dev_id);
     int (*read_model)(void *user, uint16_t dev_id, uint16_t model,
                        uint16_t offset, uint16_t *words, size_t count);

@@ -1,6 +1,8 @@
 /* Private implementation inserted after Zephyr's interface table. */
 #include <zephyr/sys/crc.h>
 struct mb_io_state {
+    bool client_bounded; /* Protected by the recursive Zephyr iface_lock. */
+    k_timepoint_t client_deadline;
     atomic_t raw_busy;
     void (*done)(void *user);
     void *done_user;
@@ -15,6 +17,43 @@ struct mb_io_state {
 #endif
 };
 static struct mb_io_state mb_io[ARRAY_SIZE(mb_ctx_tbl)];
+
+int mb_client_begin(int iface, k_timeout_t timeout)
+{
+    if (k_is_in_isr()) { return -EWOULDBLOCK; }
+    if (iface < 0 || iface >= ARRAY_SIZE(mb_io) ||
+        !atomic_test_bit(&mb_ctx_tbl[iface].state, MODBUS_STATE_CONFIGURED) ||
+        !mb_ctx_tbl[iface].client) { return -ENODEV; }
+    k_timepoint_t deadline = sys_timepoint_calc(timeout);
+    struct modbus_context *ctx = &mb_ctx_tbl[iface];
+    if (k_mutex_lock(&ctx->iface_lock, sys_timepoint_timeout(deadline))) { return -EBUSY; }
+    if (mb_io[iface].client_bounded || sys_timepoint_expired(deadline)) {
+        k_mutex_unlock(&ctx->iface_lock); return -EBUSY;
+    }
+    mb_io[iface].client_deadline = deadline;
+    mb_io[iface].client_bounded = true;
+    return 0;
+}
+
+void mb_client_end(int iface)
+{
+    mb_io[iface].client_bounded = false;
+    k_mutex_unlock(&mb_ctx_tbl[iface].iface_lock);
+}
+
+k_timeout_t mb_client_remaining(int iface)
+{
+    return mb_io[iface].client_bounded ?
+           sys_timepoint_timeout(mb_io[iface].client_deadline) : K_FOREVER;
+}
+
+static k_timeout_t mb_client_response_timeout(struct modbus_context *ctx)
+{
+    k_timeout_t remaining = mb_client_remaining(modbus_iface_get_by_ctx(ctx));
+    k_timeout_t response = K_USEC(ctx->rxwait_to);
+    return K_TIMEOUT_EQ(remaining, K_FOREVER) ? response :
+           K_TICKS(MIN(remaining.ticks, response.ticks));
+}
 
 int mb_raw_rx_begin(struct modbus_context *ctx)
 {
@@ -101,13 +140,13 @@ int mb_serial_send(int iface, const uint8_t *data, size_t size, k_timeout_t time
     struct modbus_context *ctx = &mb_ctx_tbl[iface];
     k_timepoint_t deadline = sys_timepoint_calc(timeout);
     int err = k_mutex_lock(&io->lock, sys_timepoint_timeout(deadline));
-    if (err) { return err; }
+    if (err) { return -EBUSY; }
     /* Shared links may start a client transaction while RX is assembling a
      * frame. Never overwrite that buffer; wait for its dispatch and TX silence.
      * This coordinates this MCU only, not other masters on the wire.
      */
     for (;;) {
-        if (sys_timepoint_expired(deadline)) { err = -ETIMEDOUT; goto out; }
+        if (sys_timepoint_expired(deadline)) { err = -EBUSY; goto out; }
         unsigned int key = irq_lock();
         bool idle = !ctx->cfg->uart_buf_ctr && !k_work_busy_get(&ctx->server_work) &&
                     sys_timepoint_expired(io->next_tx);

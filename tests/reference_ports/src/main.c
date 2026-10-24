@@ -56,8 +56,10 @@ static const struct dp_equip_cfg equipment = {
     .transmit = maps, .transmit_count = ARRAY_SIZE(maps),
 };
 
-static int transfer(void *user, uint16_t dev_id, struct modbus_adu *adu)
+static int transfer(void *user, uint16_t dev_id, struct modbus_adu *adu,
+                     k_timeout_t timeout)
 {
+    ARG_UNUSED(timeout);
     ARG_UNUSED(dev_id);
     ARG_UNUSED(user);
     if (atomic_get(&block_transfer)) {

@@ -1,7 +1,3 @@
-#include "../../fixtures/tr_tasks.h"
-#include "../../fixtures/co_tasks.h"
-#include "../../fixtures/dp_tasks.h"
-#include "../../fixtures/point_connections.h"
 #include "protocol/inc/protocol.h"
 #include "protocol/inc/signal_ids.h"
 #include <collect/collect.h>
@@ -64,6 +60,9 @@ static void transmitted(const struct device *dev, size_t bytes, void *user)
         slave_size = 5 + 2 * count; slave_reply[2] = 2 * count;
         for (size_t i = 0; i < count; ++i) {
             uint16_t value = address == 40000 ? *target : outgoing[0] == 1 ? 0x55aa : 0x33cc;
+            if (address + i == 30459) { value = outgoing[0]; }
+            if (address + i == 8150) { value = 0x0101; }
+            if (address + i == 8151) { value = 0x0100; }
             sys_put_be16(value, slave_reply + 3 + i * 2);
         }
     } else {
@@ -109,24 +108,31 @@ static void *setup(void)
 {
     k_work_init_delayable(&respond, respond_work);
     uart_emul_callback_tx_data_ready_set(uart, transmitted, NULL);
-    zassert_ok(protocol_register_point_tables()); zassert_ok(dp_init()); fixture_start_dp();
-    zassert_ok(protocol_ports_init()); zassert_ok(protocol_ports_init());
-    zassert_true(co_port_open(&protocol_collect_port) >= 0);
-    fixture_connect_points();
-    zassert_ok(co_init_bus(dp_config(), &protocol_collect_bus));
     /* 本套件不测试跨进程恢复，每次从空存储开始，避免复用旧固件的 schema。 */
     const struct flash_area *area;
     zassert_ok(flash_area_open(DT_FIXED_PARTITION_ID(DT_ALIAS(idu_settings)), &area));
     zassert_ok(flash_area_erase(area, 0, area->fa_size));
     flash_area_close(area);
-    zassert_ok(dp_params_init(dp_config(), DT_FIXED_PARTITION_ID(DT_ALIAS(idu_settings))));
-    /* Startup recovery can access the downstream before the first GPIO sample. */
-    uint16_t value;
-    zassert_ok(co_read(DEVICE_REMOTE_IO, 4, 8152, &value, 1));
-    zassert_ok(dp_process_init_device(0));
+    zassert_ok(protocol_init());
+    /* Real product tasks discover both peers. Disable only periodic requests
+     * afterwards so the focused wire assertions have a quiet starting point. */
+    for (int attempt = 0; attempt < 200; ++attempt) {
+        struct co_device_status first, second;
+        zassert_ok(co_device_status(DEVICE_REMOTE_IO, &first));
+        zassert_ok(co_device_status(DEVICE_REMOTE_IO + 1, &second));
+        if (first.state == CO_DEVICE_ONLINE && second.state == CO_DEVICE_ONLINE) { break; }
+        zassert_true(attempt < 199, "discovery: %d/%d errors %d/%d",
+                     first.state, second.state, first.error, second.error);
+        k_msleep(10);
+    }
+    for (size_t i = 0; i < dp_config()->collect_count; ++i) {
+        zassert_ok(co_enable_poll(i, false));
+    }
+    /* Wait for a transaction already selected by the worker to finish. */
+    zassert_ok(co_set_port_mode(0, MODE_TRAN, 500));
+    zassert_ok(co_set_mode(0, CO_PORT_POLL));
+    zassert_ok(protocol_error());
     local_address(16);
-    fixture_bind_tr(modbus_iface_get_by_name("RAW_1"));
-    zassert_ok(tr_forward_init(&protocol_forwarding, 16));
     return NULL;
 }
 ZTEST(shared_rs485, test_collection_and_cached_north_read)
@@ -215,7 +221,9 @@ ZTEST(shared_rs485, test_z_periodic_worker_updates_cache_on_the_shared_wire)
     struct co_device_status second_before, second_after;
     zassert_ok(co_device_status(DEVICE_REMOTE_IO, &before));
     zassert_ok(co_device_status(DEVICE_REMOTE_IO + 1, &second_before));
-    zassert_ok(co_polling_init()); fixture_start_co();
+    for (size_t i = 0; i < dp_config()->collect_count; ++i) {
+        zassert_ok(co_enable_poll(i, true));
+    }
     k_msleep(1200);
     /* Wait for the active poll to finish before disabling periodic traffic. */
     zassert_ok(co_set_port_mode(0, MODE_TRAN, 500));

@@ -1,4 +1,4 @@
-Status: pending
+Status: in_progress
 Blocked by: None
 Type: task
 
@@ -20,3 +20,5 @@ Type: task
 ## Comments
 
 2026-10-24：范围已授权。现有 acquisition 和 shared_rs485 套件通过不代表真实任务装配已被覆盖。
+
+2026-10-24：shared_rs485 改用真实协议初始化和任务装配，7/7 通过；故障收敛、部分启动失败及配置差异继续随 01 补齐。

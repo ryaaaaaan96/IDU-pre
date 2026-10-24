@@ -1,4 +1,4 @@
-Status: pending
+Status: in_progress
 Blocked by: None
 Type: task
 
@@ -20,3 +20,5 @@ Type: task
 ## Comments
 
 2026-10-24：范围已授权，正在核对超时及发帧调用链；未把 K_FOREVER 直接认定为死锁。
+
+2026-10-24：单次 ADU 500 ms 总预算已贯穿总线、共线、RAW、Zephyr 接口、发送及响应。竞争不发送返回 EBUSY；4 项专项测试与相关模块回归通过，实板时序与最终固件检查待完成。

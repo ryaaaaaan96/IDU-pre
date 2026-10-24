@@ -5,6 +5,15 @@ menuconfig COLLECT
 
 if COLLECT
 
+config CO_EXCHANGE_TIMEOUT_MS
+    int "Total budget per southbound message exchange (ms)"
+    default 500
+    range 10 10000
+    help
+      Includes bus and transport ownership, sending and the response wait.
+      Each automatic retry receives a new budget. Backend callbacks must honor
+      their supplied remaining timeout; contention before sending is EBUSY.
+
 config HEAP_MEM_POOL_ADD_SIZE_COLLECT
     int "Shared heap budget for acquisition queues and message buffers (bytes)"
     default 12288

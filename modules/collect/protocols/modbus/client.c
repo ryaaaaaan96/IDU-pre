@@ -4,6 +4,7 @@
 #include "client.h"
 #include <zephyr/kernel.h>
 #include <zephyr/sys/byteorder.h>
+#include <modbus_support/transport.h>
 
 /* Standard functions also work on Zephyr RAW loopback client interfaces. */
 static int transfer(int iface, struct modbus_adu *adu)
@@ -43,16 +44,32 @@ static int transfer(int iface, struct modbus_adu *adu)
     return err;
 }
 
-int co_modbus_transfer(int iface, uint16_t dev_id, struct modbus_adu *adu)
+static int transfer_bounded(int iface, struct modbus_adu *adu, k_timeout_t timeout)
+{
+    int err = mb_client_begin(iface, timeout);
+    if (err) { return err; }
+    err = transfer(iface, adu);
+    mb_client_end(iface);
+    return err;
+}
+
+int co_modbus_transfer_timeout(int iface, uint16_t dev_id, struct modbus_adu *adu,
+                               k_timeout_t timeout)
 {
     if (!adu) { return -EINVAL; }
     if (k_is_in_isr()) { return -EWOULDBLOCK; }
 #ifdef CONFIG_CO_MODBUS_RAW_PORT
-    return co_modbus_raw_transfer(iface, dev_id, adu, transfer);
+    return co_modbus_raw_transfer(iface, dev_id, adu, timeout, transfer_bounded);
 #else
     ARG_UNUSED(dev_id);
-    return transfer(iface, adu);
+    return transfer_bounded(iface, adu, timeout);
 #endif
+}
+
+int co_modbus_transfer(int iface, uint16_t dev_id, struct modbus_adu *adu)
+{
+    return co_modbus_transfer_timeout(iface, dev_id, adu,
+                                      K_MSEC(CONFIG_CO_EXCHANGE_TIMEOUT_MS));
 }
 
 int co_modbus_reconfigure(int iface, struct modbus_iface_param param)

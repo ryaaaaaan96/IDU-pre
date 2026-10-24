@@ -4,6 +4,7 @@ include(${IDU_APP}/modules/modules.cmake)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(idu_shared_rs485_tests)
 target_include_directories(app PRIVATE ${IDU_APP}/app)
-target_sources(app PRIVATE src/main.c ${IDU_APP}/app/protocol/ports.c)
+target_sources(app PRIVATE src/main.c ${IDU_APP}/app/protocol/ports.c
+  ${IDU_APP}/app/protocol/init.c ${IDU_APP}/app/protocol/tasks.c)
 add_subdirectory(${IDU_APP}/app/protocol app_cfg)
 add_subdirectory(${IDU_APP}/app/process point_process)

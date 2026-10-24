@@ -59,7 +59,8 @@ static const struct vport_io io = {
     .mtu = CONFIG_MODBUS_BUFFER_SIZE,
 };
 
-static int collect_transfer(void *user, uint16_t dev_id, struct modbus_adu *adu)
+static int collect_transfer(void *user, uint16_t dev_id, struct modbus_adu *adu,
+                             k_timeout_t timeout)
 {
     ARG_UNUSED(user);
     if (!adu || adu->length < 4) { return -EINVAL; }
@@ -69,7 +70,8 @@ static int collect_transfer(void *user, uint16_t dev_id, struct modbus_adu *adu)
     }
     /* 北向站号在本地初始化确定，后续 GPIO 样本不改变端口身份。 */
     if (!adu->unit_id || adu->unit_id == CONFIG_IDU_FORWARD_UNIT) { return -EADDRINUSE; }
-    k_mutex_lock(&wire_lock, K_FOREVER);
+    k_timepoint_t deadline = sys_timepoint_calc(timeout);
+    if (k_mutex_lock(&wire_lock, sys_timepoint_timeout(deadline))) { return -EBUSY; }
     k_spinlock_key_t key = k_spin_lock(&response_lock);
     expected.unit = adu->unit_id;
     expected.function = adu->fc;
@@ -80,7 +82,7 @@ static int collect_transfer(void *user, uint16_t dev_id, struct modbus_adu *adu)
     expected.active = true;
     k_spin_unlock(&response_lock, key);
 
-    int err = co_modbus_transfer(client, dev_id, adu);
+    int err = co_modbus_transfer_timeout(client, dev_id, adu, sys_timepoint_timeout(deadline));
 
     key = k_spin_lock(&response_lock);
     expected.active = false; /* 超时、异常和发送失败也结束事务，不遗留收包归属。 */

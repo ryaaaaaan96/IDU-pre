@@ -94,8 +94,10 @@ K_MSGQ_DEFINE(requests, sizeof(struct request_event), 128, 4);
 static atomic_t timeout_peer;
 static atomic_t fault_device = ATOMIC_INIT(10);
 
-static int transfer(void *user, uint16_t dev, struct modbus_adu *adu)
+static int transfer(void *user, uint16_t dev, struct modbus_adu *adu,
+                     k_timeout_t timeout)
 {
+    ARG_UNUSED(timeout);
     ARG_UNUSED(user);
     uint16_t address = sys_get_be16(adu->data);
     uint16_t count = sys_get_be16(adu->data + 2);

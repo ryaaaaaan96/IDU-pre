@@ -82,8 +82,10 @@ static int linked(struct dp_process_ctx *ctx, struct dp_key key)
                                    DP_OP_NO_COLLECT | DP_OP_NO_STORE);
 }
 
-static int second_bus(void *user, uint16_t dev_id, struct modbus_adu *adu)
+static int second_bus(void *user, uint16_t dev_id, struct modbus_adu *adu,
+                     k_timeout_t timeout)
 {
+    ARG_UNUSED(timeout);
     ARG_UNUSED(dev_id);
     ARG_UNUSED(user);
     if (bus_fault) { return bus_fault; }

@@ -13,4 +13,6 @@ int co_modbus_port_param(int iface, struct modbus_iface_param *param);
  * 同一绑定接口的并发事务统一经过此入口，不与直接 Zephyr 客户端调用混用。
  */
 int co_modbus_transfer(int iface, uint16_t dev_id, struct modbus_adu *adu);
+int co_modbus_transfer_timeout(int iface, uint16_t dev_id, struct modbus_adu *adu,
+                               k_timeout_t timeout);
 #endif

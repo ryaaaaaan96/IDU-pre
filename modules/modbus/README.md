@@ -34,5 +34,11 @@ RAW 适配在接收占用前预校验，随后解码再次校验，以保留既�
 `modbus_raw_submit_rx()`、`raw_tx_cb`、客户端读写和服务端能力仍来自 Zephyr；
 `mb_serial_*`、`mb_raw_set_done` 和内部扩展钩子由本模块提供，不能当作官方接口。
 
+`mb_client_begin/end` 为同一线程的同步 Zephyr 客户端调用限定总期限，并持有
+Zephyr 自身的可递归接口锁；不允许嵌套会话。`begin` 超时表示尚未发送，返回
+`-EBUSY`。会话期间 RAW 发送使用 `mb_client_remaining`，内部响应等待取原
+`rx_timeout` 与剩余总预算的较小值。原始 Zephyr API 的协议校验仍然执行。
+普通直接 Zephyr 调用不建立会话时保持原行为。此适配也受固定源文件哈希检查。
+
 独立回归见 `tests/modbus_support`；完整 RAW/RTU、内存失败、身份及并发见
 `tests/communication`，产品共线行为见 `tests/shared_rs485`。

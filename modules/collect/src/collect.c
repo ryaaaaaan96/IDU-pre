@@ -75,7 +75,8 @@ static int exchange(uint16_t dev_id, enum co_port_mode mode, struct modbus_adu *
     int d = device_index(dev_id);
     if (!bus || !adu || (unsigned)mode >= CO_PORT_SLEEP || adu->length > sizeof(adu->data)) { return -EINVAL; }
     if (k_current_get() == &k_sys_work_q.thread || k_is_in_isr()) { return -EWOULDBLOCK; }
-    k_mutex_lock(&bus->lock, K_FOREVER);
+    k_timepoint_t deadline = sys_timepoint_calc(K_MSEC(CONFIG_CO_EXCHANGE_TIMEOUT_MS));
+    if (k_mutex_lock(&bus->lock, sys_timepoint_timeout(deadline))) { return -EBUSY; }
     if ((bus->mode != mode && !(bus->mode == CO_PORT_INIT && bus->init_owner == k_current_get())) ||
         (bus->init_owner && bus->init_owner != k_current_get())) {
         k_mutex_unlock(&bus->lock); return -EBUSY;
@@ -84,8 +85,10 @@ static int exchange(uint16_t dev_id, enum co_port_mode mode, struct modbus_adu *
     uint8_t fc = adu->fc;
     uint16_t address = adu->length >= 4 ? sys_get_be16(adu->data) : 0;
     uint16_t value = adu->length >= 4 ? sys_get_be16(adu->data + 2) : 0;
-    int err = bus->cfg.transfer ? bus->cfg.transfer(bus->cfg.user, dev_id, adu) :
-                                  co_modbus_transfer(bus->cfg.iface, dev_id, adu);
+    int err = sys_timepoint_expired(deadline) ? -EBUSY :
+        bus->cfg.transfer ? bus->cfg.transfer(bus->cfg.user, dev_id, adu,
+                                             sys_timepoint_timeout(deadline)) :
+        co_modbus_transfer_timeout(bus->cfg.iface, dev_id, adu, sys_timepoint_timeout(deadline));
     if (!err && adu->unit_id != equipment->devices[d].unit_id) { err = -EBADMSG; }
     if (!err && adu->fc == (fc | 0x80) && adu->length == 1 && adu->data[0]) { err = adu->data[0]; }
     else if (!err && (adu->fc != fc || adu->unit_id != equipment->devices[d].unit_id ||

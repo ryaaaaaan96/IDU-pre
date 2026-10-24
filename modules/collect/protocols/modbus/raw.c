@@ -72,8 +72,13 @@ static int send(int iface, const struct modbus_adu *adu, void *user)
     int err = mb_rtu_encode(adu, data, adu->length + 4U, &size);
     if (err) { k_free(data); return err; }
     const struct vport_frame frame = {.data = data, .size = size};
-    err = co_port_send(port->binding.port, &destination, &frame,
-                             K_MSEC(CONFIG_CO_MODBUS_TX_TIMEOUT_MS));
+    k_timeout_t remaining = mb_client_remaining(port->iface);
+    if (K_TIMEOUT_EQ(remaining, K_NO_WAIT)) { k_free(data); return -EBUSY; }
+    k_timeout_t send_timeout = K_MSEC(CONFIG_CO_MODBUS_TX_TIMEOUT_MS);
+    if (!K_TIMEOUT_EQ(remaining, K_FOREVER)) {
+        send_timeout = K_TICKS(MIN(send_timeout.ticks, remaining.ticks));
+    }
+    err = co_port_send(port->binding.port, &destination, &frame, send_timeout);
     k_free(data); /* The send callback completes or copies the frame. */
     return err;
 }
@@ -115,14 +120,16 @@ int co_modbus_port_bind(uint16_t id, const char *name, const struct vport_io *io
 }
 
 int co_modbus_raw_transfer(int iface, uint16_t dev_id, struct modbus_adu *adu,
-                          int (*transfer)(int, struct modbus_adu *))
+                          k_timeout_t timeout,
+                          int (*transfer)(int, struct modbus_adu *, k_timeout_t))
 {
     struct raw_port *port = NULL;
     for (size_t i = 0; i < ARRAY_SIZE(ports); ++i) {
         if (ports[i].registered && ports[i].iface == iface) { port = &ports[i]; break; }
     }
-    if (!port) { return transfer(iface, adu); }
-    k_mutex_lock(&port->transaction_lock, K_FOREVER);
+    if (!port) { return transfer(iface, adu, timeout); }
+    k_timepoint_t deadline = sys_timepoint_calc(timeout);
+    if (k_mutex_lock(&port->transaction_lock, sys_timepoint_timeout(deadline))) { return -EBUSY; }
     k_spinlock_key_t key = k_spin_lock(&port->state_lock);
     if (port->owner || atomic_get(&port->receiving)) {
         k_spin_unlock(&port->state_lock, key);
@@ -132,7 +139,7 @@ int co_modbus_raw_transfer(int iface, uint16_t dev_id, struct modbus_adu *adu,
     port->destination.dev_id = dev_id;
     port->owner = k_current_get();
     k_spin_unlock(&port->state_lock, key);
-    int err = transfer(iface, adu);
+    int err = transfer(iface, adu, sys_timepoint_timeout(deadline));
     key = k_spin_lock(&port->state_lock);
     port->owner = NULL;
     k_spin_unlock(&port->state_lock, key);
