@@ -2,6 +2,18 @@
 
 策略位于 `app/status/Kconfig`，来源与动作映射位于 `app/status/status.c`。更改 `.conf` 后重新构建生效，不提供运行期 Modbus/Shell 改写或持久保存。
 
+`status.c` 私有持有唯一的整机状态，启动调用 `status_init()`，调用方不创建或传递状态对象。
+每次上电只初始化一次；重复调用返回 `-EALREADY`，初始化失败后也不重新初始化硬件。
+阶段通过 `status_set_phase()` / `status_phase_get()` 访问，故障通过 `status_report_fault()`
+报告、`status_application_fault_get()` 读取副本。协议层通过 `status_update_degradation()`
+提交离线数量和存储诊断，`status_degradation_get()` 返回一致快照；不暴露内部可写指针。
+LED 首次调度由离开 `STATUS_STARTING` 的阶段转换决定，不另存 `running` 标志。
+
+初始化不再取消旧 LED 工作；产品没有同进程重新启动状态的功能。
+采样生命周期测试使用 `tests/acquisition/run.py` 为每个场景启动独立 native 进程，
+已接入 `tests/run.sh`。该套件的 Twister 条目只构建，运行验收必须使用上述脚本，
+不能靠清零状态结构模拟整机重启。
+
 | 配置后缀（前缀 `CONFIG_APP_FAULT_`） | 来源 | 可选值 |
 | --- | --- | --- |
 | `INPUT_INIT_ACTION` / `IAP_INIT_ACTION` / `PROTOCOL_INIT_ACTION` | 必需启动服务 | 1 留驻、2 复位 |

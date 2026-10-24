@@ -144,21 +144,19 @@ int protocol_init(void)
     return err;
 }
 
-void protocol_update_status(struct application_status *status)
+void protocol_update_status(void)
 {
-    if (!status) { return; }
-    status->remote_offline = 0;
-    status->remote_initializing = 0;
+    uint16_t offline = 0, initializing = 0;
     const struct dp_equip_cfg *config = dp_config();
     if (config) {
         for (size_t i = 0; i < config->device_count; ++i) {
             struct co_device_status remote;
             if (co_device_status(config->devices[i].dev_id, &remote)) { continue; }
-            status->remote_offline += remote.state == CO_DEVICE_OFFLINE;
-            status->remote_initializing += remote.state == CO_DEVICE_INITIALIZING;
+            offline += remote.state == CO_DEVICE_OFFLINE;
+            initializing += remote.state == CO_DEVICE_INITIALIZING;
         }
     }
     struct dp_param_status parameters;
     dp_params_get_status(&parameters);
-    status->storage_error = parameters.storage_error;
+    status_update_degradation(offline, initializing, parameters.storage_error);
 }

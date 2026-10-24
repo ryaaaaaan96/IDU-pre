@@ -6,26 +6,14 @@
 #ifdef CONFIG_IDU_IAPV3
 #include <iap/iap.h>
 #endif
-#include <errno.h>
-#include <zephyr/logging/log.h>
 
-LOG_MODULE_REGISTER(app_main, LOG_LEVEL_INF);
-
-int startup(struct application_status *status)
+int startup(void)
 {
-    if (!status) {
-        return -EINVAL;
-    }
-    if (status_phase_get(status) != STATUS_UNCONFIGURED) {
-        return -EALREADY;
-    }
-
-    int err = status_init(status);
+    int err = status_init();
+    if (err) { return err; }
     enum status_fault fault = STATUS_FAULT_INPUT_INIT;
 
-    if (!err) {
-        err = acquisition_inputs_init();
-    }
+    err = acquisition_inputs_init();
 #ifdef CONFIG_IDU_IAPV3
     if (!err) {
         err = iap_init();
@@ -37,21 +25,19 @@ int startup(struct application_status *status)
         fault = STATUS_FAULT_PROTOCOL_INIT;
     }
     if (err) {
-        if (status_phase_get(status) != STATUS_FAULT_LOCKED) {
-            (void)status_report_fault(status, fault, STATUS_STARTING, err);
+        if (status_phase_get() != STATUS_FAULT_LOCKED) {
+            (void)status_report_fault(fault, STATUS_STARTING, err);
         }
-        LOG_ERR("Startup failed: %d", err);
         return err;
     }
 
-    status_set_phase(status, STATUS_RUN);
+    status_set_phase(STATUS_RUN);
     return 0;
 }
 
 int main(void)
 {
-    static struct application_status status;
-    int err = startup(&status);
+    int err = startup();
 
     if (err) {
         return err;
@@ -59,7 +45,7 @@ int main(void)
 
     while (true) {
         int64_t next_sample = k_uptime_get() + points_sample_period_ms();
-        err = acquisition_cycle(&status);
+        err = acquisition_cycle();
         if (err) {
             return err;
         }

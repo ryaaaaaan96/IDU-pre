@@ -1,4 +1,6 @@
 tests:
   idu.acquisition.lifecycle:
     platform_allow: native_sim/native/64
+    # Runtime acceptance uses run.py to isolate the singleton per process.
+    build_only: true
     tags: [idu, acquisition]

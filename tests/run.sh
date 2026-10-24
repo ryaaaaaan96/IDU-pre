@@ -132,7 +132,7 @@ timeout 30s "$test_dir/pipeline-basic/zephyr/zephyr.exe"
 
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/acquisition -d "$test_dir/acquisition"
-timeout 30s "$test_dir/acquisition/zephyr/zephyr.exe"
+python3 applications/IDU-pre/tests/acquisition/run.py "$test_dir/acquisition/zephyr/zephyr.exe"
 
 # Exact-size allocation, failure cleanup and initialization retry.
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \

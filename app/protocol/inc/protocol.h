@@ -15,9 +15,8 @@ int protocol_error(void);
  * or leave durable recovery intent; does not suspend threads holding locks. */
 void protocol_stop(void);
 bool protocol_stopped(void);
-struct application_status;
-/* Called by the application owner of status; remote outages are diagnostics. */
-void protocol_update_status(struct application_status *status);
+/* Publish remote/storage diagnostics to the application status singleton. */
+void protocol_update_status(void);
 const DEV_TABLE_S *protocol_device_table(void);
 uint16_t protocol_device_count(void);
 struct tr_forward_cfg;

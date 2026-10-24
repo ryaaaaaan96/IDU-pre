@@ -10,25 +10,13 @@
 
 LOG_MODULE_REGISTER(app_acquisition, LOG_LEVEL_INF);
 
-static int lock_fault(struct application_status *status,
-                      enum status_fault fault, enum status_phase phase, int error)
+int acquisition_cycle(void)
 {
-    int result = status_report_fault(status, fault, phase, error);
-    LOG_ERR("Acquisition fault in phase %d: %d",
-            status->fault_phase, status->last_error);
-    return result;
-}
-
-int acquisition_cycle(struct application_status *status)
-{
-    if (!status) {
-        return -EINVAL;
-    }
-    if (status_phase_get(status) != STATUS_RUN) {
+    if (status_phase_get() != STATUS_RUN) {
         return -EACCES;
     }
 
-    status_set_phase(status, STATUS_SAMPLING);
+    status_set_phase(STATUS_SAMPLING);
     struct acquisition_sample sample = {0};
     int err = acquisition_inputs_sample(&sample);
 
@@ -36,28 +24,28 @@ int acquisition_cycle(struct application_status *status)
 
     /* The business layer maps values to DP. Publish invalid quality first,
      * retaining the sampling failure when publication also fails. */
-    status_set_phase(status, STATUS_PUBLISHING);
+    status_set_phase(STATUS_PUBLISHING);
     int publish_err = points_publish_snapshot(&sample);
     if (err) {
-        return lock_fault(status, STATUS_FAULT_SAMPLE, STATUS_SAMPLING, err);
+        return status_report_fault(STATUS_FAULT_SAMPLE, STATUS_SAMPLING, err);
     }
     if (publish_err) {
-        return lock_fault(status, STATUS_FAULT_PUBLISH, STATUS_PUBLISHING, publish_err);
+        return status_report_fault(STATUS_FAULT_PUBLISH, STATUS_PUBLISHING, publish_err);
     }
 
-    status_set_phase(status, STATUS_SERVICING_COMMUNICATION);
-    protocol_update_status(status);
+    status_set_phase(STATUS_SERVICING_COMMUNICATION);
+    protocol_update_status();
     err = protocol_error();
     if (err) {
-        return lock_fault(status, STATUS_FAULT_PROTOCOL, STATUS_SERVICING_COMMUNICATION, err);
+        return status_report_fault(STATUS_FAULT_PROTOCOL, STATUS_SERVICING_COMMUNICATION, err);
     }
 
-    status_set_phase(status, STATUS_CHECKING_HEALTH);
-    err = status_progress(status);
+    status_set_phase(STATUS_CHECKING_HEALTH);
+    err = status_progress();
     if (err) {
         return err; /* status_progress already retained the precise source. */
     }
-    status_set_phase(status, STATUS_RUN);
+    status_set_phase(STATUS_RUN);
     LOG_DBG("Address=%u DI=0x%04x", sample.address, sample.di);
     return 0;
 }

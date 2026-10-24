@@ -2,6 +2,7 @@
 #include "task_watchdog/internal.h"
 #ifdef CONFIG_BOOTLOADER_MCUBOOT
 #include <dataprocess/params.h>
+#include "status/image_confirm/image_confirm.h"
 #endif
 #ifdef CONFIG_IDU_IAPV3
 #include <iap/iap.h>
@@ -22,8 +23,15 @@ static const struct watchdog_config watchdog = {
 };
 static struct watchdog monitor;
 static struct k_spinlock lock;
-static struct application_status *application;
-static bool indicator_on, running;
+static struct {
+    enum status_phase phase;
+    struct status_application_fault fault;
+    struct status_degradation degradation;
+#ifdef CONFIG_BOOTLOADER_MCUBOOT
+    struct image_confirm image_confirm;
+#endif
+} application;
+static bool indicator_on;
 static int64_t next_toggle_ms;
 static void indicate(struct k_work *work);
 static K_WORK_DELAYABLE_DEFINE(indicator, indicate);
@@ -45,54 +53,71 @@ static const enum status_action policies[STATUS_FAULT_COUNT] = {
 /* Reboot is a hardware boundary. Returning is supported by test adapters. */
 __weak void status_request_reboot(void) { sys_reboot(SYS_REBOOT_COLD); }
 
-enum status_phase status_phase_get(struct application_status *status)
+enum status_phase status_phase_get(void)
 {
     k_spinlock_key_t key = k_spin_lock(&lock);
-    enum status_phase phase = status ? status->phase : STATUS_UNCONFIGURED;
+    enum status_phase phase = application.phase;
     k_spin_unlock(&lock, key);
     return phase;
+}
+
+void status_update_degradation(uint16_t offline, uint16_t initializing, int storage_error)
+{
+    k_spinlock_key_t key = k_spin_lock(&lock);
+    application.degradation.remote_offline = offline;
+    application.degradation.remote_initializing = initializing;
+    application.degradation.storage_error = storage_error;
+    k_spin_unlock(&lock, key);
+}
+
+struct status_degradation status_degradation_get(void)
+{
+    k_spinlock_key_t key = k_spin_lock(&lock);
+    struct status_degradation snapshot = application.degradation;
+    k_spin_unlock(&lock, key);
+    return snapshot;
 }
 
 int status_application_fault_get(struct status_application_fault *snapshot)
 {
     if (!snapshot) { return -EINVAL; }
     k_spinlock_key_t key = k_spin_lock(&lock);
-    int err = !application || application->first_fault == STATUS_FAULT_NONE ? -ENOENT : 0;
+    int err = application.fault.first == STATUS_FAULT_NONE ? -ENOENT : 0;
     if (!err) {
-        *snapshot = (struct status_application_fault){
-            .first = application->first_fault, .terminal = application->terminal_fault,
-            .phase = application->fault_phase, .action = application->action,
-            .error = application->last_error, .occurred_ms = application->fault_at_ms,
-        };
+        *snapshot = application.fault;
     }
     k_spin_unlock(&lock, key);
     return err;
 }
 
-int status_report_fault(struct application_status *status, enum status_fault fault,
+int status_report_fault(enum status_fault fault,
                         enum status_phase phase, int error)
 {
-    if (!status || fault <= STATUS_FAULT_NONE || fault >= STATUS_FAULT_COUNT || !error) { return -EINVAL; }
+    if (fault <= STATUS_FAULT_NONE || fault >= STATUS_FAULT_COUNT || !error) { return -EINVAL; }
     enum status_action action = policies[fault];
     if ((fault != STATUS_FAULT_LED && action == STATUS_CONTINUE) ||
         action > STATUS_RESET || fault == STATUS_FAULT_WATCHDOG) { action = STATUS_RESET; }
     if (action == STATUS_RESET && fault != STATUS_FAULT_WATCHDOG &&
         IS_ENABLED(CONFIG_APP_DEBUG_SKIP_WATCHDOG)) { action = STATUS_HOLD; }
     k_spinlock_key_t key = k_spin_lock(&lock);
-    bool first = status->first_fault == STATUS_FAULT_NONE;
+    if (application.phase == STATUS_UNCONFIGURED) {
+        k_spin_unlock(&lock, key);
+        return -EACCES;
+    }
+    bool first = application.fault.first == STATUS_FAULT_NONE;
     if (first) {
-        status->first_fault = fault;
-        status->fault_phase = phase;
-        status->last_error = error;
-        status->fault_at_ms = k_uptime_get();
+        application.fault.first = fault;
+        application.fault.phase = phase;
+        application.fault.error = error;
+        application.fault.occurred_ms = k_uptime_get();
     }
     bool terminal = action != STATUS_CONTINUE;
-    bool act = terminal && (status->phase != STATUS_FAULT_LOCKED ||
-                             (fault == STATUS_FAULT_WATCHDOG && status->action != STATUS_RESET));
+    bool act = terminal && (application.phase != STATUS_FAULT_LOCKED ||
+                             (fault == STATUS_FAULT_WATCHDOG && application.fault.action != STATUS_RESET));
     if (act) {
-        status->phase = STATUS_FAULT_LOCKED;
-        status->terminal_fault = fault;
-        status->action = action;
+        application.phase = STATUS_FAULT_LOCKED;
+        application.fault.terminal = fault;
+        application.fault.action = action;
     }
     k_spin_unlock(&lock, key);
     if (first || act) { LOG_ERR("Fault %d phase %d error %d action %d", fault, phase, error, action); }
@@ -112,8 +137,8 @@ int status_report_fault(struct application_status *status, enum status_fault fau
 
 static void task_expired(void)
 {
-    (void)status_report_fault(application, STATUS_FAULT_TASK_TIMEOUT,
-                              status_phase_get(application), -ETIMEDOUT);
+    (void)status_report_fault(STATUS_FAULT_TASK_TIMEOUT,
+                              status_phase_get(), -ETIMEDOUT);
 }
 
 static int output(bool on)
@@ -127,9 +152,7 @@ static int output(bool on)
 static void indicate(struct k_work *work)
 {
     ARG_UNUSED(work);
-    struct application_status *status = application;
-    if (!status) { return; }
-    enum status_phase phase = status_phase_get(status);
+    enum status_phase phase = status_phase_get();
     if (phase == STATUS_UNCONFIGURED) { return; }
     int64_t now = k_uptime_get();
     bool on = true;
@@ -142,62 +165,61 @@ static void indicate(struct k_work *work)
     }
     int err = output(on);
     if (err && phase != STATUS_FAULT_LOCKED) {
-        (void)status_report_fault(status, STATUS_FAULT_LED, phase, err);
+        (void)status_report_fault(STATUS_FAULT_LED, phase, err);
     }
-    if (status_phase_get(status) == STATUS_FAULT_LOCKED && !indicator_on) { (void)output(true); }
+    if (status_phase_get() == STATUS_FAULT_LOCKED && !indicator_on) { (void)output(true); }
     /* Held faults still need a functioning external feed after main stops. */
     k_spinlock_key_t key = k_spin_lock(&lock);
-    bool check_watchdog = status->action != STATUS_RESET;
+    bool check_watchdog = application.fault.action != STATUS_RESET;
     k_spin_unlock(&lock, key);
     if (!IS_ENABLED(CONFIG_APP_DEBUG_SKIP_WATCHDOG) && check_watchdog) {
         err = watchdog_error(&monitor);
-        if (err) { (void)status_report_fault(status, STATUS_FAULT_WATCHDOG, phase, err); }
+        if (err) { (void)status_report_fault(STATUS_FAULT_WATCHDOG, phase, err); }
     }
     k_work_reschedule(&indicator, K_MSEC(STATUS_LED_HALF_PERIOD_MS));
 }
 
-int status_init(struct application_status *status)
+int status_init(void)
 {
-    if (!status) { return -EINVAL; }
-    if (status_phase_get(status) != STATUS_UNCONFIGURED) { return -EALREADY; }
-    struct k_work_sync sync;
-    k_work_cancel_delayable_sync(&indicator, &sync);
-    application = status;
-    running = false;
-    status->phase = STATUS_STARTING;
+    k_spinlock_key_t key = k_spin_lock(&lock);
+    if (application.phase != STATUS_UNCONFIGURED) {
+        k_spin_unlock(&lock, key);
+        return -EALREADY;
+    }
+    application.phase = STATUS_STARTING;
+    k_spin_unlock(&lock, key);
     int err = 0;
     if (!IS_ENABLED(CONFIG_APP_DEBUG_SKIP_WATCHDOG)) {
         err = watchdog_init(&monitor, &watchdog);
         if (!err) { err = status_tasks_init(&monitor, task_expired); }
-        if (err) { return status_report_fault(status, STATUS_FAULT_WATCHDOG, STATUS_STARTING, err); }
+        if (err) { return status_report_fault(STATUS_FAULT_WATCHDOG, STATUS_STARTING, err); }
     }
     err = output(true);
-    return err ? status_report_fault(status, STATUS_FAULT_LED, STATUS_STARTING, err) : 0;
+    return err ? status_report_fault(STATUS_FAULT_LED, STATUS_STARTING, err) : 0;
 }
 
-void status_set_phase(struct application_status *status, enum status_phase phase)
+void status_set_phase(enum status_phase phase)
 {
     bool start = false;
     k_spinlock_key_t key = k_spin_lock(&lock);
-    if (status && status->phase != STATUS_UNCONFIGURED && status->phase != STATUS_FAULT_LOCKED &&
+    if (application.phase != STATUS_UNCONFIGURED && application.phase != STATUS_FAULT_LOCKED &&
         phase > STATUS_STARTING && phase < STATUS_FAULT_LOCKED) {
-        if (!running) {
-            running = true; start = true;
+        if (application.phase == STATUS_STARTING) {
+            start = true;
             next_toggle_ms = k_uptime_get() + STATUS_LED_HALF_PERIOD_MS;
         }
-        status->phase = phase;
+        application.phase = phase;
     }
     k_spin_unlock(&lock, key);
     if (start) { k_work_reschedule(&indicator, K_MSEC(STATUS_LED_HALF_PERIOD_MS)); }
 }
 
-int status_progress(struct application_status *status)
+int status_progress(void)
 {
-    if (!status) { return -EINVAL; }
-    if (status_phase_get(status) != STATUS_CHECKING_HEALTH) { return -EACCES; }
+    if (status_phase_get() != STATUS_CHECKING_HEALTH) { return -EACCES; }
     if (!IS_ENABLED(CONFIG_APP_DEBUG_SKIP_WATCHDOG)) {
         int err = watchdog_error(&monitor);
-        if (err) { return status_report_fault(status, STATUS_FAULT_WATCHDOG, STATUS_CHECKING_HEALTH, err); }
+        if (err) { return status_report_fault(STATUS_FAULT_WATCHDOG, STATUS_CHECKING_HEALTH, err); }
     }
 #ifdef CONFIG_BOOTLOADER_MCUBOOT
     const struct device *flash = DEVICE_DT_GET(DT_NODELABEL(external_flash));
@@ -205,8 +227,8 @@ int status_progress(struct application_status *status)
     dp_params_get_status(&parameters);
     bool ready = device_is_ready(flash) && (parameters.flags & DP_PARAM_STORAGE_READY) &&
                  !(parameters.flags & DP_PARAM_PENDING);
-    int err = image_confirm_checkpoint(&status->image_confirm, k_uptime_get(), ready);
-    if (err) { return status_report_fault(status, STATUS_FAULT_IMAGE_CONFIRM, STATUS_CHECKING_HEALTH, err); }
+    int err = image_confirm_checkpoint(&application.image_confirm, k_uptime_get(), ready);
+    if (err) { return status_report_fault(STATUS_FAULT_IMAGE_CONFIRM, STATUS_CHECKING_HEALTH, err); }
 #endif
     return 0;
 }

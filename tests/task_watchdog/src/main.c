@@ -23,7 +23,6 @@ static DEVICE_API(gpio, gpio_api) = {
 };
 DEVICE_DT_DEFINE(DT_NODELABEL(gpio0), NULL, NULL, &gpio_data, &gpio_config,
                  POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE, &gpio_api);
-static struct application_status application;
 static struct status_task first, second, extra;
 static struct status_task *expected;
 
@@ -48,7 +47,7 @@ static void *setup(void)
 {
     const struct status_task_config config = {.name = "early", .timeout_ms = 100};
     zassert_equal(status_register(&extra, &config), -EACCES);
-    zassert_ok(status_init(&application));
+    zassert_ok(status_init());
     return NULL;
 }
 ZTEST(task_watchdog, test_registration_and_independent_heartbeats)
@@ -87,8 +86,8 @@ ZTEST(task_watchdog, test_zero_registered_continues_past_legacy_timeout)
     zassert_true(atomic_get(&edges) > before);
     struct status_fault_snapshot fault;
     zassert_equal(status_fault_get(&fault), -ENOENT);
-    status_set_phase(&application, STATUS_CHECKING_HEALTH);
-    zassert_ok(status_progress(&application));
+    status_set_phase(STATUS_CHECKING_HEALTH);
+    zassert_ok(status_progress());
 }
 ZTEST(task_watchdog, test_registration_validation_without_fixed_capacity)
 {
@@ -131,7 +130,7 @@ ZTEST(task_watchdog, test_explicit_hold_keeps_feed_without_task_fault)
 {
     const struct status_task_config config = {.name = "first", .timeout_ms = 2000};
     zassert_ok(status_register(&first, &config));
-    (void)status_report_fault(&application, STATUS_FAULT_INPUT_INIT, STATUS_STARTING, -EIO);
+    (void)status_report_fault(STATUS_FAULT_INPUT_INIT, STATUS_STARTING, -EIO);
     atomic_val_t before = atomic_get(&edges);
     k_sleep(K_MSEC(40));
     zassert_true(atomic_get(&edges) > before);

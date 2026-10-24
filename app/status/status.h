@@ -3,9 +3,6 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#ifdef CONFIG_BOOTLOADER_MCUBOOT
-#include "status/image_confirm/image_confirm.h"
-#endif
 
 /* Status owns this cadence; it does not indicate sampling progress. */
 #define STATUS_LED_HALF_PERIOD_MS 100
@@ -38,35 +35,28 @@ struct status_application_fault {
 /* Consistent RAM diagnosis, including faults reported from an ISR. */
 int status_application_fault_get(struct status_application_fault *snapshot);
 
-struct application_status {
-    enum status_phase phase;
-    enum status_phase fault_phase;
-    int last_error;
-    enum status_fault first_fault, terminal_fault;
-    enum status_action action;
-    int64_t fault_at_ms;
-    /* Diagnostic degradation, independent of the local watchdog fault latch. */
+struct status_degradation {
     uint16_t remote_offline, remote_initializing;
     int storage_error;
-#ifdef CONFIG_BOOTLOADER_MCUBOOT
-    struct image_confirm image_confirm;
-#endif
 };
+/* Protocol diagnostics do not clear terminal faults or stop local sampling. */
+void status_update_degradation(uint16_t offline, uint16_t initializing, int storage_error);
+struct status_degradation status_degradation_get(void);
 
-/* One product status with static lifetime. Zero-initialize once.
+/* One private product status, initialized once per boot. Repeated init returns -EALREADY.
  * Fast acquisition phases only record progress; LED policy lives in status.c.
  * Faults retain their first phase/error and cannot be cleared without reset.
  */
 /* Initializes status, LED and (unless APP_DEBUG_SKIP_WATCHDOG) watchdog.
  * The application enters STATUS_RUN
  * after all startup services succeed. */
-int status_init(struct application_status *status);
-void status_set_phase(struct application_status *status, enum status_phase phase);
-int status_progress(struct application_status *status);
-enum status_phase status_phase_get(struct application_status *status);
+int status_init(void);
+void status_set_phase(enum status_phase phase);
+int status_progress(void);
+enum status_phase status_phase_get(void);
 /* ISR-safe, retains the first error. Continue returns 0; terminal returns error
  * if reset did not take control. Watchdog failure can escalate a held fault. */
-int status_report_fault(struct application_status *status, enum status_fault fault,
+int status_report_fault(enum status_fault fault,
                         enum status_phase phase, int error);
 
 #endif
