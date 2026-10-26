@@ -4,7 +4,7 @@
 
 ```c
 status_report_fault(STATUS_INIT, err, "Input initialization failed",
-                    STATUS_RESET);
+                    STATUS_HOLD);
 status_report_fault(STATUS_RUNTIME, err, "Watchdog feed output failed", STATUS_RESET);
 ```
 
@@ -19,7 +19,10 @@ status_report_fault(STATUS_RUNTIME, err, "Watchdog feed output failed", STATUS_R
 - `STATUS_HOLD`：停止业务并留驻。
 - `STATUS_RESET`：请求复位。
 
-产品当前故障调用点明确使用 `STATUS_RESET`；需要改变某处策略时直接修改该处枚举。
+启动初始化失败明确使用 `STATUS_HOLD`，停止业务并保留故障现场，避免固定故障循环重启。
+运行期故障继续使用 `STATUS_RESET`；需要改变某处策略时直接修改该处枚举。
+看门狗初始化成功后，启动故障留驻仍持续喂狗；看门狗自身初始化失败时不再检查未初始化实例，
+也不请求软件复位，但无法保证外部硬件看门狗不会复位。
 不通过 Kconfig 数字配置动作。`APP_DEBUG_SKIP_WATCHDOG` 只关闭看门狗，
 不改变故障动作。初始化阶段传入 `STATUS_CONTINUE` 返回 `-EINVAL`。
 

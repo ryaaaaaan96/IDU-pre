@@ -314,7 +314,9 @@ static void check_startup_failure(enum service failed)
     for (enum service s = WATCHDOG_INIT; s <= FORWARD_INIT; ++s) {
         zassert_equal(calls[s], s <= failed ? 1 : 0);
     }
-    zassert_equal(stops, 1);
+    zassert_equal(stops, 0);
+    zassert_equal(reboots, 0);
+    zassert_equal(fault_snapshot().action, STATUS_HOLD);
     zassert_equal(checks, 0);
     zassert_equal(acquisition_cycle(), -EACCES);
     zassert_equal(startup(), -EALREADY);
@@ -324,6 +326,9 @@ static void check_startup_failure(enum service failed)
 ZTEST(acquisition, test_startup_failure_watchdog_init)
 {
     check_startup_failure(WATCHDOG_INIT);
+    k_msleep(250);
+    zassert_equal(reboots, 0);
+    zassert_equal(checks, 0);
 }
 
 ZTEST(acquisition, test_startup_failure_led_start)
@@ -694,7 +699,9 @@ ZTEST(acquisition, test_initial_led_output_failure_stops_startup)
     led_set_error = -EIO;
     zassert_equal(startup(), -EIO);
     zassert_equal(calls[INPUTS_INIT], 0);
-    zassert_equal(stops, 1);
+    zassert_equal(stops, 0);
+    zassert_equal(reboots, 0);
+    zassert_equal(fault_snapshot().action, STATUS_HOLD);
     zassert_equal(fault_snapshot().phase, STATUS_INIT);
 }
 

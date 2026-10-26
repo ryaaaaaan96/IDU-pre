@@ -11,7 +11,8 @@ if not cases:
     else:
         cases.append("force-reset")
 for case in cases:
-    reset = policy in ("reset", "debug") or case == "force-reset"
+    reset = policy in ("reset", "debug") and case not in ("led-init", "input-init", "protocol-init")
+    reset = reset or case == "force-reset"
     marker = "RUNTIME_RESET_PASS" if reset else "RUNTIME_POLICY_PASS"
     result = subprocess.run([executable, "-flash_in_ram"],
                             env={**os.environ, "IDU_RUNTIME_CASE": case},

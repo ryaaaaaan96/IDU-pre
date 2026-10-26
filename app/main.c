@@ -26,7 +26,7 @@ int startup(void)
     }
     if (err) {
         if (status_phase_get() != STATUS_FAULT_LOCKED) {
-            (void)status_report_fault(STATUS_INIT, err, description, STATUS_RESET);
+            (void)status_report_fault(STATUS_INIT, err, description, STATUS_HOLD);
         }
         return err;
     }

@@ -35,6 +35,7 @@ static struct {
 static void task_timer_expired(struct k_timer *timer);
 static K_TIMER_DEFINE(task_timer, task_timer_expired, NULL);
 static bool indicator_ready;
+static bool watchdog_ready;
 static int64_t next_toggle_ms;
 static void indicate(struct k_work *work);
 static K_WORK_DELAYABLE_DEFINE(indicator, indicate);
@@ -128,7 +129,7 @@ static void task_expired(void)
     enum status_fault_phase phase = STATUS_RUNTIME;
     if (status_phase_get() == STATUS_STARTING) { phase = STATUS_INIT; }
     (void)status_report_fault(phase, -ETIMEDOUT, "Task heartbeat timed out",
-                              STATUS_RESET);
+                              phase == STATUS_INIT ? STATUS_HOLD : STATUS_RESET);
 }
 
 /* 调用方持有锁。
@@ -298,7 +299,7 @@ static void indicate(struct k_work *work)
         } else { err = gpio_pin_set_dt(&run_led, 1); }
         if (err && phase != STATUS_FAULT_LOCKED) {
             (void)status_report_fault(fault_phase, err, "Indicator output failed",
-                                      STATUS_RESET);
+                                      fault_phase == STATUS_INIT ? STATUS_HOLD : STATUS_RESET);
         }
     }
     /* 一次读取故障阶段和动作；main 停止后，留驻仍需检查外部喂狗。 */
@@ -308,7 +309,7 @@ static void indicate(struct k_work *work)
     bool check_watchdog = application.fault.action != STATUS_RESET;
     k_spin_unlock(&lock, key);
     if (force_on) { (void)gpio_pin_set_dt(&run_led, 1); }
-    if (!IS_ENABLED(CONFIG_APP_DEBUG_SKIP_WATCHDOG) && check_watchdog) {
+    if (watchdog_ready && check_watchdog) {
         int err = watchdog_error(&monitor);
         if (err) { (void)status_report_fault(fault_phase, err, "Watchdog feed output failed", STATUS_RESET); }
     }
@@ -326,16 +327,17 @@ int status_init(void)
     int err = 0;
     if (!IS_ENABLED(CONFIG_APP_DEBUG_SKIP_WATCHDOG)) {
         err = watchdog_init(&monitor, &watchdog);
-        if (err) { return status_report_fault(STATUS_INIT, err, "Watchdog initialization failed", STATUS_RESET); }
+        if (err) { return status_report_fault(STATUS_INIT, err, "Watchdog initialization failed", STATUS_HOLD); }
+        watchdog_ready = true;
     }
     if (!gpio_is_ready_dt(&run_led)) {
         return status_report_fault(STATUS_INIT, -ENODEV, "Indicator initialization failed",
-                                   STATUS_RESET);
+                                   STATUS_HOLD);
     }
     err = gpio_pin_configure_dt(&run_led, GPIO_OUTPUT_ACTIVE);
     if (err) {
         return status_report_fault(STATUS_INIT, err, "Indicator initialization failed",
-                                   STATUS_RESET);
+                                   STATUS_HOLD);
     }
     indicator_ready = true;
     return 0;
