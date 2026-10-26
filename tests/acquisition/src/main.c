@@ -153,7 +153,7 @@ void iap_stop(void) {}
 
 static struct gpio_driver_data indicator_data;
 static const struct gpio_driver_config indicator_config = {.port_pin_mask = UINT32_MAX};
-static bool indicator_level;
+static bool indicator_level, fault_on_toggle;
 static unsigned indicator_writes;
 
 static void record_level(bool high)
@@ -187,7 +187,15 @@ static int set_indicator(const struct device *dev, gpio_port_pins_t pins)
 static int clear_indicator(const struct device *dev, gpio_port_pins_t pins)
 { ARG_UNUSED(dev); zassert_equal(pins, BIT(0)); return write_indicator(false); }
 static int toggle_indicator(const struct device *dev, gpio_port_pins_t pins)
-{ ARG_UNUSED(dev); zassert_equal(pins, BIT(0)); return write_indicator(!indicator_level); }
+{
+    ARG_UNUSED(dev); zassert_equal(pins, BIT(0));
+    int err = write_indicator(!indicator_level);
+    if (fault_on_toggle) {
+        fault_on_toggle = false;
+        (void)status_report_fault(STATUS_RUNTIME, -EIO, "Injected concurrent fault", STATUS_HOLD);
+    }
+    return err;
+}
 
 static int indicator_device_init(const struct device *dev)
 {
@@ -559,6 +567,13 @@ ZTEST(acquisition, test_explicit_fault_actions_preserve_first_error)
     zassert_equal(reboots, 1);
     zassert_equal(status_report_fault(STATUS_RUNTIME, -EIO, "Duplicate reset", STATUS_RESET), -EIO);
     zassert_equal(reboots, 1);
+    zassert_equal(status_report_fault(STATUS_RUNTIME, -EIO, "Lower action", STATUS_HOLD), -EIO);
+    zassert_ok(status_report_fault(STATUS_RUNTIME, -EIO, "Continue after reset", STATUS_CONTINUE));
+    zassert_equal(status_phase_get(), STATUS_FAULT_LOCKED);
+    zassert_equal(fault_snapshot().action, STATUS_RESET);
+    zassert_str_equal(fault_snapshot().terminal_description, "Reset requested");
+    zassert_equal(reboots, 1);
+    zassert_equal(stops, 1);
 }
 
 ZTEST(acquisition, test_status_retains_original_fault_despite_indicator_failure)
@@ -637,6 +652,18 @@ ZTEST(acquisition, test_late_indicator_skips_edges_and_fault_takes_priority)
     k_msleep(250);
     zassert_true(indicator_on);
     zassert_equal(indicator_edges, fault_edges);
+}
+
+ZTEST(acquisition, test_fault_during_gpio_toggle_forces_indicator_on)
+{
+    zassert_ok(startup());
+    fault_on_toggle = true;
+    k_msleep(110);
+    zassert_equal(status_phase_get(), STATUS_FAULT_LOCKED);
+    zassert_true(indicator_on);
+    zassert_str_equal(fault_snapshot().terminal_description, "Injected concurrent fault");
+    zassert_equal(fault_snapshot().action, STATUS_HOLD);
+    zassert_equal(stops, 0);
 }
 
 ZTEST(acquisition, test_late_indicator_skips_even_periods_without_toggle)

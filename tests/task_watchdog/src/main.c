@@ -92,6 +92,11 @@ ZTEST(task_watchdog, test_registration_validation_without_fixed_capacity)
 {
     struct status_task_config config = {.name = "first", .timeout_ms = 2000};
     zassert_equal(status_feed(&extra), -EACCES);
+    zassert_equal(status_sleep_forever(&extra), -EACCES);
+    struct status_task_snapshot unregistered = {.name = "unchanged", .flags = UINT32_MAX};
+    zassert_equal(status_task_get(&extra, &unregistered), -ENOENT);
+    zassert_str_equal(unregistered.name, "unchanged");
+    zassert_equal(unregistered.flags, UINT32_MAX);
     zassert_equal(status_register(NULL, &config), -EINVAL);
     zassert_equal(status_register(&extra, NULL), -EINVAL);
     config.name = NULL;

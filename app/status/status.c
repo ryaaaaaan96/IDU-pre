@@ -99,18 +99,16 @@ int status_report_fault(enum status_fault_phase phase, int error,
         application.fault.error = error;
         application.fault.occurred_ms = k_uptime_get();
     }
-    bool terminal = action != STATUS_CONTINUE;
-    bool act = terminal && (application.phase != STATUS_FAULT_LOCKED ||
-                             (action == STATUS_RESET && application.fault.action == STATUS_HOLD));
-    if (act) {
+    bool upgrade = action > application.fault.action;
+    if (upgrade) {
         application.phase = STATUS_FAULT_LOCKED;
         application.fault.terminal_description = description;
         application.fault.action = action;
         k_timer_stop(&task_timer);
     }
     k_spin_unlock(&lock, key);
-    if (first || act) { LOG_ERR("%s: phase %d error %d action %d", description, phase, error, action); }
-    if (act) {
+    if (first || upgrade) { LOG_ERR("%s: phase %d error %d action %d", description, phase, error, action); }
+    if (upgrade) {
         protocol_stop();
 #ifdef CONFIG_IDU_IAPV3
         iap_stop();
@@ -121,7 +119,7 @@ int status_report_fault(enum status_fault_phase phase, int error,
         k_work_reschedule(&indicator, K_NO_WAIT);
         if (action == STATUS_RESET) { status_request_reboot(); }
     }
-    if (terminal) { return error; }
+    if (action != STATUS_CONTINUE) { return error; }
     return 0;
 }
 
@@ -195,7 +193,7 @@ int status_register(struct status_task *task, const struct status_task_config *c
     }
     k_spinlock_key_t key = k_spin_lock(&lock);
     int err = task_service_error();
-    if (!err && task->registered && (task->state.flags & STATUS_TASK_ACTIVE)) {
+    if (!err && (task->state.flags & STATUS_TASK_ACTIVE)) {
         err = -EALREADY;
     }
     if (!err) {
@@ -206,7 +204,6 @@ int status_register(struct status_task *task, const struct status_task_config *c
         task->deadline_ticks = k_uptime_ticks() + k_ms_to_ticks_ceil64(config->timeout_ms);
         task->next = application.active;
         application.active = task;
-        task->registered = true;
         schedule_next_task();
     }
     k_spin_unlock(&lock, key);
@@ -219,7 +216,7 @@ int status_feed(struct status_task *task)
     k_spinlock_key_t key = k_spin_lock(&lock);
     int err = task_service_error();
     bool expired_task = false;
-    if (!err && (!task->registered || !(task->state.flags & STATUS_TASK_ACTIVE))) {
+    if (!err && !(task->state.flags & STATUS_TASK_ACTIVE)) {
         err = -EACCES;
     }
     if (!err && k_uptime_ticks() >= task->deadline_ticks) {
@@ -240,7 +237,7 @@ int status_task_get(const struct status_task *task, struct status_task_snapshot 
 {
     if (!task || !snapshot) { return -EINVAL; }
     k_spinlock_key_t key = k_spin_lock(&lock);
-    int err = task->registered ? 0 : -ENOENT;
+    int err = task->state.flags ? 0 : -ENOENT;
     if (!err) { *snapshot = task->state; }
     k_spin_unlock(&lock, key);
     return err;
@@ -251,8 +248,9 @@ int status_fault_get(struct status_fault_snapshot *snapshot)
     if (!snapshot) { return -EINVAL; }
     k_spinlock_key_t key = k_spin_lock(&lock);
     int err = application.task_fault.task.name ? 0 : -ENOENT;
-    if (!err) { *snapshot = application.task_fault; snapshot->feed_error = watchdog_error(&monitor); }
+    if (!err) { *snapshot = application.task_fault; }
     k_spin_unlock(&lock, key);
+    if (!err) { snapshot->feed_error = watchdog_error(&monitor); }
     return err;
 }
 
@@ -262,7 +260,7 @@ int status_sleep_forever(struct status_task *task)
     k_spinlock_key_t key = k_spin_lock(&lock);
     int err = task_service_error();
     bool expired_task = false;
-    if (!err && !task->registered) { err = -EACCES; }
+    if (!err && !task->state.flags) { err = -EACCES; }
     if (!err && (task->state.flags & STATUS_TASK_ACTIVE)) {
         if (k_uptime_ticks() >= task->deadline_ticks) {
             expired_task = task_trip(task);
@@ -302,15 +300,14 @@ static void indicate(struct k_work *work)
             (void)status_report_fault(fault_phase, err, "Indicator output failed",
                                       CONFIG_APP_FAULT_LED_ACTION);
         }
-        /* 运行中的翻转或报错不能覆盖同时到达的故障常亮要求。 */
-        if (phase != STATUS_FAULT_LOCKED && status_phase_get() == STATUS_FAULT_LOCKED) {
-            (void)gpio_pin_set_dt(&run_led, 1);
-        }
     }
-    /* main 停止后，故障留驻仍需正常驱动外部看门狗。 */
+    /* 一次读取故障阶段和动作；main 停止后，留驻仍需检查外部喂狗。 */
     k_spinlock_key_t key = k_spin_lock(&lock);
+    bool force_on = indicator_ready && phase != STATUS_FAULT_LOCKED &&
+                    application.phase == STATUS_FAULT_LOCKED;
     bool check_watchdog = application.fault.action != STATUS_RESET;
     k_spin_unlock(&lock, key);
+    if (force_on) { (void)gpio_pin_set_dt(&run_led, 1); }
     if (!IS_ENABLED(CONFIG_APP_DEBUG_SKIP_WATCHDOG) && check_watchdog) {
         int err = watchdog_error(&monitor);
         if (err) { (void)status_report_fault(fault_phase, err, "Watchdog feed output failed", STATUS_RESET); }
@@ -320,11 +317,10 @@ static void indicate(struct k_work *work)
 
 int status_init(void)
 {
-    k_spinlock_key_t key = k_spin_lock(&lock);
     if (application.phase != STATUS_UNCONFIGURED) {
-        k_spin_unlock(&lock, key);
         return -EALREADY;
     }
+    k_spinlock_key_t key = k_spin_lock(&lock);
     application.phase = STATUS_STARTING;
     k_spin_unlock(&lock, key);
     int err = 0;

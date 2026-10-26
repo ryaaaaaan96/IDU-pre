@@ -9,7 +9,6 @@
 #define STATUS_H
 
 #include <stdint.h>
-#include <stdbool.h>
 
 /** @brief 运行指示灯的标称翻转间隔，单位为毫秒。 */
 #define STATUS_LED_HALF_PERIOD_MS 100
@@ -28,8 +27,8 @@ enum status_phase {
 
 /** @brief 故障发生于初始化或运行阶段，与细分业务阶段独立。 */
 enum status_fault_phase { STATUS_INIT, STATUS_RUNTIME };
-/** @brief 故障处理动作：记录继续、停止业务留驻或请求复位。 */
-enum status_action { STATUS_CONTINUE, STATUS_HOLD, STATUS_RESET };
+/** @brief 故障动作按处理强度递增，用于判断是否需要升级。 */
+enum status_action { STATUS_CONTINUE = 0, STATUS_HOLD = 1, STATUS_RESET = 2 };
 
 /** @brief 整机首错及终止动作的一致快照。 */
 struct status_application_fault {
@@ -130,7 +129,7 @@ struct status_task_snapshot {
     const char *name; /**< 调用方持有的任务名称。 */
     uint32_t timeout_ms; /**< 最大心跳间隔，单位为毫秒。 */
     int64_t last_feed_ms; /**< 最近登记或心跳时的系统运行时间，单位为毫秒。 */
-    uint32_t flags; /**< STATUS_TASK_* 状态标志。 */
+    uint32_t flags; /**< 0 表示未登记，非零值为 STATUS_TASK_* 状态标志。 */
 };
 
 /**
@@ -141,7 +140,6 @@ struct status_task {
     struct status_task_snapshot state; /**< 内部维护的诊断状态。 */
     int64_t deadline_ticks; /**< 内部维护的绝对到期时刻，单位为系统时钟节拍。 */
     struct status_task *next; /**< 内部活动任务链表链接。 */
-    bool registered; /**< 是否曾成功登记。 */
 };
 
 /** @brief 首个任务超时和当前外部喂狗错误的快照。 */
