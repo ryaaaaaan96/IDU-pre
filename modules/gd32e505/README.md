@@ -64,7 +64,7 @@ AHB 固定为 `/1`，APB 分频可选 1/2/4/8/16；不提供 IRC、PLL1/2 或 US
   该校验依赖板级填写的电压，不测量供电电压。
 
 [`modules/analog_input`](../analog_input) 通过标准 ADC API 处理采样与平均，
-[`app/acquisition/config.c`](../../app/acquisition/config.c) 装配产品配置并交给
+[`app/acquisition/acquisition.c`](../../app/acquisition/acquisition.c) 装配产品配置并交给
 [`input_sampler`](../input_sampler/README.md)：
 通道顺序 13、0、1、2、3、4、11、12，每通道 10 次整数平均，12 位、3.3 V 及
 71.5 周期采样时间与原配置相同。工程量换算继续留在 `app/process/`。

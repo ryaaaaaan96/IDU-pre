@@ -1,4 +1,4 @@
-#include "acquisition/sample.h"
+#include "acquisition/acquisition.h"
 #include "protocol/inc/protocol.h"
 #include "protocol/inc/signal_ids.h"
 #include "status/status.h"

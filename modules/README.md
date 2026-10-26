@@ -234,10 +234,10 @@ this physical backend. No particular external watchdog IC is assumed.
 input and any configured number of digital groups; output is valid only when the
 whole read succeeds. Capacity errors occur before sampling. No product node,
 channel count, voltage reference or address offset is embedded in the module.
-`app/acquisition/config.c` constructs descriptors from the product devicetree,
+`app/acquisition/acquisition.c` constructs descriptors from the product devicetree,
 checks the current conversion's 12-bit/3.3 V contract and interprets address bits.
 Its `acquisition_inputs_sample()` returns the application snapshot declared in
-`app/acquisition/sample.h`. `app/process/points.c` maps raw values into DP points.
+`app/acquisition/acquisition.h`. `app/process/points.c` maps raw values into DP points.
 
 Application state, fault latching and state-to-LED policy live in `app/status/`.
 LED output directly uses Zephyr's LED API (`LED` / `LED_GPIO`); no application-owned

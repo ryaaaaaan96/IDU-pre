@@ -1,7 +1,7 @@
 #include <zephyr/ztest.h>
 #include <zephyr/drivers/adc/adc_emul.h>
 #include <zephyr/drivers/gpio/gpio_emul.h>
-#include <acquisition/sample.h>
+#include <acquisition/acquisition.h>
 #include <analog_input/analog_input.h>
 #include <input_sampler/input_sampler.h>
 

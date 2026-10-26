@@ -8,7 +8,6 @@
 #include <dataprocess/params.h>
 #include <dataprocess/process.h>
 #include <platform_callback.h>
-#include <acquisition/sample.h>
 #include <iap/iap.h>
 #include <zephyr/drivers/gpio.h>
 #include <watchdog/watchdog.h>

@@ -1,0 +1,11 @@
+# 编排测试替换硬件采样入口，只编译产品源码中的周期编排部分。
+get_filename_component(acquisition_source "${CMAKE_CURRENT_LIST_DIR}/../../app/acquisition/acquisition.c" ABSOLUTE)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${acquisition_source}")
+file(READ "${acquisition_source}" acquisition_contents)
+string(FIND "${acquisition_contents}" "#include <input_sampler/input_sampler.h>" hardware_offset)
+if(hardware_offset LESS 0)
+  message(FATAL_ERROR "Acquisition hardware boundary missing")
+endif()
+string(SUBSTRING "${acquisition_contents}" 0 ${hardware_offset} acquisition_cycle_source)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/acquisition_cycle.c" "${acquisition_cycle_source}")
+target_sources(app PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/acquisition_cycle.c")

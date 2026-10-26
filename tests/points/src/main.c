@@ -10,7 +10,7 @@
 #include <platform_callback.h>
 #include "process/points.h"
 #include "protocol/inc/signal_ids.h"
-#include <acquisition/sample.h>
+#include <acquisition/acquisition.h>
 #include "process/engineering.h"
 #include <collect/collect.h>
 #include <dataprocess/params.h>

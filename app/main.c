@@ -2,7 +2,6 @@
 #include "process/points.h"
 #include "protocol/inc/protocol.h"
 #include "status/status.h"
-#include <acquisition/sample.h>
 #ifdef CONFIG_IDU_IAPV3
 #include <iap/iap.h>
 #endif

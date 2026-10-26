@@ -2,7 +2,7 @@
 #include "process/points.h"
 #include "process/engineering.h"
 #include "protocol/inc/signal_ids.h"
-#include <acquisition/sample.h>
+#include <acquisition/acquisition.h>
 #include <dataprocess/params.h>
 #include <errno.h>
 #include <string.h>

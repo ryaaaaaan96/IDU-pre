@@ -8,7 +8,7 @@ target_include_directories(app PRIVATE ../../app ../../modules/iap/include
   ../../modules/gpio/include ../../modules/watchdog/include ../../modules/transmit/include
   ../../modules/dataprocess/include ../../modules/collect/include ../../modules/vport/include)
 target_sources(app PRIVATE src/main.c ../../app/main.c
-  ../../app/acquisition/acquisition.c ../../app/status/status.c
+  ../../app/status/status.c
   ../../app/protocol/init.c)
 # main 由 Ztest 提供，将真实应用的启动函数提供给测试夹具。
 set_source_files_properties(../../app/main.c PROPERTIES
@@ -18,3 +18,5 @@ target_compile_definitions(app PRIVATE CONFIG_BOOTLOADER_MCUBOOT=1 CONFIG_IDU_IA
   CONFIG_DP_POINT_WORDS=16 CONFIG_DP_PROCESS_MAX_OUTPUTS=24 CONFIG_DP_MAX_DEVICES=1
   CONFIG_IDU_COLLECT_RETRIES=2 CONFIG_IDU_COLLECT_EXCEPTION_MS=3000
   CONFIG_IDU_COLLECT_PROBE_MS=5000 CONFIG_IDU_FORWARD_UNIT=16)
+
+include(${CMAKE_CURRENT_LIST_DIR}/../fixtures/acquisition.cmake)

@@ -149,7 +149,7 @@ app/main.c                         启动顺序、采样周期与休眠
 
 引脚、极性、ADC 通道顺序、DI/拨码位序、地址偏移和喂狗时序由板级 DTS 配置，
 平均次数由 `CONFIG_IDU_ADC_AVERAGE_COUNT` 配置。业务层统一通过
-`acquisition_inputs_sample()` 获取快照；`acquisition/config.c` 将设备树配置交给通用 `input_sampler`，模块不认识点号，也不自动写 DP。
+`acquisition_inputs_sample()` 获取快照；`acquisition/acquisition.c` 将设备树配置交给通用 `input_sampler`，模块不认识点号，也不自动写 DP。
 采样字段到测点的映射由 `process/points.c` 完成，点表定义仍在 `app/protocol/`。
 
 LED 操作直接放在 `app/status/status.c`，通过 Zephyr LED API 控制：
@@ -191,7 +191,7 @@ IDU-pre/
 
 应用以 `app/` 为头文件搜索根。采集、状态、处理头
 分别与实现放在 `app/acquisition/`、`app/status/`、`app/process/`；对外配置契约在 `app/protocol/inc/`，内部头文件在 `app/protocol/` 根目录；
-跨功能引用使用 `"status/status.h"` 等路径；采样使用 `<acquisition/sample.h>`；IAP 使用 `<iap/iap.h>`、`<iap/sgz.h>`。
+跨功能引用使用 `"status/status.h"` 等路径；采样使用 `<acquisition/acquisition.h>`；IAP 使用 `<iap/iap.h>`、`<iap/sgz.h>`。
 通用模块继续保留各自的公开 `include/`，由 Zephyr 模块机制导出。
 
 `app/` 根目录只保留 `main.c`、`CMakeLists.txt` 和 `Kconfig`。
@@ -200,9 +200,8 @@ IDU-pre/
 
 | 接口 | 职责 |
 | --- | --- |
-| `acquisition/acquisition.h` | 每周期采样、发布、转发及健康检查 |
+| `acquisition/acquisition.h` | 产品输入初始化、原始样本及采样／发布／转发／健康检查周期 |
 | `status/status.h` | 业务阶段、故障状态、LED 策略及健康进度 |
-| `acquisition/sample.h` | 应用原始采样快照及产品采样入口 |
 | `<input_sampler/input_sampler.h>` | 由配置和调用者缓冲区驱动的通用组合采样 |
 | `status/image_confirm/image_confirm.h` | MCUboot 试运行健康确认 |
 | `process/engineering.h` | 仅依赖标准 C 的工程量换算，可用于主机测试 |
