@@ -23,8 +23,6 @@
         address2-gpios = <&gpio0 18 GPIO_ACTIVE_LOW>;
         address3-gpios = <&gpio0 19 GPIO_ACTIVE_LOW>;
         address4-gpios = <&gpio0 20 GPIO_ACTIVE_LOW>;
-        watchdog-gpios = <&gpio0 21 GPIO_ACTIVE_HIGH>;
-        watchdog-feed-ms = <10>;
         io-channels = <&adc0 12>, <&adc0 1>, <&adc0 4>, <&adc0 13>, <&adc0 11>, <&adc0 0>, <&adc0 3>, <&adc0 2>;
         io-channel-names = "current-8", "current-3", "current-6", "current-1", "current-7", "current-2", "current-5", "current-4";
     };

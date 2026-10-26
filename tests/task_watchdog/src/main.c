@@ -1,16 +1,19 @@
-#include <watchdog/task_monitor.h>
+#include <watchdog/watchdog.h>
 #include "status/inc/status.h"
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/sys/reboot.h>
 #include <zephyr/ztest.h>
 #include "nsi_cpu_es_if.h"
 
-static atomic_t edges;
+static atomic_t edges, feed_configures;
 void protocol_stop(void) {}
 static struct gpio_driver_data gpio_data;
 static const struct gpio_driver_config gpio_config = {.port_pin_mask = UINT32_MAX};
 static int configure(const struct device *dev, gpio_pin_t pin, gpio_flags_t flags)
-{ ARG_UNUSED(dev); ARG_UNUSED(pin); ARG_UNUSED(flags); return 0; }
+{ ARG_UNUSED(dev); ARG_UNUSED(flags); if (pin == 21) {
+    atomic_inc(&feed_configures);
+    if (IS_ENABLED(CONFIG_TEST_WATCHDOG_INIT_FAILURE)) { return -EIO; }
+} return 0; }
 static int set(const struct device *dev, gpio_port_pins_t mask, gpio_port_value_t value)
 { ARG_UNUSED(dev); ARG_UNUSED(mask); ARG_UNUSED(value); return 0; }
 static int set_bits(const struct device *dev, gpio_port_pins_t pins)
@@ -47,6 +50,13 @@ static void *setup(void)
 {
     const struct watchdog_task_config config = {.name = "early", .timeout_ms = 100};
     zassert_equal(watchdog_task_register(&extra, &config), -EACCES);
+    zassert_equal(atomic_get(&feed_configures), IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL));
+    if (IS_ENABLED(CONFIG_TEST_WATCHDOG_INIT_FAILURE)) {
+        zassert_equal(watchdog_external_error(), -EIO);
+        zassert_equal(status_init(), -EIO);
+        return NULL;
+    }
+    zassert_ok(watchdog_external_error());
     zassert_ok(status_init());
     status_set_phase(STATUS_RUN);
     return NULL;
@@ -304,5 +314,19 @@ ZTEST(task_watchdog, test_configuration_switches)
     zassert_equal(atomic_get(&edges) > 0, IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL));
     if (!err) { zassert_ok(watchdog_task_sleep_forever(&first)); }
 }
+
+#ifdef CONFIG_TEST_WATCHDOG_INIT_FAILURE
+ZTEST(task_watchdog, test_automatic_initialization_failure)
+{
+    struct status_application_fault fault;
+    zassert_equal(status_phase_get(), STATUS_FAULT_LOCKED);
+    zassert_ok(status_application_fault_get(&fault));
+    zassert_equal(fault.action, STATUS_ACTION_HOLD);
+    zassert_equal(fault.error, -EIO);
+    k_sleep(K_MSEC(200));
+    zassert_equal(atomic_get(&edges), 0);
+    zassert_equal(watchdog_external_error(), -EIO);
+}
+#endif
 
 ZTEST_SUITE(task_watchdog, NULL, setup, NULL, NULL, NULL);

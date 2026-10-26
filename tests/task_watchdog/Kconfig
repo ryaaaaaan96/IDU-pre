@@ -1,3 +1,6 @@
 mainmenu "Status task watchdog tests"
 source "Kconfig.zephyr"
 rsource "../../app/status/Kconfig"
+
+config TEST_WATCHDOG_INIT_FAILURE
+    bool "Inject external watchdog GPIO initialization failure"

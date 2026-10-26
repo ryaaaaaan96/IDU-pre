@@ -1,4 +1,4 @@
-#include <watchdog/task_monitor.h>
+#include <watchdog/watchdog.h>
 #include "acquisition/acquisition.h"
 #include "protocol/inc/protocol.h"
 #include "protocol/inc/signal_ids.h"

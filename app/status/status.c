@@ -1,6 +1,5 @@
 #include "status/inc/status.h"
 #include "status_led.h"
-#include <watchdog/task_monitor.h>
 #include <watchdog/watchdog.h>
 #ifdef CONFIG_BOOTLOADER_MCUBOOT
 #include <dataprocess/params.h>
@@ -45,23 +44,14 @@ static void task_timeout_notify(void)
                               phase == STATUS_INIT ? STATUS_ACTION_HOLD : STATUS_ACTION_RESET);
 }
 
-#ifdef CONFIG_WATCHDOG_EXTERNAL
-
-static const struct watchdog_config watchdog_config = {
-    .feed = GPIO_DT_SPEC_GET(DT_NODELABEL(idu_io), watchdog_gpios),
-    .feed_interval_ms = DT_PROP(DT_NODELABEL(idu_io), watchdog_feed_ms),
-};
-static struct watchdog monitor;
 static bool watchdog_ready;
-#endif
 
 static int status_watchdog_init(void)
 {
-#ifdef CONFIG_WATCHDOG_EXTERNAL
-    int err = watchdog_init(&monitor, &watchdog_config);
+    /* 硬件已由模块自动初始化；此处只验证启动结果并安装任务超时通知。 */
+    int err = watchdog_external_error();
     watchdog_ready = !err;
     if (err) { return err; }
-#endif
     if (IS_ENABLED(CONFIG_WATCHDOG_SOFTWARE)) {
         return watchdog_task_monitor_init(task_timeout_notify);
     }
@@ -70,17 +60,13 @@ static int status_watchdog_init(void)
 
 static int status_watchdog_check(status_fault_phase_t phase)
 {
-#ifdef CONFIG_WATCHDOG_EXTERNAL
     if (!watchdog_ready) {
         return 0;
     }
-    int err = watchdog_error(&monitor);
+    int err = watchdog_external_error();
     if (err) {
         return status_report_fault(phase, err, "Watchdog feed output failed", STATUS_ACTION_RESET);
     }
-#else
-    ARG_UNUSED(phase);
-#endif
     return 0;
 }
 
@@ -162,9 +148,7 @@ int status_report_fault(status_fault_phase_t phase, int error,
         status_led_refresh();
         k_work_reschedule(&maintenance, K_NO_WAIT);
         if (action == STATUS_ACTION_RESET) {
-#ifdef CONFIG_WATCHDOG_EXTERNAL
-            watchdog_stop(&monitor);
-#endif
+            watchdog_external_stop();
             status_request_reboot();
         }
         return error;

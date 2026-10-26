@@ -1,23 +1,37 @@
 # Watchdog 模块
 
-模块不依赖应用头文件、整机阶段或产品设备树。软件监控为系统单例，外部 GPIO 喂狗由调用方持有实例。
+所有实现放在 `src/watchdog.c`，通过段落注释区分外部 GPIO 喂狗与软件任务监控。
+唯一对外头文件为 `include/watchdog/watchdog.h`，接口统一使用 `watchdog_*` 前缀。
+不增加兼容头或转调封装，已有函数名及行为保持。
 
-| 文件 | 职责 |
-| --- | --- |
-| `include/watchdog/task_monitor.h` | 软件监控初始化、任务注册/心跳/退出及快照 |
-| `src/task_monitor.c` | 独立锁、活动链表、最早期限单次定时器和首个超时记录 |
-| `include/watchdog/watchdog.h` | 外部 GPIO 看门狗接口和实例 |
-| `src/gpio_watchdog.c` | GPIO 配置、周期翻转、错误查询与停止 |
+- 应用外部接口：`watchdog_external_error()`、`watchdog_external_stop()`；应用不传 GPIO 或硬件实例。
+- 底层 `watchdog_init/error/stop` 多实例接口继续保留，供模块底层验证及显式使用者调用。
+- 软件接口：`watchdog_task_monitor_init()`、`watchdog_task_monitor_stop()`，以及任务注册、心跳、退出监控和快照查询。
 
-`CONFIG_WATCHDOG_SOFTWARE` 和 `CONFIG_WATCHDOG_EXTERNAL` 独立启用。两者默认关闭，产品在 prj.conf 中明确启用。
-关闭外部选项时不编译 GPIO 喂狗实现；调用方不得调用对应硬件接口。关闭软件选项时初始化返回 -EACCES，
-任务注册/心跳不启动监控。软件接口不检查硬件实例；硬件错误由调用方查询。
+`CONFIG_WATCHDOG_SOFTWARE` 和 `CONFIG_WATCHDOG_EXTERNAL` 独立启用，产品在 prj.conf 中明确开启。
+外部关闭时不编译 GPIO 喂狗实现、不配置或翻转引脚；软件关闭时初始化返回 -EACCES。
+任务监控不依赖硬件实例或产品状态，超时不自动停止外部喂狗。status 查询初始化结果并决定 HOLD / RESET。
 
-软件初始化只允许一次，回调不能为空。任务上下文首次清零，名称和上下文须常驻。
-未注册任务不受监控，无活动任务时不启动期限定时器。永久休眠仅退出监控，不休眠实际线程，重新注册后恢复。
-超时在锁内记录并锁存；迟到心跳不能撤销。停止监控不可恢复，不自动停止硬件喂狗。
+软件监控是系统单例，外部实例由调用方持有。任务上下文首次清零，名称和上下文须常驻。
+无活动任务时不启动期限定时器，永久休眠仅退出监控，重新注册恢复。超时和主动停止均不可通过迟到心跳恢复。
+超时回调在锁外执行，可能来自 ISR 或调用线程，必须非阻塞且支持 ISR。模块不调用产品接口或保存 Flash。
 
-超时回调在锁外执行，可能来自定时器 ISR，也可能来自发现已过期的线程 API；必须非阻塞并支持 ISR。
-模块只报告事件，不停止业务、不保存 Flash、不调用应用状态接口、不自动请求复位。
-当前 status 在回调中使用既有 ISR 安全故障门控，LED 更新交给系统工作队列；复位不依赖工作队列获得调度。
-调用方可以选择留驻并继续喂外狗，或停止喂狗并请求复位。
+## 设备树自动初始化
+
+绑定由模块的 dts_root 提供，板子声明一个启用的节点：
+
+```dts
+external_watchdog: external-watchdog {
+    compatible = "app,gpio-watchdog";
+    feed-gpios = <&gpioc 13 GPIO_ACTIVE_HIGH>;
+    feed-interval-ms = <10>;
+    status = "okay";
+};
+```
+
+外部功能开启时，编译检查必须恰好存在一个启用节点，周期必须大于零。
+模块在 POST_KERNEL 优先级 90、GPIO 驱动初始化后配置引脚并启动周期翻转，早于应用 main。
+所选 GPIO 必须支持 ISR 安全访问，不能使用需要休眠的总线扩展 GPIO。
+初始化错误保存在模块，内核继续启动；status 首次查询错误后按启动故障留驻。
+关闭 WATCHDOG_EXTERNAL 时，不注册自动初始化钩子，不配置/翻转引脚，查询返回 0、停止为空操作。
+从 idu_io 节点移除旧 watchdog-gpios/watchdog-feed-ms，采样硬件绑定不再承载喂狗配置。

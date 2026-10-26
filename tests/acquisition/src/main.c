@@ -87,8 +87,13 @@ static int service(service_t service)
     return errors[service];
 }
 
-int watchdog_init(struct watchdog *monitor, const struct watchdog_config *config)
-{ return service(WATCHDOG_INIT); }
+int __wrap_watchdog_external_error(void)
+{
+    if (!calls[WATCHDOG_INIT]) { return service(WATCHDOG_INIT); }
+    ++checks;
+    ++calls[WATCHDOG_CHECK];
+    return errors[WATCHDOG_CHECK];
+}
 int acquisition_inputs_init(void) { return service(INPUTS_INIT); }
 int protocol_register_point_tables(void) { return service(TABLES_INIT); }
 int protocol_dp_tasks_init(void) { return service(TASKS_PREPARE); }
@@ -148,8 +153,7 @@ int co_polling_init(void) { return service(COLLECT_START); }
 uint16_t points_sample_period_ms(void) { return 500; }
 int iap_init(void) { return service(IAP_INIT); }
 int protocol_forwarding_init(void) { return service(FORWARD_INIT); }
-int watchdog_error(struct watchdog *monitor) { ++checks; ++calls[WATCHDOG_CHECK]; return errors[WATCHDOG_CHECK]; }
-void watchdog_stop(struct watchdog *monitor) { ++stops; }
+void __wrap_watchdog_external_stop(void) { ++stops; }
 void status_request_reboot(void) { ++reboots; }
 void iap_stop(void) {}
 

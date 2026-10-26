@@ -4,13 +4,13 @@
 
 ## 模块边界
 
-`modules/watchdog/src/task_monitor.c` 负责任务期限；`gpio_watchdog.c` 负责外部 GPIO 周期喂狗。
-软件监控不依赖物理后端、应用阶段或产品设备树。`app/status/status.c` 只装配产品配置、初始化模块、
-查询硬件错误，并选择 HOLD 或 RESET。status 的公开头 inc/status.h 不再提供任务接口。
+`modules/watchdog/src/watchdog.c` 在同一文件内分段实现软件任务期限与外部 GPIO 周期喂狗。
+软件监控不依赖物理后端、应用阶段或产品设备树。硬件配置由独立的 app,gpio-watchdog 设备树节点描述，模块在 POST_KERNEL 自动初始化。
+`app/status/status.c` 只初始化软件超时通知、查询硬件错误，并选择 HOLD 或 RESET。status 的公开头 inc/status.h 不再提供任务接口。
 详细接口和上下文约束见[模块说明](../modules/watchdog/README.md)。
 
 ```c
-#include <watchdog/task_monitor.h>
+#include <watchdog/watchdog.h>
 static struct watchdog_task task;
 static const struct watchdog_task_config config = {
     .name = "worker",

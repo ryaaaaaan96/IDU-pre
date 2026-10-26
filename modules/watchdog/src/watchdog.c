@@ -1,6 +1,98 @@
-#include <watchdog/task_monitor.h>
-#include <zephyr/kernel.h>
+#include <watchdog/watchdog.h>
 #include <errno.h>
+#include <zephyr/init.h>
+
+/* ==================== 外部 GPIO 喂狗 ==================== */
+
+#ifdef CONFIG_WATCHDOG_EXTERNAL
+static void feed(struct k_timer *timer)
+{
+    struct watchdog *monitor = CONTAINER_OF(timer, struct watchdog, timer);
+    k_spinlock_key_t key = k_spin_lock(&monitor->lock);
+    if (monitor->active) {
+        monitor->error = gpio_pin_toggle_dt(&monitor->config->feed);
+        if (monitor->error) { monitor->active = false; }
+    }
+    bool active = monitor->active;
+    k_spin_unlock(&monitor->lock, key);
+    if (!active) { k_timer_stop(timer); }
+}
+
+int watchdog_init(struct watchdog *monitor,
+                  const struct watchdog_config *config)
+{
+    if (!monitor || !config || !config->feed_interval_ms) { return -EINVAL; }
+    if (monitor->initialized) { return -EALREADY; }
+    if (!config->feed.port || !gpio_is_ready_dt(&config->feed)) { return -ENODEV; }
+    const struct gpio_driver_config *port = config->feed.port->config;
+    if (!port || config->feed.pin >= GPIO_MAX_PINS_PER_PORT ||
+        !(port->port_pin_mask & BIT(config->feed.pin))) { return -EINVAL; }
+    int err = gpio_pin_configure_dt(&config->feed, GPIO_OUTPUT_ACTIVE);
+    if (err) { return err; }
+    monitor->config = config;
+    monitor->error = 0;
+    monitor->active = true;
+    k_timer_init(&monitor->timer, feed, NULL);
+    monitor->initialized = true;
+    k_timer_start(&monitor->timer, K_MSEC(config->feed_interval_ms),
+                   K_MSEC(config->feed_interval_ms));
+    return 0;
+}
+
+int watchdog_error(struct watchdog *monitor)
+{
+    if (!monitor) { return -EINVAL; }
+    k_spinlock_key_t key = k_spin_lock(&monitor->lock);
+    int err = monitor->initialized ? monitor->error : -EACCES;
+    k_spin_unlock(&monitor->lock, key);
+    return err;
+}
+
+void watchdog_stop(struct watchdog *monitor)
+{
+    if (!monitor) { return; }
+    k_spinlock_key_t key = k_spin_lock(&monitor->lock);
+    bool initialized = monitor->initialized;
+    monitor->active = false;
+    if (!monitor->error) { monitor->error = -ECANCELED; }
+    k_spin_unlock(&monitor->lock, key);
+    if (initialized) { k_timer_stop(&monitor->timer); }
+}
+
+/* 板级配置仅在模块内解析，应用无需持有引脚或喂狗实例。 */
+#define DT_DRV_COMPAT app_gpio_watchdog
+BUILD_ASSERT(DT_NUM_INST_STATUS_OKAY(DT_DRV_COMPAT) == 1,
+             "Enable exactly one app,gpio-watchdog node");
+BUILD_ASSERT(DT_INST_PROP(0, feed_interval_ms) > 0,
+             "Watchdog feed interval must be positive");
+static const struct watchdog_config external_config = {
+    .feed = GPIO_DT_SPEC_INST_GET(0, feed_gpios),
+    .feed_interval_ms = DT_INST_PROP(0, feed_interval_ms),
+};
+static struct watchdog external_monitor;
+static int external_init_error = -EACCES;
+
+static int external_auto_init(void)
+{
+    external_init_error = watchdog_init(&external_monitor, &external_config);
+    /* 保留错误供应用查询；初始化失败不主动复位或中断内核启动。 */
+    return 0;
+}
+SYS_INIT(external_auto_init, POST_KERNEL, 90);
+
+int watchdog_external_error(void)
+{
+    return external_init_error ? external_init_error : watchdog_error(&external_monitor);
+}
+
+void watchdog_external_stop(void)
+{
+    watchdog_stop(&external_monitor);
+}
+#else
+int watchdog_external_error(void) { return 0; }
+void watchdog_external_stop(void) {}
+#endif
 
 /* ==================== 任务期限监控 ==================== */
 

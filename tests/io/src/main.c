@@ -38,14 +38,14 @@ static int read_port(const struct device *dev, gpio_port_value_t *value)
 static DEVICE_API(gpio, test_gpio_api) = {
     .pin_configure = configure, .port_toggle_bits = toggle, .port_get_raw = read_port,
 };
-DEVICE_DEFINE(test_gpio, "test_gpio", NULL, NULL, &gpio_data, &gpio_config,
+DEVICE_DT_DEFINE(DT_NODELABEL(gpio0), NULL, NULL, &gpio_data, &gpio_config,
               POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE, &test_gpio_api);
 
 static struct watchdog monitors[2];
 static const struct watchdog_config watchdogs[] = {
-    {.feed = {.port = DEVICE_GET(test_gpio), .pin = 0},
+    {.feed = {.port = DEVICE_DT_GET(DT_NODELABEL(gpio0)), .pin = 0},
      .feed_interval_ms = 5},
-    {.feed = {.port = DEVICE_GET(test_gpio), .pin = 1},
+    {.feed = {.port = DEVICE_DT_GET(DT_NODELABEL(gpio0)), .pin = 1},
      .feed_interval_ms = 5},
 };
 

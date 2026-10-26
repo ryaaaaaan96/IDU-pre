@@ -74,8 +74,6 @@
         address2-gpios = <&gpiod 9 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
         address3-gpios = <&gpiod 10 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
         address4-gpios = <&gpiod 11 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-        watchdog-gpios = <&gpioc 13 GPIO_ACTIVE_HIGH>;
-        watchdog-feed-ms = <10>;
     };
 
     soc {
@@ -215,3 +213,12 @@
 
 /* 产品镜像布局，由应用和 MCUboot 共用。 */
 #include "../../../bootloader/partitions.dtsi"
+
+/ {
+    external_watchdog: external-watchdog {
+        compatible = "app,gpio-watchdog";
+        feed-gpios = <&gpioc 13 GPIO_ACTIVE_HIGH>;
+        feed-interval-ms = <10>;
+        status = "okay";
+    };
+};

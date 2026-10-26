@@ -10,7 +10,14 @@
         status_led: run { gpios = <&gpio0 0 GPIO_ACTIVE_LOW>; };
     };
     idu_io: zephyr,user {
-        watchdog-gpios = <&gpio0 21 GPIO_ACTIVE_HIGH>;
-        watchdog-feed-ms = <10>;
+    };
+};
+
+/ {
+    external_watchdog: external-watchdog {
+        compatible = "app,gpio-watchdog";
+        feed-gpios = <&gpio0 21 GPIO_ACTIVE_HIGH>;
+        feed-interval-ms = <10>;
+        status = "okay";
     };
 };

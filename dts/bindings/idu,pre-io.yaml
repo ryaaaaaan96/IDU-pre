@@ -1,4 +1,4 @@
-description: IDU-pre direct digital inputs, address switches, and watchdog feed
+description: IDU-pre direct digital inputs, address switches
 compatible: "idu,pre-io"
 include: base.yaml
 properties:
@@ -101,9 +101,3 @@ properties:
   address-offset:
     type: int
     default: 1
-  watchdog-gpios:
-    type: phandle-array
-    required: true
-  watchdog-feed-ms:
-    type: int
-    required: true

@@ -14,7 +14,9 @@ add_subdirectory(../../app/status status)
 set_source_files_properties(../../app/main.c PROPERTIES
   COMPILE_DEFINITIONS "main=application_main")
 # 通过服务模拟验证可选编排，不使用引导程序或 HAL。
-target_compile_definitions(app PRIVATE CONFIG_BOOTLOADER_MCUBOOT=1 CONFIG_IDU_IAPV3=1 CONFIG_WATCHDOG_EXTERNAL=1
+target_compile_definitions(app PRIVATE CONFIG_BOOTLOADER_MCUBOOT=1 CONFIG_IDU_IAPV3=1
   CONFIG_DP_POINT_WORDS=16 CONFIG_DP_PROCESS_MAX_OUTPUTS=24 CONFIG_DP_MAX_DEVICES=1
   CONFIG_IDU_COLLECT_RETRIES=2 CONFIG_IDU_COLLECT_EXCEPTION_MS=3000
   CONFIG_IDU_COLLECT_PROBE_MS=5000 CONFIG_IDU_FORWARD_UNIT=16)
+
+zephyr_ld_options(-Wl,--wrap=watchdog_external_error -Wl,--wrap=watchdog_external_stop)

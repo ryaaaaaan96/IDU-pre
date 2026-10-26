@@ -50,3 +50,16 @@
 status 仅装配配置和选择整机故障动作；不再通过 status_* 暴露任务接口。
 WATCHDOG_SOFTWARE 与 WATCHDOG_EXTERNAL 独立启用，debug.conf 关闭两项；外部关闭时不初始化 GPIO。
 HOLD 持续喂外狗、RESET 停喂并复位、显式登记和无固定容量等契约保持。
+
+## 2026-10-26：统一文件及公开接口
+
+按用户要求，软件任务监控和外部 GPIO 喂狗合并到 modules/watchdog/src/watchdog.c，
+按注释分段；公开声明合并到 watchdog/watchdog.h，不保留 task_monitor.h。
+既有 watchdog_* 函数名、独立开关和状态处置边界保持，不增加协调层或兼容包装。
+
+## 2026-10-26：硬件节点绑定及自动启动
+
+外部喂狗改由 app,gpio-watchdog 设备树绑定提供 feed-gpios 和 feed-interval-ms。
+模块在 POST_KERNEL 优先级 90 自动初始化，早于 main，status 不再解析引脚或持有硬件实例。
+外部关闭时不执行初始化；启动错误保留供 status 查询并执行 HOLD，不由模块自行重启。
+保持单 watchdog.c/单公开头；底层多实例接口兼容保留，应用仅调用自动实例查询/停止接口。
