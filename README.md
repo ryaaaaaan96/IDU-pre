@@ -119,7 +119,7 @@ GDB 的 `p`、`bt` 等命令仍在主机 GDB 中执行。
 app/main.c                         启动顺序、采样周期与休眠
   ├─ protocol/                     产品设备、点表及模块配置
   ├─ modules/                      点表、采集、转发、输入和升级服务
-  └─ acquisition/acquisition.c     每周期采样、发布、转发和健康检查
+  └─ acquisition/acquisition.c     按配置读取 DI/AI 并同步写入 DP 测点
        ├─ process/points.c         原始样本映射和公共业务回调
        └─ status/status.c          业务阶段、故障、LED 和试运行确认条件
 ```
@@ -149,7 +149,7 @@ app/main.c                         启动顺序、采样周期与休眠
 
 引脚、极性、ADC 通道顺序、DI/拨码位序、地址偏移和喂狗时序由板级 DTS 配置，
 平均次数由 `CONFIG_IDU_ADC_AVERAGE_COUNT` 配置。业务层统一通过
-`acquisition_inputs_sample()` 获取快照；`acquisition/acquisition.c` 直接调用 Zephyr ADC 和 GPIO API 完成采样，模块不认识点号，也不自动写 DP。
+`acquisition_cycle()` 直接调用 Zephyr ADC/GPIO API，按配置中的 device_id/signal_id 使用 `dp_set_sig_value()` 同步写入测点。16 路 DI 保持位图，8 路 AI 各自独立；拨码地址暂不采样。
 采样字段到测点的映射由 `process/points.c` 完成，点表定义仍在 `app/protocol/`。
 
 LED 操作直接放在 `app/status/status.c`，通过 Zephyr LED API 控制：
@@ -165,7 +165,7 @@ IDU-pre/
 ├── boards/、dts/        # IDU 板定义、早期板级初始化及设备树
 ├── app/
 │   ├── main.c           # 模块初始化顺序、采样周期与休眠
-│   ├── acquisition/     # 采集、发布及通信执行流程
+│   ├── acquisition/     # 硬件输入映射、采样和同步写点
 │   ├── status/          # 业务状态、LED 策略、健康进度及镜像确认
 │   ├── protocol/        # 点表及端口/协议配置；inc/ 配置契约；tables/ 三表
 │   └── process/         # 采样映射、工程换算及业务参数回调
@@ -200,11 +200,10 @@ IDU-pre/
 
 | 接口 | 职责 |
 | --- | --- |
-| `acquisition/acquisition.h` | 产品输入初始化、原始样本及采样／发布／转发／健康检查周期 |
+| `acquisition/acquisition.h` | 产品输入初始化和 DI/AI 测点更新 |
 | `status/status.h` | 业务阶段、故障状态、LED 策略及健康进度 |
 | `status/image_confirm/image_confirm.h` | MCUboot 试运行健康确认 |
-| `process/engineering.h` | 仅依赖标准 C 的工程量换算，可用于主机测试 |
-| `process/points.h` | 采样发布、周期参数及测点业务回调 |
+| `process/points.h` | 周期参数及测点业务回调 |
 | `protocol/inc/protocol.h` | 点表注册、`protocol_ports_init()` 注册入口及常驻配置声明 |
 | `<transmit/server.h>` | 每端口启动、配置更新及健康维护 |
 | `<transmit/registers.h>` | 参数寄存器服务及完整 ADU 扩展 |

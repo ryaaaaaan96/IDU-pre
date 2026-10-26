@@ -1,8 +1,8 @@
 /**
  * @file
- * @brief 本地样本映射和业务处理回调。
+ * @brief 公共测点和参数业务回调。
  *
- * 采样映射和业务回调；整机启动见 main.c，协议执行归通用模块。
+ * 硬件输入映射见 acquisition.c，整机启动见 main.c，协议执行归通用模块。
  */
 #ifndef POINTS_H
 #define POINTS_H
@@ -11,12 +11,9 @@
 
 typedef struct func_para_all FUNC_PARA_ALL;
 
-struct acquisition_sample;
-
 /**
- * @brief 应用线程发布样本和读取采样周期。
+ * @brief 读取应用采样周期。
  */
-int points_publish_snapshot(const struct acquisition_sample *snapshot);
 uint16_t points_sample_period_ms(void);
 
 /**

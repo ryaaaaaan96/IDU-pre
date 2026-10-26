@@ -3,7 +3,7 @@
  * @brief 整机状态、故障策略及显式登记的任务看门狗接口。
  *
  * 状态由模块内部单例持有，每次上电只初始化一次，故障复位前不可清除。
- * 业务线程推进阶段，LED 指示独立调度，不表示采样进度。
+ * 业务线程设置运行状态，LED 指示独立调度，不表示采样进度。
  */
 #ifndef STATUS_H
 #define STATUS_H
@@ -18,10 +18,6 @@ typedef enum {
     STATUS_UNCONFIGURED, /**< 尚未初始化。 */
     STATUS_STARTING, /**< 正在初始化本地服务。 */
     STATUS_RUN, /**< 初始化完成，可以开始采样周期。 */
-    STATUS_SAMPLING, /**< 正在采样。 */
-    STATUS_PUBLISHING, /**< 正在发布样本。 */
-    STATUS_SERVICING_COMMUNICATION, /**< 正在维护通信状态。 */
-    STATUS_CHECKING_HEALTH, /**< 正在检查健康状态和镜像确认条件。 */
     STATUS_FAULT_LOCKED, /**< 已锁存终止故障，业务不可恢复。 */
 } status_phase_t;
 
@@ -85,7 +81,7 @@ int status_init(void);
 
 /**
  * @brief 记录业务阶段，首次离开启动阶段时启动 LED 周期指示。
- * @param[in] phase STATUS_RUN 至 STATUS_CHECKING_HEALTH 之间的阶段。
+ * @param[in] phase STATUS_RUN 运行状态。
  * @note 未初始化、终止故障已锁存或目标阶段无效时，不修改状态。
  */
 void status_set_phase(status_phase_t phase);
@@ -93,7 +89,7 @@ void status_set_phase(status_phase_t phase);
 /**
  * @brief 检查喂狗错误，并推进试运行镜像的健康确认。
  * @retval 0 检查通过，或故障策略允许继续。
- * @retval -EACCES 当前不处于 STATUS_CHECKING_HEALTH。
+ * @retval -EACCES 当前不处于 STATUS_RUN。
  * @return 其他错误码表示已报告故障；复位策略可能不返回。
  */
 int status_progress(void);

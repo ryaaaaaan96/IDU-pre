@@ -223,7 +223,7 @@ static const DM_SIG_CFG_S local_process_rows[] = {
         },
     },
     {
-        .sig_id = SIGNAL_CURRENT_1 + 0,
+        .sig_id = SIGNAL_CURRENT_1,
         .sig_size = 2,
         .sig_flag = DP_POINT_DEFAULT_FLAGS,
         .data_type = DATA_TYPE_U16,
@@ -235,7 +235,7 @@ static const DM_SIG_CFG_S local_process_rows[] = {
         },
     },
     {
-        .sig_id = SIGNAL_CURRENT_1 + 1,
+        .sig_id = SIGNAL_CURRENT_2,
         .sig_size = 2,
         .sig_flag = DP_POINT_DEFAULT_FLAGS,
         .data_type = DATA_TYPE_U16,
@@ -247,7 +247,7 @@ static const DM_SIG_CFG_S local_process_rows[] = {
         },
     },
     {
-        .sig_id = SIGNAL_CURRENT_1 + 2,
+        .sig_id = SIGNAL_CURRENT_3,
         .sig_size = 2,
         .sig_flag = DP_POINT_DEFAULT_FLAGS,
         .data_type = DATA_TYPE_U16,
@@ -259,7 +259,7 @@ static const DM_SIG_CFG_S local_process_rows[] = {
         },
     },
     {
-        .sig_id = SIGNAL_CURRENT_1 + 3,
+        .sig_id = SIGNAL_CURRENT_4,
         .sig_size = 2,
         .sig_flag = DP_POINT_DEFAULT_FLAGS,
         .data_type = DATA_TYPE_U16,
@@ -271,7 +271,7 @@ static const DM_SIG_CFG_S local_process_rows[] = {
         },
     },
     {
-        .sig_id = SIGNAL_CURRENT_1 + 4,
+        .sig_id = SIGNAL_CURRENT_5,
         .sig_size = 2,
         .sig_flag = DP_POINT_DEFAULT_FLAGS,
         .data_type = DATA_TYPE_U16,
@@ -283,7 +283,7 @@ static const DM_SIG_CFG_S local_process_rows[] = {
         },
     },
     {
-        .sig_id = SIGNAL_CURRENT_1 + 5,
+        .sig_id = SIGNAL_CURRENT_6,
         .sig_size = 2,
         .sig_flag = DP_POINT_DEFAULT_FLAGS,
         .data_type = DATA_TYPE_U16,
@@ -295,7 +295,7 @@ static const DM_SIG_CFG_S local_process_rows[] = {
         },
     },
     {
-        .sig_id = SIGNAL_CURRENT_1 + 6,
+        .sig_id = SIGNAL_CURRENT_7,
         .sig_size = 2,
         .sig_flag = DP_POINT_DEFAULT_FLAGS,
         .data_type = DATA_TYPE_U16,
@@ -307,7 +307,7 @@ static const DM_SIG_CFG_S local_process_rows[] = {
         },
     },
     {
-        .sig_id = SIGNAL_CURRENT_1 + 7,
+        .sig_id = SIGNAL_CURRENT_8,
         .sig_size = 2,
         .sig_flag = DP_POINT_DEFAULT_FLAGS,
         .data_type = DATA_TYPE_U16,
@@ -334,7 +334,7 @@ static const DM_SIG_CFG_S remote_process_rows[] = {
         },
     },
     {
-        .sig_id = SIGNAL_CURRENT_1 + 0,
+        .sig_id = SIGNAL_CURRENT_1,
         .sig_size = 2,
         .sig_flag = DP_POINT_DEFAULT_FLAGS,
         .data_type = DATA_TYPE_U16,
@@ -346,7 +346,7 @@ static const DM_SIG_CFG_S remote_process_rows[] = {
         },
     },
     {
-        .sig_id = SIGNAL_CURRENT_1 + 1,
+        .sig_id = SIGNAL_CURRENT_2,
         .sig_size = 2,
         .sig_flag = DP_POINT_DEFAULT_FLAGS,
         .data_type = DATA_TYPE_U16,

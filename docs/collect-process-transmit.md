@@ -101,9 +101,8 @@ flowchart LR
 - **应用层** 保留本地 ADC 换算、信号映射和设备配置；通用模块不引用
   板级 GPIO、设备专用寄存器或 BSP。启动顺序归 `main.c`，周期执行归 `acquisition`。
 
-`app/main.c` 集中产品初始化；`app/process/points.c` 只负责采样映射及公共回调，
-`app/process/engineering.c`
-负责工程值换算。这些职责直接依赖 IDU 配置及硬件语义，属于应用层。
+`app/main.c` 集中产品初始化、通信维护与健康检查；`app/process/points.c` 负责公共回调，
+`app/acquisition/acquisition.c` 负责硬件输入映射、采样、循环内电流换算及同步写点。这些职责直接依赖 IDU 配置及硬件语义，属于应用层。
 点表机制由 `dataprocess`、`collect`、`transmit` 提供，不另设 equipment 模块。
 
 `modules/quicklz` 是另外一个独立模块，通过 `CONFIG_QUICKLZ` 启用

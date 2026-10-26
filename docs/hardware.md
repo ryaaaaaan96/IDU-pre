@@ -113,14 +113,12 @@ PD8 为最高位。寄存器 DI bit0 对应 DI1，bit15 对应 DI16。
   `app/status/` 记录采集故障阶段和错误码。停止喂狗不会将 PC13 改为浮空。
 - RS485 使用 Zephyr Modbus RTU，115200/8N1，PA15 控制 DE。
   启用非标准串行配置选项以保留旧固件的 8N1；Zephyr 默认无校验时
-  使用两个停止位。拨码地址改变后异步重配，等待原响应发送结束后切换。
+  使用两个停止位。当前通信地址由协议初始化配置决定，不再采样拨码地址。
   切换期间新请求可能需要重试。串口参数由 IDU 端口配置确定。
-- 本地采样通过 DP 模块的 `dp_submit_sig_value()` / `dp_submit_sig_values()` 设置，
-  IDU 只负责采样字段到信号的映射，整份快照一次批量提交。成功表示已入队；
-  需要等待时使用返回的 ticket 调用 `dp_wait_processed()`，再读取质量与错误。
-  `app/acquisition/acquisition.c` 直接调用 Zephyr ADC 与 GPIO API，
-  应用入口 `acquisition_inputs_sample()` 返回原始样本并解释拨码地址，映射由 `app/process/points.c` 完成；
-  引脚、通道和时序来自 DTS，平均数来自应用 Kconfig，模块不绑定产品节点或测点。
+- 本地采样在 `app/acquisition/acquisition.c` 中直接调用 Zephyr ADC/GPIO API，
+  配置行将硬件 spec 与 device_id/signal_id 绑定，读取后使用 `dp_set_sig_value()` 同步写点。
+  16 路 DI 合成为位图，8 路 AI 各自平均、换算并独立写入；不再提交本地整批快照。
+  拨码地址暂不采样，地址测点保持点表默认值。每点独立写入，不保证整轮原子性。
 - LED 由 `app/status/status.c` 直接调用 Zephyr `gpio-leds` 驱动，状态与显示策略归
   `app/status/`；启动和故障常亮，运行时亮/灭各 100 ms，采样周期保持独立。后续按业务需要在 status
   中增加闪烁编码，当前不保留独立 LED 模块或定时闪烁任务。

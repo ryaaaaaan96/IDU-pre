@@ -2,6 +2,7 @@
 #include "protocol/inc/protocol.h"
 #include <transmit/forward.h>
 #include "acquisition/acquisition.h"
+#include "status/status.h"
 #include "process/points.h"
 #include <collect/collect.h>
 #include <collect/port.h>
@@ -19,6 +20,7 @@
 
 /* main.c 将 startup 保留在应用入口内，不提供公共头文件。 */
 int startup(void);
+int application_cycle(void);
 
 typedef enum { WATCHDOG_INIT, LED_START, INPUTS_INIT, IAP_INIT, TABLES_INIT, DP_INIT, DATA_BIND, TASKS_PREPARE,
                NETWORK_INIT, PORT_OPEN, COLLECT_INIT, PARAMS_INIT, PARAMS_RECOVER,
@@ -34,7 +36,7 @@ static unsigned indicator_edges, sample_delay_ms;
 static bool protocol_halted;
 void protocol_stop(void) { protocol_halted = true; }
 bool protocol_stopped(void) { return protocol_halted; }
-static struct acquisition_sample published;
+static bool published;
 static int previous_startup_service;
 static uint16_t parameter_flags;
 static int parameter_storage_error;
@@ -68,12 +70,12 @@ static int service(service_t service)
         [COLLECT_START] = STATUS_STARTING,
         [IAP_INIT] = STATUS_STARTING,
         [FORWARD_INIT] = STATUS_STARTING,
-        [SAMPLE] = STATUS_SAMPLING,
-        [PUBLISH] = STATUS_PUBLISHING,
-        [PROTOCOL] = STATUS_SERVICING_COMMUNICATION,
-        [LED] = STATUS_CHECKING_HEALTH,
-        [CHECKPOINT] = STATUS_CHECKING_HEALTH,
-        [WATCHDOG_CHECK] = STATUS_CHECKING_HEALTH,
+        [SAMPLE] = STATUS_RUN,
+        [PUBLISH] = STATUS_RUN,
+        [PROTOCOL] = STATUS_RUN,
+        [LED] = STATUS_RUN,
+        [CHECKPOINT] = STATUS_RUN,
+        [WATCHDOG_CHECK] = STATUS_RUN,
     };
     zassert_equal(status_phase_get(), phases[service]);
     if (service <= FORWARD_INIT) {
@@ -175,7 +177,7 @@ static int configure_indicator(const struct device *dev, gpio_pin_t pin, gpio_fl
 static int write_indicator(bool high)
 {
     ++indicator_writes;
-    int err = status_phase_get() == STATUS_CHECKING_HEALTH ? service(LED) : 0;
+    int err = status_phase_get() == STATUS_RUN ? service(LED) : 0;
     if (!err) { err = led_set_error; }
     if (!err) { record_level(high); }
     return err;
@@ -229,18 +231,12 @@ bool dp_healthy(uint32_t max_idle_ms)
     return healthy;
 }
 
-int acquisition_inputs_sample(struct acquisition_sample *snapshot)
+int acquisition_cycle(void)
 {
     if (sample_delay_ms) { k_msleep(sample_delay_ms); }
-    snapshot->di = 0x1234;
-    snapshot->address = 7;
-    for (size_t i = 0; i < SAMPLE_ANALOG_COUNT; ++i) { snapshot->raw[i] = 100 + i; }
-    return service(SAMPLE);
-}
-
-int points_publish_snapshot(const struct acquisition_sample *snapshot)
-{
-    published = *snapshot;
+    int err = service(SAMPLE);
+    if (err) { return err; }
+    published = true;
     return service(PUBLISH);
 }
 
@@ -263,7 +259,7 @@ static void initialize_fixture(void)
 {
     memset(errors, 0, sizeof(errors));
     memset(calls, 0, sizeof(calls));
-    published = (struct acquisition_sample){0};
+    published = false;
     checks = stops = reboots = 0;
     healthy = boot_ready = true;
     dp_health_checks = 0;
@@ -316,7 +312,7 @@ static void check_startup_failure(service_t failed)
     zassert_equal(reboots, 0);
     zassert_equal(fault_snapshot().action, STATUS_ACTION_HOLD);
     zassert_equal(checks, 0);
-    zassert_equal(acquisition_cycle(), -EACCES);
+    zassert_equal(application_cycle(), -EACCES);
     zassert_equal(startup(), -EALREADY);
     zassert_equal(fault_snapshot().error, -EIO);
 }
@@ -407,40 +403,35 @@ ZTEST(acquisition, test_failed_forwarding_never_starts_acquisition)
                   "Do not release acquisition before local protocol assembly completes");
 }
 
-ZTEST(acquisition, test_success_publishes_complete_sample_and_checks_trial_health)
+ZTEST(acquisition, test_success_updates_points_and_checks_trial_health)
 {
     zassert_ok(startup());
     zassert_equal(status_phase_get(), STATUS_RUN);
     zassert_equal(workers_started, 3);
-    zassert_ok(acquisition_cycle());
+    zassert_ok(application_cycle());
     zassert_equal(status_phase_get(), STATUS_RUN);
-    zassert_true(published.valid);
-    zassert_equal(published.di, 0x1234);
-    zassert_equal(published.address, 7);
-    for (size_t i = 0; i < SAMPLE_ANALOG_COUNT; ++i) {
-        zassert_equal(published.raw[i], 100 + i);
-    }
+    zassert_true(published);
     zassert_equal(checks, 1);
     zassert_equal(stops, 0);
     zassert_equal(calls[CHECKPOINT], 1);
     zassert_true(checkpoint_ready);
     boot_ready = false;
-    zassert_ok(acquisition_cycle());
+    zassert_ok(application_cycle());
     zassert_false(checkpoint_ready);
     zassert_equal(status_phase_get(), STATUS_RUN);
 }
 
-ZTEST(acquisition, test_failed_acquisition_publishes_invalid_quality_and_preserves_error)
+ZTEST(acquisition, test_failed_acquisition_stops_before_maintenance)
 {
     zassert_ok(startup());
     errors[SAMPLE] = -ENODEV;
     errors[PUBLISH] = -ENOMEM;
-    zassert_equal(acquisition_cycle(), -ENODEV);
-    zassert_equal(calls[PUBLISH], 1);
-    zassert_false(published.valid);
+    zassert_equal(application_cycle(), -ENODEV);
+    zassert_equal(calls[PUBLISH], 0);
+    zassert_false(published);
     zassert_equal(fault_snapshot().phase, STATUS_RUNTIME);
     zassert_equal(fault_snapshot().error, -ENODEV);
-    zassert_str_equal(fault_snapshot().description, "Input sampling failed");
+    zassert_str_equal(fault_snapshot().description, "Input point update failed");
     zassert_equal(calls[PROTOCOL], 0);
     zassert_equal(calls[CHECKPOINT], 0);
     zassert_equal(checks, 0);
@@ -451,19 +442,19 @@ static void check_cycle_failure(service_t failed, const char *description)
 {
     zassert_ok(startup());
     errors[failed] = -EIO;
-    zassert_equal(acquisition_cycle(), -EIO);
+    zassert_equal(application_cycle(), -EIO);
     zassert_equal(checks, 0);
     zassert_equal(calls[CHECKPOINT], 0);
     zassert_equal(stops, 1);
     zassert_equal(fault_snapshot().phase, STATUS_RUNTIME);
     zassert_str_equal(fault_snapshot().description, description);
-    zassert_equal(acquisition_cycle(), -EACCES);
+    zassert_equal(application_cycle(), -EACCES);
     zassert_equal(calls[PUBLISH], 1);
 }
 
-ZTEST(acquisition, test_publish_failure_is_terminal)
+ZTEST(acquisition, test_point_write_failure_is_terminal)
 {
-    check_cycle_failure(PUBLISH, "Sample publication failed");
+    check_cycle_failure(PUBLISH, "Input point update failed");
 }
 
 ZTEST(acquisition, test_protocol_failure_is_terminal)
@@ -475,7 +466,7 @@ ZTEST(acquisition, test_unregistered_dp_has_no_implicit_deadline)
 {
     zassert_ok(startup());
     healthy = false;
-    zassert_ok(acquisition_cycle());
+    zassert_ok(application_cycle());
     zassert_equal(dp_health_checks, 0);
     zassert_equal(stops, 0);
     zassert_equal(status_phase_get(), STATUS_RUN);
@@ -485,17 +476,17 @@ ZTEST(acquisition, test_confirmation_failure_stops_watchdog)
 {
     zassert_ok(startup());
     errors[CHECKPOINT] = -EIO;
-    zassert_equal(acquisition_cycle(), -EIO);
+    zassert_equal(application_cycle(), -EIO);
     zassert_equal(stops, 1);
     zassert_equal(status_phase_get(), STATUS_FAULT_LOCKED);
-    zassert_equal(acquisition_cycle(), -EACCES);
+    zassert_equal(application_cycle(), -EACCES);
 }
 
 ZTEST(acquisition, test_gpio_watchdog_error_prevents_trial_confirmation)
 {
     zassert_ok(startup());
     errors[WATCHDOG_CHECK] = -EIO;
-    zassert_equal(acquisition_cycle(), -EIO);
+    zassert_equal(application_cycle(), -EIO);
     zassert_equal(fault_snapshot().phase, STATUS_RUNTIME);
     zassert_equal(calls[CHECKPOINT], 0);
     zassert_equal(stops, 1);
@@ -505,8 +496,8 @@ ZTEST(acquisition, test_lifecycle_guards)
 {
     zassert_equal(status_phase_get(), STATUS_UNCONFIGURED);
     zassert_equal(status_progress(), -EACCES);
-    zassert_equal(status_report_fault(STATUS_RUNTIME, -EIO, "Input sampling failed", STATUS_ACTION_RESET), -EACCES);
-    zassert_equal(acquisition_cycle(), -EACCES);
+    zassert_equal(status_report_fault(STATUS_RUNTIME, -EIO, "Input point update failed", STATUS_ACTION_RESET), -EACCES);
+    zassert_equal(application_cycle(), -EACCES);
     zassert_equal(calls[SAMPLE], 0);
     zassert_ok(startup());
     zassert_equal(startup(), -EALREADY);
@@ -581,7 +572,7 @@ ZTEST(acquisition, test_status_records_latest_fault_without_resuming_business)
     zassert_true(indicator_on);
     led_set_error = -ENODEV; /* 故障指示本身失败不能覆盖采样错误。 */
     errors[SAMPLE] = -EIO;
-    zassert_equal(acquisition_cycle(), -EIO);
+    zassert_equal(application_cycle(), -EIO);
     (void)status_report_fault(STATUS_RUNTIME, -ETIMEDOUT, "Task heartbeat timed out", STATUS_ACTION_RESET);
     status_set_phase(STATUS_RUN);
     zassert_equal(status_phase_get(), STATUS_FAULT_LOCKED);
@@ -597,16 +588,16 @@ ZTEST(acquisition, test_led_tracks_startup_healthy_cycles_and_fault)
     zassert_ok(startup());
     zassert_true(indicator_on);
     zassert_false(indicator_level); /* 设备树指定低电平点亮。 */
-    zassert_ok(acquisition_cycle());
+    zassert_ok(application_cycle());
     zassert_true(indicator_on); /* 采样不再决定闪烁速度。 */
     k_sleep(K_MSEC(STATUS_LED_HALF_PERIOD_MS));
     zassert_false(indicator_on);
     zassert_true(indicator_level);
-    zassert_ok(acquisition_cycle());
+    zassert_ok(application_cycle());
     zassert_false(indicator_on);
     k_sleep(K_MSEC(STATUS_LED_HALF_PERIOD_MS));
     zassert_true(indicator_on);
-    (void)status_report_fault(STATUS_RUNTIME, -EIO, "Input sampling failed", STATUS_ACTION_RESET);
+    (void)status_report_fault(STATUS_RUNTIME, -EIO, "Input point update failed", STATUS_ACTION_RESET);
     zassert_true(indicator_on);
     k_sleep(K_MSEC(STATUS_LED_HALF_PERIOD_MS));
     zassert_true(indicator_on);
@@ -618,7 +609,7 @@ ZTEST(acquisition, test_indicator_progresses_during_blocking_sampling)
     zassert_ok(startup());
     unsigned before = indicator_edges;
     sample_delay_ms = 350;
-    zassert_ok(acquisition_cycle());
+    zassert_ok(application_cycle());
     zassert_true(indicator_edges >= before + 3);
 }
 
@@ -645,7 +636,7 @@ ZTEST(acquisition, test_late_indicator_skips_edges_and_fault_takes_priority)
     zassert_equal(while_delayed, before);
     zassert_equal(indicator_edges, before + 1); /* 跳过错过的三次边沿，不补放。 */
     zassert_false(indicator_on);
-    (void)status_report_fault(STATUS_RUNTIME, -EIO, "Input sampling failed", STATUS_ACTION_RESET);
+    (void)status_report_fault(STATUS_RUNTIME, -EIO, "Input point update failed", STATUS_ACTION_RESET);
     k_msleep(10);
     zassert_true(indicator_on);
     unsigned fault_edges = indicator_edges;
@@ -707,7 +698,7 @@ ZTEST(acquisition, test_storage_failure_keeps_sampling_without_confirmation)
     zassert_equal(calls[PARAMS_RECOVER], 0);
     zassert_equal(calls[PROCESS_INIT], 1);
     zassert_equal(calls[COLLECT_START], 1);
-    zassert_ok(acquisition_cycle());
+    zassert_ok(application_cycle());
     zassert_false(checkpoint_ready);
     zassert_equal(status_degradation_get().storage_error, -EIO);
     zassert_equal(checks, 1);
@@ -719,11 +710,11 @@ ZTEST(acquisition, test_pending_recovery_prevents_confirmation_until_resolved)
     parameter_flags = DP_PARAM_STORAGE_READY | DP_PARAM_PENDING;
     zassert_ok(startup());
     zassert_equal(calls[COLLECT_START], 1);
-    zassert_ok(acquisition_cycle());
+    zassert_ok(application_cycle());
     zassert_false(checkpoint_ready);
 
     parameter_flags = DP_PARAM_STORAGE_READY;
-    zassert_ok(acquisition_cycle());
+    zassert_ok(application_cycle());
     zassert_true(checkpoint_ready);
 }
 
@@ -731,12 +722,12 @@ ZTEST(acquisition, test_remote_outage_is_diagnostic_and_keeps_watchdog_progress)
 {
     zassert_ok(startup());
     remote_state = CO_DEVICE_OFFLINE;
-    zassert_ok(acquisition_cycle());
+    zassert_ok(application_cycle());
     zassert_equal(status_degradation_get().remote_offline, 1);
     zassert_equal(checks, 1);
     zassert_equal(stops, 0);
     remote_state = CO_DEVICE_INITIALIZING;
-    zassert_ok(acquisition_cycle());
+    zassert_ok(application_cycle());
     zassert_equal(status_degradation_get().remote_offline, 0);
     zassert_equal(status_degradation_get().remote_initializing, 1);
     zassert_equal(checks, 2);
@@ -757,15 +748,15 @@ ZTEST(acquisition, test_storage_fault_survives_successful_operation_until_storag
     errors[PARAMS_INIT] = -EIO;
     parameter_flags = 0;
     zassert_ok(startup());
-    zassert_ok(acquisition_cycle());
+    zassert_ok(application_cycle());
     zassert_equal(status_degradation_get().storage_error, -EIO);
     errors[PARAMS_INIT] = 0; /* 最近一次参数操作现已成功。 */
-    zassert_ok(acquisition_cycle());
+    zassert_ok(application_cycle());
     zassert_equal(status_degradation_get().storage_error, -EIO);
     zassert_false(checkpoint_ready);
     zassert_equal(checks, 2);
     parameter_flags = DP_PARAM_STORAGE_READY;
-    zassert_ok(acquisition_cycle());
+    zassert_ok(application_cycle());
     zassert_equal(status_degradation_get().storage_error, 0);
     zassert_true(checkpoint_ready);
 }

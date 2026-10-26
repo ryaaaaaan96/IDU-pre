@@ -18,6 +18,5 @@ target_sources(app PRIVATE src/modules.c)
 zephyr_ld_options(-Wl,--wrap=modbus_init_server)
 # 仅在外部 NVS 接口的指定步骤注入参数故障。
 zephyr_ld_options(-Wl,--wrap=nvs_mount -Wl,--wrap=nvs_write -Wl,--wrap=nvs_delete)
-zephyr_ld_options(-Wl,--wrap=k_malloc)
 
 add_subdirectory(${IDU_APP}/tests/fixtures fixtures)

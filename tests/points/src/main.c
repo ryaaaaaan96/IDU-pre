@@ -10,8 +10,7 @@
 #include <platform_callback.h>
 #include "process/points.h"
 #include "protocol/inc/signal_ids.h"
-#include <acquisition/acquisition.h>
-#include "process/engineering.h"
+#include "../../fixtures/local_sample.h"
 #include <collect/collect.h>
 #include <dataprocess/params.h>
 #include <dataprocess/points.h>
@@ -41,19 +40,11 @@ static const struct dp_key local_di = {DEVICE_LOCAL, SIGNAL_DI};
 static struct dp_equip_cfg test_cfg;
 static struct dp_point_cfg test_points[CONFIG_DP_POINTS_MAX_POINTS];
 static struct dp_transmit_cfg test_transmit[80];
-static struct acquisition_sample local_sample;
+static struct test_local_sample local_sample;
 int north_client;
 static int north_server;
 static int south_client;
 static struct modbus_adu north_reply;
-
-/* 仅让发布者的堆分配失败，其他真实任务继续运行。 */
-static k_tid_t allocation_failure_thread;
-void *__real_k_malloc(size_t size);
-void *__wrap_k_malloc(size_t size)
-{
-    return allocation_failure_thread == k_current_get() ? NULL : __real_k_malloc(size);
-}
 
 static struct dp_point_state state_of(struct dp_key key)
 {
@@ -182,12 +173,6 @@ static void *setup(void)
     };
     module_add_points(&test_cfg, test_points, test_transmit);
     zassert_ok(dp_init_config(&test_cfg)); fixture_start_dp();
-    /* 首次分配失败会释放所有权，允许重试。 */
-    struct acquisition_sample initial_sample = {.valid = true};
-    allocation_failure_thread = k_current_get();
-    int publish_error = points_publish_snapshot(&initial_sample);
-    allocation_failure_thread = NULL;
-    zassert_equal(publish_error, -ENOMEM);
     zassert_equal(state_of(remote_di).quality, DP_QUALITY_UNINITIALIZED);
     uint16_t initial;
     zassert_equal(tr_read_register(4, 10000, &initial), -EIO);
@@ -239,12 +224,12 @@ static void before(void *fixture)
         if (test_cfg.collect[i].dev_id != DEVICE_REMOTE_IO) { continue; }
         poll_block(i, 0);
     }
-    local_sample = (struct acquisition_sample){.di = 0xa55a, .address = 16, .valid = true};
+    local_sample = (struct test_local_sample){.di = 0xa55a, .address = 16, .valid = true};
     for (unsigned i = 0; i < SAMPLE_ANALOG_COUNT; ++i) {
         local_sample.raw[i] = i == 7 ? 4095 : i * 256;
     }
     uint32_t old = state_of(local_di).generation;
-    zassert_ok(points_publish_snapshot(&local_sample));
+    zassert_ok(test_publish_sample(&local_sample));
     wait_after(local_di, old);
 }
 
@@ -258,7 +243,7 @@ ZTEST(points, test_local_point_registers)
     zassert_equal(wire[3], local_sample.di);
     zassert_ok(modbus_read_input_regs(north_client, 16, 8163, wire, 8));
     for (size_t i = 0; i < SAMPLE_ANALOG_COUNT; ++i) {
-        zassert_equal(wire[i], engineering_current_from_raw(local_sample.raw[i]));
+        zassert_equal(wire[i], test_current_value(local_sample.raw[i]));
     }
     zassert_ok(modbus_read_input_regs(north_client, 16, 2504, wire, 1));
     zassert_equal(wire[0], 0x5347);
@@ -273,30 +258,17 @@ ZTEST(points, test_local_point_registers)
     }
 }
 
-ZTEST(points, test_local_samples_reuse_workspace_under_heap_pressure)
-{
-    /* before() 已发布过样本并初始化工作区。 */
-    uint32_t old = state_of(local_di).generation;
-    local_sample.di = 0x1357;
-    allocation_failure_thread = k_current_get();
-    int err = points_publish_snapshot(&local_sample);
-    allocation_failure_thread = NULL;
-    zassert_ok(err, "local publication must reuse its established workspace");
-    wait_after(local_di, old);
-    struct dp_point_state state = state_of(local_di);
-    zassert_equal(state.value.words[0], 0x1357);
-    zassert_equal(state.quality, DP_QUALITY_GOOD);
 
-    old = state.generation;
-    local_sample.valid = false;
-    allocation_failure_thread = k_current_get();
-    err = points_publish_snapshot(&local_sample);
-    allocation_failure_thread = NULL;
-    zassert_ok(err);
-    wait_after(local_di, old);
-    state = state_of(local_di);
-    zassert_not_equal(state.quality, DP_QUALITY_GOOD);
-    zassert_equal(state.error, -EIO);
+ZTEST(points, test_synchronous_local_set_is_immediately_visible_to_forwarding)
+{
+    uint8_t bytes[2];
+    sys_put_le16(0x369c, bytes);
+    zassert_ok(dp_set_sig_value(DEVICE_LOCAL, SIGNAL_DI, sizeof(bytes), bytes));
+    zassert_equal(state_of(local_di).value.words[0], 0x369c);
+    zassert_equal(state_of(local_di).quality, DP_QUALITY_GOOD);
+    uint16_t wire;
+    zassert_ok(tr_read_register(4, 8152, &wire));
+    zassert_equal(wire, 0x369c);
 }
 
 ZTEST(points, test_end_to_end_remote_forwarding)
@@ -349,12 +321,12 @@ ZTEST(points, test_reference_tables_do_not_enable_age_expiry)
     zassert_ok(tr_read_register(4, 10000, &value));
 }
 
-ZTEST(points, test_application_conversion_and_remote_range_rejection)
+ZTEST(points, test_batch_error_and_remote_range_rejection)
 {
     struct dp_key key = {DEVICE_LOCAL, SIGNAL_CURRENT_1};
     uint32_t old = state_of(key).generation;
     local_sample.raw[0] = 4096;
-    zassert_ok(points_publish_snapshot(&local_sample));
+    zassert_ok(test_publish_sample(&local_sample));
     wait_after(key, old);
     zassert_equal(state_of(key).quality, DP_QUALITY_COMM_ERROR);
     zassert_equal(state_of(key).error, -ERANGE);
@@ -362,7 +334,7 @@ ZTEST(points, test_application_conversion_and_remote_range_rejection)
     zassert_equal(tr_read_register(4, 8163, &value), -EIO);
     old = state_of(key).generation;
     local_sample.raw[0] = 2048;
-    zassert_ok(points_publish_snapshot(&local_sample));
+    zassert_ok(test_publish_sample(&local_sample));
     wait_after(key, old);
     zassert_ok(tr_read_register(4, 8163, &value));
     zassert_equal(value, 34375);

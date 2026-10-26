@@ -9,13 +9,6 @@ fi
 
 test_dir="build/IDU-pre/tests"
 mkdir -p "$test_dir"
-gcc -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined \
-    -I applications/IDU-pre/app \
-    applications/IDU-pre/tests/test_engineering.c \
-    applications/IDU-pre/app/process/engineering.c \
-    -o "$test_dir/test_engineering"
-"$test_dir/test_engineering"
-
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/points -d "$test_dir/points"
 timeout 30s "$test_dir/points/zephyr/zephyr.exe" -flash_in_ram

@@ -8,8 +8,7 @@ status_report_fault(STATUS_INIT, err, "Input initialization failed",
 status_report_fault(STATUS_RUNTIME, err, "Watchdog feed output failed", STATUS_ACTION_RESET);
 ```
 
-`STATUS_INIT` / `STATUS_RUNTIME` 表示故障发生于初始化或运行阶段，与采样、发布等细分
-业务阶段独立。错误码表示失败原因，描述说明故障来源；同一个 `-EIO` 可来自不同硬件。
+`STATUS_INIT` / `STATUS_RUNTIME` 表示故障发生于初始化或运行阶段，运行时不再设置采样、发布等细分业务阶段。错误码表示失败原因，描述说明故障来源；同一个 `-EIO` 可来自不同硬件。
 描述使用英文，必须是字符串常量或始终有效的常驻字符串，函数保存指针，不复制或动态格式化。
 `status` 不比较描述字符串、不维护故障来源枚举或动作映射表，直接执行调用方的最终动作。
 

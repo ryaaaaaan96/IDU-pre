@@ -7,3 +7,5 @@ target_include_directories(app BEFORE PRIVATE fakes ../../app)
 target_sources(app PRIVATE src/driver.c src/application.c ../../app/acquisition/acquisition.c)
 # 测试原生 ADC 后端时，仍保留产品的十次采样契约。
 target_compile_definitions(app PRIVATE CONFIG_IDU_ADC_AVERAGE_COUNT=10)
+
+target_include_directories(app PRIVATE ../../modules/dataprocess/include)

@@ -89,12 +89,11 @@ in `app/acquisition/acquisition.c`, and protocol adaptation lives in `transmit`.
 Modbus or collector dependency. `collect` and `transmit` depend on its data contracts;
 downstream forwarding is optional when `collect` is absent.
 
-Application startup lives in `app/main.c`; sample mapping and common callbacks
-live in `app/process/points.c`, with engineering conversion in
-`app/process/engineering.c`. `app/process/points.h` exposes snapshot
-publication, sample-period access and business callbacks. Status and trial-image
-readiness belong to `app/status/`. There is no separate generic equipment module
-or legacy `idu_equipment_*` application API.
+Application startup and periodic maintenance live in `app/main.c`.
+Local GPIO/ADC mapping, current conversion and synchronous DP updates live in
+`app/acquisition/acquisition.c`. `app/process/points.h` exposes sample-period
+access and common business callbacks. Status and trial-image readiness belong to
+`app/status/`. There is no separate generic equipment or engineering module.
 
 ## Protocol implementation layout
 
@@ -212,9 +211,8 @@ with timer callbacks. Task deadline policy belongs to application status, not to
 this physical backend. No particular external watchdog IC is assumed.
 
 `app/acquisition/acquisition.c` constructs descriptors from the product devicetree,
-checks the current conversion's 12-bit/3.3 V contract and interprets address bits.
-Its `acquisition_inputs_sample()` returns the application snapshot declared in
-`app/acquisition/acquisition.h`. `app/process/points.c` maps raw values into DP points.
+checks the current conversion's 12-bit/3.3 V contract and writes DI/AI points directly
+through `dp_set_sig_value()`. Hardware address switches are not sampled.
 
 Application state, fault latching and state-to-LED policy live in `app/status/`.
 LED output directly uses Zephyr's LED API (`LED` / `LED_GPIO`); no application-owned

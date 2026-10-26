@@ -1,56 +1,9 @@
-/* 本地样本到测点的映射，以及公共测点和参数命令回调。 */
+/* 公共测点和参数命令回调；硬件输入映射归 acquisition。 */
 #include "process/points.h"
-#include "process/engineering.h"
 #include "protocol/inc/signal_ids.h"
-#include <acquisition/acquisition.h>
 #include <dataprocess/params.h>
 #include <errno.h>
-#include <string.h>
 #include <zephyr/sys/byteorder.h>
-
-/* 保留一份堆工作区；发布者持续持有它，直到 zbus 完成复制。
- * 不共用 DP 消费者的缓冲区，也不把批次放在 main 栈上。 */
-static struct dp_point_batch *local_batch;
-K_MUTEX_DEFINE(local_publish_lock);
-
-int points_publish_snapshot(const struct acquisition_sample *snapshot)
-{
-    if (!snapshot || k_is_in_isr()) {
-        return -EINVAL;
-    }
-    k_timepoint_t deadline = sys_timepoint_calc(K_MSEC(20));
-    int err = k_mutex_lock(&local_publish_lock, sys_timepoint_timeout(deadline));
-    if (err) { return err; }
-    const size_t count = 2 + SAMPLE_ANALOG_COUNT;
-    BUILD_ASSERT(2 + SAMPLE_ANALOG_COUNT <= DP_BATCH_POINTS);
-    if (!local_batch) { local_batch = k_malloc(sizeof(*local_batch)); }
-    if (!local_batch) {
-        k_mutex_unlock(&local_publish_lock);
-        return -ENOMEM;
-    }
-    memset(local_batch, 0, sizeof(*local_batch));
-    local_batch->source = DP_SOURCE_LOCAL;
-    local_batch->count = count;
-    struct dp_point_update *values = local_batch->points;
-    values[0] = (struct dp_point_update){
-        .key = {DEVICE_LOCAL, SIGNAL_ADDRESS}, .width = 1,
-        .value.words = {snapshot->address}, .error = snapshot->valid ? 0 : -EIO,
-    };
-    values[1] = (struct dp_point_update){
-        .key = {DEVICE_LOCAL, SIGNAL_DI}, .width = 1,
-        .value.words = {snapshot->di}, .error = snapshot->valid ? 0 : -EIO,
-    };
-    for (unsigned i = 0; i < SAMPLE_ANALOG_COUNT; ++i) {
-        values[i + 2] = (struct dp_point_update){
-            .key = {DEVICE_LOCAL, SIGNAL_CURRENT_1 + i}, .width = 1,
-            .value.words = {engineering_current_from_raw(snapshot->raw[i])},
-            .error = !snapshot->valid ? -EIO : snapshot->raw[i] > 4095 ? -ERANGE : 0,
-        };
-    }
-    err = dp_publish(local_batch, sys_timepoint_timeout(deadline));
-    k_mutex_unlock(&local_publish_lock);
-    return err;
-}
 
 int32_t points_default_callback(FUNC_PARA_ALL *in, FUNC_PARA_ALL *out,
                           void *new_value, void *old_value)

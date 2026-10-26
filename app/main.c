@@ -34,6 +34,24 @@ int startup(void)
     return 0;
 }
 
+/* 维护通信和健康状态归主循环，采样函数只读硬件并写测点。 */
+int application_cycle(void)
+{
+    if (status_phase_get() != STATUS_RUN) {
+        return -EACCES;
+    }
+    int err = acquisition_cycle();
+    if (err) {
+        return status_report_fault(STATUS_RUNTIME, err, "Input point update failed", STATUS_ACTION_RESET);
+    }
+    protocol_update_status();
+    err = protocol_error();
+    if (err) {
+        return status_report_fault(STATUS_RUNTIME, err, "Protocol maintenance failed", STATUS_ACTION_RESET);
+    }
+    return status_progress();
+}
+
 int main(void)
 {
     int err = startup();
@@ -44,7 +62,7 @@ int main(void)
 
     while (true) {
         int64_t next_sample = k_uptime_get() + points_sample_period_ms();
-        err = acquisition_cycle();
+        err = application_cycle();
         if (err) {
             return err;
         }

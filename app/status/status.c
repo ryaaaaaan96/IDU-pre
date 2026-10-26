@@ -361,7 +361,7 @@ void status_set_phase(status_phase_t phase)
 
 int status_progress(void)
 {
-    if (status_phase_get() != STATUS_CHECKING_HEALTH) { return -EACCES; }
+    if (status_phase_get() != STATUS_RUN) { return -EACCES; }
     if (!IS_ENABLED(CONFIG_APP_DEBUG_SKIP_WATCHDOG)) {
         int err = watchdog_error(&monitor);
         if (err) { return status_report_fault(STATUS_RUNTIME, err, "Watchdog feed output failed", STATUS_ACTION_RESET); }

@@ -1,1 +1,1 @@
-target_sources(app PRIVATE points.c engineering.c)
+target_sources(app PRIVATE points.c)

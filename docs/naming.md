@@ -12,10 +12,10 @@
 | 协议装配 | `protocol_init()`、`protocol_register_point_tables()` |
 | 协议任务与端口 | `protocol_dp_tasks_*()`、`protocol_co_tasks_*()`、`protocol_ports_init()` |
 | 每周期采样编排 | `acquisition_cycle()` |
-| 产品采样 | `acquisition_inputs_init()`、`acquisition_inputs_sample()` |
-| 样本与整机状态 | `struct acquisition_sample`、`struct application_status` |
-| 测点业务 | `points_publish_snapshot()`、`points_parameter_command()`、`points_parameter_status()` |
-| 工程换算 | `engineering_current_from_raw()` |
+| 产品采样 | `acquisition_inputs_init()`、`acquisition_cycle()` |
+| 输入映射 | `struct analog_point` 及 DI 位图配置，含 spec、device_id、signal_id |
+| 测点业务 | `points_parameter_command()`、`points_parameter_status()` |
+| 工程换算 | `acquisition.c` 的 AI 采样循环内直接换算 |
 | 健康与镜像确认 | `status_init()`、`status_*()`、`image_confirm_checkpoint()` |
 
 整机启动编排入口使用 `startup()`，集中组织各服务初始化。
@@ -40,7 +40,7 @@
 日志来源使用 `app_main`、`app_protocol`、`app_acquisition`、`image_confirm`。
 
 整机初始化期间处于 `STATUS_STARTING`；所有启动服务成功后进入 `STATUS_RUN`。
-每轮采样、发布和健康检查完成后回到 `STATUS_RUN`；失败则保留故障阶段并锁定。
+运行期间保持 `STATUS_RUN`；不设置采样、发布和健康检查的细分阶段，终止故障仍锁定。
 
 ## 模块与产品配置
 
@@ -50,8 +50,8 @@
 DAC 尚未使用，后续有硬件需求时优先使用 Zephyr 标准接口。
 
 应用 `acquisition/acquisition.c` 从设备树组装配置并校验现有换算的电气条件。
-八路 ADC、十六路 DI、四位拨码以及拨码加地址偏移的解释均属于应用。
-工程换算和测点映射留在 `process`，协议与通信端口装配留在 `protocol`。
+八路 ADC 和十六路 DI 的目标设备/信号均由应用映射配置。拨码地址暂不采样。
+电流换算和输入映射归 `acquisition`，公共业务回调归 `process`，协议与通信端口装配归 `protocol`。
 
 `dp_*`、`co_*`、`tr_*`、`iap_*`、`watchdog_*`
 保留各自模块的命名空间。新的调用方直接使用职责接口。
@@ -70,6 +70,8 @@ ADC 由 `CONFIG_ADC` 启用；平均次数
 
 ADC 通过 `io-channel-names` 提供 current-1 至 current-8，应用使用
 `ADC_DT_SPEC_GET_BY_NAME` 选择，设备树条目可以任意排列，硬件通道号不要求连续。
-DI 使用 di1-gpios 至 di16-gpios，拨码使用 address1-gpios 至 address4-gpios，
-由 `GPIO_DT_SPEC_GET` 按属性名称选择。应用数组顺序表示产品样本和位序。
+DI 使用 di1-gpios 至 di16-gpios，按名称引用 GPIO 后合成为一个位图测点。
+ADC 每行配置 spec、device_id 和 signal_id；DI 位图整体配置目标 device_id/signal_id。
+采样后直接同步写 DP，无本地快照消息、堆批次或异步发布。AI 保留平均和电流换算。
+地址测点保留点表默认值，硬件拨码不参与初始化和采样。
 后续替换业务名称时同步修改设备树、绑定和应用引用，不用数字列表索引取配置。

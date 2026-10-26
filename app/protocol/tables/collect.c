@@ -17,7 +17,7 @@ static const MODBUS_RTU_TABLE_S remote_collect_table[] = {
         .scan_pri = CO_TABLE_DEFAULT_SCAN_PRIORITY,
     },
     {
-        .sig_id = SIGNAL_CURRENT_1 + 0,
+        .sig_id = SIGNAL_CURRENT_1,
         .reg_addr = 8163,
         .reg_num = 1,
         .reg_type = 4,
@@ -29,7 +29,7 @@ static const MODBUS_RTU_TABLE_S remote_collect_table[] = {
         .scan_pri = CO_TABLE_DEFAULT_SCAN_PRIORITY,
     },
     {
-        .sig_id = SIGNAL_CURRENT_1 + 1,
+        .sig_id = SIGNAL_CURRENT_2,
         .reg_addr = 8164,
         .reg_num = 1,
         .reg_type = 4,

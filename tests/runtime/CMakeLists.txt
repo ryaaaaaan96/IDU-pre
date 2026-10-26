@@ -11,6 +11,4 @@ set_source_files_properties(${IDU_APP}/app/main.c PROPERTIES COMPILE_DEFINITIONS
 add_subdirectory(${IDU_APP}/app/status status)
 add_subdirectory(${IDU_APP}/app/protocol app_cfg)
 add_subdirectory(${IDU_APP}/app/process point_process)
-zephyr_ld_options(-Wl,--wrap=k_malloc -Wl,--wrap=sys_reboot -Wl,--wrap=flash_area_open)
-
-include(${CMAKE_CURRENT_LIST_DIR}/../fixtures/acquisition.cmake)
+zephyr_ld_options(-Wl,--wrap=sys_reboot -Wl,--wrap=flash_area_open)

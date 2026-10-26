@@ -149,7 +149,7 @@ build/IDU-pre/tests/reference_services/zephyr/zephyr.exe -flash_in_ram
 
 | 测试 | 主要内容 |
 | --- | --- |
-| `test_engineering.c`、`test_mcuboot_image.py` | 工程换算、签名镜像导出边界 |
+| ADC 应用测试、`test_mcuboot_image.py` | 工程换算、签名镜像导出边界 |
 | `points`、`forwarding` | IDU 点表、标准转发、NVS/事务、扩展报文及存储格式重新初始化 |
 | `parameter_records` | 跨进程的新增、重排、停用及恢复参数，键冲突、格式清空与失败边界 |
 | `pipeline`、`models` | 无存储数据流、模型复用、多设备及多总线隔离 |
@@ -167,7 +167,7 @@ build/IDU-pre/tests/reference_services/zephyr/zephyr.exe -flash_in_ram
 在新进程中执行参数、转发服务和 IAP 恢复阶段。普通运行跳过的 reboot probe 会在
 相应阶段单独运行；按用例筛选运行时的其他 SKIP 不表示它们缺少全量覆盖。
 
-本地测点直接通过现用点表验证；工程换算由 `tests/test_engineering.c` 验证。
+本地测点直接通过现用点表验证；工程换算通过 ADC 应用直接采样及写点测试验证。
 RAW 回环和 native Flash 不能替代真实串口电气时序、NOR 掉电或 MCUboot 实际交换。
 
 ## 参数存储故障注入

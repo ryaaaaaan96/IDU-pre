@@ -20,7 +20,6 @@ static const char *scenario;
 static const char *expected_description;
 static atomic_t samples, led_edges;
 static bool indicator_on;
-static k_tid_t application_thread_id;
 static struct k_thread application_thread;
 static struct status_task monitored;
 int __real_flash_area_open(uint8_t id, const struct flash_area **area);
@@ -42,18 +41,13 @@ K_THREAD_STACK_DEFINE(application_stack, 4096);
 DEVICE_DT_DEFINE(DT_NODELABEL(modbus_test), NULL, NULL, NULL, NULL, POST_KERNEL, 90, NULL);
 
 int acquisition_inputs_init(void) { return !strcmp(scenario, "input-init") ? -EIO : 0; }
-int acquisition_inputs_sample(struct acquisition_sample *sample)
+int acquisition_cycle(void)
 {
     atomic_inc(&samples);
-    *sample = (struct acquisition_sample){.valid = true, .address = 16, .di = 0x1234};
-    return !strcmp(scenario, "sample") ? -EIO : 0;
-}
-void *__real_k_malloc(size_t size);
-void *__wrap_k_malloc(size_t size)
-{
-    if (application_thread_id == k_current_get() && atomic_get(&samples) &&
-        !strcmp(scenario, "publish")) { return NULL; }
-    return __real_k_malloc(size);
+    if (!strcmp(scenario, "sample")) { return -EIO; }
+    if (!strcmp(scenario, "publish")) { return -ENOMEM; }
+    uint16_t value = 0x1234;
+    return dp_set_sig_value(DEVICE_LOCAL, SIGNAL_DI, sizeof(value), (uint8_t *)&value);
 }
 static struct gpio_driver_data gpio_data;
 static const struct gpio_driver_config gpio_config = {.port_pin_mask = BIT_MASK(4)};
@@ -126,15 +120,14 @@ FUNC_NORETURN void __wrap_sys_reboot(int type)
 static void run_application(void *a, void *b, void *c)
 {
     ARG_UNUSED(a); ARG_UNUSED(b); ARG_UNUSED(c);
-    application_thread_id = k_current_get();
     (void)application_main();
 }
 ZTEST(runtime, test_real_main_fault_policy)
 {
     scenario = getenv("IDU_RUNTIME_CASE");
     if (!scenario) { scenario = "publish"; }
-    if (!strcmp(scenario, "publish")) { expected_description = "Sample publication failed"; }
-    else if (!strcmp(scenario, "sample")) { expected_description = "Input sampling failed"; }
+    if (!strcmp(scenario, "publish")) { expected_description = "Input point update failed"; }
+    else if (!strcmp(scenario, "sample")) { expected_description = "Input point update failed"; }
     else if (!strcmp(scenario, "led")) { expected_description = "Indicator output failed"; }
     else if (!strcmp(scenario, "led-init")) { expected_description = "Indicator initialization failed"; }
     else if (!strcmp(scenario, "input-init")) { expected_description = "Input initialization failed"; }

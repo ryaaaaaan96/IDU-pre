@@ -86,7 +86,7 @@ ZTEST(task_watchdog, test_zero_registered_continues_past_legacy_timeout)
     zassert_true(atomic_get(&edges) > before);
     struct status_fault_snapshot fault;
     zassert_equal(status_fault_get(&fault), -ENOENT);
-    status_set_phase(STATUS_CHECKING_HEALTH);
+    status_set_phase(STATUS_RUN);
     zassert_ok(status_progress());
 }
 ZTEST(task_watchdog, test_registration_validation_without_fixed_capacity)
