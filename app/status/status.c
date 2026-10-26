@@ -1,6 +1,6 @@
 #include "status/status.h"
+#include "status/status_led.h"
 #include <watchdog/watchdog.h>
-#include <zephyr/drivers/gpio.h>
 #ifdef CONFIG_BOOTLOADER_MCUBOOT
 #include <dataprocess/params.h>
 #include "status/image_confirm/image_confirm.h"
@@ -16,6 +16,8 @@ LOG_MODULE_REGISTER(app_status, LOG_LEVEL_INF);
 
 /* ==================== 共享状态与后台工作声明 ==================== */
 
+#define WATCHDOG_CHECK_INTERVAL_MS 100
+
 void protocol_stop(void);
 static struct {
     struct k_spinlock lock;
@@ -30,52 +32,6 @@ static struct {
 } application;
 static void maintain(struct k_work *work);
 static K_WORK_DELAYABLE_DEFINE(maintenance, maintain);
-
-/* ==================== LED 指示灯 ==================== */
-
-static const struct gpio_dt_spec run_led = GPIO_DT_SPEC_GET(DT_ALIAS(led0), gpios);
-static bool led_ready;
-static int64_t next_toggle_ms;
-
-static int status_led_init(void)
-{
-    if (!gpio_is_ready_dt(&run_led)) {
-        return -ENODEV;
-    }
-    int err = gpio_pin_configure_dt(&run_led, GPIO_OUTPUT_ACTIVE);
-    led_ready = !err;
-    return err;
-}
-
-static void status_led_update(status_phase_t phase)
-{
-    if (!led_ready) {
-        return;
-    }
-    int err = 0;
-    if (phase == STATUS_RUN) {
-        int64_t now = k_uptime_get();
-        if (now >= next_toggle_ms) {
-            /* 按错过的周期数决定翻转，保持既有调度抖动语义。 */
-            int64_t periods = (now - next_toggle_ms) / STATUS_LED_HALF_PERIOD_MS + 1;
-            next_toggle_ms += periods * STATUS_LED_HALF_PERIOD_MS;
-            if (periods & 1) {
-                err = gpio_pin_toggle_dt(&run_led);
-            }
-        }
-    } else {
-        err = gpio_pin_set_dt(&run_led, 1);
-    }
-    if (err && phase != STATUS_FAULT_LOCKED) {
-        status_fault_phase_t fault_phase = phase == STATUS_STARTING ? STATUS_INIT : STATUS_RUNTIME;
-        (void)status_report_fault(fault_phase, err, "Indicator output failed",
-                                 fault_phase == STATUS_INIT ? STATUS_ACTION_HOLD : STATUS_ACTION_RESET);
-    }
-    /* 输出期间可能被其他线程或驱动回调锁存故障，当轮就转为常亮。 */
-    if (phase != STATUS_FAULT_LOCKED && status_phase_get() == STATUS_FAULT_LOCKED) {
-        (void)gpio_pin_set_dt(&run_led, 1);
-    }
-}
 
 /* ==================== 外部看门狗 ==================== */
 
@@ -355,6 +311,7 @@ int status_report_fault(status_fault_phase_t phase, int error,
 #ifdef CONFIG_IDU_IAPV3
         iap_stop();
 #endif
+        status_led_refresh();
         k_work_reschedule(&maintenance, K_NO_WAIT);
         if (action == STATUS_ACTION_RESET) {
             if (!IS_ENABLED(CONFIG_APP_DEBUG_SKIP_WATCHDOG)) { watchdog_stop(&monitor); }
@@ -366,7 +323,7 @@ int status_report_fault(status_fault_phase_t phase, int error,
     }
 }
 
-/* 故障留驻后主循环停止，此工作仍维护 LED 和外部喂狗诊断。 */
+/* 故障留驻后主循环停止，此工作仍检查外部喂狗错误。 */
 static void maintain(struct k_work *work)
 {
     ARG_UNUSED(work);
@@ -374,15 +331,13 @@ static void maintain(struct k_work *work)
     if (phase == STATUS_UNCONFIGURED) {
         return;
     }
-    status_led_update(phase);
-
     k_spinlock_key_t key = k_spin_lock(&status_runtime.lock);
     bool check_watchdog = application.fault.action != STATUS_ACTION_RESET;
     k_spin_unlock(&status_runtime.lock, key);
     if (check_watchdog) {
         (void)status_watchdog_check(phase == STATUS_STARTING ? STATUS_INIT : STATUS_RUNTIME);
     }
-    k_work_reschedule(&maintenance, K_MSEC(STATUS_LED_HALF_PERIOD_MS));
+    k_work_reschedule(&maintenance, K_MSEC(WATCHDOG_CHECK_INTERVAL_MS));
 }
 
 int status_init(void)
@@ -412,11 +367,13 @@ void status_set_phase(status_phase_t phase)
     k_spinlock_key_t key = k_spin_lock(&status_runtime.lock);
     if (status_runtime.phase == STATUS_STARTING && phase == STATUS_RUN) {
         status_runtime.phase = STATUS_RUN;
-        next_toggle_ms = k_uptime_get() + STATUS_LED_HALF_PERIOD_MS;
         start = true;
     }
     k_spin_unlock(&status_runtime.lock, key);
-    if (start) { k_work_reschedule(&maintenance, K_MSEC(STATUS_LED_HALF_PERIOD_MS)); }
+    if (start) {
+        status_led_start();
+        k_work_reschedule(&maintenance, K_MSEC(WATCHDOG_CHECK_INTERVAL_MS));
+    }
 }
 
 int status_progress(void)

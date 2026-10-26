@@ -215,7 +215,7 @@ checks the current conversion's 12-bit/3.3 V contract and writes DI/AI points di
 through `dp_set_sig_value()`. Hardware address switches are not sampled.
 
 Application state, fault latching and state-to-LED policy live in `app/status/`.
-LED output directly uses Zephyr's LED API (`LED` / `LED_GPIO`); no application-owned
+LED output in `app/status/status_led.c` uses Zephyr GPIO APIs and a system delayable work; no application-owned
 LED module or generic blink worker is retained.
 It also binds the external watchdog configuration and reports completed cycles.
 With MCUboot enabled, healthy progress invokes `status/image_confirm/image_confirm.c` to
