@@ -5,15 +5,91 @@ properties:
   io-channels:
     type: phandle-array
     required: true
-    description: Analog inputs in application channel order
-  di-gpios:
+    description: Analog input references identified by io-channel-names
+  io-channel-names:
+    type: string-array
+    required: true
+    description: Application names for analog inputs, independent of list order
+  di1-gpios:
     type: phandle-array
     required: true
-    description: Sixteen digital inputs in DI1 to DI16 order
-  address-gpios:
+    description: Digital input 1
+  di2-gpios:
     type: phandle-array
     required: true
-    description: Four address switches, with ordering selected by address-bit-order
+    description: Digital input 2
+  di3-gpios:
+    type: phandle-array
+    required: true
+    description: Digital input 3
+  di4-gpios:
+    type: phandle-array
+    required: true
+    description: Digital input 4
+  di5-gpios:
+    type: phandle-array
+    required: true
+    description: Digital input 5
+  di6-gpios:
+    type: phandle-array
+    required: true
+    description: Digital input 6
+  di7-gpios:
+    type: phandle-array
+    required: true
+    description: Digital input 7
+  di8-gpios:
+    type: phandle-array
+    required: true
+    description: Digital input 8
+  di9-gpios:
+    type: phandle-array
+    required: true
+    description: Digital input 9
+  di10-gpios:
+    type: phandle-array
+    required: true
+    description: Digital input 10
+  di11-gpios:
+    type: phandle-array
+    required: true
+    description: Digital input 11
+  di12-gpios:
+    type: phandle-array
+    required: true
+    description: Digital input 12
+  di13-gpios:
+    type: phandle-array
+    required: true
+    description: Digital input 13
+  di14-gpios:
+    type: phandle-array
+    required: true
+    description: Digital input 14
+  di15-gpios:
+    type: phandle-array
+    required: true
+    description: Digital input 15
+  di16-gpios:
+    type: phandle-array
+    required: true
+    description: Digital input 16
+  address1-gpios:
+    type: phandle-array
+    required: true
+    description: Address switch input 1
+  address2-gpios:
+    type: phandle-array
+    required: true
+    description: Address switch input 2
+  address3-gpios:
+    type: phandle-array
+    required: true
+    description: Address switch input 3
+  address4-gpios:
+    type: phandle-array
+    required: true
+    description: Address switch input 4
   di-bit-order:
     type: string
     enum: ["lsb-first", "msb-first"]

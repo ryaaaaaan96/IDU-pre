@@ -52,28 +52,28 @@
         di-bit-order = "lsb-first";
         address-bit-order = "msb-first";
         address-offset = <1>;
-        io-channels = <&adc0 13>, <&adc0 0>, <&adc0 1>, <&adc0 2>,
-                      <&adc0 3>, <&adc0 4>, <&adc0 11>, <&adc0 12>;
-        di-gpios = <&gpioc 6 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,
-                   <&gpioc 7 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,
-                   <&gpioc 8 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,
-                   <&gpioc 9 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,
-                   <&gpiob 1 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,
-                   <&gpiob 2 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,
-                   <&gpiob 10 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,
-                   <&gpiob 11 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,
-                   <&gpioe 1 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,
-                   <&gpiob 8 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,
-                   <&gpiob 9 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,
-                   <&gpioe 0 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,
-                   <&gpioe 2 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,
-                   <&gpioe 3 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,
-                   <&gpioe 4 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,
-                   <&gpioe 5 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-        address-gpios = <&gpiod 8 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,
-                        <&gpiod 9 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,
-                        <&gpiod 10 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>,
-                        <&gpiod 11 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+        io-channels = <&adc0 13>, <&adc0 0>, <&adc0 1>, <&adc0 2>, <&adc0 3>, <&adc0 4>, <&adc0 11>, <&adc0 12>;
+        io-channel-names = "current-1", "current-2", "current-3", "current-4", "current-5", "current-6", "current-7", "current-8";
+        di1-gpios = <&gpioc 6 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+        di2-gpios = <&gpioc 7 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+        di3-gpios = <&gpioc 8 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+        di4-gpios = <&gpioc 9 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+        di5-gpios = <&gpiob 1 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+        di6-gpios = <&gpiob 2 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+        di7-gpios = <&gpiob 10 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+        di8-gpios = <&gpiob 11 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+        di9-gpios = <&gpioe 1 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+        di10-gpios = <&gpiob 8 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+        di11-gpios = <&gpiob 9 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+        di12-gpios = <&gpioe 0 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+        di13-gpios = <&gpioe 2 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+        di14-gpios = <&gpioe 3 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+        di15-gpios = <&gpioe 4 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+        di16-gpios = <&gpioe 5 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+        address1-gpios = <&gpiod 8 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+        address2-gpios = <&gpiod 9 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+        address3-gpios = <&gpiod 10 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+        address4-gpios = <&gpiod 11 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
         watchdog-gpios = <&gpioc 13 GPIO_ACTIVE_HIGH>;
         watchdog-feed-ms = <10>;
     };

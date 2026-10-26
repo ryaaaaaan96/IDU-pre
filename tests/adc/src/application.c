@@ -4,9 +4,15 @@
 #include <acquisition/acquisition.h>
 #include <analog_io.h>
 
-#define TEST_ADC_SPEC(node, prop, idx) ADC_DT_SPEC_GET_BY_IDX(node, idx),
 static const struct adc_dt_spec test_channels[] = {
-    DT_FOREACH_PROP_ELEM(DT_NODELABEL(idu_io), io_channels, TEST_ADC_SPEC)
+    ADC_DT_SPEC_GET_BY_NAME(DT_NODELABEL(idu_io), current_1),
+    ADC_DT_SPEC_GET_BY_NAME(DT_NODELABEL(idu_io), current_2),
+    ADC_DT_SPEC_GET_BY_NAME(DT_NODELABEL(idu_io), current_3),
+    ADC_DT_SPEC_GET_BY_NAME(DT_NODELABEL(idu_io), current_4),
+    ADC_DT_SPEC_GET_BY_NAME(DT_NODELABEL(idu_io), current_5),
+    ADC_DT_SPEC_GET_BY_NAME(DT_NODELABEL(idu_io), current_6),
+    ADC_DT_SPEC_GET_BY_NAME(DT_NODELABEL(idu_io), current_7),
+    ADC_DT_SPEC_GET_BY_NAME(DT_NODELABEL(idu_io), current_8),
 };
 static const struct analog_adc_config test_group = {
     .channels = test_channels, .channel_count = ARRAY_SIZE(test_channels), .average_count = 10,

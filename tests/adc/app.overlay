@@ -3,20 +3,30 @@
 / {
     idu_io: inputs {
         compatible = "idu,pre-io";
-        di-gpios = <&gpio0 1 GPIO_ACTIVE_LOW>, <&gpio0 2 GPIO_ACTIVE_LOW>,
-                   <&gpio0 3 GPIO_ACTIVE_LOW>, <&gpio0 4 GPIO_ACTIVE_LOW>,
-                   <&gpio0 5 GPIO_ACTIVE_LOW>, <&gpio0 6 GPIO_ACTIVE_LOW>,
-                   <&gpio0 7 GPIO_ACTIVE_LOW>, <&gpio0 8 GPIO_ACTIVE_LOW>,
-                   <&gpio0 9 GPIO_ACTIVE_LOW>, <&gpio0 10 GPIO_ACTIVE_LOW>,
-                   <&gpio0 11 GPIO_ACTIVE_LOW>, <&gpio0 12 GPIO_ACTIVE_LOW>,
-                   <&gpio0 13 GPIO_ACTIVE_LOW>, <&gpio0 14 GPIO_ACTIVE_LOW>,
-                   <&gpio0 15 GPIO_ACTIVE_LOW>, <&gpio0 16 GPIO_ACTIVE_LOW>;
-        address-gpios = <&gpio0 17 GPIO_ACTIVE_LOW>, <&gpio0 18 GPIO_ACTIVE_LOW>,
-                        <&gpio0 19 GPIO_ACTIVE_LOW>, <&gpio0 20 GPIO_ACTIVE_LOW>;
+        di1-gpios = <&gpio0 1 GPIO_ACTIVE_LOW>;
+        di2-gpios = <&gpio0 2 GPIO_ACTIVE_LOW>;
+        di3-gpios = <&gpio0 3 GPIO_ACTIVE_LOW>;
+        di4-gpios = <&gpio0 4 GPIO_ACTIVE_LOW>;
+        di5-gpios = <&gpio0 5 GPIO_ACTIVE_LOW>;
+        di6-gpios = <&gpio0 6 GPIO_ACTIVE_LOW>;
+        di7-gpios = <&gpio0 7 GPIO_ACTIVE_LOW>;
+        di8-gpios = <&gpio0 8 GPIO_ACTIVE_LOW>;
+        di9-gpios = <&gpio0 9 GPIO_ACTIVE_LOW>;
+        di10-gpios = <&gpio0 10 GPIO_ACTIVE_LOW>;
+        di11-gpios = <&gpio0 11 GPIO_ACTIVE_LOW>;
+        di12-gpios = <&gpio0 12 GPIO_ACTIVE_LOW>;
+        di13-gpios = <&gpio0 13 GPIO_ACTIVE_LOW>;
+        di14-gpios = <&gpio0 14 GPIO_ACTIVE_LOW>;
+        di15-gpios = <&gpio0 15 GPIO_ACTIVE_LOW>;
+        di16-gpios = <&gpio0 16 GPIO_ACTIVE_LOW>;
+        address1-gpios = <&gpio0 17 GPIO_ACTIVE_LOW>;
+        address2-gpios = <&gpio0 18 GPIO_ACTIVE_LOW>;
+        address3-gpios = <&gpio0 19 GPIO_ACTIVE_LOW>;
+        address4-gpios = <&gpio0 20 GPIO_ACTIVE_LOW>;
         watchdog-gpios = <&gpio0 21 GPIO_ACTIVE_HIGH>;
         watchdog-feed-ms = <10>;
-        io-channels = <&adc0 13>, <&adc0 0>, <&adc0 1>, <&adc0 2>,
-                      <&adc0 3>, <&adc0 4>, <&adc0 11>, <&adc0 12>;
+        io-channels = <&adc0 12>, <&adc0 1>, <&adc0 4>, <&adc0 13>, <&adc0 11>, <&adc0 0>, <&adc0 3>, <&adc0 2>;
+        io-channel-names = "current-8", "current-3", "current-6", "current-1", "current-7", "current-2", "current-5", "current-4";
     };
 };
 &adc0 {
