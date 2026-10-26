@@ -8,6 +8,7 @@ config WATCHDOG_EXTERNAL
     bool "External GPIO watchdog"
     depends on GPIO
     help
-      Automatically initialize the app,gpio-watchdog devicetree GPIO after
-      GPIO drivers are ready, and periodically toggle it. When disabled,
+      Initialize the app,gpio-watchdog devicetree GPIO when the application
+      explicitly calls watchdog_external_init(), then periodically toggle it.
+      When disabled,
       leave the GPIO untouched and do not start the feed timer.

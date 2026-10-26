@@ -11,7 +11,7 @@ void board_early_init_hook(void)
 #ifdef CONFIG_MCUBOOT
     /* PC13 浮空可在 MCUboot 擦除内部 Flash 前禁用外部看门狗。
      * 此钩子执行时 GPIO 驱动尚未初始化，因此直接使用 SoC HAL；
-     * 应用的 watchdog 模块在 POST_KERNEL 阶段自动重新启用喂狗。 */
+     * 应用在 status_init() 中调用 watchdog 模块重新启用喂狗。 */
     rcu_periph_clock_enable(RCU_GPIOC);
     gpio_init(GPIOC, GPIO_MODE_IN_FLOATING, GPIO_OSPEED_2MHZ, GPIO_PIN_13);
 #endif

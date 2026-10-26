@@ -20,7 +20,8 @@ status_report_fault(STATUS_RUNTIME, err, "Watchdog feed output failed", STATUS_A
 
 启动初始化失败明确使用 `STATUS_ACTION_HOLD`，停止业务并保留故障现场，避免固定故障循环重启。
 运行期故障继续使用 `STATUS_ACTION_RESET`；需要改变某处策略时直接修改该处枚举。
-看门狗初始化成功后，启动故障留驻仍持续喂狗；看门狗自身初始化失败时不再检查未初始化实例，
+main 进入后，status_init 显式调用 watchdog_external_init；模块读取设备树并开始定时喂狗，
+不在 POST_KERNEL 启动。看门狗初始化成功后，启动故障留驻仍持续喂狗；看门狗自身初始化失败时不再检查未初始化实例，
 也不请求软件复位，但无法保证外部硬件看门狗不会复位。
 不通过 Kconfig 数字配置动作。`WATCHDOG_SOFTWARE` / `WATCHDOG_EXTERNAL` 分别控制软件监控与外部喂狗，
 不改变故障动作。初始化阶段传入 `STATUS_ACTION_CONTINUE` 返回 `-EINVAL`。

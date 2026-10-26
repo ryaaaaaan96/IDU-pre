@@ -87,9 +87,9 @@ static int service(service_t service)
     return errors[service];
 }
 
+int __wrap_watchdog_external_init(void) { return service(WATCHDOG_INIT); }
 int __wrap_watchdog_external_error(void)
 {
-    if (!calls[WATCHDOG_INIT]) { return service(WATCHDOG_INIT); }
     ++checks;
     ++calls[WATCHDOG_CHECK];
     return errors[WATCHDOG_CHECK];

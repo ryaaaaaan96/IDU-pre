@@ -5,8 +5,8 @@
 ## 模块边界
 
 `modules/watchdog/src/watchdog.c` 在同一文件内分段实现软件任务期限与外部 GPIO 周期喂狗。
-软件监控不依赖物理后端、应用阶段或产品设备树。硬件配置由独立的 app,gpio-watchdog 设备树节点描述，模块在 POST_KERNEL 自动初始化。
-`app/status/status.c` 只初始化软件超时通知、查询硬件错误，并选择 HOLD 或 RESET。status 的公开头 inc/status.h 不再提供任务接口。
+软件监控不依赖物理后端、应用阶段或产品设备树。硬件配置由独立的 app,gpio-watchdog 设备树节点描述，模块仅在 status_init 显式调用 watchdog_external_init 时读取配置并开始喂狗。
+`app/status/status.c` 显式初始化硬件喂狗和软件超时通知、查询硬件错误，并选择 HOLD 或 RESET。status 的公开头 inc/status.h 不再提供任务接口。
 详细接口和上下文约束见[模块说明](../modules/watchdog/README.md)。
 
 ```c
@@ -27,6 +27,26 @@ watchdog_task_sleep_forever(&task);
 普通休眠计入预算；永久休眠移出活动链表，重新登记恢复。单次定时器跟踪最早期限，
 任一任务超时即锁存首个 RAM 快照，停止期限调度，拒绝后续心跳/登记。
 监控锁内修改和复制状态，释放锁后通知 status；模块不访问 status 状态锁。
+
+## 启动与执行边界
+
+```mermaid
+flowchart TD
+    main[main] --> status[status_init]
+    status --> init[watchdog_external_init]
+    dts[设备树：引脚与周期] --> init
+    init --> timer[内核周期定时器]
+    timer --> feed[执行一次 GPIO 翻转]
+    status --> monitor[watchdog_task_monitor_init]
+    task[显式登记的业务任务] -->|心跳| monitor
+    monitor -->|超时通知| fault[status 故障处置]
+    fault -->|HOLD| hold[停止业务和软件监控，继续硬件喂狗]
+    fault -->|RESET| reset[停止业务和喂狗，请求复位]
+```
+
+没有喂狗线程，不在 POST_KERNEL 自动启动。设备树绑定与初始化时机独立；应用选择时机，模块解释硬件配置。
+初始化前不触碰喂狗引脚，初始化失败不重试。喂狗仅表示定时器仍能执行，未登记的启动流程或任务不受软件监控保护。
+本轮不自动增加启动监控或生产任务登记；若后续需要检测初始化卡住，应显式登记启动任务并定义期限。
 
 ## 故障策略
 
@@ -52,4 +72,4 @@ prj.conf 正常启用两项；conf/debug.conf 关闭两项。移除 APP_DEBUG_SK
 
 任务测试逐场景使用新 native 进程，覆盖独立期限、休眠/恢复、并发快照、HOLD 持续喂狗和超时复位。
 四种配置分别编译并检查初始化效果。native 测试不代替外部芯片、GPIO 波形和真实复位链验证。
-本轮结果见[验收记录](../.scratch/watchdog-boundaries/validation.md)；此前记录保留在 Git 历史与原 scratch 目录。
+本轮结果见[验收记录](../.scratch/watchdog-explicit-start/validation.md)；此前记录保留在 Git 历史与原 scratch 目录。

@@ -19,4 +19,4 @@ target_compile_definitions(app PRIVATE CONFIG_BOOTLOADER_MCUBOOT=1 CONFIG_IDU_IA
   CONFIG_IDU_COLLECT_RETRIES=2 CONFIG_IDU_COLLECT_EXCEPTION_MS=3000
   CONFIG_IDU_COLLECT_PROBE_MS=5000 CONFIG_IDU_FORWARD_UNIT=16)
 
-zephyr_ld_options(-Wl,--wrap=watchdog_external_error -Wl,--wrap=watchdog_external_stop)
+zephyr_ld_options(-Wl,--wrap=watchdog_external_init -Wl,--wrap=watchdog_external_error -Wl,--wrap=watchdog_external_stop)

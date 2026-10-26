@@ -50,14 +50,19 @@ static void *setup(void)
 {
     const struct watchdog_task_config config = {.name = "early", .timeout_ms = 100};
     zassert_equal(watchdog_task_register(&extra, &config), -EACCES);
-    zassert_equal(atomic_get(&feed_configures), IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL));
+    /* 内核启动及进入测试线程不会自行配置或翻转喂狗引脚。 */
+    zassert_equal(atomic_get(&feed_configures), 0);
+    k_sleep(K_MSEC(30));
+    zassert_equal(atomic_get(&edges), 0);
+    zassert_equal(watchdog_external_error(), IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL) ? -EACCES : 0);
     if (IS_ENABLED(CONFIG_TEST_WATCHDOG_INIT_FAILURE)) {
-        zassert_equal(watchdog_external_error(), -EIO);
         zassert_equal(status_init(), -EIO);
+        zassert_equal(watchdog_external_error(), -EIO);
         return NULL;
     }
-    zassert_ok(watchdog_external_error());
     zassert_ok(status_init());
+    zassert_equal(atomic_get(&feed_configures), IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL));
+    zassert_ok(watchdog_external_error());
     status_set_phase(STATUS_RUN);
     return NULL;
 }
@@ -307,6 +312,8 @@ ZTEST(task_watchdog, test_concurrent_snapshots_are_consistent)
 }
 ZTEST(task_watchdog, test_configuration_switches)
 {
+    zassert_equal(watchdog_external_init(), IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL) ? -EALREADY : 0);
+    zassert_equal(atomic_get(&feed_configures), IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL));
     const struct watchdog_task_config config = {.name = "optional", .timeout_ms = 100};
     int err = watchdog_task_register(&first, &config);
     zassert_equal(err, IS_ENABLED(CONFIG_WATCHDOG_SOFTWARE) ? 0 : -EACCES);
@@ -316,7 +323,7 @@ ZTEST(task_watchdog, test_configuration_switches)
 }
 
 #ifdef CONFIG_TEST_WATCHDOG_INIT_FAILURE
-ZTEST(task_watchdog, test_automatic_initialization_failure)
+ZTEST(task_watchdog, test_explicit_initialization_failure)
 {
     struct status_application_fault fault;
     zassert_equal(status_phase_get(), STATUS_FAULT_LOCKED);
@@ -326,6 +333,8 @@ ZTEST(task_watchdog, test_automatic_initialization_failure)
     k_sleep(K_MSEC(200));
     zassert_equal(atomic_get(&edges), 0);
     zassert_equal(watchdog_external_error(), -EIO);
+    zassert_equal(watchdog_external_init(), -EALREADY);
+    zassert_equal(atomic_get(&feed_configures), 1);
 }
 #endif
 

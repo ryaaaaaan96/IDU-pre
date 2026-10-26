@@ -1,6 +1,5 @@
 #include <watchdog/watchdog.h>
 #include <errno.h>
-#include <zephyr/init.h>
 
 /* ==================== 外部 GPIO 喂狗 ==================== */
 
@@ -71,14 +70,16 @@ static const struct watchdog_config external_config = {
 };
 static struct watchdog external_monitor;
 static int external_init_error = -EACCES;
+static bool external_init_attempted;
 
-static int external_auto_init(void)
+int watchdog_external_init(void)
 {
+    /* 初始化由应用串行调用，每次上电仅尝试一次，失败后保留错误现场。 */
+    if (external_init_attempted) { return -EALREADY; }
+    external_init_attempted = true;
     external_init_error = watchdog_init(&external_monitor, &external_config);
-    /* 保留错误供应用查询；初始化失败不主动复位或中断内核启动。 */
-    return 0;
+    return external_init_error;
 }
-SYS_INIT(external_auto_init, POST_KERNEL, 90);
 
 int watchdog_external_error(void)
 {
@@ -87,9 +88,14 @@ int watchdog_external_error(void)
 
 void watchdog_external_stop(void)
 {
+    if (!external_init_attempted) {
+        external_init_attempted = true;
+        external_init_error = -ECANCELED;
+    }
     watchdog_stop(&external_monitor);
 }
 #else
+int watchdog_external_init(void) { return 0; }
 int watchdog_external_error(void) { return 0; }
 void watchdog_external_stop(void) {}
 #endif

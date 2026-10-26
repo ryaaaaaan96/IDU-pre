@@ -61,9 +61,17 @@ int watchdog_error(struct watchdog *monitor);
  */
 void watchdog_stop(struct watchdog *monitor);
 
-/** @brief 查询自动初始化的外部看门狗；关闭外部功能时返回 0。 */
+/**
+ * @brief 显式初始化设备树指定的外部看门狗，不向应用暴露引脚。
+ * @note 在线程中串行调用，每次上电仅尝试一次；失败后不重试。
+ * @retval 0 已开始周期喂狗，或外部功能关闭。
+ * @retval -EALREADY 已尝试初始化或已停止。
+ * @return 其他负错误码表示硬件初始化失败，查询接口保留错误。
+ */
+int watchdog_external_init(void);
+/** @brief 查询外部看门狗；未初始化返回 -EACCES，关闭功能时返回 0。 */
 int watchdog_external_error(void);
-/** @brief 停止自动初始化实例的喂狗；关闭外部功能时无操作。 */
+/** @brief 停止设备树实例的喂狗；关闭外部功能时无操作。 */
 void watchdog_external_stop(void);
 
 /* ==================== 软件任务监控 ==================== */

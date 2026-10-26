@@ -48,8 +48,8 @@ static bool watchdog_ready;
 
 static int status_watchdog_init(void)
 {
-    /* 硬件已由模块自动初始化；此处只验证启动结果并安装任务超时通知。 */
-    int err = watchdog_external_error();
+    /* 此处决定启动时机；模块内部读取设备树并执行硬件操作。 */
+    int err = watchdog_external_init();
     watchdog_ready = !err;
     if (err) { return err; }
     if (IS_ENABLED(CONFIG_WATCHDOG_SOFTWARE)) {
