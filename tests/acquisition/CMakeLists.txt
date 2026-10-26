@@ -7,9 +7,8 @@ project(idu_acquisition_tests)
 target_include_directories(app PRIVATE ../../app ../../modules/iap/include
   ../../modules/watchdog/include ../../modules/transmit/include
   ../../modules/dataprocess/include ../../modules/collect/include ../../modules/vport/include)
-target_sources(app PRIVATE src/main.c ../../app/main.c
-  ../../app/status/status.c
-  ../../app/protocol/init.c)
+target_sources(app PRIVATE src/main.c ../../app/main.c ../../app/protocol/init.c)
+add_subdirectory(../../app/status status)
 # main 由 Ztest 提供，将真实应用的启动函数提供给测试夹具。
 set_source_files_properties(../../app/main.c PROPERTIES
   COMPILE_DEFINITIONS "main=application_main")

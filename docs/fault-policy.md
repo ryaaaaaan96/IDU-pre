@@ -61,3 +61,8 @@ status_report_fault(STATUS_RUNTIME, err, "Sample publication failed", STATUS_ACT
 按业务有效性决定能否继续，无需增加来源枚举或 Kconfig 动作配置。
 验收使用 `bash tests/runtime/run.sh`，采样单场景使用 `tests/acquisition/run.py`；
 测试以独立进程隔离每次启动，不通过清零内部状态模拟重启。完整入口为 `bash tests/run.sh`。
+
+实现按职责分类：status.c 处理整机阶段、故障、诊断和镜像确认；led.c 只处理 GPIO
+指示灯；watchdog.c 负责外部看门狗适配与健康检查；task_monitor.c 负责登记与期限。
+internal.h 仅供 status 内部协作，共享阶段与状态锁。后台工作在 status.c 中依次维护
+LED 和喂狗诊断，LED 实现不再调用看门狗逻辑。

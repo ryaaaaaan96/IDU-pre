@@ -288,3 +288,6 @@ DP 提供 `dp_point_parameters_get()` 查询与初始化前的国家差异覆盖
 [Flash 布局](docs/build-and-upgrade.md#flash-与启动布局)、
 [构建](docs/build-and-upgrade.md#默认固件构建)、[MCUboot](docs/build-and-upgrade.md#mcuboot)、
 [IAPv3 / AES / SGZ](docs/build-and-upgrade.md#iapv3) 和[验证](docs/testing.md) 已按主题归档。
+
+`app/status/` 的状态与故障编排在 `status.c`，LED 在 `led.c`，外部看门狗适配在
+`watchdog.c`，任务期限监控在 `task_monitor.c`；公开调用统一使用 `status/status.h`。

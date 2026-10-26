@@ -13,7 +13,9 @@
 /** @brief 运行指示灯的标称翻转间隔，单位为毫秒。 */
 #define STATUS_LED_HALF_PERIOD_MS 100
 
-/** @brief 整机启动、采样和终止故障阶段。 */
+/* 整机状态与故障接口。 */
+
+/** @brief 整机初始化、运行和终止故障状态。 */
 typedef enum {
     STATUS_UNCONFIGURED, /**< 尚未初始化。 */
     STATUS_STARTING, /**< 正在初始化本地服务。 */
@@ -112,6 +114,8 @@ status_phase_t status_phase_get(void);
  */
 int status_report_fault(status_fault_phase_t phase, int error,
                         const char *description, status_action_t action);
+
+/* 显式登记的任务监控接口。 */
 
 /** @brief 任务处于活动期限监控状态。 */
 #define STATUS_TASK_ACTIVE UINT32_C(1)
