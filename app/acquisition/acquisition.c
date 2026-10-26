@@ -49,21 +49,49 @@ static const struct digital_io_config digital_groups[] = {
 };
 int acquisition_inputs_init(void)
 {
-    /* 这些电气假设属于产品的电流换算规则。 */
+    /* 校验电流换算所要求的 ADC 电气参数。 */
     for (size_t i = 0; i < ARRAY_SIZE(analog_channels); ++i) {
         const struct adc_dt_spec *channel = &analog_channels[i];
-        if (channel->vref_mv != 3300 || channel->resolution != 12 ||
-            channel->channel_cfg.gain != ADC_GAIN_1 ||
-            channel->channel_cfg.reference != ADC_REF_VDD_1 ||
-            channel->channel_cfg.differential || channel->oversampling) {
+
+        if (channel->vref_mv != 3300) {
+            return -EINVAL;
+        }
+        if (channel->resolution != 12) {
+            return -EINVAL;
+        }
+        if (channel->channel_cfg.gain != ADC_GAIN_1) {
+            return -EINVAL;
+        }
+        if (channel->channel_cfg.reference != ADC_REF_VDD_1) {
+            return -EINVAL;
+        }
+        if (channel->channel_cfg.differential) {
+            return -EINVAL;
+        }
+        if (channel->oversampling) {
             return -EINVAL;
         }
     }
-    for (size_t i = 0; i < ARRAY_SIZE(digital_groups); ++i) {
-        int err = digital_io_init(&digital_groups[i]);
-        if (err) { return err; }
+
+    /* 初始化 DI 输入。 */
+    int err = digital_io_init(&digital_groups[DIGITAL_INPUTS]);
+    if (err) {
+        return err;
     }
-    return analog_adc_init(&analog_inputs);
+
+    /* 初始化拨码地址输入。 */
+    err = digital_io_init(&digital_groups[ADDRESS_INPUTS]);
+    if (err) {
+        return err;
+    }
+
+    /* 初始化 ADC 输入通道。 */
+    err = analog_adc_init(&analog_inputs);
+    if (err) {
+        return err;
+    }
+
+    return 0;
 }
 
 int acquisition_inputs_sample(struct acquisition_sample *sample)
