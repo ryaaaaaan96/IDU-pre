@@ -289,9 +289,9 @@ DP 提供 `dp_point_parameters_get()` 查询与初始化前的国家差异覆盖
 [构建](docs/build-and-upgrade.md#默认固件构建)、[MCUboot](docs/build-and-upgrade.md#mcuboot)、
 [IAPv3 / AES / SGZ](docs/build-and-upgrade.md#iapv3) 和[验证](docs/testing.md) 已按主题归档。
 
-`app/status/status.c` 通过分段注释区分外部看门狗、任务期限监控和整机状态/故障处理。
+`app/status/status.c` 通过分段注释区分外部看门狗和整机状态/故障处理；任务期限监控在 `task_monitor.c`。
 LED 单独位于 `status/status_led.c/.h`，其 `status_led` 延时工作运行在系统工作队列中。
 
 status 目录采用公开接口与内部实现分离的布局：`inc/status.h` 是唯一公开头文件；
-`status.c`、`status_led.c`、`image_confirm.c` 均位于根目录，`status_led.h` 和
-`image_confirm.h` 仅供内部协作。
+`status.c`、`status_led.c`、`task_monitor.c`、`image_confirm.c` 均位于根目录，
+对应的 `status_led.h`、`task_monitor.h`、`image_confirm.h` 仅供内部协作。
