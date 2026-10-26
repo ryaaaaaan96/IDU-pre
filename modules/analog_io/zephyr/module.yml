@@ -1,4 +1,4 @@
-name: analog_input
+name: analog_io
 build:
   cmake: .
   kconfig: Kconfig

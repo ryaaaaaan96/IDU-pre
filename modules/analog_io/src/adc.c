@@ -1,7 +1,7 @@
-#include <analog_input/analog_input.h>
+#include <analog_io.h>
 #include <errno.h>
 
-static int validate(const struct analog_input_config *config)
+static int validate(const struct analog_adc_config *config)
 {
     if (!config || !config->channels || !config->channel_count || !config->average_count) {
         return -EINVAL;
@@ -18,7 +18,7 @@ static int validate(const struct analog_input_config *config)
     return 0;
 }
 
-int analog_input_init(const struct analog_input_config *config)
+int analog_adc_init(const struct analog_adc_config *config)
 {
     int err = validate(config);
     if (err) { return err; }
@@ -29,7 +29,7 @@ int analog_input_init(const struct analog_input_config *config)
     return 0;
 }
 
-int analog_input_read(const struct analog_input_config *config,
+int analog_adc_read(const struct analog_adc_config *config,
                       uint16_t *values, size_t capacity)
 {
     if (!values) { return -EINVAL; }

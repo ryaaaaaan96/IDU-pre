@@ -24,9 +24,8 @@ compatibility.
 
 | Module | Public headers | Responsibility |
 | --- | --- | --- |
-| `analog_input` | `analog_input/analog_input.h` | Configured ADC channel groups, software averaging and ordered raw samples |
+| `analog_io` | `analog_io.h` | Configured ADC channel groups, software averaging and ordered raw samples |
 | `gpio` | `gpio/digital_io.h` | Configured digital input groups |
-| [`input_sampler`](input_sampler/README.md) | `input_sampler/input_sampler.h` | Caller-configured analog/digital sampling with caller-owned buffers |
 | `watchdog` | `watchdog/watchdog.h` | Periodic GPIO feeding and terminal stop for external watchdogs |
 | [`vport`](vport/README.md) | `vport/vport.h` | Generic complete-message callbacks, ownership isolation and per-port send serialization |
 | [`modbus`](modbus/README.md) | `modbus_support/{rtu,transport}.h` | Allocation-free RTU conversion, shared serial access and reviewed Zephyr compatibility; optional forwarding hooks |
@@ -195,10 +194,9 @@ The model simulator only supplies configured defaults; it is not a UPP transport
 
 ## Input and watchdog services
 
-Input/health modules can be enabled with `ANALOG_INPUT` (requires ADC),
+Input/health modules can be enabled with `ANALOG_IO` (requires ADC),
 `DIGITAL_IO` and `WATCHDOG_MONITOR` (require GPIO). `gpio` contains the generic
-`digital_io_*` APIs. The independent `INPUT_SAMPLER` module combines GPIO and
-analog groups supplied by the caller. Generic GPIO use does not require an ADC
+`digital_io_*` APIs. The application combines digital and analog reads directly. Generic GPIO use does not require an ADC
 or a product devicetree node.
 None of these services depend on point tables, Modbus or DP, or allocate heap memory.
 Each input group uses a caller-owned immutable configuration; each watchdog owns
@@ -208,7 +206,7 @@ the caller when several groups share hardware.
 The external watchdog service uses `WATCHDOG_MONITOR` to avoid conflicting with
 Zephyr's existing `WATCHDOG` driver option.
 
-`analog_input_init()` sets up ADC channels, and `analog_input_read()` returns
+`analog_adc_init()` sets up ADC channels, and `analog_adc_read()` returns
 unsigned raw values in configured order. It supports single-ended resolutions
 up to 16 bits, averaging 1..65535 samples with integer truncation. Buffer capacity
 is checked before conversion; a failed batch may contain partial results and
@@ -229,11 +227,6 @@ also latch and stop feeding. Initialization is serialized, query/stop synchroniz
 with timer callbacks. Task deadline policy belongs to application status, not to
 this physical backend. No particular external watchdog IC is assumed.
 
-`input_sampler_init()` initializes configured input groups and
-`input_sampler_read()` fills caller-owned buffers. It supports optional analog
-input and any configured number of digital groups; output is valid only when the
-whole read succeeds. Capacity errors occur before sampling. No product node,
-channel count, voltage reference or address offset is embedded in the module.
 `app/acquisition/acquisition.c` constructs descriptors from the product devicetree,
 checks the current conversion's 12-bit/3.3 V contract and interprets address bits.
 Its `acquisition_inputs_sample()` returns the application snapshot declared in

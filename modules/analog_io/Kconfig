@@ -1,3 +1,3 @@
-config ANALOG_INPUT
+config ANALOG_IO
     bool "Configured ADC channel groups with software averaging"
     depends on ADC

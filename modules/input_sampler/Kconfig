@@ -1,9 +1,0 @@
-config INPUT_SAMPLER
-    bool "Configured analog and digital input sampling"
-    depends on ADC && GPIO
-    select ANALOG_INPUT
-    select DIGITAL_IO
-    help
-      Combine caller-provided analog and digital input groups into one sampling
-      operation. Hardware selection and application interpretation stay with
-      the caller. No product devicetree node or channel count is assumed.

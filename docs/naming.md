@@ -44,22 +44,21 @@
 
 ## 模块与产品配置
 
-`input_sampler` 组合 `gpio` 与 `analog_input`，接收调用者的配置、数量和输出缓冲区。
-模块不创建采样任务、不分配输出内存、不指定产品设备树节点或固定通道数。
-采样错误使整个输出无效；缓冲区不足在开始读取前返回错误。
-配置可只包含模拟组或数字组，模块构建仍依赖 ADC 与 GPIO。
+`analog_io` 管理模拟量输入输出，当前通过 `analog_adc_*` 提供 ADC 通道配置与平均采样。
+数字输入归 `gpio`，由应用直接组合读取，不再保留中间的组合采样模块。
+DAC 尚未实现，后续有硬件需求时在同一模块增加独立源码和接口。
 
 应用 `acquisition/acquisition.c` 从设备树组装配置并校验现有换算的电气条件。
 八路 ADC、十六路 DI、四位拨码以及拨码加地址偏移的解释均属于应用。
 工程换算和测点映射留在 `process`，协议与通信端口装配留在 `protocol`。
 
-`dp_*`、`co_*`、`tr_*`、`iap_*`、`analog_input_*`、`digital_io_*`、`watchdog_*`
+`dp_*`、`co_*`、`tr_*`、`iap_*`、`analog_adc_*`、`digital_io_*`、`watchdog_*`
 保留各自模块的命名空间。新的调用方直接使用职责接口。
 
 ## 兼容范围
 
 工程目录 `IDU-pre`、板名 `idu_pre`、产品设备树标识及应用 `CONFIG_IDU_*` 保留产品身份。
-原模块 `CONFIG_IDU_INPUTS` 改为通用 `CONFIG_INPUT_SAMPLER`；平均次数
+模拟量模块由 `CONFIG_ANALOG_IO` 启用；平均次数
 `CONFIG_IDU_ADC_AVERAGE_COUNT` 在应用 Kconfig 中提供。
 
 设备 ID、信号 ID、寄存器地址、Flash 分区及参数格式 magic 的数值保持不变。

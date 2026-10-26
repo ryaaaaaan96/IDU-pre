@@ -106,7 +106,7 @@ QuickLZ/SGZ 样本跳过；任务看门狗另覆盖 12 个独立进程场景。I
 `storage-fault.conf` 在同一装配中增加持久写失败与非持久命令成功且不重放；`acquisition` 验证本地启动及健康策略。
 独立进程参数记录和 IAP 保存失败短路继续由完整脚本运行。实物时序、栈高水位、性能及掉电验证另行记录。
 
-应用职责命名及 `input_sampler` 配置迁移见[命名约定](naming.md)和
+应用职责命名及 `analog_io` 配置迁移见[命名约定](naming.md)和
 [验证记录](../.scratch/responsibility-naming/validation.md)。ADC 套件额外覆盖非产品通道布局、
 调用者缓冲区边界、仅模拟/仅数字采样以及失败时的整体无效语义。
 
@@ -156,7 +156,7 @@ build/IDU-pre/tests/reference_services/zephyr/zephyr.exe -flash_in_ram
 | `dataprocess`、`collector`、`transmit` | 核心模块独立配置、采集调度、转发模式和恢复 |
 | `reference_config`、`reference_dp`、`reference_ports`、`reference_services` | 原表注册、同步字节接口、CO/TR 适配、策略回调和迁移 |
 | `image_confirm`、`iap`、`test_iap_codec.py` | 健康确认、独立 IAP 模块、配置驱动升级、收包/签名拒绝、SGZ/QuickLZ 边界 |
-| `adc`、`test_build_configuration.py` | 标准 ADC API、采样平均、硬件超时恢复、并发隔离与 Sysbuild 配置覆盖 |
+| `analog_io`、`test_build_configuration.py` | 标准 ADC API、采样平均、硬件超时恢复、并发隔离与 Sysbuild 配置覆盖 |
 | `io` | GPIO 极性/位序/32 位边界、外部看门狗超时与 GPIO 故障锁定 |
 | `vport` | 端口登记、所有权隔离、完整报文、来源保持和错误边界 |
 | `communication` | UART/GPIO emulator 上的 RTU/RAW 往返、完整 ADU（含 IAPv3 大报文配置）、忙时防覆盖、来源保持、TX 超时/错误及恢复 |
@@ -373,7 +373,7 @@ Kconfig 配置。保留原线协议、结果日志内容、试运行请求及应
 
 ## 硬件模块与应用精简验证（2026-10-20）
 
-硬件服务拆为 `analog_input`、`digital_io` 和 `health_monitor` 三个独立模块。
+硬件服务拆为 `analog_io`、`digital_io` 和 `health_monitor` 三个独立模块。
 应用由 `acquisition` 管理采集状态，通过 `idu_inputs_sample()` 读取原始值，
 `process/points.c` 集中点表初始化、采样映射及公共回调。产品引脚、位序和喂狗时序
 来自设备树；平均次数来自 Kconfig。应用根目录仅保留入口与构建配置。

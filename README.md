@@ -149,7 +149,7 @@ app/main.c                         启动顺序、采样周期与休眠
 
 引脚、极性、ADC 通道顺序、DI/拨码位序、地址偏移和喂狗时序由板级 DTS 配置，
 平均次数由 `CONFIG_IDU_ADC_AVERAGE_COUNT` 配置。业务层统一通过
-`acquisition_inputs_sample()` 获取快照；`acquisition/acquisition.c` 将设备树配置交给通用 `input_sampler`，模块不认识点号，也不自动写 DP。
+`acquisition_inputs_sample()` 获取快照；`acquisition/acquisition.c` 直接组合 `analog_io` 和 `gpio` 完成采样，模块不认识点号，也不自动写 DP。
 采样字段到测点的映射由 `process/points.c` 完成，点表定义仍在 `app/protocol/`。
 
 LED 操作直接放在 `app/status/status.c`，通过 Zephyr LED API 控制：
@@ -169,7 +169,7 @@ IDU-pre/
 │   ├── status/          # 业务状态、LED 策略、健康进度及镜像确认
 │   ├── protocol/        # 点表及端口/协议配置；inc/ 配置契约；tables/ 三表
 │   └── process/         # 采样映射、工程换算及业务参数回调
-├── modules/             # analog_input、gpio、watchdog 及点表/升级/SoC 模块
+├── modules/             # analog_io、gpio、watchdog 及点表/升级/SoC 模块
 ├── bootloader/          # MCUboot 配置、分区和联合构建
 ├── sysbuild/            # Zephyr 约定的薄入口
 ├── conf/                # 应用可选配置
@@ -202,7 +202,6 @@ IDU-pre/
 | --- | --- |
 | `acquisition/acquisition.h` | 产品输入初始化、原始样本及采样／发布／转发／健康检查周期 |
 | `status/status.h` | 业务阶段、故障状态、LED 策略及健康进度 |
-| `<input_sampler/input_sampler.h>` | 由配置和调用者缓冲区驱动的通用组合采样 |
 | `status/image_confirm/image_confirm.h` | MCUboot 试运行健康确认 |
 | `process/engineering.h` | 仅依赖标准 C 的工程量换算，可用于主机测试 |
 | `process/points.h` | 采样发布、周期参数及测点业务回调 |

@@ -71,7 +71,7 @@ config IDU_SAMPLE_PERIOD_MS
 
 config IDU_ADC_AVERAGE_COUNT
     int "Samples averaged per product analog input"
-    depends on INPUT_SAMPLER
+    depends on ANALOG_IO
     default 10
     range 1 64
 

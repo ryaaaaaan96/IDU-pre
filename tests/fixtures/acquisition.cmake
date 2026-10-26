@@ -1,11 +1,16 @@
-# 编排测试替换硬件采样入口，只编译产品源码中的周期编排部分。
+# 编排测试复用产品周期函数，硬件输入接口由测试实现。
 get_filename_component(acquisition_source "${CMAKE_CURRENT_LIST_DIR}/../../app/acquisition/acquisition.c" ABSOLUTE)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${acquisition_source}")
 file(READ "${acquisition_source}" acquisition_contents)
-string(FIND "${acquisition_contents}" "#include <input_sampler/input_sampler.h>" hardware_offset)
-if(hardware_offset LESS 0)
-  message(FATAL_ERROR "Acquisition hardware boundary missing")
+string(FIND "${acquisition_contents}" "int acquisition_cycle(void)" cycle_offset)
+string(FIND "${acquisition_contents}" "LOG_MODULE_REGISTER" includes_end)
+if(cycle_offset LESS 0 OR includes_end LESS 0)
+  message(FATAL_ERROR "Acquisition cycle or includes missing")
 endif()
-string(SUBSTRING "${acquisition_contents}" 0 ${hardware_offset} acquisition_cycle_source)
-file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/acquisition_cycle.c" "${acquisition_cycle_source}")
+string(SUBSTRING "${acquisition_contents}" 0 ${includes_end} cycle_includes)
+string(REPLACE "#include <analog_io.h>" "" cycle_includes "${cycle_includes}")
+string(REPLACE "#include <gpio/digital_io.h>" "" cycle_includes "${cycle_includes}")
+string(SUBSTRING "${acquisition_contents}" ${cycle_offset} -1 acquisition_cycle)
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/acquisition_cycle.c"
+  "${cycle_includes}\nLOG_MODULE_REGISTER(app_acquisition, LOG_LEVEL_INF);\n${acquisition_cycle}")
 target_sources(app PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/acquisition_cycle.c")
