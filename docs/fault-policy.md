@@ -26,9 +26,10 @@ status_report_fault(STATUS_RUNTIME, err, "Watchdog feed output failed", STATUS_A
 不通过 Kconfig 数字配置动作。`APP_DEBUG_SKIP_WATCHDOG` 只关闭看门狗，
 不改变故障动作。初始化阶段传入 `STATUS_ACTION_CONTINUE` 返回 `-EINVAL`。
 
-首个故障的描述、阶段、错误和时间保留到复位，不被后续故障覆盖。快照另存当前终止
-描述和动作；重复的相同终止动作不覆盖它，任何显式复位请求均可将留驻升级为复位。
-故障锁存后不能恢复业务；继续动作也不会清除已锁存状态。日志输出描述、阶段、错误码和动作。
+每次上报都更新描述、阶段、错误、时间和请求动作，并输出日志；快照表示最近一次故障，
+不保存历史，也不判断是否重复。删除独立的终止描述和动作强度比较。
+动作直接执行：继续只记录，留驻停止业务，复位停止业务后请求复位。
+业务停止状态独立锁存，后续继续动作不会恢复业务；重复终止请求允许重复调用停止接口。
 
 终止时 DP/CO 拒绝新业务，北向静默，IAP 拒绝新上传；保留 Shell、日志和 RAM 快照。
 普通留驻继续喂外狗，调试留驻不启动看门狗。已经开始的操作到安全边界后停止，
@@ -37,7 +38,7 @@ status_report_fault(STATUS_RUNTIME, err, "Watchdog feed output failed", STATUS_A
 `status.c` 私有持有唯一整机状态，启动调用 `status_init()`，每次上电只初始化一次。
 重复调用返回 `-EALREADY`，初始化失败后也不重新初始化硬件。业务阶段通过
 `status_set_phase()` / `status_phase_get()` 访问，健康检查使用 `status_progress()`。
-`status_application_fault_get()` 读取一致的首错和终止描述快照；任务详情使用
+`status_application_fault_get()` 读取一致的最近故障快照；任务详情使用
 `status_fault_get()`。故障记录不跨复位保存，故障路径不写 Flash。
 
 指示灯使用 GPIO，初始化失败立即返回终止故障。仅配置成功才允许后续引脚访问；

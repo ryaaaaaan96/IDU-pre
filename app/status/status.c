@@ -93,35 +93,35 @@ int status_report_fault(status_fault_phase_t phase, int error,
         k_spin_unlock(&lock, key);
         return -EACCES;
     }
-    bool first = !application.fault.description;
-    if (first) {
-        application.fault.description = description;
-        application.fault.phase = phase;
-        application.fault.error = error;
-        application.fault.occurred_ms = k_uptime_get();
-    }
-    bool upgrade = action > application.fault.action;
-    if (upgrade) {
+    application.fault.description = description;
+    application.fault.phase = phase;
+    application.fault.error = error;
+    application.fault.occurred_ms = k_uptime_get();
+    application.fault.action = action;
+    if (action != STATUS_ACTION_CONTINUE) {
         application.phase = STATUS_FAULT_LOCKED;
-        application.fault.terminal_description = description;
-        application.fault.action = action;
         k_timer_stop(&task_timer);
     }
     k_spin_unlock(&lock, key);
-    if (first || upgrade) { LOG_ERR("%s: phase %d error %d action %d", description, phase, error, action); }
-    if (upgrade) {
+    LOG_ERR("%s: phase %d error %d action %d", description, phase, error, action);
+    switch (action) {
+    case STATUS_ACTION_CONTINUE:
+        return 0;
+    case STATUS_ACTION_HOLD:
+    case STATUS_ACTION_RESET:
         protocol_stop();
 #ifdef CONFIG_IDU_IAPV3
         iap_stop();
 #endif
-        if (!IS_ENABLED(CONFIG_APP_DEBUG_SKIP_WATCHDOG) && action == STATUS_ACTION_RESET) {
-            watchdog_stop(&monitor);
-        }
         k_work_reschedule(&indicator, K_NO_WAIT);
-        if (action == STATUS_ACTION_RESET) { status_request_reboot(); }
+        if (action == STATUS_ACTION_RESET) {
+            if (!IS_ENABLED(CONFIG_APP_DEBUG_SKIP_WATCHDOG)) { watchdog_stop(&monitor); }
+            status_request_reboot();
+        }
+        return error;
+    default:
+        return -EINVAL;
     }
-    if (action != STATUS_ACTION_CONTINUE) { return error; }
-    return 0;
 }
 
 static void task_expired(void)

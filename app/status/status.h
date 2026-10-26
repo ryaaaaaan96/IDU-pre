@@ -30,21 +30,20 @@ typedef enum {
     STATUS_INIT,
     STATUS_RUNTIME,
 } status_fault_phase_t;
-/** @brief 故障动作按处理强度递增，用于判断是否需要升级。 */
+/** @brief 调用方指定的故障处理动作。 */
 typedef enum {
     STATUS_ACTION_CONTINUE = 0,
     STATUS_ACTION_HOLD = 1,
     STATUS_ACTION_RESET = 2,
 } status_action_t;
 
-/** @brief 整机首错及终止动作的一致快照。 */
+/** @brief 整机最近一次故障的一致快照。 */
 struct status_application_fault {
-    const char *description; /**< 首个故障的常驻描述字符串。 */
-    const char *terminal_description; /**< 当前终止故障的常驻描述，无终止故障时为空。 */
-    status_fault_phase_t phase; /**< 首个故障发生于初始化或运行阶段。 */
-    status_action_t action; /**< 当前锁存的终止动作，显式复位请求可将留驻升级。 */
-    int error; /**< 首个故障的错误码。 */
-    int64_t occurred_ms; /**< 首个故障发生时的系统运行时间，单位为毫秒。 */
+    const char *description; /**< 最近一次故障的常驻描述字符串。 */
+    status_fault_phase_t phase; /**< 最近一次故障发生于初始化或运行阶段。 */
+    status_action_t action; /**< 最近一次故障请求的处理动作，不代表业务是否已停止。 */
+    int error; /**< 最近一次故障的错误码。 */
+    int64_t occurred_ms; /**< 最近一次故障发生时的系统运行时间，单位为毫秒。 */
 };
 
 /**
@@ -103,7 +102,7 @@ int status_progress(void);
 status_phase_t status_phase_get(void);
 
 /**
- * @brief 记录首错并执行调用方指定的最终动作。
+ * @brief 记录本次故障并执行调用方指定的动作。
  * @param[in] phase 初始化或运行阶段。
  * @param[in] error 非零错误码，通常为负 errno。
  * @param[in] description 非空的常驻描述字符串；记录时保留指针，不复制或格式化。
@@ -113,7 +112,7 @@ status_phase_t status_phase_get(void);
  * @retval -EACCES 状态尚未初始化。
  * @return 终止动作在复位未接管时返回传入的错误码。
  * @note 可在 ISR 中调用；不按描述字符串选择策略，不隐式转换调试动作。
- * @note 首错不覆盖；终止后不可恢复，显式 RESET 可将 HOLD 升级为复位。
+ * @note 每次更新故障快照；已停止业务不会因后续 CONTINUE 恢复。
  */
 int status_report_fault(status_fault_phase_t phase, int error,
                         const char *description, status_action_t action);

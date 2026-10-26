@@ -109,7 +109,7 @@ static bool terminal_result(status_action_t action)
     struct status_application_fault fault;
     struct dp_point_state point;
     return !status_application_fault_get(&fault) && fault.description && !strcmp(fault.description, expected_description) &&
-        fault.terminal_description && !strcmp(fault.terminal_description, expected_description) && fault.error < 0 && fault.action == action &&
+        fault.error < 0 && fault.action == action &&
         protocol_stopped() &&
         dp_read((struct dp_key){DEVICE_LOCAL, SIGNAL_DI}, &point) == -ECANCELED;
 }
@@ -182,7 +182,7 @@ ZTEST(runtime, test_real_main_fault_policy)
         k_msleep(10);
     }
     zassert_ok(status_application_fault_get(&fault));
-    if (!fault.terminal_description) {
+    if (status_phase_get() != STATUS_FAULT_LOCKED) {
         zassert_str_equal(expected_description, "Indicator output failed");
         zassert_str_equal(fault.description, expected_description);
         zassert_false(protocol_stopped());
