@@ -9,25 +9,67 @@
 
 LOG_MODULE_REGISTER(app_acquisition, LOG_LEVEL_INF);
 
-/* 产品硬件选择集中在此处；通用模块只接收描述信息。 */
+/* 下列数字是设备树属性的元素索引，不是 ADC 通道号或 GPIO 引脚号。
+ * 数组左侧是产品样本顺序，右侧可独立选择设备树中的元素。
+ * 实际引脚、通道号和极性由设备树提供，不要求硬件编号连续。
+ */
 #define IO_NODE DT_NODELABEL(idu_io)
-#define ADC_SPEC(node, prop, idx) ADC_DT_SPEC_GET_BY_IDX(node, idx),
-#define GPIO_SPEC(node, prop, idx) GPIO_DT_SPEC_GET_BY_IDX(node, prop, idx),
 
 static const struct adc_dt_spec analog_channels[] = {
-    DT_FOREACH_PROP_ELEM(IO_NODE, io_channels, ADC_SPEC)
+    [0] = ADC_DT_SPEC_GET_BY_IDX(IO_NODE, 0), /* 模拟量输入 1。 */
+    [1] = ADC_DT_SPEC_GET_BY_IDX(IO_NODE, 1), /* 模拟量输入 2。 */
+    [2] = ADC_DT_SPEC_GET_BY_IDX(IO_NODE, 2), /* 模拟量输入 3。 */
+    [3] = ADC_DT_SPEC_GET_BY_IDX(IO_NODE, 3), /* 模拟量输入 4。 */
+    [4] = ADC_DT_SPEC_GET_BY_IDX(IO_NODE, 4), /* 模拟量输入 5。 */
+    [5] = ADC_DT_SPEC_GET_BY_IDX(IO_NODE, 5), /* 模拟量输入 6。 */
+    [6] = ADC_DT_SPEC_GET_BY_IDX(IO_NODE, 6), /* 模拟量输入 7。 */
+    [7] = ADC_DT_SPEC_GET_BY_IDX(IO_NODE, 7), /* 模拟量输入 8。 */
 };
+
 static const struct gpio_dt_spec digital_pins[] = {
-    DT_FOREACH_PROP_ELEM(IO_NODE, di_gpios, GPIO_SPEC)
+    [0] = GPIO_DT_SPEC_GET_BY_IDX(IO_NODE, di_gpios, 0), /* DI1。 */
+    [1] = GPIO_DT_SPEC_GET_BY_IDX(IO_NODE, di_gpios, 1), /* DI2。 */
+    [2] = GPIO_DT_SPEC_GET_BY_IDX(IO_NODE, di_gpios, 2), /* DI3。 */
+    [3] = GPIO_DT_SPEC_GET_BY_IDX(IO_NODE, di_gpios, 3), /* DI4。 */
+    [4] = GPIO_DT_SPEC_GET_BY_IDX(IO_NODE, di_gpios, 4), /* DI5。 */
+    [5] = GPIO_DT_SPEC_GET_BY_IDX(IO_NODE, di_gpios, 5), /* DI6。 */
+    [6] = GPIO_DT_SPEC_GET_BY_IDX(IO_NODE, di_gpios, 6), /* DI7。 */
+    [7] = GPIO_DT_SPEC_GET_BY_IDX(IO_NODE, di_gpios, 7), /* DI8。 */
+    [8] = GPIO_DT_SPEC_GET_BY_IDX(IO_NODE, di_gpios, 8), /* DI9。 */
+    [9] = GPIO_DT_SPEC_GET_BY_IDX(IO_NODE, di_gpios, 9), /* DI10。 */
+    [10] = GPIO_DT_SPEC_GET_BY_IDX(IO_NODE, di_gpios, 10), /* DI11。 */
+    [11] = GPIO_DT_SPEC_GET_BY_IDX(IO_NODE, di_gpios, 11), /* DI12。 */
+    [12] = GPIO_DT_SPEC_GET_BY_IDX(IO_NODE, di_gpios, 12), /* DI13。 */
+    [13] = GPIO_DT_SPEC_GET_BY_IDX(IO_NODE, di_gpios, 13), /* DI14。 */
+    [14] = GPIO_DT_SPEC_GET_BY_IDX(IO_NODE, di_gpios, 14), /* DI15。 */
+    [15] = GPIO_DT_SPEC_GET_BY_IDX(IO_NODE, di_gpios, 15), /* DI16。 */
 };
+
 static const struct gpio_dt_spec address_pins[] = {
-    DT_FOREACH_PROP_ELEM(IO_NODE, address_gpios, GPIO_SPEC)
+    [0] = GPIO_DT_SPEC_GET_BY_IDX(IO_NODE, address_gpios, 0), /* 第 1 路拨码输入。 */
+    [1] = GPIO_DT_SPEC_GET_BY_IDX(IO_NODE, address_gpios, 1), /* 第 2 路拨码输入。 */
+    [2] = GPIO_DT_SPEC_GET_BY_IDX(IO_NODE, address_gpios, 2), /* 第 3 路拨码输入。 */
+    [3] = GPIO_DT_SPEC_GET_BY_IDX(IO_NODE, address_gpios, 3), /* 第 4 路拨码输入。 */
 };
-BUILD_ASSERT(ARRAY_SIZE(analog_channels) == SAMPLE_ANALOG_COUNT);
-BUILD_ASSERT(ARRAY_SIZE(digital_pins) == SAMPLE_DI_COUNT);
-BUILD_ASSERT(ARRAY_SIZE(address_pins) == 4);
-BUILD_ASSERT(DT_PROP(IO_NODE, address_offset) >= 0 &&
-             DT_PROP(IO_NODE, address_offset) <= UINT8_MAX - 15);
+
+/* 显式数组不再自动跟随设备树长度，分别检查设备树和产品样本布局。 */
+BUILD_ASSERT(DT_PROP_LEN(IO_NODE, io_channels) == ARRAY_SIZE(analog_channels),
+             "ADC devicetree entries must match the explicit channel mapping");
+BUILD_ASSERT(ARRAY_SIZE(analog_channels) == SAMPLE_ANALOG_COUNT,
+             "ADC mapping must match the product sample layout");
+BUILD_ASSERT(DT_PROP_LEN(IO_NODE, di_gpios) == ARRAY_SIZE(digital_pins),
+             "DI devicetree entries must match the explicit pin mapping");
+BUILD_ASSERT(ARRAY_SIZE(digital_pins) == SAMPLE_DI_COUNT,
+             "DI mapping must match the product sample layout");
+BUILD_ASSERT(DT_PROP_LEN(IO_NODE, address_gpios) == ARRAY_SIZE(address_pins),
+             "Address devicetree entries must match the explicit pin mapping");
+BUILD_ASSERT(ARRAY_SIZE(address_pins) == 4,
+             "Address selector requires four GPIO inputs");
+/* 四位拨码取值为 0 至 15，加偏移后必须能存入 uint8_t 地址。 */
+BUILD_ASSERT(DT_PROP(IO_NODE, address_offset) >= 0,
+             "Address offset must not be negative");
+BUILD_ASSERT(DT_PROP(IO_NODE, address_offset) <= UINT8_MAX - 15,
+             "Address offset plus the four-bit selector must fit in uint8_t");
 
 static const struct analog_adc_config analog_inputs = {
     .channels = analog_channels,
