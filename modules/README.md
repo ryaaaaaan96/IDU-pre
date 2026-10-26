@@ -24,7 +24,6 @@ compatibility.
 
 | Module | Public headers | Responsibility |
 | --- | --- | --- |
-| `analog_io` | `analog_io.h` | Configured ADC channel groups, software averaging and ordered raw samples |
 | `gpio` | `gpio/digital_io.h` | Configured digital input groups |
 | `watchdog` | `watchdog/watchdog.h` | Periodic GPIO feeding and terminal stop for external watchdogs |
 | [`vport`](vport/README.md) | `vport/vport.h` | Generic complete-message callbacks, ownership isolation and per-port send serialization |
@@ -194,8 +193,7 @@ The model simulator only supplies configured defaults; it is not a UPP transport
 
 ## Input and watchdog services
 
-Input/health modules can be enabled with `ANALOG_IO` (requires ADC),
-`DIGITAL_IO` and `WATCHDOG_MONITOR` (require GPIO). `gpio` contains the generic
+Input/health modules use `DIGITAL_IO` and `WATCHDOG_MONITOR` (require GPIO). `gpio` contains the generic
 `digital_io_*` APIs. The application combines digital and analog reads directly. Generic GPIO use does not require an ADC
 or a product devicetree node.
 None of these services depend on point tables, Modbus or DP, or allocate heap memory.
@@ -206,13 +204,8 @@ the caller when several groups share hardware.
 The external watchdog service uses `WATCHDOG_MONITOR` to avoid conflicting with
 Zephyr's existing `WATCHDOG` driver option.
 
-`analog_adc_init()` sets up ADC channels, and `analog_adc_read()` returns
-unsigned raw values in configured order. It supports single-ended resolutions
-up to 16 bits, averaging 1..65535 samples with integer truncation. Buffer capacity
-is checked before conversion; a failed batch may contain partial results and
-must be treated as invalid. Product calibration and signal conversion stay in
-the application. The ADC driver determines supported gains, references and
-hardware oversampling.
+The application calls Zephyr ADC channel setup and read APIs directly and applies
+its configured averaging count. There is no separate analog wrapper module.
 
 `digital_io_init()` configures 1..32 inputs; `digital_io_read()` returns logical
 active bits in LSB-first or MSB-first order, leaving the caller's result unchanged

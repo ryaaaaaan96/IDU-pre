@@ -8,7 +8,6 @@ if(cycle_offset LESS 0 OR includes_end LESS 0)
   message(FATAL_ERROR "Acquisition cycle or includes missing")
 endif()
 string(SUBSTRING "${acquisition_contents}" 0 ${includes_end} cycle_includes)
-string(REPLACE "#include <analog_io.h>" "" cycle_includes "${cycle_includes}")
 string(REPLACE "#include <gpio/digital_io.h>" "" cycle_includes "${cycle_includes}")
 string(SUBSTRING "${acquisition_contents}" ${cycle_offset} -1 acquisition_cycle)
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/acquisition_cycle.c"

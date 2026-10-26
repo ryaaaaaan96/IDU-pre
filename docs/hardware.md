@@ -92,7 +92,7 @@ PD8 为最高位。寄存器 DI bit0 对应 DI1，bit15 对应 DI16。
 - 每 500 ms 获取 16 路 DI 和拨码地址，采集 8 路模拟量。
 - 每个模拟通道连续采集 10 次并取整数平均，分辨率 12 bit。
   模块中的 ADC0 驱动通过标准 `adc_*` API 提供逐通道轮询和转换超时，
-  `modules/analog_io` 按产品配置保留通道顺序及平均。设备初始化时校准，读取超时后下次读取重置并重新校准；
+  应用采样代码按产品配置保留通道顺序及平均。设备初始化时校准，读取超时后下次读取重置并重新校准；
   不沿用 FreeRTOS 的连续 DMA 缓冲区。
   平均数和周期由 `CONFIG_IDU_ADC_AVERAGE_COUNT`、
   `CONFIG_IDU_SAMPLE_PERIOD_MS` 调整初始配置；31000 可设置并保存运行周期。
@@ -118,7 +118,7 @@ PD8 为最高位。寄存器 DI bit0 对应 DI1，bit15 对应 DI16。
 - 本地采样通过 DP 模块的 `dp_submit_sig_value()` / `dp_submit_sig_values()` 设置，
   IDU 只负责采样字段到信号的映射，整份快照一次批量提交。成功表示已入队；
   需要等待时使用返回的 ticket 调用 `dp_wait_processed()`，再读取质量与错误。
-  `app/acquisition/acquisition.c` 直接调用 `modules/analog_io` 与 `modules/gpio`，
+  `app/acquisition/acquisition.c` 直接调用 Zephyr ADC API 与 `modules/gpio`，
   应用入口 `acquisition_inputs_sample()` 返回原始样本并解释拨码地址，映射由 `app/process/points.c` 完成；
   引脚、通道和时序来自 DTS，平均数来自应用 Kconfig，模块不绑定产品节点或测点。
 - LED 由 `app/status/status.c` 直接调用 Zephyr `gpio-leds` 驱动，状态与显示策略归

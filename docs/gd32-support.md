@@ -76,7 +76,7 @@ Flash 还有一处具体兼容原因：当前 [上游 `flash_gd32_v1.c`](https:/
 
 本地 [ADC 驱动](../modules/gd32e505/drivers/adc/adc_gd32e50x.c) 封装官方 HAL，
 通过 Zephyr 设备模型提供同步单通道读取、校准和超时恢复；
-[analog_io](../modules/analog_io) 使用标准 API 按配置保留通道顺序与平均策略。
+应用 `acquisition.c` 直接使用 Zephyr ADC API，保留产品通道顺序与平均策略。
 板级 DTS 仍配置 APB2/6、12 位、71.5 周期采样。该实现不修改上游驱动，
 多通道序列、异步/DMA 和内部通道暂不支持，范围见[模块说明](../modules/gd32e505/README.md)。
 分频、触发、校准、错误恢复及实际电流换算仍需实板验证。

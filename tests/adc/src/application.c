@@ -2,21 +2,6 @@
 #include <zephyr/drivers/adc/adc_emul.h>
 #include <zephyr/drivers/gpio/gpio_emul.h>
 #include <acquisition/acquisition.h>
-#include <analog_io.h>
-
-static const struct adc_dt_spec test_channels[] = {
-    ADC_DT_SPEC_GET_BY_NAME(DT_NODELABEL(idu_io), current_1),
-    ADC_DT_SPEC_GET_BY_NAME(DT_NODELABEL(idu_io), current_2),
-    ADC_DT_SPEC_GET_BY_NAME(DT_NODELABEL(idu_io), current_3),
-    ADC_DT_SPEC_GET_BY_NAME(DT_NODELABEL(idu_io), current_4),
-    ADC_DT_SPEC_GET_BY_NAME(DT_NODELABEL(idu_io), current_5),
-    ADC_DT_SPEC_GET_BY_NAME(DT_NODELABEL(idu_io), current_6),
-    ADC_DT_SPEC_GET_BY_NAME(DT_NODELABEL(idu_io), current_7),
-    ADC_DT_SPEC_GET_BY_NAME(DT_NODELABEL(idu_io), current_8),
-};
-static const struct analog_adc_config test_group = {
-    .channels = test_channels, .channel_count = ARRAY_SIZE(test_channels), .average_count = 10,
-};
 
 static const struct device *const emul = DEVICE_DT_GET(DT_NODELABEL(adc0));
 static unsigned int samples[16];
@@ -74,51 +59,4 @@ ZTEST(adc_application, test_unified_sampling_preserves_digital_and_address_bit_o
     zassert_equal(acquisition_inputs_sample(NULL), -EINVAL);
 }
 
-ZTEST(adc_application, test_independent_channel_groups_and_averaging)
-{
-    struct adc_dt_spec channels[] = {test_group.channels[2], test_group.channels[0]};
-    const struct analog_adc_config group = {
-        .channels = channels, .channel_count = ARRAY_SIZE(channels), .average_count = 3,
-    };
-    zassert_ok(analog_adc_init(&group));
-    uint16_t values[3] = {0, 0, 0x55aa};
-    zassert_ok(analog_adc_read(&group, values, 2));
-    zassert_equal(values[0], 101);
-    zassert_equal(values[1], 1301);
-    zassert_equal(values[2], 0x55aa);
-    zassert_equal(samples[0], 0);
-}
-
-ZTEST(adc_application, test_invalid_group_or_buffer_does_not_start_adc)
-{
-    uint16_t values[8];
-    struct analog_adc_config group = test_group;
-    zassert_equal(analog_adc_read(&group, NULL, 8), -EINVAL);
-    zassert_equal(analog_adc_read(&group, values, 7), -ENOMEM);
-    group.average_count = 0;
-    zassert_equal(analog_adc_init(&group), -EINVAL);
-    group = test_group;
-    struct adc_dt_spec channel = group.channels[0];
-    channel.channel_cfg.differential = true;
-    group.channels = &channel;
-    group.channel_count = 1;
-    zassert_equal(analog_adc_init(&group), -ENOTSUP);
-    for (unsigned int i = 0; i < ARRAY_SIZE(samples); ++i) { zassert_equal(samples[i], 0); }
-}
-
-ZTEST(adc_application, test_single_analog_group_propagates_read_failure)
-{
-    struct adc_dt_spec channel = test_group.channels[1];
-    channel.resolution = 10;
-    channel.vref_mv = 1800;
-    const struct analog_adc_config config = {
-        .channels = &channel, .channel_count = 1, .average_count = 3,
-    };
-    uint16_t raw;
-    zassert_ok(analog_adc_init(&config));
-    zassert_ok(analog_adc_read(&config, &raw, 1));
-    zassert_equal(raw, 1);
-    fail_channel = channel.channel_id;
-    zassert_equal(analog_adc_read(&config, &raw, 1), -EIO);
-}
 ZTEST_SUITE(adc_application, NULL, NULL, before, NULL, NULL);

@@ -1,7 +1,7 @@
 #include "acquisition/acquisition.h"
 #include "protocol/inc/protocol.h"
 #include "process/points.h"
-#include <analog_io.h>
+#include <zephyr/drivers/adc.h>
 #include <gpio/digital_io.h>
 #include <errno.h>
 #include <zephyr/kernel.h>
@@ -63,11 +63,6 @@ BUILD_ASSERT(DT_PROP(IO_NODE, address_offset) >= 0,
 BUILD_ASSERT(DT_PROP(IO_NODE, address_offset) <= UINT8_MAX - 15,
              "Address offset plus the four-bit selector must fit in uint8_t");
 
-static const struct analog_adc_config analog_inputs = {
-    .channels = analog_channels,
-    .channel_count = ARRAY_SIZE(analog_channels),
-    .average_count = CONFIG_IDU_ADC_AVERAGE_COUNT,
-};
 typedef enum { DIGITAL_INPUTS, ADDRESS_INPUTS, DIGITAL_GROUP_COUNT } digital_group_t;
 static const struct digital_io_config digital_groups[] = {
     [DIGITAL_INPUTS] = {
@@ -87,6 +82,9 @@ int acquisition_inputs_init(void)
     for (size_t i = 0; i < ARRAY_SIZE(analog_channels); ++i) {
         const struct adc_dt_spec *channel = &analog_channels[i];
 
+        if (!adc_is_ready_dt(channel)) {
+            return -ENODEV;
+        }
         if (channel->vref_mv != 3300) {
             return -EINVAL;
         }
@@ -120,9 +118,11 @@ int acquisition_inputs_init(void)
     }
 
     /* 初始化 ADC 输入通道。 */
-    err = analog_adc_init(&analog_inputs);
-    if (err) {
-        return err;
+    for (size_t i = 0; i < ARRAY_SIZE(analog_channels); ++i) {
+        err = adc_channel_setup_dt(&analog_channels[i]);
+        if (err) {
+            return err;
+        }
     }
 
     return 0;
@@ -137,14 +137,32 @@ int acquisition_inputs_sample(struct acquisition_sample *sample)
         int err = digital_io_read(&digital_groups[i], &digital[i]);
         if (err) { return err; }
     }
-    int err = analog_adc_read(&analog_inputs, sample->raw, ARRAY_SIZE(sample->raw));
+    for (size_t i = 0; i < ARRAY_SIZE(analog_channels); ++i) {
+        uint16_t raw;
+        uint32_t sum = 0;
+        struct adc_sequence sequence = {
+            .buffer = &raw,
+            .buffer_size = sizeof(raw),
+        };
 
-    if (!err) {
-        sample->di = digital[DIGITAL_INPUTS];
-        sample->address = digital[ADDRESS_INPUTS] + DT_PROP(IO_NODE, address_offset);
+        int err = adc_sequence_init_dt(&analog_channels[i], &sequence);
+        if (err) {
+            return err;
+        }
+        for (uint32_t n = 0; n < CONFIG_IDU_ADC_AVERAGE_COUNT; ++n) {
+            err = adc_read_dt(&analog_channels[i], &sequence);
+            if (err) {
+                return err;
+            }
+            sum += raw;
+        }
+        sample->raw[i] = sum / CONFIG_IDU_ADC_AVERAGE_COUNT;
     }
-    sample->valid = !err;
-    return err;
+
+    sample->di = digital[DIGITAL_INPUTS];
+    sample->address = digital[ADDRESS_INPUTS] + DT_PROP(IO_NODE, address_offset);
+    sample->valid = true;
+    return 0;
 }
 
 int acquisition_cycle(void)
