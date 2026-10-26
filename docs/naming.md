@@ -46,14 +46,14 @@
 
 应用直接调用 `adc_channel_setup_dt()` 配置 ADC 通道，通过 `adc_sequence_init_dt()`
 与 `adc_read_dt()` 读取样本并按产品要求做软件平均，不单设模拟量包装模块。
-数字输入归 `gpio`，由应用直接组合读取，不再保留中间的组合采样模块。
+数字输入由应用直接使用 Zephyr GPIO API 配置和读取，不保留 GPIO 包装模块。
 DAC 尚未使用，后续有硬件需求时优先使用 Zephyr 标准接口。
 
 应用 `acquisition/acquisition.c` 从设备树组装配置并校验现有换算的电气条件。
 八路 ADC、十六路 DI、四位拨码以及拨码加地址偏移的解释均属于应用。
 工程换算和测点映射留在 `process`，协议与通信端口装配留在 `protocol`。
 
-`dp_*`、`co_*`、`tr_*`、`iap_*`、`digital_io_*`、`watchdog_*`
+`dp_*`、`co_*`、`tr_*`、`iap_*`、`watchdog_*`
 保留各自模块的命名空间。新的调用方直接使用职责接口。
 
 ## 兼容范围

@@ -14,4 +14,4 @@ timeout 30s build/IDU-pre/tests/adc/zephyr/zephyr.exe
 `application.c` 使用 Zephyr ADC/GPIO emulator 执行应用配置中的 `acquisition_inputs_sample()`，
 验证通道顺序、每通道 10 次整数平均、DI/拨码位序及采样错误传播；
 ADC 驱动参数和缓冲区边界由驱动测试覆盖，应用测试验证直接读取与平均。
-产品组合采样由 `acquisition.c` 直接实现，验证 DI 与地址位序和 ADC 失败后的无效样本。
+产品直接使用 Zephyr ADC/GPIO API，组合采样由 `acquisition.c` 实现，验证 DI 与地址位序和 ADC 失败后的无效样本。

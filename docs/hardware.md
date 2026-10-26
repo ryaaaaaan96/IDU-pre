@@ -118,7 +118,7 @@ PD8 为最高位。寄存器 DI bit0 对应 DI1，bit15 对应 DI16。
 - 本地采样通过 DP 模块的 `dp_submit_sig_value()` / `dp_submit_sig_values()` 设置，
   IDU 只负责采样字段到信号的映射，整份快照一次批量提交。成功表示已入队；
   需要等待时使用返回的 ticket 调用 `dp_wait_processed()`，再读取质量与错误。
-  `app/acquisition/acquisition.c` 直接调用 Zephyr ADC API 与 `modules/gpio`，
+  `app/acquisition/acquisition.c` 直接调用 Zephyr ADC 与 GPIO API，
   应用入口 `acquisition_inputs_sample()` 返回原始样本并解释拨码地址，映射由 `app/process/points.c` 完成；
   引脚、通道和时序来自 DTS，平均数来自应用 Kconfig，模块不绑定产品节点或测点。
 - LED 由 `app/status/status.c` 直接调用 Zephyr `gpio-leds` 驱动，状态与显示策略归

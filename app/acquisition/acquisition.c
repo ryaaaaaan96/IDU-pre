@@ -2,7 +2,7 @@
 #include "protocol/inc/protocol.h"
 #include "process/points.h"
 #include <zephyr/drivers/adc.h>
-#include <gpio/digital_io.h>
+#include <zephyr/drivers/gpio.h>
 #include <errno.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
@@ -63,19 +63,6 @@ BUILD_ASSERT(DT_PROP(IO_NODE, address_offset) >= 0,
 BUILD_ASSERT(DT_PROP(IO_NODE, address_offset) <= UINT8_MAX - 15,
              "Address offset plus the four-bit selector must fit in uint8_t");
 
-typedef enum { DIGITAL_INPUTS, ADDRESS_INPUTS, DIGITAL_GROUP_COUNT } digital_group_t;
-static const struct digital_io_config digital_groups[] = {
-    [DIGITAL_INPUTS] = {
-        .pins = digital_pins,
-        .count = ARRAY_SIZE(digital_pins),
-        .order = DT_ENUM_IDX(IO_NODE, di_bit_order),
-    },
-    [ADDRESS_INPUTS] = {
-        .pins = address_pins,
-        .count = ARRAY_SIZE(address_pins),
-        .order = DT_ENUM_IDX(IO_NODE, address_bit_order),
-    },
-};
 int acquisition_inputs_init(void)
 {
     /* 校验电流换算所要求的 ADC 电气参数。 */
@@ -106,20 +93,30 @@ int acquisition_inputs_init(void)
     }
 
     /* 初始化 DI 输入。 */
-    int err = digital_io_init(&digital_groups[DIGITAL_INPUTS]);
-    if (err) {
-        return err;
+    for (size_t i = 0; i < ARRAY_SIZE(digital_pins); ++i) {
+        if (!gpio_is_ready_dt(&digital_pins[i])) {
+            return -ENODEV;
+        }
+        int err = gpio_pin_configure_dt(&digital_pins[i], GPIO_INPUT);
+        if (err) {
+            return err;
+        }
     }
 
     /* 初始化拨码地址输入。 */
-    err = digital_io_init(&digital_groups[ADDRESS_INPUTS]);
-    if (err) {
-        return err;
+    for (size_t i = 0; i < ARRAY_SIZE(address_pins); ++i) {
+        if (!gpio_is_ready_dt(&address_pins[i])) {
+            return -ENODEV;
+        }
+        int err = gpio_pin_configure_dt(&address_pins[i], GPIO_INPUT);
+        if (err) {
+            return err;
+        }
     }
 
     /* 初始化 ADC 输入通道。 */
     for (size_t i = 0; i < ARRAY_SIZE(analog_channels); ++i) {
-        err = adc_channel_setup_dt(&analog_channels[i]);
+        int err = adc_channel_setup_dt(&analog_channels[i]);
         if (err) {
             return err;
         }
@@ -132,11 +129,30 @@ int acquisition_inputs_sample(struct acquisition_sample *sample)
 {
     if (!sample) { return -EINVAL; }
     *sample = (struct acquisition_sample){0};
-    uint32_t digital[DIGITAL_GROUP_COUNT] = {0};
-    for (size_t i = 0; i < ARRAY_SIZE(digital_groups); ++i) {
-        int err = digital_io_read(&digital_groups[i], &digital[i]);
-        if (err) { return err; }
+    uint16_t digital = 0;
+    uint8_t address = 0;
+
+    /* 绑定中的 lsb-first 枚举值为 0，msb-first 为 1。 */
+    for (size_t i = 0; i < ARRAY_SIZE(digital_pins); ++i) {
+        int value = gpio_pin_get_dt(&digital_pins[i]);
+        if (value < 0) {
+            return value;
+        }
+        size_t bit = DT_ENUM_IDX(IO_NODE, di_bit_order) == 0
+                   ? i : ARRAY_SIZE(digital_pins) - 1 - i;
+        digital |= (uint16_t)((uint32_t)value << bit);
     }
+
+    for (size_t i = 0; i < ARRAY_SIZE(address_pins); ++i) {
+        int value = gpio_pin_get_dt(&address_pins[i]);
+        if (value < 0) {
+            return value;
+        }
+        size_t bit = DT_ENUM_IDX(IO_NODE, address_bit_order) == 0
+                   ? i : ARRAY_SIZE(address_pins) - 1 - i;
+        address |= (uint8_t)((uint32_t)value << bit);
+    }
+
     for (size_t i = 0; i < ARRAY_SIZE(analog_channels); ++i) {
         uint16_t raw;
         uint32_t sum = 0;
@@ -159,8 +175,8 @@ int acquisition_inputs_sample(struct acquisition_sample *sample)
         sample->raw[i] = sum / CONFIG_IDU_ADC_AVERAGE_COUNT;
     }
 
-    sample->di = digital[DIGITAL_INPUTS];
-    sample->address = digital[ADDRESS_INPUTS] + DT_PROP(IO_NODE, address_offset);
+    sample->di = digital;
+    sample->address = address + DT_PROP(IO_NODE, address_offset);
     sample->valid = true;
     return 0;
 }

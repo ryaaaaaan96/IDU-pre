@@ -59,4 +59,27 @@ ZTEST(adc_application, test_unified_sampling_preserves_digital_and_address_bit_o
     zassert_equal(acquisition_inputs_sample(NULL), -EINVAL);
 }
 
+ZTEST(adc_application, test_each_digital_input_and_address_switch_maps_to_its_bit)
+{
+    const struct device *gpio = DEVICE_DT_GET(DT_NODELABEL(gpio0));
+    struct acquisition_sample sample;
+    const uint32_t di_mask = BIT_MASK(17) & ~BIT(0);
+    const uint32_t address_mask = BIT_MASK(21) & ~BIT_MASK(17);
+
+    for (size_t i = 0; i < 16; ++i) {
+        zassert_ok(gpio_emul_input_set_masked(gpio, di_mask, di_mask & ~BIT(i + 1)));
+        zassert_ok(acquisition_inputs_sample(&sample));
+        zassert_true(sample.valid);
+        zassert_equal(sample.di, BIT(i));
+    }
+    zassert_ok(gpio_emul_input_set_masked(gpio, di_mask, di_mask));
+    for (size_t i = 0; i < 4; ++i) {
+        zassert_ok(gpio_emul_input_set_masked(gpio, address_mask,
+                                            address_mask & ~BIT(i + 17)));
+        zassert_ok(acquisition_inputs_sample(&sample));
+        zassert_true(sample.valid);
+        zassert_equal(sample.di, 0);
+        zassert_equal(sample.address, BIT(3 - i) + 1);
+    }
+}
 ZTEST_SUITE(adc_application, NULL, NULL, before, NULL, NULL);

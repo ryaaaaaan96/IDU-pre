@@ -395,7 +395,7 @@ Kconfig 配置。保留原线协议、结果日志内容、试运行请求及应
 ## LED、状态与统一输入模块验证（2026-10-20）
 
 GPIO 输入与 IDU 采样实现合并到 `modules/io_input`，通用 GPIO 和 IDU 采样配置
-分别通过 `DIGITAL_IO`、`IDU_INPUTS` 启用。LED 使用标准 Zephyr LED 驱动及
+历史输入包装开关已删除，当前应用直接启用 Zephyr `GPIO`、`ADC`。LED 使用标准 Zephyr LED 驱动及
 `modules/led_indicator`；业务阶段、故障锁定、LED 策略和健康进度归 `app/status/`。
 当前为启动/故障常亮、每个正常采集周期翻转一次，尚未配置故障闪烁编码。
 

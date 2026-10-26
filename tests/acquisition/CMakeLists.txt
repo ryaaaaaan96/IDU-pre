@@ -5,7 +5,7 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(idu_acquisition_tests)
 # 按公共契约编译产品编排代码，服务由测试模拟。
 target_include_directories(app PRIVATE ../../app ../../modules/iap/include
-  ../../modules/gpio/include ../../modules/watchdog/include ../../modules/transmit/include
+  ../../modules/watchdog/include ../../modules/transmit/include
   ../../modules/dataprocess/include ../../modules/collect/include ../../modules/vport/include)
 target_sources(app PRIVATE src/main.c ../../app/main.c
   ../../app/status/status.c

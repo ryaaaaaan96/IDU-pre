@@ -1,3 +1,0 @@
-config DIGITAL_IO
-    bool "Configured GPIO input groups"
-    depends on GPIO

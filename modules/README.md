@@ -24,7 +24,6 @@ compatibility.
 
 | Module | Public headers | Responsibility |
 | --- | --- | --- |
-| `gpio` | `gpio/digital_io.h` | Configured digital input groups |
 | `watchdog` | `watchdog/watchdog.h` | Periodic GPIO feeding and terminal stop for external watchdogs |
 | [`vport`](vport/README.md) | `vport/vport.h` | Generic complete-message callbacks, ownership isolation and per-port send serialization |
 | [`modbus`](modbus/README.md) | `modbus_support/{rtu,transport}.h` | Allocation-free RTU conversion, shared serial access and reviewed Zephyr compatibility; optional forwarding hooks |
@@ -85,8 +84,8 @@ Register-to-signal mappings belong
 to the tables. Protocol windows and command bindings
 live in [`app/protocol/`](../app/protocol); execution belongs to `transmit`, while
 application options live in [`app/Kconfig`](../app/Kconfig). Business callbacks
-remain in `app/process/`; product input bindings are in the optional `gpio` profile
-and protocol adaptation in `transmit`. `dataprocess` has no
+remain in `app/process/`; product input bindings and direct Zephyr GPIO reads live
+in `app/acquisition/acquisition.c`, and protocol adaptation lives in `transmit`. `dataprocess` has no
 Modbus or collector dependency. `collect` and `transmit` depend on its data contracts;
 downstream forwarding is optional when `collect` is absent.
 
@@ -193,24 +192,16 @@ The model simulator only supplies configured defaults; it is not a UPP transport
 
 ## Input and watchdog services
 
-Input/health modules use `DIGITAL_IO` and `WATCHDOG_MONITOR` (require GPIO). `gpio` contains the generic
-`digital_io_*` APIs. The application combines digital and analog reads directly. Generic GPIO use does not require an ADC
-or a product devicetree node.
-None of these services depend on point tables, Modbus or DP, or allocate heap memory.
-Each input group uses a caller-owned immutable configuration; each watchdog owns
-its timer and state. Physical device/channel configuration must be serialized by
-the caller when several groups share hardware.
+The application configures and reads ADC and GPIO using Zephyr APIs directly.
+It combines named digital and analog inputs, interprets bit order and address switches,
+and treats failed reads as invalid samples. Pins are read sequentially, not simultaneously.
+The watchdog remains an independent GPIO-based service.
 
 The external watchdog service uses `WATCHDOG_MONITOR` to avoid conflicting with
 Zephyr's existing `WATCHDOG` driver option.
 
 The application calls Zephyr ADC channel setup and read APIs directly and applies
 its configured averaging count. There is no separate analog wrapper module.
-
-`digital_io_init()` configures 1..32 inputs; `digital_io_read()` returns logical
-active bits in LSB-first or MSB-first order, leaving the caller's result unchanged
-on failure. Pins are sampled sequentially. The implementation now lives in
-`gpio`, retaining its existing public GPIO API.
 
 `watchdog_init()` starts periodic feeding on a configured on-chip GPIO using a
 kernel timer. GPIO toggles must be nonblocking and ISR-safe. `watchdog_error()`
