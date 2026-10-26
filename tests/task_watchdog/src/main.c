@@ -47,6 +47,7 @@ static void *setup(void)
     const struct status_task_config config = {.name = "early", .timeout_ms = 100};
     zassert_equal(status_register(&extra, &config), -EACCES);
     zassert_ok(status_init());
+    status_set_phase(STATUS_RUN);
     return NULL;
 }
 ZTEST(task_watchdog, test_registration_and_independent_heartbeats)
@@ -134,7 +135,7 @@ ZTEST(task_watchdog, test_explicit_hold_keeps_feed_without_task_fault)
 {
     const struct status_task_config config = {.name = "first", .timeout_ms = 2000};
     zassert_ok(status_register(&first, &config));
-    (void)status_report_fault(STATUS_INIT, -EIO, "Input initialization failed", STATUS_HOLD);
+    (void)status_report_fault(STATUS_INIT, -EIO, "Input initialization failed", STATUS_ACTION_HOLD);
     atomic_val_t before = atomic_get(&edges);
     k_sleep(K_MSEC(40));
     zassert_true(atomic_get(&edges) > before);

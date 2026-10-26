@@ -4,8 +4,8 @@
 
 ```c
 status_report_fault(STATUS_INIT, err, "Input initialization failed",
-                    STATUS_HOLD);
-status_report_fault(STATUS_RUNTIME, err, "Watchdog feed output failed", STATUS_RESET);
+                    STATUS_ACTION_HOLD);
+status_report_fault(STATUS_RUNTIME, err, "Watchdog feed output failed", STATUS_ACTION_RESET);
 ```
 
 `STATUS_INIT` / `STATUS_RUNTIME` 表示故障发生于初始化或运行阶段，与采样、发布等细分
@@ -13,18 +13,18 @@ status_report_fault(STATUS_RUNTIME, err, "Watchdog feed output failed", STATUS_R
 描述使用英文，必须是字符串常量或始终有效的常驻字符串，函数保存指针，不复制或动态格式化。
 `status` 不比较描述字符串、不维护故障来源枚举或动作映射表，直接执行调用方的最终动作。
 
-动作直接在 C 调用点使用 `enum status_action` 的枚举值：
+动作直接在 C 调用点使用 `status_action_t` 的枚举值：
 
-- `STATUS_CONTINUE`：记录后继续，仅运行期可用。
-- `STATUS_HOLD`：停止业务并留驻。
-- `STATUS_RESET`：请求复位。
+- `STATUS_ACTION_CONTINUE`：记录后继续，仅运行期可用。
+- `STATUS_ACTION_HOLD`：停止业务并留驻。
+- `STATUS_ACTION_RESET`：请求复位。
 
-启动初始化失败明确使用 `STATUS_HOLD`，停止业务并保留故障现场，避免固定故障循环重启。
-运行期故障继续使用 `STATUS_RESET`；需要改变某处策略时直接修改该处枚举。
+启动初始化失败明确使用 `STATUS_ACTION_HOLD`，停止业务并保留故障现场，避免固定故障循环重启。
+运行期故障继续使用 `STATUS_ACTION_RESET`；需要改变某处策略时直接修改该处枚举。
 看门狗初始化成功后，启动故障留驻仍持续喂狗；看门狗自身初始化失败时不再检查未初始化实例，
 也不请求软件复位，但无法保证外部硬件看门狗不会复位。
 不通过 Kconfig 数字配置动作。`APP_DEBUG_SKIP_WATCHDOG` 只关闭看门狗，
-不改变故障动作。初始化阶段传入 `STATUS_CONTINUE` 返回 `-EINVAL`。
+不改变故障动作。初始化阶段传入 `STATUS_ACTION_CONTINUE` 返回 `-EINVAL`。
 
 首个故障的描述、阶段、错误和时间保留到复位，不被后续故障覆盖。快照另存当前终止
 描述和动作；重复的相同终止动作不覆盖它，任何显式复位请求均可将留驻升级为复位。
@@ -54,7 +54,7 @@ status_report_fault(STATUS_RUNTIME, err, "Watchdog feed output failed", STATUS_R
 例如让某处运行期故障留驻，直接写：
 
 ```c
-status_report_fault(STATUS_RUNTIME, err, "Sample publication failed", STATUS_HOLD);
+status_report_fault(STATUS_RUNTIME, err, "Sample publication failed", STATUS_ACTION_HOLD);
 ```
 
 新增故障时，在调用点给出初始化／运行阶段、错误码、英文常驻描述和枚举动作，

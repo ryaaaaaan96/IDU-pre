@@ -23,7 +23,7 @@ static const struct watchdog_config watchdog = {
 static struct watchdog monitor;
 static struct k_spinlock lock;
 static struct {
-    enum status_phase phase;
+    status_phase_t phase;
     struct status_application_fault fault;
     struct status_degradation degradation;
     struct status_task *active;
@@ -43,10 +43,10 @@ static K_WORK_DELAYABLE_DEFINE(indicator, indicate);
 /* 复位属于硬件接口；测试适配实现允许调用返回。 */
 __weak void status_request_reboot(void) { sys_reboot(SYS_REBOOT_COLD); }
 
-enum status_phase status_phase_get(void)
+status_phase_t status_phase_get(void)
 {
     k_spinlock_key_t key = k_spin_lock(&lock);
-    enum status_phase phase = application.phase;
+    status_phase_t phase = application.phase;
     k_spin_unlock(&lock, key);
     return phase;
 }
@@ -80,12 +80,12 @@ int status_application_fault_get(struct status_application_fault *snapshot)
     return err;
 }
 
-int status_report_fault(enum status_fault_phase phase, int error,
-                        const char *description, enum status_action action)
+int status_report_fault(status_fault_phase_t phase, int error,
+                        const char *description, status_action_t action)
 {
     if ((phase != STATUS_INIT && phase != STATUS_RUNTIME) || !error ||
-        !description || !description[0] || (unsigned int)action > STATUS_RESET ||
-        (phase == STATUS_INIT && action == STATUS_CONTINUE)) {
+        !description || !description[0] || (unsigned int)action > STATUS_ACTION_RESET ||
+        (phase == STATUS_INIT && action == STATUS_ACTION_CONTINUE)) {
         return -EINVAL;
     }
     k_spinlock_key_t key = k_spin_lock(&lock);
@@ -114,22 +114,22 @@ int status_report_fault(enum status_fault_phase phase, int error,
 #ifdef CONFIG_IDU_IAPV3
         iap_stop();
 #endif
-        if (!IS_ENABLED(CONFIG_APP_DEBUG_SKIP_WATCHDOG) && action == STATUS_RESET) {
+        if (!IS_ENABLED(CONFIG_APP_DEBUG_SKIP_WATCHDOG) && action == STATUS_ACTION_RESET) {
             watchdog_stop(&monitor);
         }
         k_work_reschedule(&indicator, K_NO_WAIT);
-        if (action == STATUS_RESET) { status_request_reboot(); }
+        if (action == STATUS_ACTION_RESET) { status_request_reboot(); }
     }
-    if (action != STATUS_CONTINUE) { return error; }
+    if (action != STATUS_ACTION_CONTINUE) { return error; }
     return 0;
 }
 
 static void task_expired(void)
 {
-    enum status_fault_phase phase = STATUS_RUNTIME;
+    status_fault_phase_t phase = STATUS_RUNTIME;
     if (status_phase_get() == STATUS_STARTING) { phase = STATUS_INIT; }
     (void)status_report_fault(phase, -ETIMEDOUT, "Task heartbeat timed out",
-                              phase == STATUS_INIT ? STATUS_HOLD : STATUS_RESET);
+                              phase == STATUS_INIT ? STATUS_ACTION_HOLD : STATUS_ACTION_RESET);
 }
 
 /* 调用方持有锁。
@@ -283,9 +283,9 @@ int status_sleep_forever(struct status_task *task)
 static void indicate(struct k_work *work)
 {
     ARG_UNUSED(work);
-    enum status_phase phase = status_phase_get();
+    status_phase_t phase = status_phase_get();
     if (phase == STATUS_UNCONFIGURED) { return; }
-    enum status_fault_phase fault_phase = STATUS_RUNTIME;
+    status_fault_phase_t fault_phase = STATUS_RUNTIME;
     if (phase == STATUS_STARTING) { fault_phase = STATUS_INIT; }
     if (indicator_ready) {
         int err = 0;
@@ -299,19 +299,19 @@ static void indicate(struct k_work *work)
         } else { err = gpio_pin_set_dt(&run_led, 1); }
         if (err && phase != STATUS_FAULT_LOCKED) {
             (void)status_report_fault(fault_phase, err, "Indicator output failed",
-                                      fault_phase == STATUS_INIT ? STATUS_HOLD : STATUS_RESET);
+                                      fault_phase == STATUS_INIT ? STATUS_ACTION_HOLD : STATUS_ACTION_RESET);
         }
     }
     /* 一次读取故障阶段和动作；main 停止后，留驻仍需检查外部喂狗。 */
     k_spinlock_key_t key = k_spin_lock(&lock);
     bool force_on = indicator_ready && phase != STATUS_FAULT_LOCKED &&
                     application.phase == STATUS_FAULT_LOCKED;
-    bool check_watchdog = application.fault.action != STATUS_RESET;
+    bool check_watchdog = application.fault.action != STATUS_ACTION_RESET;
     k_spin_unlock(&lock, key);
     if (force_on) { (void)gpio_pin_set_dt(&run_led, 1); }
     if (watchdog_ready && check_watchdog) {
         int err = watchdog_error(&monitor);
-        if (err) { (void)status_report_fault(fault_phase, err, "Watchdog feed output failed", STATUS_RESET); }
+        if (err) { (void)status_report_fault(fault_phase, err, "Watchdog feed output failed", STATUS_ACTION_RESET); }
     }
     k_work_reschedule(&indicator, K_MSEC(STATUS_LED_HALF_PERIOD_MS));
 }
@@ -327,23 +327,23 @@ int status_init(void)
     int err = 0;
     if (!IS_ENABLED(CONFIG_APP_DEBUG_SKIP_WATCHDOG)) {
         err = watchdog_init(&monitor, &watchdog);
-        if (err) { return status_report_fault(STATUS_INIT, err, "Watchdog initialization failed", STATUS_HOLD); }
+        if (err) { return status_report_fault(STATUS_INIT, err, "Watchdog initialization failed", STATUS_ACTION_HOLD); }
         watchdog_ready = true;
     }
     if (!gpio_is_ready_dt(&run_led)) {
         return status_report_fault(STATUS_INIT, -ENODEV, "Indicator initialization failed",
-                                   STATUS_HOLD);
+                                   STATUS_ACTION_HOLD);
     }
     err = gpio_pin_configure_dt(&run_led, GPIO_OUTPUT_ACTIVE);
     if (err) {
         return status_report_fault(STATUS_INIT, err, "Indicator initialization failed",
-                                   STATUS_HOLD);
+                                   STATUS_ACTION_HOLD);
     }
     indicator_ready = true;
     return 0;
 }
 
-void status_set_phase(enum status_phase phase)
+void status_set_phase(status_phase_t phase)
 {
     bool start = false;
     k_spinlock_key_t key = k_spin_lock(&lock);
@@ -364,7 +364,7 @@ int status_progress(void)
     if (status_phase_get() != STATUS_CHECKING_HEALTH) { return -EACCES; }
     if (!IS_ENABLED(CONFIG_APP_DEBUG_SKIP_WATCHDOG)) {
         int err = watchdog_error(&monitor);
-        if (err) { return status_report_fault(STATUS_RUNTIME, err, "Watchdog feed output failed", STATUS_RESET); }
+        if (err) { return status_report_fault(STATUS_RUNTIME, err, "Watchdog feed output failed", STATUS_ACTION_RESET); }
     }
 #ifdef CONFIG_BOOTLOADER_MCUBOOT
     const struct device *flash = DEVICE_DT_GET(DT_NODELABEL(external_flash));
@@ -374,7 +374,7 @@ int status_progress(void)
                  !(parameters.flags & DP_PARAM_PENDING);
     int err = image_confirm_checkpoint(&application.image_confirm, k_uptime_get(), ready);
     if (err) { return status_report_fault(STATUS_RUNTIME, err, "Image confirmation failed",
-                                             STATUS_RESET); }
+                                             STATUS_ACTION_RESET); }
 #endif
     return 0;
 }

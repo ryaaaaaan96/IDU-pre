@@ -104,7 +104,7 @@ static DEVICE_API(gpio, gpio_api) = {
 DEVICE_DT_DEFINE(DT_NODELABEL(gpio_test), NULL, NULL, &gpio_data, &gpio_config,
                  POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE, &gpio_api);
 
-static bool terminal_result(enum status_action action)
+static bool terminal_result(status_action_t action)
 {
     struct status_application_fault fault;
     struct dp_point_state point;
@@ -115,7 +115,7 @@ static bool terminal_result(enum status_action action)
 }
 FUNC_NORETURN void __wrap_sys_reboot(int type)
 {
-    bool ok = type == SYS_REBOOT_COLD && terminal_result(STATUS_RESET);
+    bool ok = type == SYS_REBOOT_COLD && terminal_result(STATUS_ACTION_RESET);
     if (!strcmp(scenario, "led-init")) {
         ok = ok && atomic_get(&samples) == 0 && indicator_writes == 0;
     }
@@ -167,7 +167,7 @@ ZTEST(runtime, test_real_main_fault_policy)
     }
     for (int i = 0; i < 300; ++i) {
         if (!strcmp(scenario, "force-reset") && atomic_get(&samples)) {
-            (void)status_report_fault(STATUS_RUNTIME, -EIO, "Explicit reset test", STATUS_RESET);
+            (void)status_report_fault(STATUS_RUNTIME, -EIO, "Explicit reset test", STATUS_ACTION_RESET);
         }
         if (!strcmp(scenario, "maintenance") && atomic_get(&samples) && !maintenance_injected) {
             zassert_ok(modbus_disable(modbus_iface_get_by_name("RAW_1")));
@@ -194,7 +194,7 @@ ZTEST(runtime, test_real_main_fault_policy)
         zassert_ok(dp_read((struct dp_key){DEVICE_LOCAL, SIGNAL_DI}, &point));
         zassert_equal(point.quality, DP_QUALITY_GOOD);
     } else {
-        zassert_true(terminal_result(STATUS_HOLD), "normal RESET must have exited via reboot");
+        zassert_true(terminal_result(STATUS_ACTION_HOLD), "normal RESET must have exited via reboot");
         k_msleep(150); /* 等待当前操作到达可取消的安全位置。 */
         int before = atomic_get(&samples);
         int sent = atomic_get(&transmitted_bytes);

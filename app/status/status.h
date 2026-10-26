@@ -14,7 +14,7 @@
 #define STATUS_LED_HALF_PERIOD_MS 100
 
 /** @brief 整机启动、采样和终止故障阶段。 */
-enum status_phase {
+typedef enum {
     STATUS_UNCONFIGURED, /**< 尚未初始化。 */
     STATUS_STARTING, /**< 正在初始化本地服务。 */
     STATUS_RUN, /**< 初始化完成，可以开始采样周期。 */
@@ -23,19 +23,26 @@ enum status_phase {
     STATUS_SERVICING_COMMUNICATION, /**< 正在维护通信状态。 */
     STATUS_CHECKING_HEALTH, /**< 正在检查健康状态和镜像确认条件。 */
     STATUS_FAULT_LOCKED, /**< 已锁存终止故障，业务不可恢复。 */
-};
+} status_phase_t;
 
 /** @brief 故障发生于初始化或运行阶段，与细分业务阶段独立。 */
-enum status_fault_phase { STATUS_INIT, STATUS_RUNTIME };
+typedef enum {
+    STATUS_INIT,
+    STATUS_RUNTIME,
+} status_fault_phase_t;
 /** @brief 故障动作按处理强度递增，用于判断是否需要升级。 */
-enum status_action { STATUS_CONTINUE = 0, STATUS_HOLD = 1, STATUS_RESET = 2 };
+typedef enum {
+    STATUS_ACTION_CONTINUE = 0,
+    STATUS_ACTION_HOLD = 1,
+    STATUS_ACTION_RESET = 2,
+} status_action_t;
 
 /** @brief 整机首错及终止动作的一致快照。 */
 struct status_application_fault {
     const char *description; /**< 首个故障的常驻描述字符串。 */
     const char *terminal_description; /**< 当前终止故障的常驻描述，无终止故障时为空。 */
-    enum status_fault_phase phase; /**< 首个故障发生于初始化或运行阶段。 */
-    enum status_action action; /**< 当前锁存的终止动作，显式复位请求可将留驻升级。 */
+    status_fault_phase_t phase; /**< 首个故障发生于初始化或运行阶段。 */
+    status_action_t action; /**< 当前锁存的终止动作，显式复位请求可将留驻升级。 */
     int error; /**< 首个故障的错误码。 */
     int64_t occurred_ms; /**< 首个故障发生时的系统运行时间，单位为毫秒。 */
 };
@@ -82,7 +89,7 @@ int status_init(void);
  * @param[in] phase STATUS_RUN 至 STATUS_CHECKING_HEALTH 之间的阶段。
  * @note 未初始化、终止故障已锁存或目标阶段无效时，不修改状态。
  */
-void status_set_phase(enum status_phase phase);
+void status_set_phase(status_phase_t phase);
 
 /**
  * @brief 检查喂狗错误，并推进试运行镜像的健康确认。
@@ -93,7 +100,7 @@ void status_set_phase(enum status_phase phase);
 int status_progress(void);
 
 /** @brief 读取当前阶段，可在线程或 ISR 中调用。 */
-enum status_phase status_phase_get(void);
+status_phase_t status_phase_get(void);
 
 /**
  * @brief 记录首错并执行调用方指定的最终动作。
@@ -108,8 +115,8 @@ enum status_phase status_phase_get(void);
  * @note 可在 ISR 中调用；不按描述字符串选择策略，不隐式转换调试动作。
  * @note 首错不覆盖；终止后不可恢复，显式 RESET 可将 HOLD 升级为复位。
  */
-int status_report_fault(enum status_fault_phase phase, int error,
-                        const char *description, enum status_action action);
+int status_report_fault(status_fault_phase_t phase, int error,
+                        const char *description, status_action_t action);
 
 /** @brief 任务处于活动期限监控状态。 */
 #define STATUS_TASK_ACTIVE UINT32_C(1)

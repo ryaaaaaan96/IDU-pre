@@ -51,7 +51,7 @@ const struct co_port_config protocol_collect_port;
 
 static int service(enum service service)
 {
-    static const enum status_phase phases[SERVICES] = {
+    static const status_phase_t phases[SERVICES] = {
         [WATCHDOG_INIT] = STATUS_STARTING,
         [LED_START] = STATUS_STARTING,
         [INPUTS_INIT] = STATUS_STARTING,
@@ -192,7 +192,7 @@ static int toggle_indicator(const struct device *dev, gpio_port_pins_t pins)
     int err = write_indicator(!indicator_level);
     if (fault_on_toggle) {
         fault_on_toggle = false;
-        (void)status_report_fault(STATUS_RUNTIME, -EIO, "Injected concurrent fault", STATUS_HOLD);
+        (void)status_report_fault(STATUS_RUNTIME, -EIO, "Injected concurrent fault", STATUS_ACTION_HOLD);
     }
     return err;
 }
@@ -316,7 +316,7 @@ static void check_startup_failure(enum service failed)
     }
     zassert_equal(stops, 0);
     zassert_equal(reboots, 0);
-    zassert_equal(fault_snapshot().action, STATUS_HOLD);
+    zassert_equal(fault_snapshot().action, STATUS_ACTION_HOLD);
     zassert_equal(checks, 0);
     zassert_equal(acquisition_cycle(), -EACCES);
     zassert_equal(startup(), -EALREADY);
@@ -507,7 +507,7 @@ ZTEST(acquisition, test_lifecycle_guards)
 {
     zassert_equal(status_phase_get(), STATUS_UNCONFIGURED);
     zassert_equal(status_progress(), -EACCES);
-    zassert_equal(status_report_fault(STATUS_RUNTIME, -EIO, "Input sampling failed", STATUS_RESET), -EACCES);
+    zassert_equal(status_report_fault(STATUS_RUNTIME, -EIO, "Input sampling failed", STATUS_ACTION_RESET), -EACCES);
     zassert_equal(acquisition_cycle(), -EACCES);
     zassert_equal(calls[SAMPLE], 0);
     zassert_ok(startup());
@@ -524,13 +524,13 @@ ZTEST(acquisition, test_lifecycle_guards)
 ZTEST(acquisition, test_fault_arguments_do_not_change_state)
 {
     zassert_ok(startup());
-    zassert_equal(status_report_fault((enum status_fault_phase)-1, -EIO, "Invalid phase", STATUS_RESET), -EINVAL);
-    zassert_equal(status_report_fault(STATUS_RUNTIME, 0, "Invalid error code", STATUS_RESET), -EINVAL);
-    zassert_equal(status_report_fault(STATUS_RUNTIME, -EIO, NULL, STATUS_RESET), -EINVAL);
-    zassert_equal(status_report_fault(STATUS_RUNTIME, -EIO, "", STATUS_RESET), -EINVAL);
-    zassert_equal(status_report_fault(STATUS_RUNTIME, -EIO, "Invalid action", (enum status_action)-1), -EINVAL);
-    zassert_equal(status_report_fault(STATUS_RUNTIME, -EIO, "Invalid action", (enum status_action)3), -EINVAL);
-    zassert_equal(status_report_fault(STATUS_INIT, -EIO, "Initialization cannot continue", STATUS_CONTINUE), -EINVAL);
+    zassert_equal(status_report_fault((status_fault_phase_t)-1, -EIO, "Invalid phase", STATUS_ACTION_RESET), -EINVAL);
+    zassert_equal(status_report_fault(STATUS_RUNTIME, 0, "Invalid error code", STATUS_ACTION_RESET), -EINVAL);
+    zassert_equal(status_report_fault(STATUS_RUNTIME, -EIO, NULL, STATUS_ACTION_RESET), -EINVAL);
+    zassert_equal(status_report_fault(STATUS_RUNTIME, -EIO, "", STATUS_ACTION_RESET), -EINVAL);
+    zassert_equal(status_report_fault(STATUS_RUNTIME, -EIO, "Invalid action", (status_action_t)-1), -EINVAL);
+    zassert_equal(status_report_fault(STATUS_RUNTIME, -EIO, "Invalid action", (status_action_t)3), -EINVAL);
+    zassert_equal(status_report_fault(STATUS_INIT, -EIO, "Initialization cannot continue", STATUS_ACTION_CONTINUE), -EINVAL);
     struct status_application_fault fault;
     zassert_equal(status_application_fault_get(&fault), -ENOENT);
     zassert_equal(status_phase_get(), STATUS_RUN);
@@ -542,40 +542,40 @@ ZTEST(acquisition, test_explicit_fault_actions_preserve_first_error)
 {
     zassert_ok(startup());
     static const char first[] = "Auxiliary output error";
-    zassert_ok(status_report_fault(STATUS_RUNTIME, -EIO, first, STATUS_CONTINUE));
+    zassert_ok(status_report_fault(STATUS_RUNTIME, -EIO, first, STATUS_ACTION_CONTINUE));
     struct status_application_fault fault = fault_snapshot();
     zassert_equal_ptr(fault.description, first);
     zassert_is_null(fault.terminal_description);
-    zassert_equal(fault.action, STATUS_CONTINUE);
+    zassert_equal(fault.action, STATUS_ACTION_CONTINUE);
     zassert_equal(status_phase_get(), STATUS_RUN);
     zassert_false(protocol_halted);
 
-    zassert_equal(status_report_fault(STATUS_RUNTIME, -ETIMEDOUT, "Input unavailable", STATUS_HOLD), -ETIMEDOUT);
+    zassert_equal(status_report_fault(STATUS_RUNTIME, -ETIMEDOUT, "Input unavailable", STATUS_ACTION_HOLD), -ETIMEDOUT);
     fault = fault_snapshot();
     zassert_equal_ptr(fault.description, first);
     zassert_equal(fault.error, -EIO);
     zassert_str_equal(fault.terminal_description, "Input unavailable");
-    zassert_equal(fault.action, STATUS_HOLD);
+    zassert_equal(fault.action, STATUS_ACTION_HOLD);
     zassert_equal(status_phase_get(), STATUS_FAULT_LOCKED);
     zassert_true(protocol_halted);
     zassert_equal(stops, 0);
     zassert_equal(reboots, 0);
 
-    zassert_equal(status_report_fault(STATUS_RUNTIME, -ECANCELED, "Subsequent cancellation", STATUS_HOLD), -ECANCELED);
+    zassert_equal(status_report_fault(STATUS_RUNTIME, -ECANCELED, "Subsequent cancellation", STATUS_ACTION_HOLD), -ECANCELED);
     zassert_str_equal(fault_snapshot().terminal_description, "Input unavailable");
-    zassert_equal(status_report_fault(STATUS_RUNTIME, -EIO, "Reset requested", STATUS_RESET), -EIO);
+    zassert_equal(status_report_fault(STATUS_RUNTIME, -EIO, "Reset requested", STATUS_ACTION_RESET), -EIO);
     fault = fault_snapshot();
     zassert_equal_ptr(fault.description, first);
     zassert_str_equal(fault.terminal_description, "Reset requested");
-    zassert_equal(fault.action, STATUS_RESET);
+    zassert_equal(fault.action, STATUS_ACTION_RESET);
     zassert_equal(stops, 1);
     zassert_equal(reboots, 1);
-    zassert_equal(status_report_fault(STATUS_RUNTIME, -EIO, "Duplicate reset", STATUS_RESET), -EIO);
+    zassert_equal(status_report_fault(STATUS_RUNTIME, -EIO, "Duplicate reset", STATUS_ACTION_RESET), -EIO);
     zassert_equal(reboots, 1);
-    zassert_equal(status_report_fault(STATUS_RUNTIME, -EIO, "Lower action", STATUS_HOLD), -EIO);
-    zassert_ok(status_report_fault(STATUS_RUNTIME, -EIO, "Continue after reset", STATUS_CONTINUE));
+    zassert_equal(status_report_fault(STATUS_RUNTIME, -EIO, "Lower action", STATUS_ACTION_HOLD), -EIO);
+    zassert_ok(status_report_fault(STATUS_RUNTIME, -EIO, "Continue after reset", STATUS_ACTION_CONTINUE));
     zassert_equal(status_phase_get(), STATUS_FAULT_LOCKED);
-    zassert_equal(fault_snapshot().action, STATUS_RESET);
+    zassert_equal(fault_snapshot().action, STATUS_ACTION_RESET);
     zassert_str_equal(fault_snapshot().terminal_description, "Reset requested");
     zassert_equal(reboots, 1);
     zassert_equal(stops, 1);
@@ -588,7 +588,7 @@ ZTEST(acquisition, test_status_retains_original_fault_despite_indicator_failure)
     led_set_error = -ENODEV; /* 故障指示本身失败不能覆盖采样错误。 */
     errors[SAMPLE] = -EIO;
     zassert_equal(acquisition_cycle(), -EIO);
-    (void)status_report_fault(STATUS_RUNTIME, -ETIMEDOUT, "Task heartbeat timed out", STATUS_RESET);
+    (void)status_report_fault(STATUS_RUNTIME, -ETIMEDOUT, "Task heartbeat timed out", STATUS_ACTION_RESET);
     status_set_phase(STATUS_RUN);
     zassert_equal(status_phase_get(), STATUS_FAULT_LOCKED);
     zassert_equal(fault_snapshot().phase, STATUS_RUNTIME);
@@ -611,7 +611,7 @@ ZTEST(acquisition, test_led_tracks_startup_healthy_cycles_and_fault)
     zassert_false(indicator_on);
     k_sleep(K_MSEC(STATUS_LED_HALF_PERIOD_MS));
     zassert_true(indicator_on);
-    (void)status_report_fault(STATUS_RUNTIME, -EIO, "Input sampling failed", STATUS_RESET);
+    (void)status_report_fault(STATUS_RUNTIME, -EIO, "Input sampling failed", STATUS_ACTION_RESET);
     zassert_true(indicator_on);
     k_sleep(K_MSEC(STATUS_LED_HALF_PERIOD_MS));
     zassert_true(indicator_on);
@@ -650,7 +650,7 @@ ZTEST(acquisition, test_late_indicator_skips_edges_and_fault_takes_priority)
     zassert_equal(while_delayed, before);
     zassert_equal(indicator_edges, before + 1); /* 跳过错过的三次边沿，不补放。 */
     zassert_false(indicator_on);
-    (void)status_report_fault(STATUS_RUNTIME, -EIO, "Input sampling failed", STATUS_RESET);
+    (void)status_report_fault(STATUS_RUNTIME, -EIO, "Input sampling failed", STATUS_ACTION_RESET);
     k_msleep(10);
     zassert_true(indicator_on);
     unsigned fault_edges = indicator_edges;
@@ -667,7 +667,7 @@ ZTEST(acquisition, test_fault_during_gpio_toggle_forces_indicator_on)
     zassert_equal(status_phase_get(), STATUS_FAULT_LOCKED);
     zassert_true(indicator_on);
     zassert_str_equal(fault_snapshot().terminal_description, "Injected concurrent fault");
-    zassert_equal(fault_snapshot().action, STATUS_HOLD);
+    zassert_equal(fault_snapshot().action, STATUS_ACTION_HOLD);
     zassert_equal(stops, 0);
 }
 
@@ -701,7 +701,7 @@ ZTEST(acquisition, test_initial_led_output_failure_stops_startup)
     zassert_equal(calls[INPUTS_INIT], 0);
     zassert_equal(stops, 0);
     zassert_equal(reboots, 0);
-    zassert_equal(fault_snapshot().action, STATUS_HOLD);
+    zassert_equal(fault_snapshot().action, STATUS_ACTION_HOLD);
     zassert_equal(fault_snapshot().phase, STATUS_INIT);
 }
 
