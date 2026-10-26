@@ -22,7 +22,7 @@ status_report_fault(STATUS_RUNTIME, err, "Watchdog feed output failed", STATUS_A
 运行期故障继续使用 `STATUS_ACTION_RESET`；需要改变某处策略时直接修改该处枚举。
 看门狗初始化成功后，启动故障留驻仍持续喂狗；看门狗自身初始化失败时不再检查未初始化实例，
 也不请求软件复位，但无法保证外部硬件看门狗不会复位。
-不通过 Kconfig 数字配置动作。`APP_DEBUG_SKIP_WATCHDOG` 只关闭看门狗，
+不通过 Kconfig 数字配置动作。`WATCHDOG_SOFTWARE` / `WATCHDOG_EXTERNAL` 分别控制软件监控与外部喂狗，
 不改变故障动作。初始化阶段传入 `STATUS_ACTION_CONTINUE` 返回 `-EINVAL`。
 
 每次上报都更新描述、阶段、错误、时间和请求动作，并输出日志；快照表示最近一次故障，
@@ -38,7 +38,7 @@ status_report_fault(STATUS_RUNTIME, err, "Watchdog feed output failed", STATUS_A
 重复调用返回 `-EALREADY`，初始化失败后也不重新初始化硬件。业务阶段通过
 `status_set_phase()` / `status_phase_get()` 访问，健康检查使用 `status_progress()`。
 `status_application_fault_get()` 读取一致的最近故障快照；任务详情使用
-`status_fault_get()`。故障记录不跨复位保存，故障路径不写 Flash。
+`watchdog_task_fault_get()`。故障记录不跨复位保存，故障路径不写 Flash。
 
 指示灯使用 GPIO，初始化失败立即返回终止故障。仅配置成功才允许后续引脚访问；
 首次离开 `STATUS_STARTING` 时启动周期工作，运行态按错过周期奇偶翻转，故障强制常亮。
@@ -62,7 +62,7 @@ status_report_fault(STATUS_RUNTIME, err, "Sample publication failed", STATUS_ACT
 验收使用 `bash tests/runtime/run.sh`，采样单场景使用 `tests/acquisition/run.py`；
 测试以独立进程隔离每次启动，不通过清零内部状态模拟重启。完整入口为 `bash tests/run.sh`。
 
-整机状态与外部看门狗保留在 status.c 内，以分段注释分类；任务期限监控位于 task_monitor.c。
+整机状态和看门狗产品编排位于 status.c；软件期限与硬件喂狗实现归 modules/watchdog。
 LED 单独位于 status_led.c/.h，名为 status_led 的延时工作独立更新 GPIO；
 status.c 的后台工作只检查外部喂狗错误。两者均使用系统工作队列，不新增工作线程。
 进入运行时启动 LED 周期工作，故障时提交立即更新请求；初始化失败后不访问 LED 引脚。

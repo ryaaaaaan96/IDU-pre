@@ -1,3 +1,4 @@
+#include <watchdog/task_monitor.h>
 #include "acquisition/acquisition.h"
 #include "protocol/inc/protocol.h"
 #include "protocol/inc/signal_ids.h"
@@ -21,7 +22,7 @@ static const char *expected_description;
 static atomic_t samples, led_edges;
 static bool indicator_on;
 static struct k_thread application_thread;
-static struct status_task monitored;
+static struct watchdog_task monitored;
 int __real_flash_area_open(uint8_t id, const struct flash_area **area);
 int __wrap_flash_area_open(uint8_t id, const struct flash_area **area)
 {
@@ -167,8 +168,8 @@ ZTEST(runtime, test_real_main_fault_policy)
             maintenance_injected = true;
         }
         if (!strcmp(scenario, "task-timeout") && atomic_get(&samples) && !maintenance_injected) {
-            const struct status_task_config config = {.name = "test-task", .timeout_ms = 50};
-            zassert_ok(status_register(&monitored, &config));
+            const struct watchdog_task_config config = {.name = "test-task", .timeout_ms = 50};
+            zassert_ok(watchdog_task_register(&monitored, &config));
             maintenance_injected = true;
         }
         if (!status_application_fault_get(&fault)) { break; }
@@ -200,7 +201,7 @@ ZTEST(runtime, test_real_main_fault_policy)
         }
         zassert_equal(atomic_get(&samples), before);
         zassert_equal(atomic_get(&transmitted_bytes), sent);
-        zassert_equal(edges > 0, !IS_ENABLED(CONFIG_APP_DEBUG_SKIP_WATCHDOG));
+        zassert_equal(edges > 0, IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL));
         if (strcmp(scenario, "led") && strcmp(scenario, "led-init")) { zassert_true(indicator_on); }
     }
     printk("RUNTIME_POLICY_PASS\n");

@@ -1,6 +1,6 @@
 #include "status/inc/status.h"
 #include "status_led.h"
-#include "task_monitor.h"
+#include <watchdog/task_monitor.h>
 #include <watchdog/watchdog.h>
 #ifdef CONFIG_BOOTLOADER_MCUBOOT
 #include <dataprocess/params.h>
@@ -15,12 +15,15 @@
 
 LOG_MODULE_REGISTER(app_status, LOG_LEVEL_INF);
 
-/* ==================== 共享状态与后台工作声明 ==================== */
+/* ==================== 整机状态与后台工作声明 ==================== */
 
 #define WATCHDOG_CHECK_INTERVAL_MS 100
 
 void protocol_stop(void);
-struct status_runtime status_runtime;
+static struct {
+    struct k_spinlock lock;
+    status_phase_t phase;
+} status_runtime;
 static struct {
     struct status_application_fault fault;
     struct status_degradation degradation;
@@ -31,7 +34,18 @@ static struct {
 static void maintain(struct k_work *work);
 static K_WORK_DELAYABLE_DEFINE(maintenance, maintain);
 
-/* ==================== 外部看门狗 ==================== */
+/* ==================== 看门狗配置与故障策略 ==================== */
+
+static void task_timeout_notify(void)
+{
+    /* 保留 ISR 安全的故障门控，不依赖系统工作队列获得调度。 */
+    if (status_phase_get() == STATUS_FAULT_LOCKED) { return; }
+    status_fault_phase_t phase = status_phase_get() == STATUS_STARTING ? STATUS_INIT : STATUS_RUNTIME;
+    (void)status_report_fault(phase, -ETIMEDOUT, "Task heartbeat timed out",
+                              phase == STATUS_INIT ? STATUS_ACTION_HOLD : STATUS_ACTION_RESET);
+}
+
+#ifdef CONFIG_WATCHDOG_EXTERNAL
 
 static const struct watchdog_config watchdog_config = {
     .feed = GPIO_DT_SPEC_GET(DT_NODELABEL(idu_io), watchdog_gpios),
@@ -39,32 +53,34 @@ static const struct watchdog_config watchdog_config = {
 };
 static struct watchdog monitor;
 static bool watchdog_ready;
+#endif
 
 static int status_watchdog_init(void)
 {
-    if (IS_ENABLED(CONFIG_APP_DEBUG_SKIP_WATCHDOG)) {
-        return 0;
-    }
+#ifdef CONFIG_WATCHDOG_EXTERNAL
     int err = watchdog_init(&monitor, &watchdog_config);
     watchdog_ready = !err;
-    return err;
-}
-
-/* 内部接口：任务监控查询同一外部看门狗实例。 */
-int status_watchdog_error(void)
-{
-    return watchdog_error(&monitor);
+    if (err) { return err; }
+#endif
+    if (IS_ENABLED(CONFIG_WATCHDOG_SOFTWARE)) {
+        return watchdog_task_monitor_init(task_timeout_notify);
+    }
+    return 0;
 }
 
 static int status_watchdog_check(status_fault_phase_t phase)
 {
+#ifdef CONFIG_WATCHDOG_EXTERNAL
     if (!watchdog_ready) {
         return 0;
     }
-    int err = status_watchdog_error();
+    int err = watchdog_error(&monitor);
     if (err) {
         return status_report_fault(phase, err, "Watchdog feed output failed", STATUS_ACTION_RESET);
     }
+#else
+    ARG_UNUSED(phase);
+#endif
     return 0;
 }
 
@@ -130,7 +146,7 @@ int status_report_fault(status_fault_phase_t phase, int error,
     application.fault.action = action;
     if (action != STATUS_ACTION_CONTINUE) {
         status_runtime.phase = STATUS_FAULT_LOCKED;
-        task_monitor_stop();
+        watchdog_task_monitor_stop();
     }
     k_spin_unlock(&status_runtime.lock, key);
     LOG_ERR("%s: phase %d error %d action %d", description, phase, error, action);
@@ -146,7 +162,9 @@ int status_report_fault(status_fault_phase_t phase, int error,
         status_led_refresh();
         k_work_reschedule(&maintenance, K_NO_WAIT);
         if (action == STATUS_ACTION_RESET) {
-            if (!IS_ENABLED(CONFIG_APP_DEBUG_SKIP_WATCHDOG)) { watchdog_stop(&monitor); }
+#ifdef CONFIG_WATCHDOG_EXTERNAL
+            watchdog_stop(&monitor);
+#endif
             status_request_reboot();
         }
         return error;

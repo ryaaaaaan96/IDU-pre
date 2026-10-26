@@ -7,8 +7,8 @@
  * 初始化须串行， 错误查询和停止可与定时器并发。 喂狗 GPIO 必须支持 ISR 安全翻转， 应使用片上 GPIO 而非可休眠总线。
  * GPIO 失败及显式停止在设备复位前不可恢复；停止后引脚保持最后电平， 让外部看门狗到期。
  */
-#ifndef WATCHDOG_MONITOR_H
-#define WATCHDOG_MONITOR_H
+#ifndef WATCHDOG_GPIO_H
+#define WATCHDOG_GPIO_H
 
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/kernel.h>

@@ -79,5 +79,5 @@ ADC 每行配置 spec、device_id 和 signal_id；DI 位图整体配置目标 de
 ## status 目录边界
 
 唯一对外头文件放在 `app/status/inc/status.h`，业务通过 `status/inc/status.h` 引用。
-全部 `.c` 放在 status 根目录；根目录的 status_led.h、task_monitor.h、image_confirm.h 为内部接口，
+全部 `.c` 放在 status 根目录；根目录的 status_led.h、image_confirm.h 为内部接口，
 普通业务不直接包含，单元测试可显式包含以验证内部组件。

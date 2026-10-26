@@ -42,3 +42,11 @@
 随后用户明确要求将“任务期限监控”段独立为 task_monitor.c/.h，仍位于 status 根目录。
 对外接口保留 inc/status.h，内部头共享运行阶段和锁、停止期限及外狗查询接口，
 维持原来的锁内超时记录/停止计时、锁外故障处理和监控范围。
+
+## 2026-10-26：软件/硬件看门狗归通用模块
+
+按用户确定的新边界，软件期限监控迁入 modules/watchdog/src/task_monitor.c，外部喂狗归 gpio_watchdog.c。
+本决定替代此前“应用内实现并共享 status 锁”的约束。通用模块独立持锁、锁外通知，
+status 仅装配配置和选择整机故障动作；不再通过 status_* 暴露任务接口。
+WATCHDOG_SOFTWARE 与 WATCHDOG_EXTERNAL 独立启用，debug.conf 关闭两项；外部关闭时不初始化 GPIO。
+HOLD 持续喂外狗、RESET 停喂并复位、显式登记和无固定容量等契约保持。

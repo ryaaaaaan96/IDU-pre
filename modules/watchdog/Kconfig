@@ -1,3 +1,12 @@
-config WATCHDOG_MONITOR
-    bool "Periodic external GPIO watchdog"
+config WATCHDOG_SOFTWARE
+    bool "Software task watchdog"
+    help
+      Monitor explicitly registered task heartbeat deadlines independently
+      of the external watchdog. Report timeouts through a caller callback.
+
+config WATCHDOG_EXTERNAL
+    bool "External GPIO watchdog"
     depends on GPIO
+    help
+      Initialize the feed GPIO and periodically toggle it. When disabled,
+      leave the GPIO untouched and do not start the feed timer.

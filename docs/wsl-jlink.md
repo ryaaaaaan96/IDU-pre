@@ -449,8 +449,8 @@ west attach -d build/IDU-pre/mcuboot-iapv3/IDU-pre -r jlink \
 
 常规 `prj.conf` 默认启用看门狗。单步调试时从应用目录执行
 `./scripts/build.sh --extra-conf "$PWD/conf/debug.conf"`，显式设置
-`CONFIG_APP_DEBUG_SKIP_WATCHDOG=y`：应用跳过外部看门狗和任务监控初始化，
-其他复位策略改为停止业务并留驻，便于保留现场。
+`CONFIG_WATCHDOG_SOFTWARE=n` 与 `CONFIG_WATCHDOG_EXTERNAL=n`：应用跳过任务监控和外部喂狗初始化；
+调用点明确请求的 RESET 仍会复位，调试配置不改写故障动作。
 PC13 保持 MCUboot 早期设置的浮空状态，不恢复输出。需重新构建、下载并从
 MCUboot 复位启动后生效；此配置不会主动禁用旧固件已经启用的看门狗。
 调试结束后不带该额外配置重新构建、下载，以恢复看门狗保护。
@@ -468,7 +468,7 @@ MCUboot 早期将 PC13 浮空以禁用外狗，应用 `status_init()` 又恢复�
 3. 若只有 PC13 浮空禁用方式，需另行做可恢复的调试专用停狗机制，明确暂停和恢复顺序，再用于长期断点；当前没有实现，不能直接声称可安全单步任意位置。
 4. 恢复业务验证时启用真实外狗，重新上电/复位后验证采集、转发、IAP 与任务超时复位。
 
-不要把 `CONFIG_WATCHDOG_MONITOR=n` 当作现成解决办法：本产品要求该服务，配置检查会失败。
+旧的 `CONFIG_WATCHDOG_MONITOR` 已移除；当前两个开关独立控制，产品允许关闭。
 也不要为了断点在故障路径长期代喂，或随意写寄存器后让正式固件一直失去外狗保护。
 参见[板级钩子](../boards/idu/idu_pre/board.c)、[任务看门狗](task-watchdog.md)。
 
