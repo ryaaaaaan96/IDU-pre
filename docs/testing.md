@@ -415,7 +415,7 @@ GPIO 输入与 IDU 采样实现合并到 `modules/io_input`，通用 GPIO 和 ID
 日志位于 `build/IDU-pre/status-modules/`。本轮未烧录；软件闪烁由系统工作队列
 调度，需实板验证 LED 极性、工作队列负载下的闪烁和故障/看门狗复位交接。
 
-随后将试运行健康确认改名并移至 `app/status/image_confirm/image_confirm.c`，状态统一由
+随后将试运行健康确认改名并移至 `app/status/image_confirm.c`，状态统一由
 `idu_status` 持有。确认规则不变；移动后单独重跑 11 项采集/status 集成测试与
 3 项镜像确认测试通过，默认及 MCUboot＋IAPv3 再次构建、导出与验签通过。
 原 `tests/boot` 改为 `tests/image_confirm`，完整回归入口已同步更新。

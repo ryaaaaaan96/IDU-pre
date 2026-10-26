@@ -10,9 +10,6 @@
 
 #include <stdint.h>
 
-/** @brief 运行指示灯的标称翻转间隔，单位为毫秒。 */
-#define STATUS_LED_HALF_PERIOD_MS 100
-
 /* 整机状态与故障接口。 */
 
 /** @brief 整机初始化、运行和终止故障状态。 */

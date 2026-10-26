@@ -1,5 +1,5 @@
-#include "status/status_led/status_led.h"
-#include "status/status.h"
+#include "status_led.h"
+#include "status/inc/status.h"
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/kernel.h>
 #include <errno.h>

@@ -1,6 +1,6 @@
 #include "inc/protocol.h"
 #include "tasks.h"
-#include "status/status.h"
+#include "status/inc/status.h"
 #include <collect/collect.h>
 #include <dataprocess/acquisition.h>
 #include <dataprocess/params.h>

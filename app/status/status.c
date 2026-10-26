@@ -1,9 +1,9 @@
-#include "status/status.h"
-#include "status/status_led/status_led.h"
+#include "status/inc/status.h"
+#include "status_led.h"
 #include <watchdog/watchdog.h>
 #ifdef CONFIG_BOOTLOADER_MCUBOOT
 #include <dataprocess/params.h>
-#include "status/image_confirm/image_confirm.h"
+#include "image_confirm.h"
 #endif
 #ifdef CONFIG_IDU_IAPV3
 #include <iap/iap.h>

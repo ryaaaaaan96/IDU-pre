@@ -1,8 +1,11 @@
 /** @file
- * @brief 整机状态指示灯接口，使用系统工作队列更新。
+ * @brief status 内部的指示灯接口，使用系统工作队列更新。
  */
 #ifndef STATUS_LED_H
 #define STATUS_LED_H
+
+/** @brief 指示灯标称翻转间隔，单位为毫秒。 */
+#define STATUS_LED_HALF_PERIOD_MS 100
 
 /** @brief 检查并配置 GPIO，启动期间点亮；失败返回负错误码。 */
 int status_led_init(void);

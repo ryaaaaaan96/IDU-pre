@@ -127,9 +127,9 @@ app/main.c                         启动顺序、采样周期与休眠
 `main.c` 中的 `startup()` 显式组织状态与输入初始化、点表注册、端口和总线
 建立、参数恢复、INIT 和采集启动。启动成功后按周期调用 `acquisition_cycle()`；
 不再设置独立的 startup 文件或设备服务兼容入口。
-`app/status/status.h` 定义业务阶段，启动或采集失败时保留最初故障、停止喂狗，
+`app/status/inc/status.h` 定义业务阶段，启动或采集失败时保留最初故障、停止喂狗，
 并拒绝继续执行。MCUboot 确认条件由 `status` 检查 Flash 和参数事务状态，
-持续健康窗口由 `status/image_confirm/image_confirm.c` 判断。
+持续健康窗口由 `status/image_confirm.c` 判断。
 多任务看门狗由 status 显式登记管理；无活动登记项时持续喂狗，现有任务暂未接入，见[任务看门狗](docs/task-watchdog.md)。
 
 新增功能时，通用机制放进对应模块，产品数据放进 `protocol/`，测点业务放进 `process/`。
@@ -152,7 +152,7 @@ app/main.c                         启动顺序、采样周期与休眠
 `acquisition_cycle()` 直接调用 Zephyr ADC/GPIO API，按配置中的 device_id/signal_id 使用 `dp_set_sig_value()` 同步写入测点。16 路 DI 保持位图，8 路 AI 各自独立；拨码地址暂不采样。
 采样字段到测点的映射由 `process/points.c` 完成，点表定义仍在 `app/protocol/`。
 
-LED 操作放在 `app/status/status_led/status_led.c`，通过 Zephyr GPIO API 和系统工作队列控制：
+LED 操作放在 `app/status/status_led.c`，通过 Zephyr GPIO API 和系统工作队列控制：
 启动和终止故障时常亮，运行时标称亮/灭各 100 ms，由 status 在系统工作队列独立调度，允许普通调度抖动。
 主循环只维护采样周期；LED 不用于证明采样仍在推进。输出失败按[故障策略](docs/fault-policy.md)处理。
 常规构建默认启用看门狗；单步调试显式使用 `./scripts/build.sh --extra-conf "$PWD/conf/debug.conf"`。
@@ -190,8 +190,8 @@ IDU-pre/
 ## 头文件与启动程序边界
 
 应用以 `app/` 为头文件搜索根。采集、状态、处理头
-分别与实现放在 `app/acquisition/`、`app/status/`、`app/process/`；对外配置契约在 `app/protocol/inc/`，内部头文件在 `app/protocol/` 根目录；
-跨功能引用使用 `"status/status.h"` 等路径；采样使用 `<acquisition/acquisition.h>`；IAP 使用 `<iap/iap.h>`、`<iap/sgz.h>`。
+分别归属 `app/acquisition/`、`app/status/`、`app/process/`；status 的唯一对外头文件为 `app/status/inc/status.h`，实现和内部头文件放在 status 根目录；对外协议契约在 `app/protocol/inc/`；
+跨功能引用使用 `"status/inc/status.h"` 等路径；采样使用 `<acquisition/acquisition.h>`；IAP 使用 `<iap/iap.h>`、`<iap/sgz.h>`。
 通用模块继续保留各自的公开 `include/`，由 Zephyr 模块机制导出。
 
 `app/` 根目录只保留 `main.c`、`CMakeLists.txt` 和 `Kconfig`。
@@ -201,8 +201,8 @@ IDU-pre/
 | 接口 | 职责 |
 | --- | --- |
 | `acquisition/acquisition.h` | 产品输入初始化和 DI/AI 测点更新 |
-| `status/status.h` | 业务阶段、故障状态、LED 策略及健康进度 |
-| `status/image_confirm/image_confirm.h` | MCUboot 试运行健康确认 |
+| `status/inc/status.h` | 业务阶段、故障状态、LED 策略及健康进度 |
+| `status/image_confirm.h` | MCUboot 试运行健康确认 |
 | `process/points.h` | 周期参数及测点业务回调 |
 | `protocol/inc/protocol.h` | 点表注册、`protocol_ports_init()` 注册入口及常驻配置声明 |
 | `<transmit/server.h>` | 每端口启动、配置更新及健康维护 |
@@ -222,7 +222,7 @@ IDU-pre/
 回调。目录及依赖边界见[模块说明](modules/README.md#protocol-implementation-layout)。
 
 [`bootloader/`](bootloader/README.md) 保存本板 MCUboot 配置、分区和联合构建设置。
-MCUboot 源码仍使用 West 工作区中的独立仓库；`app/status/image_confirm/image_confirm.c` 负责应用健康确认。
+MCUboot 源码仍使用 West 工作区中的独立仓库；`app/status/image_confirm.c` 负责应用健康确认。
 [`modules/iap/`](modules/iap/README.md) 负责升级接收、解包和验签，分区／内存取自
 设备树，密钥来源、镜像上限和保存策略由 `conf/iapv3.conf` 等 Kconfig 配置提供，
 产品升级开关归 `app/Kconfig`，运行层和通信层直接调用 `iap_*`，不再保留
@@ -290,4 +290,8 @@ DP 提供 `dp_point_parameters_get()` 查询与初始化前的国家差异覆盖
 [IAPv3 / AES / SGZ](docs/build-and-upgrade.md#iapv3) 和[验证](docs/testing.md) 已按主题归档。
 
 `app/status/status.c` 通过分段注释区分外部看门狗、任务期限监控和整机状态/故障处理。
-LED 单独位于 `status/status_led/status_led.c/.h`，其 `status_led` 延时工作运行在系统工作队列中。
+LED 单独位于 `status/status_led.c/.h`，其 `status_led` 延时工作运行在系统工作队列中。
+
+status 目录采用公开接口与内部实现分离的布局：`inc/status.h` 是唯一公开头文件；
+`status.c`、`status_led.c`、`image_confirm.c` 均位于根目录，`status_led.h` 和
+`image_confirm.h` 仅供内部协作。

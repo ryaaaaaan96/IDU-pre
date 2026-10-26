@@ -1,4 +1,4 @@
-#include "status/status.h"
+#include "status/inc/status.h"
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/sys/reboot.h>
 #include <zephyr/ztest.h>

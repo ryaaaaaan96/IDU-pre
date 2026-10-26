@@ -2,7 +2,8 @@
 #include "protocol/inc/protocol.h"
 #include <transmit/forward.h>
 #include "acquisition/acquisition.h"
-#include "status/status.h"
+#include "status/inc/status.h"
+#include "status/status_led.h"
 #include "process/points.h"
 #include <collect/collect.h>
 #include <collect/port.h>
@@ -16,7 +17,7 @@
 #include <zephyr/storage/flash_map.h>
 #include <string.h>
 #include <stdlib.h>
-#include "status/image_confirm/image_confirm.h"
+#include "status/image_confirm.h"
 
 /* main.c 将 startup 保留在应用入口内，不提供公共头文件。 */
 int startup(void);

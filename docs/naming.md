@@ -35,7 +35,7 @@
 `dp_process_timer_start()` 是运行期的定时器操作。这些接口保留启动含义，初始化顺序与执行上下文归属保持原约定。
 
 头文件与职责一致，例如 `acquisition/acquisition.h`、`process/points.h`、
-`status/status.h`、`status/status_led/status_led.h`、`status/image_confirm/image_confirm.h`。
+`status/inc/status.h`、`status/status_led.h`、`status/image_confirm.h`。
 设备、信号、点表及逻辑口分别使用 `DEVICE_*`、`SIGNAL_*`、`TABLE_*`、`PORT_*` 等前缀。
 日志来源使用 `app_main`、`app_protocol`、`app_acquisition`、`image_confirm`。
 
@@ -75,3 +75,9 @@ ADC 每行配置 spec、device_id 和 signal_id；DI 位图整体配置目标 de
 采样后直接同步写 DP，无本地快照消息、堆批次或异步发布。AI 保留平均和电流换算。
 地址测点保留点表默认值，硬件拨码不参与初始化和采样。
 后续替换业务名称时同步修改设备树、绑定和应用引用，不用数字列表索引取配置。
+
+## status 目录边界
+
+唯一对外头文件放在 `app/status/inc/status.h`，业务通过 `status/inc/status.h` 引用。
+全部 `.c` 放在 status 根目录；根目录的 status_led.h、image_confirm.h 为内部接口，
+普通业务不直接包含，单元测试可显式包含以验证内部组件。
