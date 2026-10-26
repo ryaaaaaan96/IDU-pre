@@ -3,14 +3,12 @@ set -euo pipefail
 workspace_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 cd -- "$workspace_dir"
 if [[ -z "${VIRTUAL_ENV:-}" && -f .venv/bin/activate ]]; then source .venv/bin/activate; fi
-for variant in reset hold debug continue bad-uart; do
+for variant in reset debug bad-uart; do
     arguments=()
     cases=()
     policy="$variant"
     case "$variant" in
-        hold) arguments=(-DEXTRA_CONF_FILE=hold.conf);;
         debug) arguments=(-DEXTRA_CONF_FILE=../../conf/debug.conf);;
-        continue) arguments=(-DEXTRA_CONF_FILE=continue.conf); cases=(led led-init);;
         bad-uart) arguments=(-DEXTRA_DTC_OVERLAY_FILE=bad-uart.overlay); policy=reset; cases=(protocol-init);;
     esac
     directory="build/IDU-pre/tests/runtime-$variant"

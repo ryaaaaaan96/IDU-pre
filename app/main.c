@@ -12,24 +12,21 @@ int startup(void)
     int err = status_init();
     if (err) { return err; }
     const char *description = "Input initialization failed";
-    enum status_action action = CONFIG_APP_FAULT_INPUT_INIT_ACTION;
 
     err = acquisition_inputs_init();
 #ifdef CONFIG_IDU_IAPV3
     if (!err) {
         err = iap_init();
         description = "Upgrade service initialization failed";
-        action = CONFIG_APP_FAULT_IAP_INIT_ACTION;
     }
 #endif
     if (!err) {
         err = protocol_init();
         description = "Protocol initialization failed";
-        action = CONFIG_APP_FAULT_PROTOCOL_INIT_ACTION;
     }
     if (err) {
         if (status_phase_get() != STATUS_FAULT_LOCKED) {
-            (void)status_report_fault(STATUS_INIT, err, description, action);
+            (void)status_report_fault(STATUS_INIT, err, description, STATUS_RESET);
         }
         return err;
     }

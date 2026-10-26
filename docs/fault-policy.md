@@ -4,7 +4,7 @@
 
 ```c
 status_report_fault(STATUS_INIT, err, "Input initialization failed",
-                    CONFIG_APP_FAULT_INPUT_INIT_ACTION);
+                    STATUS_RESET);
 status_report_fault(STATUS_RUNTIME, err, "Watchdog feed output failed", STATUS_RESET);
 ```
 
@@ -13,22 +13,15 @@ status_report_fault(STATUS_RUNTIME, err, "Watchdog feed output failed", STATUS_R
 描述使用英文，必须是字符串常量或始终有效的常驻字符串，函数保存指针，不复制或动态格式化。
 `status` 不比较描述字符串、不维护故障来源枚举或动作映射表，直接执行调用方的最终动作。
 
-动作仍在 `app/status/Kconfig` 集中配置，调用方直接传入对应配置值；更改 `.conf` 后
-重新构建生效，不提供运行期 Modbus/Shell 改写或持久保存。
+动作直接在 C 调用点使用 `enum status_action` 的枚举值：
 
-| 配置后缀（前缀 `CONFIG_APP_FAULT_`） | 来源 | 可选值 |
-| --- | --- | --- |
-| `INPUT_INIT_ACTION` / `IAP_INIT_ACTION` / `PROTOCOL_INIT_ACTION` | 必需启动服务 | 1 留驻、2 复位 |
-| `SAMPLE_ACTION` / `PUBLISH_ACTION` | 本地采样、交付 | 1、2 |
-| `PROTOCOL_ACTION` / `IMAGE_CONFIRM_ACTION` | 协议维护、试运行确认 | 1、2 |
-| `TASK_TIMEOUT_ACTION` | 显式登记任务超时 | 1、2 |
-| `LED_ACTION` | 运行期指示灯输出 | 0 记录继续、1、2 |
-| `LED_INIT_ACTION` | 指示灯初始化 | 1、2；默认沿用 LED_ACTION，若为 0 则默认复位 |
+- `STATUS_CONTINUE`：记录后继续，仅运行期可用。
+- `STATUS_HOLD`：停止业务并留驻。
+- `STATUS_RESET`：请求复位。
 
-正常构建的普通动作默认复位；`APP_DEBUG_SKIP_WATCHDOG=y` 时，未显式配置的普通动作
-默认留驻。显式设置复位仍会执行，上报函数不再按调试标志改写最终动作。
-喂狗初始化及输出故障由调用方直接传入 `STATUS_RESET`，不提供可选动作。
-初始化故障禁止继续；直接向接口提交 `STATUS_INIT` 加 `STATUS_CONTINUE` 返回 `-EINVAL`。
+产品当前故障调用点明确使用 `STATUS_RESET`；需要改变某处策略时直接修改该处枚举。
+不通过 Kconfig 数字配置动作。`APP_DEBUG_SKIP_WATCHDOG` 只关闭看门狗，
+不改变故障动作。初始化阶段传入 `STATUS_CONTINUE` 返回 `-EINVAL`。
 
 首个故障的描述、阶段、错误和时间保留到复位，不被后续故障覆盖。快照另存当前终止
 描述和动作；重复的相同终止动作不覆盖它，任何显式复位请求均可将留驻升级为复位。
@@ -55,14 +48,13 @@ status_report_fault(STATUS_RUNTIME, err, "Watchdog feed output failed", STATUS_R
 ./scripts/build.sh --extra-conf "$PWD/conf/debug.conf"
 ```
 
-例如让运行期 LED 故障记录后继续、发布故障留驻，在自定义配置中写：
+例如让某处运行期故障留驻，直接写：
 
-```ini
-CONFIG_APP_FAULT_LED_ACTION=0
-CONFIG_APP_FAULT_PUBLISH_ACTION=1
+```c
+status_report_fault(STATUS_RUNTIME, err, "Sample publication failed", STATUS_HOLD);
 ```
 
-新增故障时，在调用点给出初始化／运行阶段、错误码、英文常驻描述和最终动作；需要
-可配置时在 Kconfig 声明动作及允许范围，按业务有效性决定能否继续，无需增加来源枚举。
+新增故障时，在调用点给出初始化／运行阶段、错误码、英文常驻描述和枚举动作，
+按业务有效性决定能否继续，无需增加来源枚举或 Kconfig 动作配置。
 验收使用 `bash tests/runtime/run.sh`，采样单场景使用 `tests/acquisition/run.py`；
 测试以独立进程隔离每次启动，不通过清零内部状态模拟重启。完整入口为 `bash tests/run.sh`。

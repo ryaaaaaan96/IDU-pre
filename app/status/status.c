@@ -128,7 +128,7 @@ static void task_expired(void)
     enum status_fault_phase phase = STATUS_RUNTIME;
     if (status_phase_get() == STATUS_STARTING) { phase = STATUS_INIT; }
     (void)status_report_fault(phase, -ETIMEDOUT, "Task heartbeat timed out",
-                              CONFIG_APP_FAULT_TASK_TIMEOUT_ACTION);
+                              STATUS_RESET);
 }
 
 /* 调用方持有锁。
@@ -298,7 +298,7 @@ static void indicate(struct k_work *work)
         } else { err = gpio_pin_set_dt(&run_led, 1); }
         if (err && phase != STATUS_FAULT_LOCKED) {
             (void)status_report_fault(fault_phase, err, "Indicator output failed",
-                                      CONFIG_APP_FAULT_LED_ACTION);
+                                      STATUS_RESET);
         }
     }
     /* 一次读取故障阶段和动作；main 停止后，留驻仍需检查外部喂狗。 */
@@ -330,12 +330,12 @@ int status_init(void)
     }
     if (!gpio_is_ready_dt(&run_led)) {
         return status_report_fault(STATUS_INIT, -ENODEV, "Indicator initialization failed",
-                                   CONFIG_APP_FAULT_LED_INIT_ACTION);
+                                   STATUS_RESET);
     }
     err = gpio_pin_configure_dt(&run_led, GPIO_OUTPUT_ACTIVE);
     if (err) {
         return status_report_fault(STATUS_INIT, err, "Indicator initialization failed",
-                                   CONFIG_APP_FAULT_LED_INIT_ACTION);
+                                   STATUS_RESET);
     }
     indicator_ready = true;
     return 0;
@@ -372,7 +372,7 @@ int status_progress(void)
                  !(parameters.flags & DP_PARAM_PENDING);
     int err = image_confirm_checkpoint(&application.image_confirm, k_uptime_get(), ready);
     if (err) { return status_report_fault(STATUS_RUNTIME, err, "Image confirmation failed",
-                                             CONFIG_APP_FAULT_IMAGE_CONFIRM_ACTION); }
+                                             STATUS_RESET); }
 #endif
     return 0;
 }
