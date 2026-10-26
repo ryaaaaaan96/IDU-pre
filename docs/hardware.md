@@ -119,7 +119,7 @@ PD8 为最高位。寄存器 DI bit0 对应 DI1，bit15 对应 DI16。
   配置行将硬件 spec 与 device_id/signal_id 绑定，读取后使用 `dp_set_sig_value()` 同步写点。
   16 路 DI 合成为位图，8 路 AI 各自平均、换算并独立写入；不再提交本地整批快照。
   拨码地址暂不采样，地址测点保持点表默认值。每点独立写入，不保证整轮原子性。
-- LED 由 `app/status/led.c` 直接调用 Zephyr GPIO API，状态与显示策略归
+- LED 由 `app/status/status.c` 的 LED 段 直接调用 Zephyr GPIO API，状态与显示策略归
   `app/status/`；启动和故障常亮，运行时亮/灭各 100 ms，采样周期保持独立。后续按业务需要在 status
   中增加闪烁编码，当前不保留独立 LED 模块或定时闪烁任务。
 - DP 内部通过 zbus 消息副本发布采集批次，处理线程执行点表转换与范围检查，
