@@ -12,7 +12,7 @@ static inline void fixture_start_co(void)
     if (started) { return; }
     started = true;
     for (size_t i = 0; i < ARRAY_SIZE(fixture_buses); ++i) {
-        enum co_port_mode mode;
+        co_port_mode_t mode;
         if (co_get_mode(i, &mode)) { continue; }
         k_thread_create(&fixture_buses[i], fixture_bus_stacks[i],
                         K_THREAD_STACK_SIZEOF(fixture_bus_stacks[i]),

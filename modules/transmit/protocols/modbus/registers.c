@@ -83,7 +83,7 @@ int tr_register_attach(int iface, const void *config)
     /* 所有段表校验通过后才替换现有路由。 */
     int err = validate_protocol_table(service);
     if (err) { return err; }
-    enum tr_port_mode mode;
+    tr_port_mode_t mode;
     err = tr_port_get_mode(iface, &mode);
     if (err) { return err; }
     err = tr_routes_validate(service ? service->routes : NULL);

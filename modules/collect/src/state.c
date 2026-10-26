@@ -179,7 +179,7 @@ static void co_state_complete(uint16_t dev, const struct co_schedule *before,
     int i = index_of(dev);
     if (i < 0) { k_mutex_unlock(&state_lock); return; }
     bool was_offline = devices[i].status.state == CO_DEVICE_OFFLINE;
-    enum co_device_online phase = before->state;
+    co_device_online_t phase = before->state;
     if (outcome.missing && devices[i].replies != before->replies) {
         outcome.missing = false;
         outcome.replied = true;

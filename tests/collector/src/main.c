@@ -103,7 +103,7 @@ static void completed(const struct co_request *request, int error, void *user)
     zassert_ok(k_msgq_put(&completions, &event, K_NO_WAIT));
 }
 
-static int submit(uint32_t id, enum co_port_mode mode, uint8_t priority)
+static int submit(uint32_t id, co_port_mode_t mode, uint8_t priority)
 {
     struct co_request request = {
         .id = id, .dev_id = 1, .priority = priority, .mode = mode,
@@ -130,7 +130,7 @@ static struct transfer_event expect_transfer(uint16_t address, k_timeout_t timeo
     return event;
 }
 
-static void set_mode(enum co_port_mode mode)
+static void set_mode(co_port_mode_t mode)
 {
     int err = -EBUSY;
     for (unsigned i = 0; i < 20 && err == -EBUSY; ++i) {
@@ -305,7 +305,7 @@ ZTEST(collector, test_initialization_owns_bus_and_wakes_restored_mode)
     expect_transfer(300, K_NO_WAIT); /* 仅用于初始化的表条目。 */
     expect_transfer(31, K_NO_WAIT);
     zassert_equal(atomic_get(&init_callbacks), 1); /* 不依赖 NVS。 */
-    enum co_port_mode mode;
+    co_port_mode_t mode;
     zassert_ok(co_get_mode(0, &mode));
     zassert_equal(mode, CO_PORT_UPDATE);
     zassert_ok(co_cancel(0));

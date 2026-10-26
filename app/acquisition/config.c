@@ -27,7 +27,7 @@ static const struct analog_input_config analog_inputs = {
     .channel_count = ARRAY_SIZE(analog_channels),
     .average_count = CONFIG_IDU_ADC_AVERAGE_COUNT,
 };
-enum digital_group { DIGITAL_INPUTS, ADDRESS_INPUTS, DIGITAL_GROUP_COUNT };
+typedef enum { DIGITAL_INPUTS, ADDRESS_INPUTS, DIGITAL_GROUP_COUNT } digital_group_t;
 static const struct digital_io_config digital_groups[] = {
     [DIGITAL_INPUTS] = {
         .pins = digital_pins,

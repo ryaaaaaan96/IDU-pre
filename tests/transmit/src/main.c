@@ -252,7 +252,7 @@ ZTEST(transmit, test_callback_mode_does_not_fall_through_to_writer)
     zassert_equal(tr_port_set_mode(servers[0], TR_MODE_CALLBACK), -ENOENT);
     zassert_ok(tr_port_set_handler(servers[0], TR_MODE_CALLBACK, mode_callback, (void *)&equipment));
     zassert_ok(tr_port_set_mode(servers[0], TR_MODE_CALLBACK));
-    enum tr_port_mode mode;
+    tr_port_mode_t mode;
     zassert_ok(tr_port_get_mode(servers[0], &mode));
     zassert_equal(mode, TR_MODE_CALLBACK);
     zassert_equal(tr_port_set_handler(servers[0], TR_MODE_CALLBACK, NULL, NULL), -EBUSY);
@@ -326,7 +326,7 @@ ZTEST(transmit, test_sleep_allows_admitted_request_to_complete)
 ZTEST(transmit, test_control_validation_and_statistics_clear)
 {
     zassert_equal(tr_port_set_mode(-1, TR_MODE_SLEEP), -EINVAL);
-    zassert_equal(tr_port_set_mode(servers[0], (enum tr_port_mode)99), -EINVAL);
+    zassert_equal(tr_port_set_mode(servers[0], (tr_port_mode_t)99), -EINVAL);
     zassert_equal(tr_port_get_mode(servers[0], NULL), -EINVAL);
     zassert_equal(tr_port_set_handler(servers[0], TR_MODE_SLEEP, mode_callback, NULL), -EINVAL);
     zassert_equal(tr_port_control(servers[0], TR_PORT_GET_STATS, NULL), -EINVAL);

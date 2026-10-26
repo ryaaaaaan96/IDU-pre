@@ -5,7 +5,7 @@
 #include <transmit/modbus.h>
 #include <errno.h>
 
-enum { SIMULATED_DEVICE = 3 };
+typedef enum { SIMULATED_DEVICE = 3 } simulated_device_t;
 static int send(void *user, uint16_t port, const struct vport_source *source,
                  const struct vport_frame *frame, k_timeout_t timeout)
 {

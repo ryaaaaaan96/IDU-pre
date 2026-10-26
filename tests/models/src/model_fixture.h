@@ -8,12 +8,12 @@
  * 展开后生成 Flash 常量表，各实例共用不可变采集字段数组。
  * 下方寄存器号描述南向协议，不描述本地 BSP。
  */
-enum idu_mvio_signal {
+typedef enum {
     IDU_MVIO_DI = 8152,
     IDU_MVIO_CURRENT_1 = 8163,
     IDU_MVIO_PROTOCOL = 8150,
     IDU_MVIO_ADDRESS = 30459,
-};
+} idu_mvio_signal_t;
 
 /* 处理测点定义。 */
 /* 共享 MV-IO 信号定义，每个逻辑设备展开一次。

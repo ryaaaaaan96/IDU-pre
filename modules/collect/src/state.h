@@ -6,7 +6,7 @@
 struct co_outcome { bool replied, missing; };
 struct co_schedule {
     bool managed;
-    enum co_device_online state;
+    co_device_online_t state;
     size_t cursor;
     int64_t due;
     uint8_t retries;

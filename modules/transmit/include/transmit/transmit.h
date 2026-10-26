@@ -9,22 +9,22 @@
 /**
  * @brief 端口控制要求 CONFIG_TR_MODBUS_ADAPTER。
  */
-enum tr_port_mode { TR_MODE_SLAVE, TR_MODE_SLEEP, TR_MODE_CALLBACK };
+typedef enum { TR_MODE_SLAVE, TR_MODE_SLEEP, TR_MODE_CALLBACK } tr_port_mode_t;
 /**
  * @brief 各接口的模式和过滤处理函数接收已准入的完整 ADU。
  *
  * 返回 -ENOENT 继续、0 回复、TR_MODBUS_SILENT 静默接收， 或返回 -errno／正 Modbus 异常码。
  * CALLBACK 模式绝不回退到普通寄存器写入器。登记内容会复制， 用户数据须在使用期间有效。
  */
-int tr_port_set_handler(int iface, enum tr_port_mode mode,
+int tr_port_set_handler(int iface, tr_port_mode_t mode,
                        tr_modbus_route_fn handler, void *user);
-int tr_port_get_mode(int iface, enum tr_port_mode *mode);
+int tr_port_get_mode(int iface, tr_port_mode_t *mode);
 /**
  * @brief 只影响后续请求；进行中的处理函数或 TX 可以完成。
  *
  * SLEEP 禁止新的回调和回复，不中断串口发送。
  */
-int tr_port_set_mode(int iface, enum tr_port_mode mode);
+int tr_port_set_mode(int iface, tr_port_mode_t mode);
 int tr_port_set_filter(int iface, tr_modbus_route_fn handler, void *user);
 int tr_port_enable_filter(int iface, bool enabled);
 struct tr_port_stats {
@@ -34,11 +34,11 @@ struct tr_port_stats {
     uint32_t sleep_drops;    /**< 休眠期间丢弃的有效报文数。 */
     uint32_t callback_errors;
 };
-enum tr_port_control { TR_PORT_GET_STATS, TR_PORT_CLEAR_STATS };
+typedef enum { TR_PORT_GET_STATS, TR_PORT_CLEAR_STATS } tr_port_control_t;
 /**
  * @brief GET 使用 struct tr_port_stats *，CLEAR 使用 NULL；要求启用适配实现。
  */
-int tr_port_control(int iface, enum tr_port_control command, void *arg);
+int tr_port_control(int iface, tr_port_control_t command, void *arg);
 struct tr_connection_status {
     bool enabled, connected;
     int64_t last_activity;

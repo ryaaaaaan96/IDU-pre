@@ -20,27 +20,27 @@ struct dp_key {
     uint16_t sig_id;
 };
 
-enum dp_value_type { DP_U16, DP_S16, DP_U32, DP_S32, DP_WORDS, DP_U8 };
-enum dp_source { DP_SOURCE_CONSTANT, DP_SOURCE_LOCAL, DP_SOURCE_MODBUS,
-                  DP_SOURCE_PARAMETER };
+typedef enum { DP_U16, DP_S16, DP_U32, DP_S32, DP_WORDS, DP_U8 } dp_value_type_t;
+typedef enum { DP_SOURCE_CONSTANT, DP_SOURCE_LOCAL, DP_SOURCE_MODBUS,
+                  DP_SOURCE_PARAMETER } dp_source_t;
 /**
  * @brief 存储中的数值采用低字在前、主机字节序。
  */
-enum dp_word_order { DP_LOW_WORD_FIRST, DP_HIGH_WORD_FIRST,
-                     DP_LOW_WORD_BYTE_SWAP, DP_HIGH_WORD_BYTE_SWAP };
+typedef enum { DP_LOW_WORD_FIRST, DP_HIGH_WORD_FIRST,
+                     DP_LOW_WORD_BYTE_SWAP, DP_HIGH_WORD_BYTE_SWAP } dp_word_order_t;
 static inline uint16_t dp_order_word(const uint16_t *words, size_t width,
-                                     size_t index, enum dp_word_order order)
+                                     size_t index, dp_word_order_t order)
 {
     uint16_t v = words[(order & 1) ? width - 1 - index : index];
     return (order & 2) ? (uint16_t)((v << 8) | (v >> 8)) : v;
 }
-enum dp_quality {
+typedef enum {
     DP_QUALITY_GOOD,
     DP_QUALITY_UNINITIALIZED,
     DP_QUALITY_COMM_ERROR,
     DP_QUALITY_STALE,
     DP_QUALITY_BAD_VALUE,
-};
+} dp_quality_t;
 #define DP_QUALITY_SIMULATED 0x0100U
 
 /**
@@ -66,8 +66,8 @@ typedef int (*dp_process_fn)(const struct dp_point_cfg *cfg,
 
 struct dp_point_cfg {
     struct dp_key key;
-    enum dp_source source;
-    enum dp_value_type type;
+    dp_source_t source;
+    dp_value_type_t type;
     uint8_t width;
     uint32_t stale_ms; /**< 0 表示不限制数据年龄；常量永不过期。 */
     int64_t minimum;
@@ -81,7 +81,7 @@ struct dp_point_cfg {
      */
     uint8_t param_flags;
     uint16_t write_address;
-    enum dp_word_order write_order;
+    dp_word_order_t write_order;
     dp_process_fn prepare_write;
     /**
      * @brief 持久键缺失时使用初始值，或此可选的只读种子存储。
@@ -113,7 +113,7 @@ struct co_field {
     uint16_t sig_id;
     uint8_t offset;
     uint8_t width;
-    enum dp_word_order order;
+    dp_word_order_t order;
 };
 
 /**
@@ -137,14 +137,14 @@ struct co_cfg {
     struct co_field reference_field;
 };
 
-enum dp_map_kind { DP_MAP_VALUE, DP_MAP_QUALITY, DP_MAP_ZERO };
+typedef enum { DP_MAP_VALUE, DP_MAP_QUALITY, DP_MAP_ZERO } dp_map_kind_t;
 struct dp_transmit_cfg {
     uint8_t function;
     uint16_t address;
     uint16_t count;
     struct dp_key key;
-    enum dp_map_kind kind;
-    enum dp_word_order order;
+    dp_map_kind_t kind;
+    dp_word_order_t order;
 };
 
 struct dp_equip_cfg {
@@ -199,7 +199,7 @@ struct dp_point_update {
 struct dp_point_batch {
     int64_t sampled_at;
     uint32_t ticket; /**< 由发布接口赋值，按 FIFO 顺序消费。 */
-    enum dp_source source;
+    dp_source_t source;
     uint16_t flags; /**< 取值为 DP_QUALITY_SIMULATED 或 0。 */
     uint8_t count;
     struct dp_point_update points[DP_BATCH_POINTS];

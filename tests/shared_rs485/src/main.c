@@ -30,7 +30,7 @@ static K_SEM_DEFINE(north_release, 0, 1);
 static bool hold_north_send;
 static struct k_work_delayable respond;
 
-enum { NORMAL, NO_REPLY, WRONG_UNIT, WRONG_FUNCTION, WRONG_LENGTH, BAD_CRC, EXCEPTION, NORTH_REQUEST };
+typedef enum { NORMAL, NO_REPLY, WRONG_UNIT, WRONG_FUNCTION, WRONG_LENGTH, BAD_CRC, EXCEPTION, NORTH_REQUEST } response_scenario_t;
 
 /* 外部从机夹具通过 UART 注入完整帧，不链接产品内置模拟后端。 */
 static void respond_work(struct k_work *work)

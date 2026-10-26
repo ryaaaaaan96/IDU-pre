@@ -245,7 +245,7 @@ out:
 static struct dp_device_cfg devices[CONFIG_DP_MAX_DEVICES];
 static struct dp_equip_cfg compiled;
 
-static int word_order(uint8_t encoded, enum dp_word_order *order)
+static int word_order(uint8_t encoded, dp_word_order_t *order)
 {
     switch (encoded) {
     case BYTE_ORDER_DEFAULT:

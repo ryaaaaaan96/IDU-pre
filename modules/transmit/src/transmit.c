@@ -249,7 +249,7 @@ int tr_dispatch(int iface, const struct modbus_adu *rx,
             if (target + count > 65536) { return -ERANGE; }
             sys_put_be16(target, tx->data);
             const struct dp_equip_cfg *cfg = dp_config();
-            enum co_port_mode mode = CO_PORT_POLL;
+            co_port_mode_t mode = CO_PORT_POLL;
             for (size_t d = 0; cfg && d < cfg->device_count; ++d) {
                 if (cfg->devices[d].dev_id == s->target_dev) {
                     co_get_mode(cfg->devices[d].bus_id, &mode); break;

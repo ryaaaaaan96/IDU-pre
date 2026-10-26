@@ -10,10 +10,10 @@
 /**
  * @brief 内部链路标识，不作为应用公共 API。
  */
-enum communication_port {
+typedef enum {
     PORT_FORWARD = 1, PORT_ACQUISITION = 2,
-};
-enum communication_link {
+} communication_port_t;
+typedef enum {
     LINK_RS485 = 1,
-};
+} communication_link_t;
 #endif

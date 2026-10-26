@@ -7,15 +7,15 @@
 #include <dataprocess/points.h>
 #include <zephyr/modbus/modbus.h>
 #define CO_MAX_REGS DP_TRANSFER_WORDS
-enum co_port_mode { CO_PORT_POLL, CO_PORT_INIT, CO_PORT_UPDATE,
-                     CO_PORT_IV, CO_PORT_FAULT, CO_PORT_PASSTHROUGH, CO_PORT_SLEEP };
-enum co_device_online { CO_DEVICE_UNKNOWN, CO_DEVICE_OFFLINE,
-                         CO_DEVICE_ONLINE, CO_DEVICE_EXCEPTION, CO_DEVICE_INITIALIZING };
+typedef enum { CO_PORT_POLL, CO_PORT_INIT, CO_PORT_UPDATE,
+                     CO_PORT_IV, CO_PORT_FAULT, CO_PORT_PASSTHROUGH, CO_PORT_SLEEP } co_port_mode_t;
+typedef enum { CO_DEVICE_UNKNOWN, CO_DEVICE_OFFLINE,
+                         CO_DEVICE_ONLINE, CO_DEVICE_EXCEPTION, CO_DEVICE_INITIALIZING } co_device_online_t;
 struct co_device_status {
     uint16_t dev_id;
     uint8_t bus_id;
     bool simulated;
-    enum co_device_online state;
+    co_device_online_t state;
     int error;
     uint32_t successes, failures;
     int64_t last_success;
@@ -92,7 +92,7 @@ struct co_request {
     uint32_t id;
     uint16_t dev_id;
     uint8_t priority;
-    enum co_port_mode mode; /**< 仅在端口处于此模式时调度。 */
+    co_port_mode_t mode; /**< 仅在端口处于此模式时调度。 */
     struct modbus_adu adu;
 };
 typedef void (*co_done_fn)(const struct co_request *reply,
@@ -118,8 +118,8 @@ void co_bus_task(void *bus_id, void *unused1, void *unused2);
  * 安装回调前先拒绝无效配置。
  */
 int co_init_bus(const struct dp_equip_cfg *cfg, const struct co_bus_cfg *bus);
-int co_set_mode(uint8_t bus, enum co_port_mode mode);
-int co_get_mode(uint8_t bus, enum co_port_mode *mode);
+int co_set_mode(uint8_t bus, co_port_mode_t mode);
+int co_get_mode(uint8_t bus, co_port_mode_t *mode);
 int co_enable_poll(size_t block, bool enabled);
 int co_device_status(uint16_t dev_id, struct co_device_status *status);
 /**
@@ -135,7 +135,7 @@ int co_initialize_device(uint16_t dev_id);
 int co_submit(const struct co_request *request,
                         co_done_fn done, void *user);
 int co_cancel(uint8_t bus); /**< 排队请求以 -ECANCELED 完成。 */
-int co_transfer_mode(uint16_t dev_id, enum co_port_mode mode, struct modbus_adu *adu);
+int co_transfer_mode(uint16_t dev_id, co_port_mode_t mode, struct modbus_adu *adu);
 /**
  * @brief 普通读写要求处于 POLL 模式，或由当前初始化上下文持有设备。
  */

@@ -22,7 +22,7 @@ struct bus_state {
     struct co_bus_cfg cfg;
     struct k_mutex lock;
     struct k_sem wake;
-    enum co_port_mode mode;
+    co_port_mode_t mode;
     bool ready, running;
     k_tid_t init_owner;
     struct queued_request *queue[CONFIG_CO_QUEUE_DEPTH];
@@ -75,7 +75,7 @@ static struct bus_state *bus_for(uint16_t dev_id)
 }
 
 
-static int exchange(uint16_t dev_id, enum co_port_mode mode, struct modbus_adu *adu,
+static int exchange(uint16_t dev_id, co_port_mode_t mode, struct modbus_adu *adu,
                      struct co_outcome *outcome)
 {
     *outcome = (struct co_outcome){0};
@@ -114,7 +114,7 @@ static int exchange(uint16_t dev_id, enum co_port_mode mode, struct modbus_adu *
     return err;
 }
 
-int co_transfer_mode(uint16_t dev_id, enum co_port_mode mode, struct modbus_adu *adu)
+int co_transfer_mode(uint16_t dev_id, co_port_mode_t mode, struct modbus_adu *adu)
 {
     struct co_outcome outcome;
     int err = exchange(dev_id, mode, adu, &outcome);
@@ -347,7 +347,7 @@ static int collect_group(size_t first, bool sync, bool due_only, size_t *rows,
 
 int co_poll(size_t block) { return collect_poll(block, false); }
 
-int co_set_mode(uint8_t id, enum co_port_mode mode)
+int co_set_mode(uint8_t id, co_port_mode_t mode)
 {
     if (id >= ARRAY_SIZE(buses) || !buses[id].ready || (unsigned)mode > CO_PORT_SLEEP) { return -EINVAL; }
     struct bus_state *bus = &buses[id];
@@ -361,7 +361,7 @@ int co_set_mode(uint8_t id, enum co_port_mode mode)
     return 0;
 }
 
-int co_get_mode(uint8_t id, enum co_port_mode *mode)
+int co_get_mode(uint8_t id, co_port_mode_t *mode)
 {
     if (id >= ARRAY_SIZE(buses) || !buses[id].ready || !mode) { return -EINVAL; }
     k_mutex_lock(&schedule_lock, K_FOREVER); *mode = buses[id].mode;
@@ -381,7 +381,7 @@ int co_set_port_mode(uint16_t id, uint8_t mode, uint32_t timeout_ms)
         k_mutex_unlock(&bus->lock); return busy;
     }
     /* 受支持的参考模式数值一致，但 OTHER 不一致。 */
-    bus->mode = (enum co_port_mode)mode;
+    bus->mode = (co_port_mode_t)mode;
     k_mutex_unlock(&schedule_lock);
     k_mutex_unlock(&bus->lock);
     k_sem_give(&bus->wake);
@@ -392,7 +392,7 @@ int co_get_port_mode(uint16_t id, uint8_t *mode)
 {
     if (id >= ARRAY_SIZE(buses) || !mode) { return -EINVAL; }
     if (k_is_in_isr()) { return -EWOULDBLOCK; }
-    enum co_port_mode current;
+    co_port_mode_t current;
     int err = co_get_mode((uint8_t)id, &current);
     /* 不能将原生 SLEEP 报告为参考模式 OTHER。 */
     if (!err && current == CO_PORT_SLEEP) { return -ENOTSUP; }
@@ -474,7 +474,7 @@ int co_initialize_device(uint16_t dev_id)
     if (k_mutex_lock(&bus->lock, K_NO_WAIT)) { return -EBUSY; }
     if (bus->init_owner) { k_mutex_unlock(&bus->lock); return -EBUSY; }
     k_mutex_lock(&schedule_lock, K_FOREVER);
-    enum co_port_mode old = bus->mode; bus->mode = CO_PORT_INIT;
+    co_port_mode_t old = bus->mode; bus->mode = CO_PORT_INIT;
     bus->init_owner = k_current_get();
     k_mutex_unlock(&schedule_lock);
     k_mutex_unlock(&bus->lock);
@@ -690,7 +690,7 @@ int co_dp_fast_set(PARA_DATA_S *data, PARA_SET_STATUS status)
         }
         if (p->source == DP_SOURCE_CONSTANT) { err = -EACCES; break; }
         struct reference_write *write = &reference_writes[i];
-        enum dp_word_order order = p->write_order;
+        dp_word_order_t order = p->write_order;
         uint16_t address = p->write_address;
         bool mapped = p->source == DP_SOURCE_PARAMETER && (p->param_flags & DP_PARAM_FORWARD);
         if (!mapped) {

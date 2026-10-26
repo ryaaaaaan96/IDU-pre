@@ -20,7 +20,7 @@ struct port_callback {
 struct port_control {
     int64_t last_activity;
     bool connection_enabled, seen_activity;
-    enum tr_port_mode mode;
+    tr_port_mode_t mode;
     struct port_callback slave, callback, filter;
     bool filter_enabled;
     struct tr_port_stats stats;
@@ -52,7 +52,7 @@ static struct { tr_modbus_route_fn fn; void *user; k_tid_t caller; } routes[IFAC
 K_MUTEX_DEFINE(config_lock);
 static struct k_spinlock submission_lock;
 
-int tr_port_get_mode(int iface, enum tr_port_mode *mode)
+int tr_port_get_mode(int iface, tr_port_mode_t *mode)
 {
     if (iface < 0 || iface >= IFACE_LIMIT || !mode) { return -EINVAL; }
     k_spinlock_key_t key = k_spin_lock(&control_lock);
@@ -61,7 +61,7 @@ int tr_port_get_mode(int iface, enum tr_port_mode *mode)
     return 0;
 }
 
-int tr_port_set_mode(int iface, enum tr_port_mode mode)
+int tr_port_set_mode(int iface, tr_port_mode_t mode)
 {
     if (iface < 0 || iface >= IFACE_LIMIT || (unsigned)mode > TR_MODE_CALLBACK) { return -EINVAL; }
     k_spinlock_key_t key = k_spin_lock(&control_lock);
@@ -72,7 +72,7 @@ int tr_port_set_mode(int iface, enum tr_port_mode mode)
     return err;
 }
 
-int tr_port_set_handler(int iface, enum tr_port_mode mode,
+int tr_port_set_handler(int iface, tr_port_mode_t mode,
                        tr_modbus_route_fn handler, void *user)
 {
     if (iface < 0 || iface >= IFACE_LIMIT ||
@@ -110,7 +110,7 @@ int tr_port_enable_filter(int iface, bool enabled)
     return err;
 }
 
-int tr_port_control(int iface, enum tr_port_control command, void *arg)
+int tr_port_control(int iface, tr_port_control_t command, void *arg)
 {
     if (iface < 0 || iface >= IFACE_LIMIT ||
         (command != TR_PORT_GET_STATS && command != TR_PORT_CLEAR_STATS) ||
@@ -157,7 +157,7 @@ int tr_pkt_filter_config(uint16_t iface, bool enabled)
 int tr_get_port_mode(uint16_t iface, uint8_t *mode)
 {
     if (!mode) { return -EINVAL; }
-    enum tr_port_mode current;
+    tr_port_mode_t current;
     int err = tr_port_get_mode(iface, &current);
     if (!err) { *mode = (uint8_t)current; }
     return err;
@@ -165,7 +165,7 @@ int tr_get_port_mode(uint16_t iface, uint8_t *mode)
 
 int tr_set_port_mode(uint16_t iface, uint8_t mode)
 {
-    return tr_port_set_mode(iface, (enum tr_port_mode)mode);
+    return tr_port_set_mode(iface, (tr_port_mode_t)mode);
 }
 
 int tr_mb_port_work_control(uint16_t iface, uint16_t command, void *arg)

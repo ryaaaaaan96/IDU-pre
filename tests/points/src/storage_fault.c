@@ -27,7 +27,7 @@ void storage_fault_reset(const struct flash_area *area)
     atomic_clear(&hits);
 }
 
-void storage_fault_arm(enum storage_fault_stage stage)
+void storage_fault_arm(storage_fault_stage_t stage)
 {
     zassert_equal(atomic_get(&target_stage), STORAGE_FAULT_NONE);
     zassert_true(stage > STORAGE_FAULT_NONE && stage <= STORAGE_FAULT_INTENT_DELETE);
@@ -38,7 +38,7 @@ void storage_fault_arm(enum storage_fault_stage stage)
 
 void storage_fault_finish(void)
 {
-    enum storage_fault_stage stage = atomic_get(&target_stage);
+    storage_fault_stage_t stage = atomic_get(&target_stage);
     atomic_set(&target_stage, STORAGE_FAULT_NONE);
     if (stage != STORAGE_FAULT_NONE) {
         zassert_equal(atomic_get(&hits), 1, "Storage fault stage '%s' was not reached",
@@ -47,7 +47,7 @@ void storage_fault_finish(void)
 }
 
 int __real_nvs_mount(struct nvs_fs *fs);
-static bool should_fail(struct nvs_fs *fs, enum storage_fault_stage stage)
+static bool should_fail(struct nvs_fs *fs, storage_fault_stage_t stage)
 {
     return stage != STORAGE_FAULT_NONE && target_area &&
            fs->flash_device == flash_area_get_device(target_area) &&
@@ -63,7 +63,7 @@ int __wrap_nvs_mount(struct nvs_fs *fs)
 ssize_t __real_nvs_write(struct nvs_fs *fs, uint16_t id, const void *data, size_t len);
 ssize_t __wrap_nvs_write(struct nvs_fs *fs, uint16_t id, const void *data, size_t len)
 {
-    enum storage_fault_stage stage = STORAGE_FAULT_NONE;
+    storage_fault_stage_t stage = STORAGE_FAULT_NONE;
     if (id == SETTINGS_INTENT_ID) { stage = STORAGE_FAULT_INTENT_WRITE; }
     else if (id == SETTINGS_COMMIT_ID) { stage = STORAGE_FAULT_COMMIT_WRITE; }
     else if (id == SETTINGS_META_ID) { stage = STORAGE_FAULT_META_WRITE; }
@@ -79,7 +79,7 @@ ssize_t __wrap_nvs_write(struct nvs_fs *fs, uint16_t id, const void *data, size_
 int __real_nvs_delete(struct nvs_fs *fs, uint16_t id);
 int __wrap_nvs_delete(struct nvs_fs *fs, uint16_t id)
 {
-    enum storage_fault_stage stage = STORAGE_FAULT_NONE;
+    storage_fault_stage_t stage = STORAGE_FAULT_NONE;
     if (id == SETTINGS_INTENT_ID) { stage = STORAGE_FAULT_INTENT_DELETE; }
     else if (id == SETTINGS_COMMIT_ID) { stage = STORAGE_FAULT_COMMIT_DELETE; }
     if (should_fail(fs, stage)) {

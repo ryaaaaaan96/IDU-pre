@@ -15,7 +15,7 @@
 #define DP_OP_DEFER      BIT(3)
 #define DP_OP_MASK       0x0fU
 
-enum dp_operation { DP_OP_WRITE, DP_OP_READ, DP_OP_INIT, DP_OP_TIMER, DP_OP_SAMPLE };
+typedef enum { DP_OP_WRITE, DP_OP_READ, DP_OP_INIT, DP_OP_TIMER, DP_OP_SAMPLE } dp_operation_t;
 struct dp_process_item {
     struct dp_point_update point;
     uint8_t flags;
@@ -27,7 +27,7 @@ struct dp_process_item {
 };
 struct dp_process_request {
     uint32_t id;
-    enum dp_operation operation;
+    dp_operation_t operation;
     uint16_t port_id;
     uint16_t quality_flags;
     int64_t sampled_at;

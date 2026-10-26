@@ -6,10 +6,10 @@
 #define CO_SIMULATOR_H
 #include <collect/collect.h>
 
-enum co_simulator_fault {
+typedef enum {
     CO_SIMULATOR_WRITE_OK, CO_SIMULATOR_WRITE_REJECT,
     CO_SIMULATOR_WRITE_LOSE_ACK, CO_SIMULATOR_WRITE_DISCONNECT,
-};
+} co_simulator_fault_t;
 struct co_simulator_register {
     uint8_t function, width; /**< width 1/2 为一个不可拆分的值，低字在前。 */
     uint16_t address;
@@ -40,7 +40,7 @@ struct co_simulator {
  */
 int co_simulator_init(struct co_simulator *sim, const struct co_simulator_config *config);
 void co_simulator_set_online(struct co_simulator *sim, bool online);
-void co_simulator_set_write_fault(struct co_simulator *sim, enum co_simulator_fault fault);
+void co_simulator_set_write_fault(struct co_simulator *sim, co_simulator_fault_t fault);
 unsigned co_simulator_write_count(struct co_simulator *sim);
 int co_simulator_set_register(struct co_simulator *sim, uint8_t function,
                                uint16_t address, uint16_t value);

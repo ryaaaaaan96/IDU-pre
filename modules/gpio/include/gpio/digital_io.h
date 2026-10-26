@@ -14,14 +14,14 @@
 /**
  * @brief 输入引脚在结果位图中的排列顺序。
  */
-enum digital_io_order { DIGITAL_IO_LSB_FIRST, DIGITAL_IO_MSB_FIRST };
+typedef enum { DIGITAL_IO_LSB_FIRST, DIGITAL_IO_MSB_FIRST } digital_io_order_t;
 /**
  * @brief 数字量引脚与位序配置。
  */
 struct digital_io_config {
     const struct gpio_dt_spec *pins;
     size_t count;
-    enum digital_io_order order;
+    digital_io_order_t order;
 };
 
 /**

@@ -12,9 +12,9 @@
 
 LOG_MODULE_REGISTER(app_protocol, LOG_LEVEL_INF);
 
-static enum co_device_online reported_states[CONFIG_DP_MAX_DEVICES];
+static co_device_online_t reported_states[CONFIG_DP_MAX_DEVICES];
 
-static const char *device_state_name(enum co_device_online state)
+static const char *device_state_name(co_device_online_t state)
 {
     switch (state) {
     case CO_DEVICE_OFFLINE: return "offline";

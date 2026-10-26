@@ -229,7 +229,7 @@ ZTEST(collect_state, test_b_periodic_groups_preserve_gaps_and_device_identity)
     zassert_equal(state.value.words[0], 1010);
 }
 
-static void wait_state(uint16_t dev, enum co_device_online wanted)
+static void wait_state(uint16_t dev, co_device_online_t wanted)
 {
     for (unsigned i = 0; i < 500; ++i) {
         struct co_device_status status;

@@ -16,10 +16,10 @@
 #include <string.h>
 
 LOG_MODULE_REGISTER(iap, LOG_LEVEL_INF);
-enum { IAP_IDLE, IAP_LOGIN, IAP_TRANSFER, IAP_ANALYSIS, IAP_UPGRADING, IAP_SUCCESS, IAP_FAULT, IAP_JUMP };
-enum { NO_CAUSE, VERSION, SPACE, CRC_ERROR, FLASH_ERROR, NO_APP, COMM_ERROR,
-       SUBFILE, HEAP, OPEN_FILE, KEY_ERROR, UNKNOWN };
-enum { JOB_NONE, JOB_LOGIN, JOB_PACKET, JOB_FINISH, JOB_EXIT, JOB_RECOVER, JOB_LOGIN_PACKET };
+typedef enum { IAP_IDLE, IAP_LOGIN, IAP_TRANSFER, IAP_ANALYSIS, IAP_UPGRADING, IAP_SUCCESS, IAP_FAULT, IAP_JUMP } iap_state_t;
+typedef enum { NO_CAUSE, VERSION, SPACE, CRC_ERROR, FLASH_ERROR, NO_APP, COMM_ERROR,
+       SUBFILE, HEAP, OPEN_FILE, KEY_ERROR, UNKNOWN } iap_cause_t;
+typedef enum { JOB_NONE, JOB_LOGIN, JOB_PACKET, JOB_FINISH, JOB_EXIT, JOB_RECOVER, JOB_LOGIN_PACKET } iap_job_t;
 #define PACKET_MAX 1024
 #define PACKETS_MAX (CONFIG_IAP_MAX_CONTAINER_SIZE / 16)
 #define SECTOR 4096
@@ -50,7 +50,7 @@ static struct receiver_buffers *buffers;
 static uint16_t packet_length;
 K_MUTEX_DEFINE(lock);
 K_SEM_DEFINE(wake, 0, 1);
-enum { STOP_REQUESTED = BIT(0), COMMIT_ADMITTED = BIT(1), REBOOT_ADMITTED = BIT(2) };
+typedef enum { STOP_REQUESTED = BIT(0), COMMIT_ADMITTED = BIT(1), REBOOT_ADMITTED = BIT(2) } iap_stop_flags_t;
 static atomic_t lifecycle;
 void iap_stop(void) { atomic_or(&lifecycle, STOP_REQUESTED); k_sem_give(&wake); }
 static bool stopped(void) { return (atomic_get(&lifecycle) & STOP_REQUESTED) != 0; }

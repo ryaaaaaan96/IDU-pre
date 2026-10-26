@@ -283,7 +283,7 @@ ZTEST(points, test_parameters_no_downstream_write_without_durable_intent)
     zassert_ok(dp_params_recover());
 }
 
-static void check_downstream_storage_fault(enum storage_fault_stage stage)
+static void check_downstream_storage_fault(storage_fault_stage_t stage)
 {
     unsigned writes = co_simulator_write_count(&idu_collect_simulator);
     storage_fault_arm(stage);

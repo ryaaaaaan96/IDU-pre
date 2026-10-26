@@ -25,7 +25,7 @@ static int locate(struct co_simulator *sim, uint8_t fc, uint16_t address,
 
 void co_simulator_set_online(struct co_simulator *sim, bool online)
 { if (sim) { atomic_set(&sim->online, online); } }
-void co_simulator_set_write_fault(struct co_simulator *sim, enum co_simulator_fault fault)
+void co_simulator_set_write_fault(struct co_simulator *sim, co_simulator_fault_t fault)
 { if (sim) { atomic_set(&sim->fault, fault); } }
 unsigned co_simulator_write_count(struct co_simulator *sim)
 { return sim ? atomic_get(&sim->writes) : 0; }

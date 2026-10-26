@@ -21,10 +21,10 @@
 /* main.c 将 startup 保留在应用入口内，不提供公共头文件。 */
 int startup(void);
 
-enum service { WATCHDOG_INIT, LED_START, INPUTS_INIT, IAP_INIT, TABLES_INIT, DP_INIT, DATA_BIND, TASKS_PREPARE,
+typedef enum { WATCHDOG_INIT, LED_START, INPUTS_INIT, IAP_INIT, TABLES_INIT, DP_INIT, DATA_BIND, TASKS_PREPARE,
                NETWORK_INIT, PORT_OPEN, COLLECT_INIT, PARAMS_INIT, PARAMS_RECOVER,
                PROCESS_INIT, REFERENCE_INIT, COLLECT_START, FORWARD_INIT,
-               SAMPLE, PUBLISH, PROTOCOL, LED, CHECKPOINT, WATCHDOG_CHECK, SERVICES };
+               SAMPLE, PUBLISH, PROTOCOL, LED, CHECKPOINT, WATCHDOG_CHECK, SERVICES } service_t;
 static int errors[SERVICES];
 static unsigned calls[SERVICES], checks, stops, reboots;
 static bool healthy, boot_ready, checkpoint_ready;
@@ -42,14 +42,14 @@ static int parameter_storage_error;
 static unsigned workers_started;
 static struct dp_device_cfg remote_device[] = {{.dev_id = 10, .unit_id = 1}};
 static const struct dp_equip_cfg point_config = {.devices = remote_device, .device_count = 1};
-static enum co_device_online remote_state;
+static co_device_online_t remote_state;
 /* 编排测试夹具提供与真实 CO 相同的事件契约。 */
 ZBUS_CHAN_DEFINE(co_device_events, struct co_device_status, NULL, NULL,
                  ZBUS_OBSERVERS_EMPTY, ZBUS_MSG_INIT(0));
 const struct co_bus_cfg protocol_collect_bus = {0};
 const struct co_port_config protocol_collect_port;
 
-static int service(enum service service)
+static int service(service_t service)
 {
     static const status_phase_t phases[SERVICES] = {
         [WATCHDOG_INIT] = STATUS_STARTING,
@@ -297,7 +297,7 @@ static struct status_application_fault fault_snapshot(void)
     return fault;
 }
 
-static void check_startup_failure(enum service failed)
+static void check_startup_failure(service_t failed)
 {
     errors[failed] = -EIO;
     zassert_equal(startup(), -EIO);
@@ -311,7 +311,7 @@ static void check_startup_failure(enum service failed)
     else if (failed == IAP_INIT) { description = "Upgrade service initialization failed"; }
     zassert_str_equal(fault_snapshot().description, description);
     zassert_str_equal(fault_snapshot().terminal_description, description);
-    for (enum service s = WATCHDOG_INIT; s <= FORWARD_INIT; ++s) {
+    for (service_t s = WATCHDOG_INIT; s <= FORWARD_INIT; ++s) {
         zassert_equal(calls[s], s <= failed ? 1 : 0);
     }
     zassert_equal(stops, 0);
@@ -449,7 +449,7 @@ ZTEST(acquisition, test_failed_acquisition_publishes_invalid_quality_and_preserv
     zassert_equal(stops, 1);
 }
 
-static void check_cycle_failure(enum service failed, const char *description)
+static void check_cycle_failure(service_t failed, const char *description)
 {
     zassert_ok(startup());
     errors[failed] = -EIO;
