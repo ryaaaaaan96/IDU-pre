@@ -1,4 +1,4 @@
-#include "status/status_led.h"
+#include "status/status_led/status_led.h"
 #include "status/status.h"
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/kernel.h>

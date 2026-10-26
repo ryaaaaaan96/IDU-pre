@@ -1,5 +1,5 @@
 #include "status/status.h"
-#include "status/status_led.h"
+#include "status/status_led/status_led.h"
 #include <watchdog/watchdog.h>
 #ifdef CONFIG_BOOTLOADER_MCUBOOT
 #include <dataprocess/params.h>

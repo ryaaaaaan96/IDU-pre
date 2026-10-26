@@ -35,7 +35,7 @@
 `dp_process_timer_start()` 是运行期的定时器操作。这些接口保留启动含义，初始化顺序与执行上下文归属保持原约定。
 
 头文件与职责一致，例如 `acquisition/acquisition.h`、`process/points.h`、
-`status/status.h`、`status/status_led.h`、`status/image_confirm/image_confirm.h`。
+`status/status.h`、`status/status_led/status_led.h`、`status/image_confirm/image_confirm.h`。
 设备、信号、点表及逻辑口分别使用 `DEVICE_*`、`SIGNAL_*`、`TABLE_*`、`PORT_*` 等前缀。
 日志来源使用 `app_main`、`app_protocol`、`app_acquisition`、`image_confirm`。
 

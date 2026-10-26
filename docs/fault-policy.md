@@ -63,6 +63,6 @@ status_report_fault(STATUS_RUNTIME, err, "Sample publication failed", STATUS_ACT
 测试以独立进程隔离每次启动，不通过清零内部状态模拟重启。完整入口为 `bash tests/run.sh`。
 
 整机状态、外部看门狗与任务期限监控保留在 status.c 内，以分段注释分类。
-LED 单独位于 status_led.c/.h，名为 status_led 的延时工作独立更新 GPIO；
+LED 单独位于 status_led/status_led.c/.h，名为 status_led 的延时工作独立更新 GPIO；
 status.c 的后台工作只检查外部喂狗错误。两者均使用系统工作队列，不新增工作线程。
 进入运行时启动 LED 周期工作，故障时提交立即更新请求；初始化失败后不访问 LED 引脚。

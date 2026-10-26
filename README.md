@@ -152,7 +152,7 @@ app/main.c                         启动顺序、采样周期与休眠
 `acquisition_cycle()` 直接调用 Zephyr ADC/GPIO API，按配置中的 device_id/signal_id 使用 `dp_set_sig_value()` 同步写入测点。16 路 DI 保持位图，8 路 AI 各自独立；拨码地址暂不采样。
 采样字段到测点的映射由 `process/points.c` 完成，点表定义仍在 `app/protocol/`。
 
-LED 操作放在 `app/status/status_led.c`，通过 Zephyr GPIO API 和系统工作队列控制：
+LED 操作放在 `app/status/status_led/status_led.c`，通过 Zephyr GPIO API 和系统工作队列控制：
 启动和终止故障时常亮，运行时标称亮/灭各 100 ms，由 status 在系统工作队列独立调度，允许普通调度抖动。
 主循环只维护采样周期；LED 不用于证明采样仍在推进。输出失败按[故障策略](docs/fault-policy.md)处理。
 常规构建默认启用看门狗；单步调试显式使用 `./scripts/build.sh --extra-conf "$PWD/conf/debug.conf"`。
@@ -290,4 +290,4 @@ DP 提供 `dp_point_parameters_get()` 查询与初始化前的国家差异覆盖
 [IAPv3 / AES / SGZ](docs/build-and-upgrade.md#iapv3) 和[验证](docs/testing.md) 已按主题归档。
 
 `app/status/status.c` 通过分段注释区分外部看门狗、任务期限监控和整机状态/故障处理。
-LED 单独位于 `status/status_led.c/.h`，其 `status_led` 延时工作运行在系统工作队列中。
+LED 单独位于 `status/status_led/status_led.c/.h`，其 `status_led` 延时工作运行在系统工作队列中。
