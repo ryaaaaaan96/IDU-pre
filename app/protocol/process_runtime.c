@@ -5,18 +5,31 @@
 #include <dataprocess/process.h>
 #include <dataprocess/model.h>
 
-static struct dp_model_cfg models[] = {
-    {.device_id = DEVICE_LOCAL},
+/* 产品只声明数据归属和处理表；通信配置不进入 DP 模型。 */
+struct data_device_cfg {
+    uint16_t device_id;
+    uint16_t process_table;
 };
+
+static const struct data_device_cfg devices[] = {
+    {.device_id = DEVICE_LOCAL, .process_table = TABLE_LOCAL_PROCESS},
+};
+static struct dp_model_cfg models[ARRAY_SIZE(devices)];
 
 int protocol_register_point_tables(void)
 {
     if (dp_config()) { return -EBUSY; }
-    const struct dp_registered_table *process;
-    int err = dp_table_registry_find(TABLE_LOCAL_PROCESS, PRO_DATA_PROCESS, &process);
-    if (err) { return err; }
-    models[0].points = process->rows;
-    models[0].point_count = process->count;
+    for (size_t i = 0; i < ARRAY_SIZE(devices); ++i) {
+        const struct dp_registered_table *process;
+        int err = dp_table_registry_find(devices[i].process_table,
+                                        PRO_DATA_PROCESS, &process);
+        if (err) { return err; }
+        models[i] = (struct dp_model_cfg){
+            .device_id = devices[i].device_id,
+            .points = process->rows,
+            .point_count = process->count,
+        };
+    }
     return dp_register_models(models, ARRAY_SIZE(models));
 }
 
@@ -34,6 +47,5 @@ int protocol_init(void)
         .timers = DP_PROCESS_DEFAULT_TIMERS,
         .timer_count = DP_PROCESS_DEFAULT_COUNT,
     };
-    err = dp_process_init(&plan);
-    return err;
+    return dp_process_init(&plan);
 }

@@ -1,4 +1,3 @@
-#include "../../../app/protocol/device_binding.h"
 #include "../../fixtures/tr_tasks.h"
 #include "../../fixtures/dp_tasks.h"
 #include <dataprocess/points.h>
@@ -58,10 +57,12 @@ static const STRUCT_SECTION_ITERABLE(dp_registered_table, duplicate_map) = {
     .id = 7, .type = PRO_MB_SLAVE, .rows = invalid_maps, .count = 2};
 static const STRUCT_SECTION_ITERABLE(dp_registered_table, missing_source_map) = {
     .id = 8, .type = PRO_MB_SLAVE, .rows = &invalid_maps[2], .count = 1};
-static const struct data_device_cfg data_devices[] = {
-    {.dev_id = 1, .process_table = 1, .collect_table = 0},
-    {.dev_id = 10, .process_table = 5, .collect_table = 2, .collect_port = 0, .collect_addr = 1},
-    {.dev_id = 11, .process_table = 5, .collect_table = 2, .collect_port = 0, .collect_addr = 2},
+static const struct dp_device_binding data_devices[] = {
+    {.dev_id = 1, .tables = {{1, PRO_DATA_PROCESS}}},
+    {.dev_id = 10, .port = 0, .coll_addr = 1,
+     .tables = {{5, PRO_DATA_PROCESS}, {2, PRO_MB_MASTER}}},
+    {.dev_id = 11, .port = 0, .coll_addr = 2,
+     .tables = {{5, PRO_DATA_PROCESS}, {2, PRO_MB_MASTER}}},
 };
 static DEV_TABLE_S devices[3];
 static const DEV_TABLE_S *get_devices(void) { return devices; }
@@ -136,7 +137,7 @@ static void *setup(void)
         };
         zassert_ok(dp_table_registry_bind(old_bindings, ARRAY_SIZE(old_bindings), devices));
     } else {
-        zassert_ok(protocol_bind_devices(data_devices, ARRAY_SIZE(data_devices), devices));
+        zassert_ok(dp_table_registry_bind(data_devices, ARRAY_SIZE(data_devices), devices));
     }
     pltcb_reg_cfg_get_dev_tbl(get_devices); pltcb_reg_cfg_get_dev_num(get_count);
     zassert_ok(dp_init()); fixture_start_dp();

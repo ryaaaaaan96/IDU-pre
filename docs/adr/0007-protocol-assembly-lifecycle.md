@@ -63,3 +63,9 @@ IAP 保留参数保存失败时阻止升级提交/重启的约束。
 模型允许共享定义且运行值隔离，不创建线程，也不调用旧参考任务登记初始化。
 原 data_device_cfg 装配逻辑归 protocol/device_binding，停用通信测试改为引用该应用实现。
 本决定替代上一段固定 DEV_TABLE_S 数组直接登记的过渡方案。
+
+### 装配集中在 process_runtime.c
+
+按用户要求删除 device_binding.c/.h 及 protocol_bind_devices 产品转换接口。
+当前 data_device_cfg 只在 process_runtime.c 内定义，包含设备 ID 和 process 表 ID；同文件直接生成 DP 模型并登记。
+不把旧采集校验和七槽目录转换并入当前运行入口。停用通信测试直接使用已有目录装配函数，移除仅验证已删除转换接口的用例。

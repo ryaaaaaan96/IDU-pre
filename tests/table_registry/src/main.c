@@ -1,4 +1,3 @@
-#include "../../../app/protocol/device_binding.h"
 #include "../../fixtures/dp_tasks.h"
 #include <dataprocess/table_registry.h>
 #include <dataprocess/params.h>
@@ -211,23 +210,3 @@ ZTEST(table_registry, test_failed_poll_preserves_value_and_reports_quality)
     zassert_equal(writes, 0); zassert_equal(flash_writes, 0);
 }
 ZTEST_SUITE(table_registry, NULL, setup, before, NULL, NULL);
-
-ZTEST(table_registry, test_data_device_bindings_reject_invalid_references)
-{
-    struct data_device_cfg cfg = {.dev_id = 10, .process_table = 20,
-        .collect_table = 10, .collect_port = 0, .collect_addr = 1};
-    DEV_TABLE_S view, original;
-    memset(&original, 0xa5, sizeof(original)); view = original;
-    cfg.process_table = 999;
-    zassert_equal(protocol_bind_devices(&cfg, 1, &view), -ENOENT);
-    zassert_mem_equal(&view, &original, sizeof(view));
-    cfg.process_table = 30;
-    zassert_equal(protocol_bind_devices(&cfg, 1, &view), -EINVAL);
-    cfg.process_table = 20; cfg.collect_addr = 248;
-    zassert_equal(protocol_bind_devices(&cfg, 1, &view), -EINVAL);
-    cfg.collect_table = 0; /* 不采集的设备忽略两个 collect 字段。 */
-    zassert_ok(protocol_bind_devices(&cfg, 1, &view));
-    struct data_device_cfg duplicate[] = {cfg, cfg};
-    DEV_TABLE_S pair[2];
-    zassert_equal(protocol_bind_devices(duplicate, 2, pair), -EEXIST);
-}

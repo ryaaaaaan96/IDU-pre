@@ -1,4 +1,3 @@
-#include "device_binding.h"
 #include "protocol.h"
 #include "tables.h"
 #include "signal_ids.h"
@@ -15,20 +14,19 @@
 #define REMOTE_DEVICE_BINDING(index, port_id, first_dev_id, first_address) \
     { \
         .dev_id = (first_dev_id) + (index), \
-        .process_table = TABLE_REMOTE_PROCESS, \
-        .collect_table = TABLE_COLLECT, \
-        .collect_port = (port_id), \
-        .collect_addr = (first_address) + (index), \
+        .port = (port_id), \
+        .coll_addr = (first_address) + (index), \
+        .tables = {{TABLE_REMOTE_PROCESS, PRO_DATA_PROCESS}, \
+                   {TABLE_COLLECT, PRO_MB_MASTER}}, \
     }
 
 /* 点表常驻 Flash；DP 只装配数据归属及可选南向采集关系。 */
-static const struct data_device_cfg bindings[] = {
+static const struct dp_device_binding bindings[] = {
     {
         .dev_id = DEVICE_LOCAL,
-        .process_table = TABLE_LOCAL_PROCESS,
-        .collect_table = PROTOCOL_NO_COLLECT_TABLE,
-        .collect_port = DP_DEVICE_DEFAULT_PORT,
-        .collect_addr = DP_DEVICE_DEFAULT_ADDRESS,
+        .port = DP_DEVICE_DEFAULT_PORT,
+        .coll_addr = DP_DEVICE_DEFAULT_ADDRESS,
+        .tables = {{TABLE_LOCAL_PROCESS, PRO_DATA_PROCESS}},
     },
     /* LISTIFY：2 项；逐项调用 REMOTE_DEVICE_BINDING；(,) 分隔；
      * 其余参数分别为采集逻辑口、首设备 ID、首南向站号。
@@ -55,7 +53,7 @@ uint16_t protocol_device_count(void)
 int protocol_register_point_tables(void)
 {
     if (dp_config()) { return -EBUSY; }
-    int err = protocol_bind_devices(bindings, ARRAY_SIZE(bindings), devices);
+    int err = dp_table_registry_bind(bindings, ARRAY_SIZE(bindings), devices);
     if (err) { return err; }
     pltcb_reg_cfg_get_dev_tbl(protocol_device_table);
     pltcb_reg_cfg_get_dev_num(protocol_device_count);

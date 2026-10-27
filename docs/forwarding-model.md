@@ -27,7 +27,7 @@ FC04/10000 读取远端设备 10 的 DI；两者可以共享同一信号 ID。
 
 产品使用两类 const 声明，定义见下文；不再维护七个表槽或 `idu_registers`。
 当前产品转发暂时停用，DP 使用纯数据模型。以下是待重新接入的通信装配：
-应用内部 `protocol_bind_devices()` 通过 Iterable Sections 解析 process 与可选 collect，生成
+停用配置通过已有 `dp_table_registry_bind()` 和 Iterable Sections 解析 process 与可选 collect，生成
 兼容 DP/CO 的小型 `DEV_TABLE_S` 只读关联视图。本地只关联 process，远端 10、11
 共享 process/collect 行，并保留独立数据缓存、参数键和采集目标。
 

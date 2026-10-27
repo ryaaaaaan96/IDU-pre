@@ -4,5 +4,3 @@ include(${IDU_APP}/modules/modules.cmake)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(forwarding_devices_tests)
 target_sources(app PRIVATE src/main.c)
-
-target_sources(app PRIVATE ${IDU_APP}/app/protocol/device_binding.c)

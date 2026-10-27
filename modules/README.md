@@ -508,7 +508,7 @@ remaining ten names and configuration requirements. Use
 
 `TR_FORWARD_CONFIG` requires the reference-table registry, register dispatch and server lifecycle.
 当前产品通过 `dp_register_models()` 登记纯数据模型，再调用 `dp_init()`。
-采集/转发装配属于应用 protocol；停用通信配置使用应用内部 `protocol_bind_devices()`，DP 不提供产品绑定接口。
+采集/转发装配属于应用 protocol；当前模型装配集中在 `app/protocol/process_runtime.c`；停用通信配置直接使用已有目录装配，删除额外产品转换接口。
 Register physical I/O through CO/TR message APIs before `tr_forward_service(config, sampled_unit)`.
 For an already managed Modbus interface, `tr_forward_attach(iface, config)` installs the same routing.
 All declarations and tables must outlive the services and remain immutable; attachment is a startup operation.
