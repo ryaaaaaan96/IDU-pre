@@ -45,14 +45,12 @@ static struct {
 static void check_tasks(struct k_work *work);
 static K_WORK_DELAYABLE_DEFINE(check_work, check_tasks);
 
-static int64_t validity_ms(void)
-{
+/* 健康结果有效期及首次检查宽限均为软件检查周期的三倍。 */
 #ifdef CONFIG_WATCHDOG_SOFTWARE
-    return 3LL * CONFIG_WATCHDOG_CHECK_INTERVAL_MS;
+#define WATCHDOG_VALIDITY_MS (3LL * CONFIG_WATCHDOG_CHECK_INTERVAL_MS)
 #else
-    return 0;
+#define WATCHDOG_VALIDITY_MS 0LL
 #endif
-}
 
 /* 调用方持锁。监控故障只锁存一次；新的 GPIO 失败可升级已留驻的任务故障。 */
 static void record_fault(watchdog_fault_reason_t reason, int error,
@@ -154,7 +152,7 @@ static void check_tasks(struct k_work *work)
                 first->state.flags = WATCHDOG_TASK_FAULT;
                 record_fault(WATCHDOG_FAULT_TASK, -ETIMEDOUT, first, now);
             } else {
-                monitor.healthy_until_ms = now + validity_ms();
+                monitor.healthy_until_ms = now + WATCHDOG_VALIDITY_MS;
                 atomic_set(&feed_deadline_ms, (uint32_t)monitor.healthy_until_ms);
             }
         }
@@ -203,7 +201,7 @@ int watchdog_init(watchdog_fault_cb_t notify)
         return -ECANCELED;
     }
     monitor.checking = IS_ENABLED(CONFIG_WATCHDOG_SOFTWARE);
-    monitor.healthy_until_ms = k_uptime_get() + validity_ms();
+    monitor.healthy_until_ms = k_uptime_get() + WATCHDOG_VALIDITY_MS;
 #ifdef CONFIG_WATCHDOG_EXTERNAL
     atomic_set(&feed_deadline_ms, (uint32_t)monitor.healthy_until_ms);
     atomic_set(&feed_state, FEED_ENABLED | (monitor.checking ? FEED_CHECKING : 0));
