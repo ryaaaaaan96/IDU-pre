@@ -24,7 +24,7 @@ struct tr_server_config {
     int (*attach)(int iface, const void *protocol);
     const void *protocol;
     int (*configure)(struct modbus_iface_param *param);
-    uint32_t recovery_timeout_ms;
+    uint32_t recovery_timeout_ms; /**< 处理阻塞及重配置的检查期限，不是无报文超时。 */
 };
 
 /**

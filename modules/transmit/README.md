@@ -17,3 +17,7 @@ RAW 与完整 RTU 报文转换使用 [`modbus_support`](../modbus/README.md)；
 公共 Modbus 兼容实现通过可选内部钩子调用本模块的转发处理；本模块选择
 `MODBUS_SUPPORT_SERVER_HOOKS`，纯采集构建不需要这些转发钩子。
 非隔离、非阻塞的直接 Zephyr 接入仍可使用其子系统工作队列，不为此创建模块线程。
+
+北向没有主站连接或长期无请求均属于正常空闲，不告警、不触发接口重建。
+`tr_modbus_service()` 的超时仅检查处理函数阻塞和重配置逾期，不能作为无报文超时。
+显式参数重配置与 `tr_modbus_recover()` 仍保留，实际异常由调用方处理。

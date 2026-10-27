@@ -70,7 +70,7 @@ int tr_modbus_reconfigure(int iface, struct modbus_iface_param param,
  */
 int tr_modbus_recover(int iface, tr_modbus_config_done_fn done, void *user);
 /**
- * @brief 主循环健康维护：TX 空闲或阻塞超过 timeout_ms 后触发恢复； 处理函数卡住返回 -ETIMEDOUT，由板级看门狗复位 CPU。
+ * @brief 周期健康检查：处理或重配置超时返回 -ETIMEDOUT；正常空闲不报错、不重建接口。
  */
 int tr_modbus_service(int iface, uint32_t timeout_ms);
 struct tr_modbus_health { uint32_t recoveries; int last_error; bool changing; };

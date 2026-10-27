@@ -403,8 +403,9 @@ returns `-ENOTRECOVERABLE`. Completion reports actual application of the setting
 New submissions are gated while waiting; a handler that does not finish within
 2 s produces `-ETIMEDOUT` instead of blocking the control queue in drain/cancel.
 `tr_modbus_recover()` can reset a backend whose TX-complete event was lost.
-`tr_modbus_service(iface, timeout_ms)` schedules idle recovery and reports a
-stuck handler to the board health monitor. `tr_modbus_get_health()` reports the
+`tr_modbus_service(iface, timeout_ms)` reports handler or reconfiguration
+timeouts to its caller. An idle northbound interface remains listening without
+automatic recovery or an alarm. `tr_modbus_get_health()` reports the
 number of recovery attempts, last error and configuration-in-progress state.
 Southbound `co_reconfigure()` requires an idle bus and leaves it asleep
 on failure; the caller must reconfigure successfully before resuming it.

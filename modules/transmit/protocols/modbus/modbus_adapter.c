@@ -41,7 +41,7 @@ struct forwarding_port {
     void *user;
     int64_t deadline;
     int64_t busy_since;
-    atomic_t paused, last_activity;
+    atomic_t paused;
     uint32_t recoveries;
     int last_error;
     bool changing, plugged, force;
@@ -251,7 +251,6 @@ complete:
     port->changing = false;
     port->last_error = err;
     if (port->force) { ++port->recoveries; }
-    atomic_set(&port->last_activity, k_uptime_get_32());
     atomic_clear(&port->paused);
     k_mutex_unlock(&config_lock);
     if (done) { done(port->iface, err, user); }
@@ -310,7 +309,6 @@ int tr_modbus_init_server(int iface, struct modbus_iface_param param,
         }
         port->current = param; port->last_error = 0;
         port->busy_since = 0;
-        atomic_set(&port->last_activity, k_uptime_get_32());
     }
     if (err) { writers[iface] = previous_writer; }
     if (port) {
@@ -357,8 +355,6 @@ bool mb_support_accept_request(struct modbus_context *ctx)
     const struct tr_modbus_policy *p = &policies[iface];
     bool accepted = p->accept ? p->accept(&ctx->rx_adu, ctx->unit_id, p->user) :
                     (ctx->rx_adu.unit_id == 0 || ctx->rx_adu.unit_id == ctx->unit_id);
-    struct forwarding_port *port = port_for(iface);
-    if (accepted && port) { atomic_set(&port->last_activity, k_uptime_get_32()); }
     return accepted;
 }
 
@@ -451,13 +447,8 @@ int tr_modbus_service(int iface, uint32_t timeout_ms)
     int err = 0;
     if ((busy && now - port->busy_since >= timeout_ms) ||
         (port->changing && now > port->deadline + timeout_ms)) { err = -ETIMEDOUT; }
-    bool recover = !err && !busy && !port->changing &&
-        (uint32_t)((uint32_t)now - (uint32_t)atomic_get(&port->last_activity)) >= timeout_ms;
+    /* 北向无请求属于正常空闲，不能据此重建接口或报告故障。 */
     k_mutex_unlock(&config_lock);
-    if (recover) {
-        err = tr_modbus_recover(iface, NULL, NULL);
-        if (err == -EBUSY) { err = 0; }
-    }
     return err;
 }
 

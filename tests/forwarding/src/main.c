@@ -373,19 +373,22 @@ ZTEST(forwarding, test_recovery_reinitializes_and_rolls_back)
     zassert_ok(tr_modbus_init_server(server, server_param, tr_register_write, true));
 }
 
-ZTEST(forwarding, test_idle_service_recovers_without_resetting_parameters)
+ZTEST(forwarding, test_idle_service_keeps_interface_ready_without_recovery)
 {
     struct tr_modbus_health before, after;
     zassert_ok(tr_modbus_get_health(server, &before));
-    k_sleep(K_MSEC(30)); zassert_ok(tr_modbus_service(server, 20));
-    for (int i = 0; i < 100; ++i) {
+    for (int i = 0; i < 3; ++i) {
+        k_sleep(K_MSEC(30));
+        zassert_ok(tr_modbus_service(server, 20));
         zassert_ok(tr_modbus_get_health(server, &after));
-        if (!after.changing && after.recoveries > before.recoveries) { break; }
-        k_sleep(K_MSEC(5));
+        zassert_false(after.changing, "Idle interface must not be reconfigured");
+        zassert_equal(after.recoveries, before.recoveries);
+        zassert_ok(after.last_error);
     }
-    zassert_equal(after.recoveries, before.recoveries + 1); zassert_ok(after.last_error);
     zassert_equal(saved(), 1);
-    uint16_t word; zassert_ok(modbus_read_holding_regs(client, 16, 30459, &word, 1));
+    uint16_t word;
+    zassert_ok(modbus_read_holding_regs(client, 16, 30459, &word, 1));
+    zassert_equal(word, 1);
 }
 
 ZTEST(forwarding, test_stuck_tx_state_can_be_forced_back_to_receive)
