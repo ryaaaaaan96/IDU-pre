@@ -59,14 +59,11 @@ endif()
 class ApplicationRequirements(unittest.TestCase):
     required = (
         'BOOTLOADER_MCUBOOT',
-        'DATAPROCESS', 'DP_PROCESS', 'DP_REFERENCE_TABLES', 'DP_TABLE_REGISTRY', 'DP_PARAMS', 'COLLECT', 'CO_MODBUS_ADAPTER', 'CO_MODBUS_RAW_PORT',
-        'TRANSMIT', 'TR_MODBUS_ADAPTER', 'TR_MODBUS_RAW_PORT', 'TR_SERVER_SERVICE',
-        'TR_REGISTER_SERVICE', 'GPIO', 'ADC',
+        'DATAPROCESS', 'GPIO', 'ADC',
     )
 
     def configure(self, **overrides):
         values = {name: 'y' for name in self.required}
-        values.update(CO_SIMULATOR='n', CO_MODEL_SIMULATOR='n', CO_MAX_BUSES='1')
         values.update(overrides)
         script = 'cmake_minimum_required(VERSION 3.20.0)\n'
         # 运行真实配置检查，不编译固件镜像。
@@ -89,20 +86,6 @@ class ApplicationRequirements(unittest.TestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(f'requires CONFIG_{name}=y', result.stderr)
 
-    def test_product_does_not_require_simulated_devices(self):
-        result = self.configure(CO_SIMULATOR='n', CO_MODEL_SIMULATOR='n')
-        self.assertEqual(result.returncode, 0, result.stderr)
-
-    def test_iapv3_rejects_silent_station_247(self):
-        result = self.configure(IDU_IAPV3='y', IDU_FORWARD_UNIT='247')
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn('IAPv3 does not support CONFIG_IDU_FORWARD_UNIT=247', result.stderr)
-
-    def test_station_restriction_only_applies_to_iapv3_247(self):
-        for iapv3, station in (('n', '247'), ('y', '246'), ('y', '16')):
-            with self.subTest(iapv3=iapv3, station=station):
-                result = self.configure(IDU_IAPV3=iapv3, IDU_FORWARD_UNIT=station)
-                self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == '__main__':

@@ -1,9 +1,0 @@
-tests:
-  idu.runtime.fault:
-    platform_allow: native_sim/native/64
-    tags: [idu, runtime]
-    harness: console
-    harness_config:
-      type: one_line
-      regex:
-        - "RUNTIME_RESET_PASS"

@@ -15,38 +15,25 @@
 
 所有构建使用同一套 IDU 产品点表和业务。IAPv3 是唯一的镜像上传接收器，
 `--no-upload` 只关闭接收器，不切换产品点表；不再保留 AIDC 产品分支。
-南北向共用 RS485 的联调配置见[端口说明](communication-ports.md)。
+当前产品不运行采集和转发，`modules/collect`、`modules/transmit`、`modules/vport`
+及其应用装配已移除；重新接入需要新的 DP 适配层。
 
 从包含旧产品分支的版本更新后，首次执行 `./applications/IDU-pre/scripts/build.sh --pristine always`
 重新生成构建目录，清除已删除开关的配置缓存。
 
-采集和转发的实例数量、栈大小由各模块的 Kconfig 定义，在 `prj.conf`
-手动填写，不随固件类型自动覆盖。当前工作配置为 MCUboot + IAPv3：
+DP 最小核心的线程和容量配置集中在 `prj.conf`：
 
-| 所属配置 | 选项 | 当前手动值 |
-| --- | --- | ---: |
-| `modules/collect/Kconfig` | `CONFIG_CO_MAX_BUSES` | 1 |
-| `modules/collect/Kconfig` | `CONFIG_CO_STACK_SIZE` | 4096 B / 总线 |
-| `modules/transmit/Kconfig` | `CONFIG_TR_PORTS` | 1 |
-| `modules/transmit/Kconfig` | `CONFIG_TR_STACK_SIZE` | 4096 B / 转发口 |
-| `modules/transmit/Kconfig` | `CONFIG_TR_CONFIG_STACK_SIZE` | 2048 B，共享 |
+| 配置 | 当前值 | 说明 |
+| --- | ---: | --- |
+| `CONFIG_DATAPROCESS` | y | 启用点值和参数核心 |
+| `CONFIG_DP_POINTS_MAX_POINTS` | 32 | 静态状态槽；当前 26 点 |
+| `CONFIG_DP_PARAMS_MAX_COUNT` | 8 | 当前 3 个持久参数 |
+| `CONFIG_DP_PARAMS_TRANSACTION_BYTES` | 2048 | 参数提交镜像上限 |
+| `CONFIG_MAIN_STACK_SIZE` | 4096 | 主循环、本地采样和 DP 同步调用 |
+| `CONFIG_SYSTEM_WORKQUEUE_STACK_SIZE` | 2048 | 看门狗等系统工作 |
 
-这些工作线程共预留 `CO_MAX_BUSES × CO_STACK_SIZE + TR_PORTS × TR_STACK_SIZE +
-TR_CONFIG_STACK_SIZE` 字节栈，另计架构对齐/保护开销；DP、系统工作队列等
-其他线程不在这个公式中。槽位数量决定预留几份栈，栈大小决定每份的容量。
-即使某个槽位没有启动线程，静态栈仍占用 RAM。后续增加设备总线或转发口时，
-由维护者手动修改 `.conf`；调整栈大小后检查目标板最深调用路径的栈余量。
-IAPv3 通过 `./applications/IDU-pre/scripts/build.sh --mcuboot --iapv3` 构建，
-`conf/iapv3.conf` 启用升级功能，不覆盖上述线程配置。
-
-总线容量原名 `CONFIG_DP_MAX_BUSES` 已迁移为 `CONFIG_CO_MAX_BUSES`；
-自定义 `.conf` 请同步改名，已有构建缓存使用 `west build -p always` 重新生成。
-`co_init_bus()` 会在注册前检查全部设备的总线 ID 均小于配置容量，
-数据处理模块不再依赖采集线程数量。
-
-`app/CMakeLists.txt` 在配置阶段检查 IDU 应用所需的模块，缺少时给出对应配置错误。
-当前只有一个采集总线；后续扩展时手动调整点表、端口注册及 `.conf` 容量。
-模块自身仍可由其他应用或独立测试按需启用。
+`app/CMakeLists.txt` 在配置阶段检查 `BOOTLOADER_MCUBOOT`、`DATAPROCESS`、
+`GPIO` 和 `ADC`。模块仍可由其他应用或独立测试按需启用。
 
 ## Flash 与启动布局
 
@@ -182,9 +169,11 @@ RAM 范围取自 `slot0_partition`／`zephyr,sram`；`conf/iapv3.conf` 配置镜
 自动导出 SGZ 时读取本次构建的 `.config`；单独运行 `pack_sgz.py` 时也可用
 `--config <应用 .config>` 保持密钥和上限一致。
 
-适用当前 MV-IO 单 ARM 硬件。升级地址段在 USART2/RS485 内路由。当前周期采集
-也使用同一条 RS485，上传主站必须留出总线窗口；实物上传与周期采集并行的性能仍需验证。
-这是唯一的镜像上传入口；应用不再提供第二个写 slot1 的接收器。
+适用当前 MV-IO 单 ARM 硬件。`modules/iap` 提供 `iap_route()`，但当前最小产品
+没有编译 TR/Modbus 路由，`iap_init()` 初始化的接收器没有调用者；IAPv3 上传在
+本构建中尚不可用。重新启用需要新增一个最小的 Modbus/RAW 路由适配层，并单独
+验证总线窗口与上传时序。这是唯一的镜像上传入口；应用不再提供第二个写 slot1
+的接收器。
 
 ```bash
 ./applications/IDU-pre/scripts/build.sh --mcuboot --iapv3

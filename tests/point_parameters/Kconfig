@@ -1,6 +1,0 @@
-mainmenu "Inline process parameter tests"
-
-config TEST_COUNTRY_OVERRIDE
-    bool "Select the fixture country before DP initialization"
-
-source "Kconfig.zephyr"

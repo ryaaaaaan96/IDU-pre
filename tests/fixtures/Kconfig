@@ -1,5 +1,0 @@
-config IDU_TEST_FIXTURES
-    bool
-    default y
-    depends on ZTEST
-    select CO_SIMULATOR

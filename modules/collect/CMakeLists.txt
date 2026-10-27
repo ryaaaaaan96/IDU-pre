@@ -1,8 +1,0 @@
-zephyr_include_directories(include)
-if(CONFIG_COLLECT)
-  zephyr_library()
-  zephyr_library_sources_ifdef(CONFIG_CO_VPORT src/message.c)
-  zephyr_library_sources(src/collect.c src/state.c)
-  zephyr_library_sources_ifdef(CONFIG_CO_MODEL_SIMULATOR src/model_simulator.c)
-  add_subdirectory(protocols/modbus)
-endif()

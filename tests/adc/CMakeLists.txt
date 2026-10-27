@@ -9,3 +9,5 @@ target_sources(app PRIVATE src/driver.c src/application.c ../../app/acquisition/
 target_compile_definitions(app PRIVATE CONFIG_IDU_ADC_AVERAGE_COUNT=10)
 
 target_include_directories(app PRIVATE ../../modules/dataprocess/include)
+
+target_compile_definitions(app PRIVATE CONFIG_DP_POINT_WORDS=16)

@@ -1,4 +1,0 @@
-tests:
-  idu.reference_configuration:
-    platform_allow: native_sim/native/64
-    tags: [dataprocess, reference]

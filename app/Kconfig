@@ -1,68 +1,4 @@
-config DP_TABLE_REGISTRY
-    default y if DP_REFERENCE_TABLES
-
 rsource "status/Kconfig"
-
-config IDU_COLLECT_PERIOD_MS
-    int "Southbound sample polling period (ms)"
-    default 500
-    range 10 60000
-
-config IDU_FORWARD_UNIT
-    int "Northbound Modbus unit selected at initialization"
-    default 16
-    range 1 247
-    help
-      The legacy IAPv3 receiver ignores station 247. IDU rejects this station
-      during product configuration when IDU_IAPV3 is enabled.
-
-config IDU_COLLECT_RETRIES
-    int "Extra automatic acquisition attempts"
-    default 2
-    range 0 16
-
-config IDU_COLLECT_EXCEPTION_MS
-    int "Maximum response anomaly duration (ms)"
-    default 3000
-    range 1 3600000
-
-config IDU_COLLECT_PROBE_MS
-    int "Offline discovery interval (ms)"
-    default 5000
-    range 1 3600000
-    help
-      Delay after an offline discovery attempt before probing again.
-      Each offline probe sends the first initialization or polling packet
-      once, without the retries used during initialization and normal polling.
-
-config IDU_PROTOCOL_SERVICE_PERIOD_MS
-    int "Communication maintenance interval (ms)"
-    default 100
-    range 10 60000
-
-config DP_REFERENCE_TABLES
-    default y
-
-config TR_MODBUS_RAW_PORT
-    default y if TR_MODBUS_ADAPTER
-
-config CO_MODBUS_RAW_PORT
-    default y if CO_MODBUS_ADAPTER
-
-config MODBUS_RAW_ADU
-    default y
-
-config MODBUS_NUMOF_RAW_ADU
-    default 2
-
-config TR_SERVER_SERVICE
-    default y
-
-config TR_REGISTER_SERVICE
-    default y
-
-config TR_FORWARD_CONFIG
-    default y
 
 config IDU_SAMPLE_PERIOD_MS
     int "Acquisition period in milliseconds"
@@ -78,9 +14,3 @@ config IDU_ADC_AVERAGE_COUNT
 config IDU_IAPV3
     bool "MV-IO IAPv3 AES/SGZ receiver"
     depends on BOOTLOADER_MCUBOOT && !MCUMGR_GRP_IMG
-    depends on IAP_CONFIGURED && IAP_REBOOT_DP_PARAMS && TR_MODBUS_ADAPTER
-    help
-      Only firmware upload receiver: legacy Modbus AES/SGZ on the fitted
-      MV-IO RS485 port. Accepts a single ARM QuickLZ level-3 SGZ containing
-      a signed MCUboot ECDSA-P256 image. Delta and downstream-device
-      upgrades are unsupported.

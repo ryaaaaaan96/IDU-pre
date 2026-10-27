@@ -1,4 +1,0 @@
-mainmenu "Independent forwarding devices"
-config MODBUS_BUFFER_SIZE
-    range 64 1100
-source "Kconfig.zephyr"

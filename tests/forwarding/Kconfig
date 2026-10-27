@@ -1,8 +1,0 @@
-mainmenu "Product forwarding tests"
-config MODBUS_BUFFER_SIZE
-    range 64 1100
-
-source "Kconfig.zephyr"
-rsource "../../app/Kconfig"
-
-rsource "../fixtures/Kconfig"

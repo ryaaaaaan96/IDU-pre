@@ -8,6 +8,26 @@ AIDC 产品代码、专用测试及导入工具已移除；下方日期章节保
 其中的旧构建命令和文件路径不再作为当前操作入口。
 当前构建入口为 `./applications/IDU-pre/scripts/build.sh`（从工作区根目录运行）；旧记录中的根目录 `build.sh` 已移入 `scripts/`。
 
+## 2026-10-27 DP 最小原子核心
+
+`modules/dataprocess` 收缩为模型登记、单点同步读写和本机 NVS 参数；删除异步
+样本队列、业务线程、定时器、参考表目录、`data_process.h` 字节适配层及
+collect/transmit 描述符。`modules/collect`、`modules/transmit`、`modules/vport`
+和旧应用通信装配一并删除。决策见 [ADR 0014](adr/0014-dp-minimal-core.md)，
+记录见 [.scratch/dp-minimal-core](../.scratch/dp-minimal-core/spec.md)。
+
+- DP 源码 5,827 → 1,056 行；应用 Flash 106,100 → 88,852 B，
+  RAM 78,676 → 40,728 B，系统堆 45,404 → 16,988 B。
+- 默认构建通过、无警告；MCUboot 签名和 SGZ 导出通过（SGZ 89,632 B）。
+- `tests/dp_core`、`tests/process_runtime` 通过；`dp_core` 用同一份模拟 Flash
+  跨进程验证参数 700 持久化和恢复默认 500。
+- `adc` 14 项、`io` 10 个进程场景、`modbus_support` 3 项、`task_watchdog`
+  25 个进程场景、`iap/run.sh` 通过。
+- `test_mcuboot_image.py`、`test_mcuboot_artifacts.py`、`test_build_configuration.py`
+  （5 项）、`test_debug_session.py`（4 项）、`git diff --check` 通过。
+
+未验证：实板参数掉电恢复、IAP 上传（当前无 TR/Modbus 路由）、堆峰值和栈高水位。
+
 ## 2026-10-27 IAPv3 布局下沉与暂存收敛
 
 `boards/iapv3.overlay` 删除，IAP 暂存/日志分区与 `chosen` 收进板级 DTS，
@@ -576,10 +596,10 @@ getter 只返回表，删除按设备号补挂表的装配逻辑。三表由 `de
 
 ## 通信接入与硬件模块整理（2026-10-20）
 
-现有 RS485 转发和虚拟采集通过 `transmit` 的 Modbus 适配接入 vport，
-配置见[通信端口接入](communication-ports.md)。`gpio`、`watchdog` 分别替代
-原输入、健康监控模块的名称；实现逻辑保持不变。LED 模块及通用闪烁任务已删除，
-由 `app/status/status.c` 直接调用 Zephyr LED API。
+现有 RS485 转发和虚拟采集通过 `transmit` 的 Modbus 适配接入 vport；
+相关模块和文档已在 2026-10-27 的 DP 最小核心中删除。`gpio`、`watchdog`
+分别替代原输入、健康监控模块的名称；实现逻辑保持不变。LED 模块及通用闪烁
+任务已删除，由 `app/status/status.c` 直接调用 Zephyr LED API。
 
 - `CCACHE_DISABLE=1 ASAN_OPTIONS=detect_leaks=0 bash tests/run.sh` 全量通过：
   39 次模拟器执行、258 项 Ztest PASS（含恢复阶段等重复执行）；

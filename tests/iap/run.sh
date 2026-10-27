@@ -36,9 +36,3 @@ env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/iap -d build/IDU-pre/tests/iap-configured -- \
     -DEXTRA_CONF_FILE=configured.conf -DEXTRA_DTC_OVERLAY_FILE=configured.overlay
 timeout 30s build/IDU-pre/tests/iap-configured/zephyr/zephyr.exe -flash_in_ram
-
-# 参考式协议段表后接真实 IAP 接收器。
-env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
-    applications/IDU-pre/tests/iap -d build/IDU-pre/tests/iap-routed -- \
-    -DEXTRA_CONF_FILE=routed.conf
-timeout 30s build/IDU-pre/tests/iap-routed/zephyr/zephyr.exe -flash_in_ram

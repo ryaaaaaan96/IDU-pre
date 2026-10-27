@@ -1,5 +1,7 @@
 # 0008：南向离线按设备判定并降低轮询负载
 
+> 2026-10-27：本决策涉及的采集/转发模块已由 [ADR 0014](0014-dp-minimal-core.md) 删除；以下内容保留为历史记录。
+
 状态：状态机与策略边界已接受，2026-10-22；已按正式规格实现，验证见通信重构实施记录。
 
 用户将最初“连续无回复直接判离线”的方向细化为每设备四状态：初始化、正常轮询、答复异常、掉线。
@@ -32,5 +34,5 @@
 显式下发最终取消自动重试，失败不触发答复异常状态，持久事务与读回规则保留；
 不因重新上线自动重放命令。这里取消的是显式下发重试，初始化和正常轮询超时重试保留。
 本地启动及存储故障边界见 [ADR 0007](0007-protocol-assembly-lifecycle.md)。
-实施验收依据见[正式规格](../../.scratch/communication-boundaries/spec.md)，快速阅读见[方案汇总](../communication-refactor.md)，实际配置值在 `prj.conf` 手动维护；
+实施验收依据见[正式规格](../../.scratch/communication-boundaries/spec.md)，实际配置值在 `prj.conf` 手动维护；
 问答过程见[边界讨论](../../.scratch/communication-boundaries/discussion.md)。

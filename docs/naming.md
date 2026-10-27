@@ -9,8 +9,7 @@
 | 职责 | 当前接口或类型 |
 | --- | --- |
 | 整机启动 | `startup()`，位于 `app/main.c` |
-| 协议装配 | `protocol_init()`、`protocol_register_point_tables()` |
-| 协议任务与端口 | `protocol_dp_tasks_*()`、`protocol_co_tasks_*()`、`protocol_ports_init()` |
+| 协议装配 | `protocol_init()` |
 | 每周期采样编排 | `acquisition_cycle()` |
 | 产品采样 | `acquisition_inputs_init()`、`acquisition_cycle()` |
 | 输入映射 | `struct analog_point` 及 DI 位图配置，含 spec、device_id、signal_id |
@@ -27,12 +26,12 @@
 | --- | --- |
 | IAP 项目配置 / 显式配置 | `iap_init()` / `iap_init_config(config)` |
 | 看门狗实例 | `watchdog_init()` |
-| DP 测点处理计划 / 全局 INIT 与 TIMER 表 | `dp_process_init()` / `dp_reference_init()` |
-| 采集调度就绪 / 测试模拟器 | `co_polling_init()` / `co_simulator_init()` |
-| 应用任务上下文 / 转发服务 | `protocol_dp_tasks_init()`、`protocol_co_tasks_init()` / `protocol_forwarding_init()` |
+| DP 模型、点值和参数 | `dp_start()` |
+| 产品本地 process | `protocol_init()` |
+| 硬件输入 | `acquisition_inputs_init()` / `acquisition_cycle()` |
+| 看门狗、状态 | `watchdog_init()` / `status_init()` |
 
-`protocol_dp_tasks_start()`、`protocol_co_tasks_start()` 最后放行已初始化的任务；
-`dp_process_timer_start()` 是运行期的定时器操作。这些接口保留启动含义，初始化顺序与执行上下文归属保持原约定。
+DP 不创建线程或定时器；命令点和状态点通过点表行的 `handler` / `read` 回调执行。
 
 头文件与职责一致，例如 `acquisition/acquisition.h`、`process/points.h`、
 `status/inc/status.h`、`status/status_led.h`。
@@ -53,8 +52,8 @@ DAC 尚未使用，后续有硬件需求时优先使用 Zephyr 标准接口。
 八路 ADC 和十六路 DI 的目标设备/信号均由应用映射配置。拨码地址暂不采样。
 电流换算和输入映射归 `acquisition`，公共业务回调归 `process`，协议与通信端口装配归 `protocol`。
 
-`dp_*`、`co_*`、`tr_*`、`iap_*`、`watchdog_*`
-保留各自模块的命名空间。新的调用方直接使用职责接口。
+`dp_*`、`iap_*`、`watchdog_*` 保留各自模块的命名空间。
+`co_*`、`tr_*` 随采集/转发模块删除，不再作为当前接口。
 
 ## 兼容范围
 

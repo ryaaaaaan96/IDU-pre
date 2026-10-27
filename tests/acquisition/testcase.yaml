@@ -1,6 +1,0 @@
-tests:
-  idu.acquisition.lifecycle:
-    platform_allow: native_sim/native/64
-    # 运行验收使用 run.py，在各独立进程中隔离单例。
-    build_only: true
-    tags: [idu, acquisition]

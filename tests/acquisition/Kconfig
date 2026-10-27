@@ -1,3 +1,0 @@
-mainmenu "Application acquisition tests"
-source "Kconfig.zephyr"
-rsource "../../app/status/Kconfig"

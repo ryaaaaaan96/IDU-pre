@@ -1,2 +1,0 @@
-mainmenu "Reference configuration tests"
-source "Kconfig.zephyr"

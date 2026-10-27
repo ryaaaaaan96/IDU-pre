@@ -11,7 +11,7 @@ static const DM_SIG_CFG_S local_process_rows[] = {
         .sig_size = 2,
         .sig_flag = DP_POINT_DEFAULT_FLAGS,
         .data_type = DATA_TYPE_U16,
-        .pf_sig_proc = points_parameter_command,
+        .handler = points_parameter_command,
         .data = {
             .def_value.u16 = DP_POINT_DEFAULT_VALUE,
             .min_value.u16 = DP_POINT_DEFAULT_VALUE,
@@ -23,7 +23,7 @@ static const DM_SIG_CFG_S local_process_rows[] = {
         .sig_size = 2,
         .sig_flag = DP_POINT_DEFAULT_FLAGS,
         .data_type = DATA_TYPE_U16,
-        .pf_sig_proc = points_parameter_command,
+        .handler = points_parameter_command,
         .data = {
             .def_value.u16 = DP_POINT_DEFAULT_VALUE,
             .min_value.u16 = DP_POINT_DEFAULT_VALUE,
@@ -35,7 +35,7 @@ static const DM_SIG_CFG_S local_process_rows[] = {
         .sig_size = 2,
         .sig_flag = DP_POINT_DEFAULT_FLAGS,
         .data_type = DATA_TYPE_U16,
-        .pf_sig_proc = points_parameter_command,
+        .handler = points_parameter_command,
         .data = {
             .def_value.u16 = DP_POINT_DEFAULT_VALUE,
             .min_value.u16 = DP_POINT_DEFAULT_VALUE,
@@ -47,7 +47,7 @@ static const DM_SIG_CFG_S local_process_rows[] = {
         .sig_size = 2,
         .sig_flag = DP_POINT_DEFAULT_FLAGS,
         .data_type = DATA_TYPE_U16,
-        .pf_sig_proc = points_parameter_command,
+        .handler = points_parameter_command,
         .data = {
             .def_value.u16 = DP_POINT_DEFAULT_VALUE,
             .min_value.u16 = DP_POINT_DEFAULT_VALUE,
@@ -59,7 +59,7 @@ static const DM_SIG_CFG_S local_process_rows[] = {
         .sig_size = 8,
         .sig_flag = FLAG_READ_CALLBACK,
         .data_type = DATA_TYPE_U16ARRAY,
-        .pf_sig_proc = points_parameter_status,
+        .read = points_parameter_status,
         .data = {
             .def_value.pst = DP_POINT_DEFAULT_ARRAY,
             .min_value.pst = DP_POINT_DEFAULT_ARRAY,
@@ -71,7 +71,6 @@ static const DM_SIG_CFG_S local_process_rows[] = {
         .sig_size = 2,
         .sig_flag = FLAG_PERSISTENCE | FLAG_RT_STORE | FLAG_RANGE_CHECK,
         .data_type = DATA_TYPE_U16,
-        .pf_sig_proc = DP_POINT_DEFAULT_CALLBACK,
         .data = {
             .def_value.u16 = CONFIG_IDU_SAMPLE_PERIOD_MS,
             .min_value.u16 = 100,
@@ -83,7 +82,6 @@ static const DM_SIG_CFG_S local_process_rows[] = {
         .sig_size = 16,
         .sig_flag = FLAG_PERSISTENCE | FLAG_RT_STORE,
         .data_type = DATA_TYPE_U16ARRAY,
-        .pf_sig_proc = DP_POINT_DEFAULT_CALLBACK,
         .data = {
             .def_value.pst = (void *)(const uint16_t[]){0x4944, 0x552d, 0x7072, 0x6500, 0, 0, 0, 0},
             .min_value.pst = DP_POINT_DEFAULT_ARRAY,
@@ -95,7 +93,6 @@ static const DM_SIG_CFG_S local_process_rows[] = {
         .sig_size = 2,
         .sig_flag = FLAG_PERSISTENCE | FLAG_RT_STORE | FLAG_RANGE_CHECK,
         .data_type = DATA_TYPE_U16,
-        .pf_sig_proc = DP_POINT_DEFAULT_CALLBACK,
         .data = {
             .def_value.u16 = 1,
             .min_value.u16 = 1,
@@ -105,9 +102,8 @@ static const DM_SIG_CFG_S local_process_rows[] = {
     {
         .sig_id = 2503,
         .sig_size = 2,
-        .sig_flag = FLAG_RANGE_CHECK,
+        .sig_flag = FLAG_RANGE_CHECK | FLAG_CONSTANT,
         .data_type = DATA_TYPE_U16,
-        .pf_sig_proc = points_default_callback,
         .data = {
             .def_value.u16 = 3,
             .min_value.u16 = DP_POINT_DEFAULT_VALUE,
@@ -117,9 +113,8 @@ static const DM_SIG_CFG_S local_process_rows[] = {
     {
         .sig_id = 2504,
         .sig_size = 20,
-        .sig_flag = DP_POINT_DEFAULT_FLAGS,
+        .sig_flag = FLAG_CONSTANT,
         .data_type = DATA_TYPE_U16ARRAY,
-        .pf_sig_proc = points_default_callback,
         .data = {
             .def_value.pst = (void *)(const uint16_t[]){0x5347, 0x2d46, 0x4143, 0x544f, 0x5259, 0, 0, 0, 0, 0},
             .min_value.pst = DP_POINT_DEFAULT_ARRAY,
@@ -129,9 +124,8 @@ static const DM_SIG_CFG_S local_process_rows[] = {
     {
         .sig_id = 2581,
         .sig_size = 30,
-        .sig_flag = DP_POINT_DEFAULT_FLAGS,
+        .sig_flag = FLAG_CONSTANT,
         .data_type = DATA_TYPE_U16ARRAY,
-        .pf_sig_proc = points_default_callback,
         .data = {
             .def_value.pst = (void *)(const uint16_t[]){0x4944, 0x552d, 0x7072, 0x655f, 0x302e, 0x312e, 0x3000, 0, 0, 0, 0, 0, 0, 0, 0},
             .min_value.pst = DP_POINT_DEFAULT_ARRAY,
@@ -141,9 +135,8 @@ static const DM_SIG_CFG_S local_process_rows[] = {
     {
         .sig_id = 2568,
         .sig_size = 8,
-        .sig_flag = DP_POINT_DEFAULT_FLAGS,
+        .sig_flag = FLAG_CONSTANT,
         .data_type = DATA_TYPE_U16ARRAY,
-        .pf_sig_proc = points_default_callback,
         .data = {
             .def_value.pst = (void *)(const uint16_t[]){0x3031, 0x4152, 3, 0x0103},
             .min_value.pst = DP_POINT_DEFAULT_ARRAY,
@@ -153,9 +146,8 @@ static const DM_SIG_CFG_S local_process_rows[] = {
     {
         .sig_id = 8149,
         .sig_size = 2,
-        .sig_flag = FLAG_RANGE_CHECK,
+        .sig_flag = FLAG_RANGE_CHECK | FLAG_CONSTANT,
         .data_type = DATA_TYPE_U16,
-        .pf_sig_proc = points_default_callback,
         .data = {
             .def_value.u16 = DEVICE_TYPE,
             .min_value.u16 = DP_POINT_DEFAULT_VALUE,
@@ -165,9 +157,8 @@ static const DM_SIG_CFG_S local_process_rows[] = {
     {
         .sig_id = SIGNAL_PROTOCOL,
         .sig_size = 4,
-        .sig_flag = FLAG_RANGE_CHECK,
+        .sig_flag = FLAG_RANGE_CHECK | FLAG_CONSTANT,
         .data_type = DATA_TYPE_U32,
-        .pf_sig_proc = points_default_callback,
         .data = {
             .def_value.u32 = PROTOCOL_VERSION,
             .min_value.u32 = DP_POINT_DEFAULT_VALUE,
@@ -177,9 +168,8 @@ static const DM_SIG_CFG_S local_process_rows[] = {
     {
         .sig_id = 5486,
         .sig_size = 2,
-        .sig_flag = FLAG_RANGE_CHECK,
+        .sig_flag = FLAG_RANGE_CHECK | FLAG_CONSTANT,
         .data_type = DATA_TYPE_U16,
-        .pf_sig_proc = points_default_callback,
         .data = {
             .def_value.u16 = 0x1204,
             .min_value.u16 = DP_POINT_DEFAULT_VALUE,
@@ -189,9 +179,8 @@ static const DM_SIG_CFG_S local_process_rows[] = {
     {
         .sig_id = SIGNAL_VIRTUAL_MODE,
         .sig_size = 2,
-        .sig_flag = FLAG_RANGE_CHECK,
+        .sig_flag = FLAG_RANGE_CHECK | FLAG_CONSTANT,
         .data_type = DATA_TYPE_U16,
-        .pf_sig_proc = points_default_callback,
         .data = {
             .def_value.u16 = IS_ENABLED(CONFIG_IDU_TEST_FIXTURES),
             .min_value.u16 = DP_POINT_DEFAULT_VALUE,
@@ -203,7 +192,6 @@ static const DM_SIG_CFG_S local_process_rows[] = {
         .sig_size = 2,
         .sig_flag = FLAG_RANGE_CHECK,
         .data_type = DATA_TYPE_U16,
-        .pf_sig_proc = DP_POINT_DEFAULT_CALLBACK,
         .data = {
             .def_value.u16 = 1,
             .min_value.u16 = 1,
@@ -215,7 +203,6 @@ static const DM_SIG_CFG_S local_process_rows[] = {
         .sig_size = 2,
         .sig_flag = DP_POINT_DEFAULT_FLAGS,
         .data_type = DATA_TYPE_U16,
-        .pf_sig_proc = DP_POINT_DEFAULT_CALLBACK,
         .data = {
             .def_value.u16 = DP_POINT_DEFAULT_VALUE,
             .min_value.u16 = DP_POINT_DEFAULT_VALUE,
@@ -227,7 +214,6 @@ static const DM_SIG_CFG_S local_process_rows[] = {
         .sig_size = 2,
         .sig_flag = DP_POINT_DEFAULT_FLAGS,
         .data_type = DATA_TYPE_U16,
-        .pf_sig_proc = DP_POINT_DEFAULT_CALLBACK,
         .data = {
             .def_value.u16 = DP_POINT_DEFAULT_VALUE,
             .min_value.u16 = DP_POINT_DEFAULT_VALUE,
@@ -239,7 +225,6 @@ static const DM_SIG_CFG_S local_process_rows[] = {
         .sig_size = 2,
         .sig_flag = DP_POINT_DEFAULT_FLAGS,
         .data_type = DATA_TYPE_U16,
-        .pf_sig_proc = DP_POINT_DEFAULT_CALLBACK,
         .data = {
             .def_value.u16 = DP_POINT_DEFAULT_VALUE,
             .min_value.u16 = DP_POINT_DEFAULT_VALUE,
@@ -251,7 +236,6 @@ static const DM_SIG_CFG_S local_process_rows[] = {
         .sig_size = 2,
         .sig_flag = DP_POINT_DEFAULT_FLAGS,
         .data_type = DATA_TYPE_U16,
-        .pf_sig_proc = DP_POINT_DEFAULT_CALLBACK,
         .data = {
             .def_value.u16 = DP_POINT_DEFAULT_VALUE,
             .min_value.u16 = DP_POINT_DEFAULT_VALUE,
@@ -263,7 +247,6 @@ static const DM_SIG_CFG_S local_process_rows[] = {
         .sig_size = 2,
         .sig_flag = DP_POINT_DEFAULT_FLAGS,
         .data_type = DATA_TYPE_U16,
-        .pf_sig_proc = DP_POINT_DEFAULT_CALLBACK,
         .data = {
             .def_value.u16 = DP_POINT_DEFAULT_VALUE,
             .min_value.u16 = DP_POINT_DEFAULT_VALUE,
@@ -275,7 +258,6 @@ static const DM_SIG_CFG_S local_process_rows[] = {
         .sig_size = 2,
         .sig_flag = DP_POINT_DEFAULT_FLAGS,
         .data_type = DATA_TYPE_U16,
-        .pf_sig_proc = DP_POINT_DEFAULT_CALLBACK,
         .data = {
             .def_value.u16 = DP_POINT_DEFAULT_VALUE,
             .min_value.u16 = DP_POINT_DEFAULT_VALUE,
@@ -287,7 +269,6 @@ static const DM_SIG_CFG_S local_process_rows[] = {
         .sig_size = 2,
         .sig_flag = DP_POINT_DEFAULT_FLAGS,
         .data_type = DATA_TYPE_U16,
-        .pf_sig_proc = DP_POINT_DEFAULT_CALLBACK,
         .data = {
             .def_value.u16 = DP_POINT_DEFAULT_VALUE,
             .min_value.u16 = DP_POINT_DEFAULT_VALUE,
@@ -299,7 +280,6 @@ static const DM_SIG_CFG_S local_process_rows[] = {
         .sig_size = 2,
         .sig_flag = DP_POINT_DEFAULT_FLAGS,
         .data_type = DATA_TYPE_U16,
-        .pf_sig_proc = DP_POINT_DEFAULT_CALLBACK,
         .data = {
             .def_value.u16 = DP_POINT_DEFAULT_VALUE,
             .min_value.u16 = DP_POINT_DEFAULT_VALUE,
@@ -311,98 +291,10 @@ static const DM_SIG_CFG_S local_process_rows[] = {
         .sig_size = 2,
         .sig_flag = DP_POINT_DEFAULT_FLAGS,
         .data_type = DATA_TYPE_U16,
-        .pf_sig_proc = DP_POINT_DEFAULT_CALLBACK,
         .data = {
             .def_value.u16 = DP_POINT_DEFAULT_VALUE,
             .min_value.u16 = DP_POINT_DEFAULT_VALUE,
             .max_value.u16 = DP_POINT_DEFAULT_VALUE,
-        },
-    },
-};
-
-static const DM_SIG_CFG_S remote_process_rows[] = {
-    {
-        .sig_id = SIGNAL_DI,
-        .sig_size = 2,
-        .sig_flag = DP_POINT_DEFAULT_FLAGS,
-        .data_type = DATA_TYPE_U16,
-        .pf_sig_proc = DP_POINT_DEFAULT_CALLBACK,
-        .data = {
-            .def_value.u16 = DP_POINT_DEFAULT_VALUE,
-            .min_value.u16 = DP_POINT_DEFAULT_VALUE,
-            .max_value.u16 = DP_POINT_DEFAULT_VALUE,
-        },
-    },
-    {
-        .sig_id = SIGNAL_CURRENT_1,
-        .sig_size = 2,
-        .sig_flag = DP_POINT_DEFAULT_FLAGS,
-        .data_type = DATA_TYPE_U16,
-        .pf_sig_proc = DP_POINT_DEFAULT_CALLBACK,
-        .data = {
-            .def_value.u16 = DP_POINT_DEFAULT_VALUE,
-            .min_value.u16 = DP_POINT_DEFAULT_VALUE,
-            .max_value.u16 = DP_POINT_DEFAULT_VALUE,
-        },
-    },
-    {
-        .sig_id = SIGNAL_CURRENT_2,
-        .sig_size = 2,
-        .sig_flag = DP_POINT_DEFAULT_FLAGS,
-        .data_type = DATA_TYPE_U16,
-        .pf_sig_proc = DP_POINT_DEFAULT_CALLBACK,
-        .data = {
-            .def_value.u16 = DP_POINT_DEFAULT_VALUE,
-            .min_value.u16 = DP_POINT_DEFAULT_VALUE,
-            .max_value.u16 = DP_POINT_DEFAULT_VALUE,
-        },
-    },
-    {
-        .sig_id = SIGNAL_PROTOCOL,
-        .sig_size = 4,
-        .sig_flag = DP_POINT_DEFAULT_FLAGS,
-        .data_type = DATA_TYPE_U32,
-        .pf_sig_proc = DP_POINT_DEFAULT_CALLBACK,
-        .data = {
-            .def_value.u32 = DP_POINT_DEFAULT_VALUE,
-            .min_value.u32 = DP_POINT_DEFAULT_VALUE,
-            .max_value.u32 = DP_POINT_DEFAULT_VALUE,
-        },
-    },
-    {
-        .sig_id = SIGNAL_ADDRESS,
-        .sig_size = 2,
-        .sig_flag = FLAG_RANGE_CHECK,
-        .data_type = DATA_TYPE_U16,
-        .pf_sig_proc = DP_POINT_DEFAULT_CALLBACK,
-        .data = {
-            .def_value.u16 = 1,
-            .min_value.u16 = 1,
-            .max_value.u16 = 247,
-        },
-    },
-    {
-        .sig_id = SIGNAL_REMOTE_SETPOINT,
-        .sig_size = 2,
-        .sig_flag = FLAG_PERSISTENCE | FLAG_RT_STORE | FLAG_COLLECT | FLAG_RANGE_CHECK,
-        .data_type = DATA_TYPE_U16,
-        .pf_sig_proc = DP_POINT_DEFAULT_CALLBACK,
-        .data = {
-            .def_value.u16 = 100,
-            .min_value.u16 = DP_POINT_DEFAULT_VALUE,
-            .max_value.u16 = 1000,
-        },
-    },
-    {
-        .sig_id = SIGNAL_REMOTE_OFFSET,
-        .sig_size = 4,
-        .sig_flag = FLAG_PERSISTENCE | FLAG_RT_STORE | FLAG_COLLECT | FLAG_RANGE_CHECK,
-        .data_type = DATA_TYPE_S32,
-        .pf_sig_proc = DP_POINT_DEFAULT_CALLBACK,
-        .data = {
-            .def_value.s32 = DP_POINT_DEFAULT_VALUE,
-            .min_value.s32 = -100000,
-            .max_value.s32 = 100000,
         },
     },
 };
@@ -412,14 +304,4 @@ const struct dp_model_cfg protocol_local_model = {
     .device_id = DEVICE_LOCAL,
     .points = local_process_rows,
     .point_count = ARRAY_SIZE(local_process_rows),
-};
-
-static const STRUCT_SECTION_ITERABLE(dp_registered_table, local_process_table) = {
-    .id = TABLE_LOCAL_PROCESS, .type = PRO_DATA_PROCESS,
-    .rows = local_process_rows, .count = ARRAY_SIZE(local_process_rows),
-};
-
-static const STRUCT_SECTION_ITERABLE(dp_registered_table, remote_process_table) = {
-    .id = TABLE_REMOTE_PROCESS, .type = PRO_DATA_PROCESS,
-    .rows = remote_process_rows, .count = ARRAY_SIZE(remote_process_rows),
 };

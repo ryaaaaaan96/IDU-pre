@@ -1,47 +1,37 @@
 # IDU-pre 文档导航
 
-[项目入口](../README.md)
+[项目入口](../README.md) · [领域术语](../GLOSSARY.md)
 
-## 按任务阅读
+## 当前文档
 
-| 任务 | 文档 | 内容边界 |
-| --- | --- | --- |
-| 构建或升级固件 | [构建、分区与升级](build-and-upgrade.md) | 配置选择、分区、产物、签名密钥、MCUboot/IAPv3 |
-| 配置代码跳转 | [VS Code 与 clangd](editor.md) | Sysbuild 应用编译数据库、后台索引及编辑器参数 |
-| 调整启动程序配置 | [MCUboot 配置目录](../bootloader/README.md) | 本板启动配置、分区及与应用升级代码的边界 |
-| 核对硬件 | [硬件与板级适配](hardware.md) | 时钟、引脚、Flash、看门狗和已实现行为 |
-| 在 WSL 调试实板 | [Windows J-Link 远程调试](wsl-jlink.md) | Windows USB/GDB Server、WSL GDB、签名烧录与断点限制 |
-| 调整代码命名或采样配置 | [命名与采样边界](naming.md) | 职责前缀、通用采样、产品配置与兼容范围 |
-| 理解框架 | [采集、处理与转发架构](collect-process-transmit.md) | 模块职责、数据流、Zephyr 调度、初始化顺序 |
-| 核对采集决策和公共 Modbus 职责 | [ADR 0010](adr/0010-collection-decisions-and-modbus-support.md) | 采集决策集中、公共传输适配、转发扩展与依赖方向 |
-| 使用任务健康监控 | [多任务看门狗方案](task-watchdog.md) | 已实施；显式登记、永久休眠、复位与 RAM 诊断，现有任务尚未接入 |
-| 维护点表 | [配置指南](../app/protocol/README.md) | 文件职责、新增设备/点、分散登记与参数配置 |
-| 规划多张转发表 | [转发表与北向服务](forwarding-model.md) | 挂表设备、数据来源、站号、寄存器地址及当前服务隔离限制 |
-| 查询协议和存储语义 | [点表、寄存器与参数事务](point-tables.md) | 点值/质量、扩展寄存器、NVS/下发恢复、真实采集口 |
-| 使用模块 | [模块接口](../modules/README.md)、[DP](../modules/dataprocess/README.md) | 依赖、配置、API 单位、同步/异步与事务约束 |
-| 扩展逻辑通信端口 | [vport](../modules/vport/README.md) | 回调端口、CO/TR 收发入口、来源保持与缓冲区所有权 |
-| 自动进行同线回环测试 | [Python 回环脚本](forward-loopback.md) | 可配置南向模拟、北向下发、离线/恢复及结果记录 |
-| 联调北向到南向下发 | [参数下发测试](north-south-test.md) | 10 秒采集周期、模拟从站配置、单字/双字映射及 RTU 测试帧 |
-| 查看现有端口接入 | [通信端口接入](communication-ports.md) | 同线 RS485 采集/转发、回调绑定、完整报文分流及恢复 |
-| 迁移参考平台接口 | [参考平台对照](reference-platform.md) | 原库证据、79/89 名称覆盖、差异、const/RAM 分工 |
-| 核对产品与升级边界 | [领域术语](../GLOSSARY.md)、[单一 IDU 产品方案](adr/0001-single-idu-product.md) | IDU 产品、可选升级模块和测试夹具的区别 |
-| 测试和核对容量 | [验证说明](testing.md) | 测试命令、套件、桌面结果、RAM 对比、实板边界 |
-| 调整大缓冲和堆容量 | [内存管理](memory-management.md) | k_malloc 所有权、初始化/临时工作区、共享堆预算和栈保护 |
-
-## 调研与历史证据
-
-| 文档 | 适用范围 |
+| 任务 | 文档 |
 | --- | --- |
-| [GD32 官方支持调研](gd32-support.md) | 2026-10-19 核查的官方仓库/提交、E505 时钟/ADC 缺口、版本选择；不是实时支持列表 |
-| [同端口多设备配置调研](device-groups.md) | 共享点表、设备实例与连续地址组的方案比较，以及 32 台设备的容量和轮询约束；建议接口尚未实现 |
-| [迁移与早期审计](migration-history.md) | 2026-10-14/15 旧表、旧库、MV-IO 验证及 10-19 目录重构记录；不是当前能力清单 |
+| 构建、分区与升级 | [构建与升级](build-and-upgrade.md) |
+| 维护点表和本地参数 | [协议点表](../app/protocol/README.md)、[DP 模块](../modules/dataprocess/README.md) |
+| 调整堆、点值或参数容量 | [内存管理](memory-management.md) |
+| 测试与验证记录 | [验证说明](testing.md) |
+| 核对硬件与引脚 | [硬件说明](hardware.md) |
+| 命名与采样边界 | [命名与采样边界](naming.md) |
+| 故障与看门狗 | [故障策略](fault-policy.md)、[任务看门狗](task-watchdog.md) |
+| 配置代码跳转 | [VS Code 与 clangd](editor.md) |
+| 在 WSL 调试实板 | [Windows J-Link 远程调试](wsl-jlink.md) |
+| GD32 支持调研 | [GD32 官方支持调研](gd32-support.md) |
+
+## 架构决策
+
+当前有效决策见 [`adr/`](adr/)。`modules/collect`、`modules/transmit`、
+`modules/vport` 已删除，相关 ADR 保留为历史记录；重新接入通信需要新的适配层。
+
+## 历史与证据
+
+| 文档 | 用途 |
+| --- | --- |
+| [迁移与早期审计](migration-history.md) | 旧表、旧库和目录重构记录 |
+| `legacy-point-inventory.csv`、`legacy-audit-evidence.json` | 旧平台点表与审计证据 |
+| [任务记录](../.scratch/) | 按功能保存当时规格、讨论与验证 |
 
 ## 维护规则
 
 当前行为写入对应主题；测试数量、容量和外部仓库结论须注明日期或提交。
-构建命令统一以 West 工作区为起点，使用应用自带的 `scripts/build.sh`。
-产品配置步骤集中在 `app/protocol/README.md`，原接口兼容结论集中在
-`reference-platform.md`，验证结果集中在 `testing.md`，避免各页重复维护数值。
-
-源码与桌面测试的结论须和实板证据分别记录。构建产物、日志及签名私钥保存在
-工作区 `build/`，不加入文档提交。旧链接入口保留为导航，历史记录保留原时点含义。
+构建产物、日志及签名私钥保存在工作区 `build/`，不加入文档提交。
+主机、模拟器和实板证据分开记录。

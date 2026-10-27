@@ -7,7 +7,3 @@ config IDU_PRE
     bool
     default y
     select REBOOT
-    select COLLECT if DATAPROCESS
-    select TRANSMIT if DATAPROCESS
-    select DP_PROCESS if DATAPROCESS
-    select TR_MODBUS_ADAPTER if DATAPROCESS

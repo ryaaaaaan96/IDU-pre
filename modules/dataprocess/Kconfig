@@ -1,123 +1,46 @@
 menuconfig DATAPROCESS
-    bool "Data management and processing"
+    bool "Data management and local parameter storage"
     select KERNEL_MEM_POOL
-    select ZBUS
-    select ZBUS_MSG_SUBSCRIBER
-    select ZBUS_MSG_SUBSCRIBER_NET_BUF_POOL_ISOLATION
+    select NVS
+    select NVS_DATA_CRC
+    depends on FLASH && FLASH_PAGE_LAYOUT && FLASH_MAP
 
 if DATAPROCESS
 
-config DP_REFERENCE_OVERRIDES
-    int "Maximum runtime default/range overrides (base tables stay const)"
-    default 4
-    range 1 32
-
-config DP_REFERENCE_EVENTS
-    int "Pending reference change/log notifications"
-    default 4
-    range 1 32
-    depends on DP_PROCESS
-
-config DP_REFERENCE_TABLES
-    bool "Use reference DEV_TABLE_S point tables"
-    depends on DP_PROCESS
-    help
-      Accept the reference device/process/Modbus table layouts through
-      platform_callback.h. Unsupported protocols and flags fail initialization.
-      Read const rows on demand through stack-local execution descriptors.
-      Native Zephyr tables can use dp_register_config_provider without this
-      option. No full-table RAM copies are allocated.
-
-config DP_TABLE_REGISTRY
-    bool "Discover const reference tables through iterable sections"
-    depends on DP_REFERENCE_TABLES
-    help
-      Register each complete table once. Resolve device bindings by table ID,
-      keeping rows in ROM and allocating only the caller-owned device view.
-
-config DP_PROCESS
-    bool "Business transactions, sample handlers and timers"
+config DP_PARAMS
+    bool
     default y
     help
-      Run READ, INIT, WRITE, SAMPLE and TIMER handlers with bounded copied
-      requests. Telemetry processing does not require flash or parameter storage.
-
-config DP_REFERENCE_MAX_TIMERS
-    int "Maximum reference business timer registrations"
-    default 8
-    range 1 32
-    depends on DP_PROCESS
+      Compatibility symbol for modules that select a parameter persistence
+      policy. Parameters are always part of the minimal DP core.
 
 config DP_POINT_WORDS
     int "Maximum words in one point"
     default 16
     range 2 72
 
-config DP_PROCESS_MAX_OUTPUTS
-    int "Maximum points produced by one process transaction"
-    default 24
-    range 4 64
-
-config DP_PROCESS_QUEUE_DEPTH
-    int "Asynchronous process queue depth"
-    default 4
-    range 1 16
-
-config DP_PROCESS_TIMERS
-    int "Registered business timers"
-    default 8
-    range 1 32
-
-config DP_PROCESS_STACK_SIZE
-    int "Business processor thread stack size"
-    default 6144
-    depends on DP_PROCESS
-
-config DP_MAX_DEVICES
-    int "Maximum acquisition devices"
-    default 16
-    range 1 64
-
-config DP_PARAMS
-    bool "Transactional parameter writes and durable NVS parameter records"
-    depends on FLASH && FLASH_PAGE_LAYOUT && FLASH_MAP
-    select DP_PROCESS
-    select NVS
-    select NVS_DATA_CRC
-    select REBOOT
-
-config DP_PARAMS_TRANSACTION_BYTES
-    int "Maximum encoded parameter transaction bytes"
-    default 2048
-    range 256 8192
-    depends on DP_PARAMS
-    help
-      Buffer for a temporary batch commit or downstream intent. Individual
-      parameter values are stored separately by device and signal identity.
-
-config DP_PARAMS_MAX_COUNT
-    int "Maximum parameter points"
-    default 16
-    range 1 192
-    depends on DP_PARAMS
-
-config DP_POINTS_QUEUE_DEPTH
-    int "Maximum pending acquisition batches"
-    default 6
-    range 1 16
-
 config DP_POINTS_MAX_POINTS
-    int "Maximum configured signals"
-    default 64
+    int "Maximum configured points"
+    default 32
     range 16 768
 
 config DP_POINTS_VALUE_WORDS
     int "Maximum total words in configured point values"
     default 512
-    range 64 16384
+    range 16 16384
     help
       Upper bound for the sum of point widths, validated at startup.
       Initialization allocates only the actual total from the system heap.
+
+config DP_PARAMS_MAX_COUNT
+    int "Maximum persistent parameters"
+    default 8
+    range 1 64
+
+config DP_PARAMS_TRANSACTION_BYTES
+    int "Maximum encoded parameter commit image"
+    default 2048
+    range 256 8192
 
 config HEAP_MEM_POOL_ADD_SIZE_DATAPROCESS
     int "System heap budget for point values (bytes)"
@@ -126,37 +49,14 @@ config HEAP_MEM_POOL_ADD_SIZE_DATAPROCESS
     help
       Contribution to the shared Zephyr system heap, not a private DP arena.
       Include the configured point widths times two and allocator overhead.
-      Other heap users need their own budget. A failed allocation leaves DP
-      uninitialized.
-
-config HEAP_MEM_POOL_ADD_SIZE_DP_WORK
-    int "Shared heap budget for sample processing buffers (bytes)"
-    default 16384 if DP_PROCESS
-    default 2048
-    range 512 32768
-    help
-      Covers the lifetime sample-worker batch, temporary process/reference
-      requests and transaction entries, copied asynchronous collector data,
-      queued/active business jobs and publication batches including product
-      sample mapping buffers. Queues hold pointers to owned heap jobs.
 
 config HEAP_MEM_POOL_ADD_SIZE_DP_PARAMS
-    int "Shared heap budget for parameter state and transaction buffers (bytes)"
-    depends on DP_PARAMS
-    default 8192
+    int "System heap budget for parameter cache and commit buffers (bytes)"
+    default 4096
     range 1024 131072
     help
-      Allocated once by dp_params_init(). Tune for DP_PARAMS_MAX_COUNT,
-      DP_POINT_WORDS and DP_PARAMS_TRANSACTION_BYTES. These buffers remain
-      available during storage failure so cached parameter reads can continue.
-
-config DP_POINTS_MAX_POLLS
-    int "Maximum collection blocks"
-    default 16
-    range 1 512
-
-config DP_POINTS_STACK_SIZE
-    int "Point processor stack size"
-    default 4096
+      Allocated once by the parameter store. Covers the per-parameter cache,
+      staging/durable copies and the commit image. These buffers remain
+      available during storage failure so cached reads can continue.
 
 endif

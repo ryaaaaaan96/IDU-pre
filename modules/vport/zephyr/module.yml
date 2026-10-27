@@ -1,4 +1,0 @@
-name: vport
-build:
-  cmake: .
-  kconfig: Kconfig
