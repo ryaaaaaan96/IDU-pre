@@ -38,6 +38,8 @@
 
 - 采集/转发和 IAP 路由不再是本产品能力。`modules/iap` 仍保留 `iap_route()`，
   但当前没有调用者；重新启用通信需要新增独立的 Modbus/RAW 路由适配层。
+  IAP 最小路由计划在下次调试 IAP 配置时实现，见
+  [.scratch/iap-route](../../.scratch/iap-route/spec.md)。
 - 参数宽度/类型变化会按格式不兼容清空 `idu-settings`，与旧行为一致。
 - 实板参数持久化、掉电和 IAP 上传需单独验证；本轮只有主机/native_sim 证据。
 - 历史 ADR 0006、0008、0010 记录当时方案，不代表当前能力。

@@ -172,9 +172,9 @@ RAM 范围取自 `slot0_partition`／`zephyr,sram`；`conf/iapv3.conf` 配置镜
 
 适用当前 MV-IO 单 ARM 硬件。`modules/iap` 提供 `iap_route()`，但当前最小产品
 没有编译 TR/Modbus 路由，`iap_init()` 初始化的接收器没有调用者；IAPv3 上传在
-本构建中尚不可用。重新启用需要新增一个最小的 Modbus/RAW 路由适配层，并单独
-验证总线窗口与上传时序。这是唯一的镜像上传入口；应用不再提供第二个写 slot1
-的接收器。
+本构建中尚不可用。最小路由计划在下次调试 IAP 配置时实现，见
+[.scratch/iap-route](../../.scratch/iap-route/spec.md)；重新启用后单独验证总线窗口
+与上传时序。这是唯一的镜像上传入口；应用不再提供第二个写 slot1 的接收器。
 
 ```bash
 ./applications/IDU-pre/scripts/build.sh --mcuboot --iapv3
