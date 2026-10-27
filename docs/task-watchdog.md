@@ -11,8 +11,8 @@ flowchart TD
     tasks[显式登记任务的心跳] --> work
     work -->|完整检查正常| healthy[健康结果及有效期]
     healthy --> timer
-    timer -->|正常且未过期| gpio[翻转一次 GPIO]
-    timer -->|过期| latch[锁存异常，停止发出边沿]
+    timer -->|已有健康标志正常| gpio[先翻转一次 GPIO]
+    gpio -->|随后发现过期| latch[锁存异常，下一周期起停止发出边沿]
     latch -->|队列恢复后通知| status[status 产品故障处理]
     work -->|任务或 GPIO 故障通知| status
     status -->|HOLD| hold[停止检查，显式保留喂狗]
@@ -25,7 +25,7 @@ flowchart TD
 生产 main、DP、CO、TR、IAP 保持不自动登记，不恢复隐式主循环或 DP 活性约束。
 
 软件/硬件开关独立；debug.conf 关闭两项，但显式 watchdog_reset 仍会复位。
-工作队列阻塞超过有效期时，硬件定时器锁存 CHECK 故障并停喂，不在 ISR 调用 status；外部芯片负责兜底。
+工作队列阻塞超过有效期时，硬件定时器本轮先喂狗，再锁存 CHECK 故障，下一周期起停喂，不在 ISR 调用 status；外部芯片负责兜底。
 仅软件配置无法在系统队列卡死期间主动处置，只会在队列恢复后发现过期，这与带外部硬件的能力不同。
 过期结果不能在恢复检查时重新续期；HOLD 显式关闭检查后可保留喂狗，但诊断不清除。
 

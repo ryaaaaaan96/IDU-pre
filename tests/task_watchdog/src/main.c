@@ -9,6 +9,7 @@
 #endif
 
 static atomic_t edges, feed_configures;
+static atomic_t last_edge_ms;
 static atomic_t protocol_stop_calls, last_stop_in_isr;
 static atomic_t queue_blocked;
 static bool expect_check_fault, expect_direct_reset;
@@ -30,7 +31,14 @@ static int set(const struct device *dev, gpio_port_pins_t mask, gpio_port_value_
 static int set_bits(const struct device *dev, gpio_port_pins_t pins)
 { ARG_UNUSED(dev); ARG_UNUSED(pins); return 0; }
 static int toggle(const struct device *dev, gpio_port_pins_t pins)
-{ ARG_UNUSED(dev); if (pins & BIT(21)) { atomic_inc(&edges); } return 0; }
+{
+    ARG_UNUSED(dev);
+    if (pins & BIT(21)) {
+        atomic_inc(&edges);
+        atomic_set(&last_edge_ms, k_uptime_get());
+    }
+    return 0;
+}
 static DEVICE_API(gpio, gpio_api) = {
     .pin_configure = configure, .port_set_masked_raw = set, .port_toggle_bits = toggle,
     .port_set_bits_raw = set_bits, .port_clear_bits_raw = set_bits,
@@ -381,6 +389,8 @@ ZTEST(task_watchdog, test_check_expiry_with_blocked_workqueue_stops_and_reboots)
     if (IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL)) {
         zassert_ok(watchdog_fault_get(&fault));
         zassert_equal(fault.reason, WATCHDOG_FAULT_CHECK);
+        /* 发现过期的同一轮已先输出最后一个喂狗边沿。 */
+        zassert_equal(atomic_get(&last_edge_ms), fault.occurred_ms);
         before = atomic_get(&edges);
         k_sleep(K_MSEC(30));
         zassert_equal(atomic_get(&edges), before);

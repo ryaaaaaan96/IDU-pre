@@ -70,22 +70,25 @@ static void record_fault(watchdog_fault_reason_t reason, int error,
 static void feed(struct k_timer *timer)
 {
     k_spinlock_key_t key = k_spin_lock(&lock);
-    if (monitor.feeding) {
-        if (monitor.checking && monitor.healthy &&
-            k_uptime_get() >= monitor.healthy_until_ms) {
-            record_fault(WATCHDOG_FAULT_CHECK, -ETIMEDOUT, NULL);
-            k_work_reschedule(&check_work, K_NO_WAIT);
-        }
-        if (!monitor.checking || monitor.healthy) {
-            int err = gpio_pin_toggle_dt(&feed_gpio);
-            if (err) {
-                monitor.feeding = false;
-                record_fault(WATCHDOG_FAULT_FEED_GPIO, err, NULL);
-                k_work_reschedule(&check_work, K_NO_WAIT);
-            }
-        }
+    if (!monitor.feeding || (monitor.checking && !monitor.healthy)) {
+        k_spin_unlock(&lock, key);
+        return;
     }
-    if (!monitor.feeding) { k_timer_stop(timer); }
+
+    int err = gpio_pin_toggle_dt(&feed_gpio);
+    if (err) {
+        monitor.feeding = false;
+        k_timer_stop(timer);
+        record_fault(WATCHDOG_FAULT_FEED_GPIO, err, NULL);
+    } else if (monitor.checking && k_uptime_get() >= monitor.healthy_until_ms) {
+        /* 本轮先喂狗，再锁存过期；后续周期不再喂狗。 */
+        record_fault(WATCHDOG_FAULT_CHECK, -ETIMEDOUT, NULL);
+    } else {
+        k_spin_unlock(&lock, key);
+        return;
+    }
+
+    k_work_reschedule(&check_work, K_NO_WAIT);
     k_spin_unlock(&lock, key);
 }
 static K_TIMER_DEFINE(feed_timer, feed, NULL);
