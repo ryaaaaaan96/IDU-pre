@@ -46,7 +46,7 @@ static void record_fault(watchdog_fault_reason_t reason, int error,
                          const struct watchdog_task *task)
 {
     if (monitor.fault.error &&
-        (reason != WATCHDOG_FAULT_GPIO || monitor.fault.reason == WATCHDOG_FAULT_GPIO)) {
+        (reason != WATCHDOG_FAULT_FEED_GPIO || monitor.fault.reason == WATCHDOG_FAULT_FEED_GPIO)) {
         return;
     }
     monitor.healthy = false;
@@ -57,7 +57,7 @@ static void record_fault(watchdog_fault_reason_t reason, int error,
     switch (reason) {
     case WATCHDOG_FAULT_TASK: monitor.fault.description = "Task heartbeat timed out"; break;
     case WATCHDOG_FAULT_CHECK: monitor.fault.description = "Watchdog health check expired"; break;
-    case WATCHDOG_FAULT_GPIO: monitor.fault.description = "Watchdog feed output failed"; break;
+    case WATCHDOG_FAULT_FEED_GPIO: monitor.fault.description = "Watchdog feed output failed"; break;
     default: break;
     }
     if (task) { monitor.fault.task = task->state; }
@@ -80,7 +80,7 @@ static void feed(struct k_timer *timer)
             int err = gpio_pin_toggle_dt(&feed_gpio);
             if (err) {
                 monitor.feeding = false;
-                record_fault(WATCHDOG_FAULT_GPIO, err, NULL);
+                record_fault(WATCHDOG_FAULT_FEED_GPIO, err, NULL);
                 k_work_reschedule(&check_work, K_NO_WAIT);
             }
         }
@@ -162,7 +162,7 @@ int watchdog_init(watchdog_fault_cb_t notify)
     int err = configure_feed();
     if (err) {
         key = k_spin_lock(&lock);
-        record_fault(WATCHDOG_FAULT_GPIO, err, NULL);
+        record_fault(WATCHDOG_FAULT_FEED_GPIO, err, NULL);
         monitor.notified = true; /* 初始化错误由返回值交给调用者处理。 */
         k_spin_unlock(&lock, key);
         return err;

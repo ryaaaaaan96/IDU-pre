@@ -65,7 +65,7 @@ ZTEST(io_modules, test_gpio_error_latches_and_notifies_from_workqueue)
     k_sleep(K_MSEC(30));
     struct watchdog_fault fault;
     zassert_ok(watchdog_fault_get(&fault));
-    zassert_equal(fault.reason, WATCHDOG_FAULT_GPIO);
+    zassert_equal(fault.reason, WATCHDOG_FAULT_FEED_GPIO);
     zassert_equal(fault.error, -EIO);
     zassert_equal(atomic_get(&notifications), 1);
     zassert_false(callback_in_isr);

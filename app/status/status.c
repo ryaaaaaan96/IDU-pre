@@ -55,11 +55,11 @@ static int status_watchdog_fault(const struct watchdog_fault *fault)
     watchdog_action_t action = fault->action;
     if (fault->reason != WATCHDOG_FAULT_REPORTED) {
         /* 显式留驻后，只接受新的硬件故障。 */
-        if (current == STATUS_FAULT_LOCKED && fault->reason != WATCHDOG_FAULT_GPIO) {
+        if (current == STATUS_FAULT_LOCKED && fault->reason != WATCHDOG_FAULT_FEED_GPIO) {
             k_spin_unlock(&status_runtime.lock, key);
             return 0;
         }
-        action = current == STATUS_STARTING && fault->reason != WATCHDOG_FAULT_GPIO ?
+        action = current == STATUS_STARTING && fault->reason != WATCHDOG_FAULT_FEED_GPIO ?
                  WATCHDOG_ACTION_HOLD : WATCHDOG_ACTION_RESET;
     }
     if (current == STATUS_STARTING && action == WATCHDOG_ACTION_CONTINUE) {

@@ -37,7 +37,7 @@ typedef enum {
 typedef enum {
     WATCHDOG_FAULT_TASK, /**< 已登记任务超时。 */
     WATCHDOG_FAULT_CHECK, /**< 检查结果或首次检查宽限过期。 */
-    WATCHDOG_FAULT_GPIO, /**< 外部看门狗喂狗 GPIO 初始化或电平翻转失败。 */
+    WATCHDOG_FAULT_FEED_GPIO, /**< 外部看门狗喂狗 GPIO 初始化或电平翻转失败。 */
     WATCHDOG_FAULT_REPORTED, /**< 其他模块主动上报，附带描述和动作。 */
 } watchdog_fault_reason_t;
 
