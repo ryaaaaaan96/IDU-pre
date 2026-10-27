@@ -2,7 +2,6 @@
 #include "inc/protocol.h"
 #include "inc/signal_ids.h"
 #include "tables.h"
-#include <dataprocess/points.h>
 #include <dataprocess/process.h>
 #include <platform_callback.h>
 
@@ -16,9 +15,6 @@ static const struct data_device_cfg bindings[] = {
     },
 };
 static DEV_TABLE_S devices[ARRAY_SIZE(bindings)];
-static struct k_thread samples, business;
-K_THREAD_STACK_DEFINE(sample_stack, CONFIG_DP_POINTS_STACK_SIZE);
-K_THREAD_STACK_DEFINE(business_stack, CONFIG_DP_PROCESS_STACK_SIZE);
 
 const DEV_TABLE_S *protocol_device_table(void) { return devices; }
 uint16_t protocol_device_count(void) { return ARRAY_SIZE(devices); }
@@ -48,14 +44,5 @@ int protocol_init(void)
     };
     err = dp_process_init(&plan);
     if (!err) { err = dp_reference_init(); }
-    if (err) { return err; }
-
-    /* 装配成功后再启动，模块不隐式创建线程。 */
-    k_thread_create(&samples, sample_stack, K_THREAD_STACK_SIZEOF(sample_stack),
-                    dp_samples_task, NULL, NULL, NULL, 5, 0, K_FOREVER);
-    k_thread_create(&business, business_stack, K_THREAD_STACK_SIZEOF(business_stack),
-                    dp_business_task, NULL, NULL, NULL, 6, 0, K_FOREVER);
-    k_thread_start(&samples);
-    k_thread_start(&business);
-    return 0;
+    return err;
 }

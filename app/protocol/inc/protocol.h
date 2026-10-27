@@ -12,7 +12,7 @@
  */
 int protocol_register_point_tables(void);
 /**
- * @brief 当前仅初始化本地 process 并启动 DP 线程；通信装配暂时停用。
+ * @brief 当前仅同步初始化本地 process；不创建 DP 线程，通信装配暂时停用。
  */
 int protocol_init(void);
 const DEV_TABLE_S *protocol_device_table(void);

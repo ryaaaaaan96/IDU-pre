@@ -3,7 +3,9 @@
 ## 当前阶段：仅运行 process（2026-10-27）
 
 按本轮优化要求，产品只编译 `process_runtime.c` 和 `tables/process.c`。
-启动顺序：本地点表注册 → `dp_init()` → `dp_process_init()` → `dp_reference_init()` → DP 样本/业务线程。
+启动顺序：本地点表注册 → `dp_init()` → `dp_process_init()` → `dp_reference_init()`。
+当前不创建 DP 样本/业务线程；本地 `dp_set_sig_value()` 在调用线程中同步完成处理。
+异步提交、定时业务及延后保存暂不启用，通用模块的线程处理函数保留。
 只绑定 `DEVICE_LOCAL`，不生成采集关系；本地 DI/AI 继续由 acquisition 读取并写入 DP。
 不提供 protocol 错误查询、停止接口或停止标志；故障回调直接调用 `dp_stop()`，不增加转调层。
 
