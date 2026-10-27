@@ -41,7 +41,7 @@ typedef enum {
     WATCHDOG_FAULT_REPORTED, /**< 其他模块主动上报，附带描述和动作。 */
 } watchdog_fault_reason_t;
 
-/** @brief 模块锁存的故障；非任务故障的 task.name 为空。 */
+/** @brief 统一故障快照；非任务故障的 task.name 为空。 */
 struct watchdog_fault {
     watchdog_fault_reason_t reason;
     int error;
@@ -71,7 +71,7 @@ typedef enum {
 int watchdog_init(watchdog_fault_cb_t notify);
 /**
  * @brief 同步上报业务故障，通知初始化时绑定的唯一回调；线程和 ISR 均可调用。
- * @note 不修改监控锁存故障或健康有效期；停止业务和复位策略由回调负责。
+ * @note 通知前更新最近故障；不修改监控锁存或健康有效期，动作由回调负责。
  * @note description 必须非空且常驻；故障阶段与处理策略由接收者判断。
  * @retval 0 回调处理成功。
  * @retval -EINVAL 参数无效。
@@ -93,7 +93,7 @@ int watchdog_task_feed(struct watchdog_task *task);
 int watchdog_task_sleep_forever(struct watchdog_task *task);
 /** @brief 复制任务快照，可从 ISR 调用，未登记返回 -ENOENT。 */
 int watchdog_task_get(const struct watchdog_task *task, struct watchdog_task_snapshot *snapshot);
-/** @brief 复制锁存故障，可从 ISR 调用；没有故障返回 -ENOENT，不改变状态。 */
+/** @brief 复制最近主动上报或监控故障，可从 ISR 调用；没有故障返回 -ENOENT。 */
 int watchdog_fault_get(struct watchdog_fault *snapshot);
 
 #endif

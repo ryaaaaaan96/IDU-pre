@@ -8,7 +8,7 @@ watchdog_report_fault(err, "Input point update failed", WATCHDOG_ACTION_RESET);
 ```
 
 描述保存指针，不复制或按字符串选择策略；应使用字符串常量或常驻存储。
-status 根据接收故障时的整机状态判断 STATUS_INIT / STATUS_RUNTIME，不要求调用者传入阶段。
+status 根据接收故障时的整机状态选择启动或运行策略，不再单独保存故障阶段。
 整机只维护未配置、启动、运行与故障锁存阶段。
 
 | 动作 | 行为 |
@@ -18,8 +18,9 @@ status 根据接收故障时的整机状态判断 STATUS_INIT / STATUS_RUNTIME�
 | RESET | 锁存终止状态，停止业务与全部监控，调用 watchdog_reset |
 
 初始化阶段不允许 CONTINUE，传入时返回 -EINVAL。启动初始化失败默认 HOLD，运行故障默认 RESET，动作直接写在 C 调用点。
-每次报告更新描述、阶段、错误、时间和请求动作，不判断重复、首次或升级，不维护故障历史。
-status_application_fault_get 返回一致的最近故障快照；fault.action 是最近请求，不代表业务已恢复。
+watchdog 在通知前更新最近故障快照，不判断重复、首次或升级，不维护历史。
+watchdog_fault_get 统一返回最近主动上报或监控故障；action 只对主动上报有效，表示请求而非实际恢复状态。
+参数无效或未绑定回调时不更新；合法请求即使被 status 的启动策略拒绝，也保留记录。
 重复终止请求允许重复调用停止接口，业务停止标志复位前不清除。
 
 ## Watchdog 与产品处理
@@ -27,7 +28,8 @@ status_application_fault_get 返回一致的最近故障快照；fault.action �
 main 只调用 status_init；status 内部通过 watchdog_init(status_watchdog_fault) 绑定唯一故障回调并启动监控，然后初始化 LED。
 watchdog 内部读取设备树并启动硬件喂狗及工作队列检查，不引用 status，也不提供多订阅者注册表。
 watchdog_report_fault 在调用者上下文、模块锁外同步调用唯一 status 回调，并返回回调结果；main 不增加故障处理入口。
-主动上报不改变 watchdog 的监控锁存故障，CONTINUE 不使监控停喂。watchdog_fault_get 仍只查询监控自身故障。
+主动上报不改变 watchdog 的监控锁存故障，CONTINUE 不使监控停喂。
+监控锁存用于健康门控和待通知事件，最近故障用于查询，两者均由 watchdog 内部管理；status 不再复制故障。
 引脚和硬件周期来自 app,gpio-watchdog 节点，软件周期来自 WATCHDOG_CHECK_INTERVAL_MS。
 首次检查宽限和健康结果有效期固定为三倍软件周期。只有完整检查通过才能续期，任务心跳不续期。
 
@@ -56,7 +58,8 @@ RESET 先调用 watchdog_stop(ALL)，再关闭协议/IAP 准入，提交非阻�
 
 ## 产品状态与指示
 
-status 保留整机阶段、最近产品故障、远端/存储降级和 LED。
+status 只维护整机阶段、产品故障动作和 LED，不保存故障或远端/存储诊断副本。
+远端状态直接调用 co_device_status，参数状态直接调用 dp_params_get_status；删除 protocol_update_status 的重复汇总。
 远端离线或允许的存储降级不停止本地采样，不主动停止硬件喂狗。
 startup 在必要初始化成功后直接调用 boot_write_img_confirmed，确认失败按初始化 HOLD 处理。
 不再保留 image_confirm.c、status_progress 或运行健康计时；存储降级和远端离线不阻止镜像确认。

@@ -73,6 +73,11 @@ ZTEST(io_modules, test_gpio_error_latches_and_notifies_from_workqueue)
     k_sleep(K_MSEC(30));
     zassert_equal(atomic_get(&toggles), 0);
     zassert_equal(atomic_get(&notifications), 1);
+    zassert_ok(watchdog_report_fault(-EAGAIN, "Later diagnostic", WATCHDOG_ACTION_CONTINUE));
+    zassert_ok(watchdog_fault_get(&fault));
+    zassert_str_equal(fault.description, "Later diagnostic");
+    k_sleep(K_MSEC(30));
+    zassert_equal(atomic_get(&toggles), 0); /* 最新记录覆盖不解除监控锁存。 */
 }
 
 ZTEST(io_modules, test_initialization_error_is_returned_without_retry)
@@ -119,7 +124,9 @@ ZTEST(io_modules, test_report_is_synchronous_and_preserves_monitoring)
     zassert_equal(reported.action, WATCHDOG_ACTION_CONTINUE);
     zassert_equal(strcmp(reported.description, "Diagnostic"), 0);
     struct watchdog_fault fault;
-    zassert_equal(watchdog_fault_get(&fault), -ENOENT);
+    zassert_ok(watchdog_fault_get(&fault));
+    zassert_equal(fault.reason, WATCHDOG_FAULT_REPORTED);
+    zassert_str_equal(fault.description, "Diagnostic");
     atomic_val_t before = atomic_get(&toggles);
     k_sleep(K_MSEC(30));
     zassert_true(atomic_get(&toggles) > before);

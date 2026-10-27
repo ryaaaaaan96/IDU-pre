@@ -15,6 +15,8 @@ static const struct gpio_dt_spec feed_gpio = GPIO_DT_SPEC_INST_GET(0, feed_gpios
 /* ==================== 共享健康状态 ==================== */
 
 static struct k_spinlock lock;
+/* 最近故障供统一查询，监控锁存仍独立决定健康状态和待通知事件。 */
+static struct watchdog_fault latest_fault;
 static struct {
     bool initialized;
     bool stopped;
@@ -52,7 +54,14 @@ static void record_fault(watchdog_fault_reason_t reason, int error,
     monitor.fault = (struct watchdog_fault){
         .reason = reason, .error = error, .occurred_ms = k_uptime_get(),
     };
+    switch (reason) {
+    case WATCHDOG_FAULT_TASK: monitor.fault.description = "Task heartbeat timed out"; break;
+    case WATCHDOG_FAULT_CHECK: monitor.fault.description = "Watchdog health check expired"; break;
+    case WATCHDOG_FAULT_GPIO: monitor.fault.description = "Watchdog feed output failed"; break;
+    default: break;
+    }
     if (task) { monitor.fault.task = task->state; }
+    latest_fault = monitor.fault;
 }
 
 /* ==================== 硬件定时器：只判定健康并执行喂狗 ==================== */
@@ -190,9 +199,10 @@ int watchdog_report_fault(int error,
     }
     k_spinlock_key_t key = k_spin_lock(&lock);
     watchdog_fault_cb_t notify = monitor.notify;
-    k_spin_unlock(&lock, key);
-    if (!notify) { return -EACCES; }
-
+    if (!notify) {
+        k_spin_unlock(&lock, key);
+        return -EACCES;
+    }
     const struct watchdog_fault fault = {
         .reason = WATCHDOG_FAULT_REPORTED,
         .error = error,
@@ -200,6 +210,8 @@ int watchdog_report_fault(int error,
         .action = action,
         .description = description,
     };
+    latest_fault = fault;
+    k_spin_unlock(&lock, key);
     return notify(&fault);
 }
 
@@ -317,8 +329,8 @@ int watchdog_fault_get(struct watchdog_fault *snapshot)
 {
     if (!snapshot) { return -EINVAL; }
     k_spinlock_key_t key = k_spin_lock(&lock);
-    int err = monitor.fault.error ? 0 : -ENOENT;
-    if (!err) { *snapshot = monitor.fault; }
+    int err = latest_fault.error ? 0 : -ENOENT;
+    if (!err) { *snapshot = latest_fault; }
     k_spin_unlock(&lock, key);
     return err;
 }

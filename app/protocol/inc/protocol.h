@@ -6,8 +6,6 @@
 #define APPLICATION_PROTOCOL_H
 
 #include <data_process.h>
-#include <collect_lib.h>
-#include <transmit_lib.h>
 
 /**
  * @brief 注册产品点表回调；随后由调用者执行通用模块 dp_init()。
@@ -28,10 +26,6 @@ int protocol_error(void);
  */
 void protocol_stop(void);
 bool protocol_stopped(void);
-/**
- * @brief 向应用状态单例提交远端和存储诊断。
- */
-void protocol_update_status(void);
 const DEV_TABLE_S *protocol_device_table(void);
 uint16_t protocol_device_count(void);
 struct tr_forward_cfg;

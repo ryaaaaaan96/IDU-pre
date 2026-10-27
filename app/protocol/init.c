@@ -1,7 +1,7 @@
 #include "inc/protocol.h"
 #include "tasks.h"
-#include "status/inc/status.h"
 #include <collect/collect.h>
+#include <collect_lib.h>
 #include <dataprocess/acquisition.h>
 #include <dataprocess/params.h>
 #include <dataprocess/process.h>
@@ -109,7 +109,7 @@ int protocol_init(void)
     }
     const uint8_t storage_id = DT_FIXED_PARTITION_ID(DT_ALIAS(idu_settings));
 
-    /* 保留降级策略：存储不可用时可采集，但禁止持久参数写入和试运行确认。 */
+    /* 保留降级策略：存储不可用时可采集，但禁止持久参数写入。 */
     err = dp_params_init(config, storage_id);
     if (err) {
         LOG_ERR("Parameter storage unavailable (%d); persistent writes disabled", err);
@@ -142,21 +142,4 @@ int protocol_init(void)
         protocol_co_tasks_start();
     }
     return err;
-}
-
-void protocol_update_status(void)
-{
-    uint16_t offline = 0, initializing = 0;
-    const struct dp_equip_cfg *config = dp_config();
-    if (config) {
-        for (size_t i = 0; i < config->device_count; ++i) {
-            struct co_device_status remote;
-            if (co_device_status(config->devices[i].dev_id, &remote)) { continue; }
-            offline += remote.state == CO_DEVICE_OFFLINE;
-            initializing += remote.state == CO_DEVICE_INITIALIZING;
-        }
-    }
-    struct dp_param_status parameters;
-    dp_params_get_status(&parameters);
-    status_update_degradation(offline, initializing, parameters.storage_error);
 }

@@ -101,10 +101,10 @@ DEVICE_DT_DEFINE(DT_NODELABEL(gpio_test), NULL, NULL, &gpio_data, &gpio_config,
 
 static bool terminal_result(watchdog_action_t action)
 {
-    struct status_application_fault fault;
+    struct watchdog_fault fault;
     struct dp_point_state point;
-    return !status_application_fault_get(&fault) && fault.description && !strcmp(fault.description, expected_description) &&
-        fault.error < 0 && fault.action == action &&
+    return !watchdog_fault_get(&fault) && fault.description && !strcmp(fault.description, expected_description) &&
+        fault.error < 0 && (fault.reason != WATCHDOG_FAULT_REPORTED || fault.action == action) &&
         protocol_stopped() &&
         dp_read((struct dp_key){DEVICE_LOCAL, SIGNAL_DI}, &point) == -ECANCELED;
 }
@@ -144,12 +144,12 @@ ZTEST(runtime, test_real_main_fault_policy)
     k_thread_create(&application_thread, application_stack, K_THREAD_STACK_SIZEOF(application_stack),
                      run_application, NULL, NULL, NULL, 10, 0, K_NO_WAIT);
     bool maintenance_injected = false;
-    struct status_application_fault fault;
+    struct watchdog_fault fault;
     if (!expected_description) {
         k_msleep(1800);
         zassert_true(atomic_get(&samples) >= 3);
         zassert_false(protocol_stopped());
-        zassert_equal(status_application_fault_get(&fault), -ENOENT);
+        zassert_equal(watchdog_fault_get(&fault), -ENOENT);
         struct dp_param_status storage;
         dp_params_get_status(&storage);
         zassert_true(storage.storage_error < 0);
@@ -172,10 +172,10 @@ ZTEST(runtime, test_real_main_fault_policy)
             zassert_ok(watchdog_task_register(&monitored, &config));
             maintenance_injected = true;
         }
-        if (!status_application_fault_get(&fault)) { break; }
+        if (!watchdog_fault_get(&fault)) { break; }
         k_msleep(10);
     }
-    zassert_ok(status_application_fault_get(&fault));
+    zassert_ok(watchdog_fault_get(&fault));
     if (status_phase_get() != STATUS_FAULT_LOCKED) {
         zassert_str_equal(expected_description, "Indicator output failed");
         zassert_str_equal(fault.description, expected_description);

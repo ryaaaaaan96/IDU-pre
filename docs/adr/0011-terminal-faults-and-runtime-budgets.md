@@ -87,3 +87,13 @@ startup 完成输入、可选 IAP 和协议初始化后直接调用 boot_write_i
 初始化失败不确认，确认写入失败按启动故障 HOLD，不循环重试；已确认镜像仍使用同一幂等接口。
 不再要求连续健康 10 秒、调用间隔小于 1.5 秒、60 秒窗口或参数区健康/无待处理事务。
 此决定取代此前镜像运行健康确认策略；镜像确认后，运行故障不能再依靠试运行回退。
+
+## 2026-10-27：故障记录和查询统一归 watchdog
+
+删除 status_application_fault_get、status_update_degradation、status_degradation_get 与相应状态副本。
+watchdog_fault_get 返回最近主动上报或监控故障；记录在回调前提交，覆盖最近记录不解除内部监控锁存。
+内部监控故障和待通知快照继续独立保留，确保队列延迟通知与后来的主动上报互不丢失。
+参数合法、回调已绑定的请求都会记录，包含被启动阶段 CONTINUE 策略拒绝的请求；动作字段仅对主动上报有效。
+status 只维护整机阶段、执行产品动作与 LED；删除单独故障阶段枚举及 protocol_update_status 重复汇总。
+业务诊断直接用 co_device_status 与 dp_params_get_status 读取。status 通过协议公开头声明调用 protocol_stop，
+不再手写跨目录前置声明。此项替代此前由 status 保留最近故障和降级汇总的决定。

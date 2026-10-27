@@ -87,10 +87,8 @@ static int service(service_t service)
 }
 
 int __real_watchdog_init(watchdog_fault_cb_t notify);
-static watchdog_fault_cb_t watchdog_notify;
 int __wrap_watchdog_init(watchdog_fault_cb_t notify)
 {
-    watchdog_notify = notify;
     zassert_ok(__real_watchdog_init(notify));
     return service(WATCHDOG_SERVICE_INIT);
 }
@@ -289,10 +287,10 @@ static void before(void *fixture)
     initialize_fixture();
 }
 
-static struct status_application_fault fault_snapshot(void)
+static struct watchdog_fault fault_snapshot(void)
 {
-    struct status_application_fault fault;
-    zassert_ok(status_application_fault_get(&fault));
+    struct watchdog_fault fault;
+    zassert_ok(watchdog_fault_get(&fault));
     return fault;
 }
 
@@ -301,7 +299,6 @@ static void check_startup_failure(service_t failed)
     errors[failed] = -EIO;
     zassert_equal(startup(), -EIO);
     zassert_equal(status_phase_get(), STATUS_FAULT_LOCKED);
-    zassert_equal(fault_snapshot().phase, STATUS_INIT);
     zassert_equal(fault_snapshot().error, -EIO);
     const char *description = "Protocol initialization failed";
     if (failed == WATCHDOG_SERVICE_INIT) { description = "Watchdog initialization failed"; }
@@ -434,7 +431,6 @@ ZTEST(acquisition, test_failed_acquisition_stops_before_maintenance)
     zassert_equal(application_cycle(), -ENODEV);
     zassert_equal(calls[PUBLISH], 0);
     zassert_false(published);
-    zassert_equal(fault_snapshot().phase, STATUS_RUNTIME);
     zassert_equal(fault_snapshot().error, -ENODEV);
     zassert_str_equal(fault_snapshot().description, "Input point update failed");
     zassert_equal(calls[PROTOCOL], 0);
@@ -449,7 +445,6 @@ static void check_cycle_failure(service_t failed, const char *description)
     zassert_equal(application_cycle(), -EIO);
     zassert_equal(calls[IMAGE_CONFIRM], 1);
     zassert_equal(stops, 1);
-    zassert_equal(fault_snapshot().phase, STATUS_RUNTIME);
     zassert_str_equal(fault_snapshot().description, description);
     zassert_equal(application_cycle(), -EACCES);
     zassert_equal(calls[PUBLISH], 1);
@@ -484,10 +479,8 @@ ZTEST(acquisition, test_confirmation_failure_holds_startup_without_sampling)
 ZTEST(acquisition, test_gpio_watchdog_error_stops_runtime_after_confirmation)
 {
     zassert_ok(startup());
-    const struct watchdog_fault fault = {.reason = WATCHDOG_FAULT_GPIO, .error = -EIO};
-    watchdog_notify(&fault);
+    (void)watchdog_report_fault(-EIO, "Watchdog feed output failed", WATCHDOG_ACTION_RESET);
     zassert_equal(application_cycle(), -EACCES);
-    zassert_equal(fault_snapshot().phase, STATUS_RUNTIME);
     zassert_equal(calls[IMAGE_CONFIRM], 1);
     zassert_equal(stops, 1);
 }
@@ -502,8 +495,8 @@ ZTEST(acquisition, test_lifecycle_guards)
     zassert_equal(startup(), -EALREADY);
     zassert_equal(status_init(), -EALREADY);
     zassert_equal(status_phase_get(), STATUS_RUN);
-    struct status_application_fault fault;
-    zassert_equal(status_application_fault_get(&fault), -ENOENT);
+    struct watchdog_fault fault;
+    zassert_equal(watchdog_fault_get(&fault), -ENOENT);
     zassert_equal(calls[TABLES_INIT], 1);
     zassert_equal(calls[WATCHDOG_SERVICE_INIT], 1);
     zassert_equal(calls[LED_START], 1);
@@ -515,8 +508,9 @@ ZTEST(acquisition, test_startup_cannot_continue_after_fault)
     zassert_equal(watchdog_report_fault(-EIO, "Initialization cannot continue",
                                        WATCHDOG_ACTION_CONTINUE), -EINVAL);
     zassert_equal(status_phase_get(), STATUS_STARTING);
-    struct status_application_fault fault;
-    zassert_equal(status_application_fault_get(&fault), -ENOENT);
+    struct watchdog_fault fault;
+    zassert_ok(watchdog_fault_get(&fault));
+    zassert_equal(fault.action, WATCHDOG_ACTION_CONTINUE);
 }
 
 ZTEST(acquisition, test_fault_arguments_do_not_change_state)
@@ -527,8 +521,8 @@ ZTEST(acquisition, test_fault_arguments_do_not_change_state)
     zassert_equal(watchdog_report_fault(-EIO, "", WATCHDOG_ACTION_RESET), -EINVAL);
     zassert_equal(watchdog_report_fault(-EIO, "Invalid action", (watchdog_action_t)-1), -EINVAL);
     zassert_equal(watchdog_report_fault(-EIO, "Invalid action", (watchdog_action_t)3), -EINVAL);
-    struct status_application_fault fault;
-    zassert_equal(status_application_fault_get(&fault), -ENOENT);
+    struct watchdog_fault fault;
+    zassert_equal(watchdog_fault_get(&fault), -ENOENT);
     zassert_equal(status_phase_get(), STATUS_RUN);
     zassert_equal(reboots, 0);
     zassert_equal(stops, 0);
@@ -539,7 +533,7 @@ ZTEST(acquisition, test_explicit_fault_actions_record_latest_error)
     zassert_ok(startup());
     static const char first[] = "Auxiliary output error";
     zassert_ok(watchdog_report_fault(-EIO, first, WATCHDOG_ACTION_CONTINUE));
-    struct status_application_fault fault = fault_snapshot();
+    struct watchdog_fault fault = fault_snapshot();
     zassert_equal_ptr(fault.description, first);
     zassert_equal(fault.action, WATCHDOG_ACTION_CONTINUE);
     zassert_equal(status_phase_get(), STATUS_RUN);
@@ -583,7 +577,6 @@ ZTEST(acquisition, test_status_records_latest_fault_without_resuming_business)
     (void)watchdog_report_fault(-ETIMEDOUT, "Task heartbeat timed out", WATCHDOG_ACTION_RESET);
     status_set_phase(STATUS_RUN);
     zassert_equal(status_phase_get(), STATUS_FAULT_LOCKED);
-    zassert_equal(fault_snapshot().phase, STATUS_RUNTIME);
     zassert_equal(fault_snapshot().error, -ETIMEDOUT);
     zassert_str_equal(fault_snapshot().description, "Task heartbeat timed out");
     zassert_equal(stops, 2);
@@ -693,7 +686,6 @@ ZTEST(acquisition, test_initial_led_output_failure_stops_startup)
     zassert_equal(stops, 0);
     zassert_equal(reboots, 0);
     zassert_equal(fault_snapshot().action, WATCHDOG_ACTION_HOLD);
-    zassert_equal(fault_snapshot().phase, STATUS_INIT);
 }
 
 ZTEST(acquisition, test_storage_degradation_does_not_block_startup_confirmation)
@@ -705,7 +697,7 @@ ZTEST(acquisition, test_storage_degradation_does_not_block_startup_confirmation)
     zassert_equal(calls[PROCESS_INIT], 1);
     zassert_equal(calls[COLLECT_START], 1);
     zassert_ok(application_cycle());
-    zassert_equal(status_degradation_get().storage_error, -EIO);
+    zassert_equal(parameter_storage_error, -EIO);
     zassert_equal(calls[IMAGE_CONFIRM], 1);
 }
 
@@ -728,13 +720,15 @@ ZTEST(acquisition, test_remote_outage_is_diagnostic_and_keeps_watchdog_progress)
     zassert_ok(startup());
     remote_state = CO_DEVICE_OFFLINE;
     zassert_ok(application_cycle());
-    zassert_equal(status_degradation_get().remote_offline, 1);
+    struct co_device_status remote;
+    zassert_ok(co_device_status(10, &remote));
+    zassert_equal(remote.state, CO_DEVICE_OFFLINE);
     zassert_equal(calls[IMAGE_CONFIRM], 1);
     zassert_equal(stops, 0);
     remote_state = CO_DEVICE_INITIALIZING;
     zassert_ok(application_cycle());
-    zassert_equal(status_degradation_get().remote_offline, 0);
-    zassert_equal(status_degradation_get().remote_initializing, 1);
+    zassert_ok(co_device_status(10, &remote));
+    zassert_equal(remote.state, CO_DEVICE_INITIALIZING);
     zassert_equal(calls[IMAGE_CONFIRM], 1);
 }
 
@@ -748,20 +742,22 @@ ZTEST(acquisition, test_shared_wire_station_conflict_fails_before_ports_or_worke
     zassert_equal(workers_started, 0);
 }
 
-ZTEST(acquisition, test_storage_fault_survives_successful_operation_until_storage_recovers)
+ZTEST(acquisition, test_storage_diagnostics_are_read_from_dataprocess)
 {
     errors[PARAMS_INIT] = -EIO;
     parameter_flags = 0;
     zassert_ok(startup());
+    struct dp_param_status storage;
+    dp_params_get_status(&storage);
+    zassert_equal(storage.storage_error, -EIO);
     zassert_ok(application_cycle());
-    zassert_equal(status_degradation_get().storage_error, -EIO);
-    errors[PARAMS_INIT] = 0; /* 最近一次参数操作现已成功。 */
-    zassert_ok(application_cycle());
-    zassert_equal(status_degradation_get().storage_error, -EIO);
-    zassert_equal(calls[IMAGE_CONFIRM], 1);
+    parameter_storage_error = 0;
     parameter_flags = DP_PARAM_STORAGE_READY;
-    zassert_ok(application_cycle());
-    zassert_equal(status_degradation_get().storage_error, 0);
+    dp_params_get_status(&storage);
+    zassert_equal(storage.storage_error, 0);
+    zassert_true(storage.flags & DP_PARAM_STORAGE_READY);
+    struct watchdog_fault fault;
+    zassert_equal(watchdog_fault_get(&fault), -ENOENT);
 }
 
 ZTEST_SUITE(acquisition, NULL, NULL, before, NULL, NULL);

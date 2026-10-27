@@ -1,4 +1,6 @@
 #include <watchdog/watchdog.h>
+#include <zephyr/kernel.h>
+#include <errno.h>
 #include "acquisition/acquisition.h"
 #include "process/points.h"
 #include "protocol/inc/protocol.h"
@@ -55,7 +57,6 @@ int application_cycle(void)
     if (err) {
         return watchdog_report_fault(err, "Input point update failed", WATCHDOG_ACTION_RESET);
     }
-    protocol_update_status();
     err = protocol_error();
     if (err) {
         return watchdog_report_fault(err, "Protocol maintenance failed", WATCHDOG_ACTION_RESET);

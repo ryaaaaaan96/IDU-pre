@@ -185,7 +185,9 @@ ZTEST(task_watchdog, test_explicit_hold_keeps_feed_without_task_fault)
     zassert_equal(watchdog_task_feed(&first), -ECANCELED);
     zassert_equal(watchdog_task_register(&extra, &config), -ECANCELED);
     struct watchdog_fault fault;
-    zassert_equal(watchdog_fault_get(&fault), -ENOENT);
+    zassert_ok(watchdog_fault_get(&fault));
+    zassert_equal(fault.reason, WATCHDOG_FAULT_REPORTED);
+    zassert_equal(fault.action, WATCHDOG_ACTION_HOLD);
 }
 ZTEST(task_watchdog, test_permanent_sleep_and_explicit_reregistration)
 {
@@ -442,6 +444,10 @@ ZTEST(task_watchdog, test_explicit_hold_after_expiry_keeps_feed_without_clearing
     k_sleep(K_MSEC(40));
     zassert_equal(status_phase_get(), STATUS_FAULT_LOCKED);
     zassert_equal(atomic_get(&protocol_stop_calls), 1);
+    struct watchdog_fault latest;
+    zassert_ok(watchdog_fault_get(&latest));
+    zassert_str_equal(latest.description, "Explicit diagnostic hold");
+    zassert_equal(watchdog_task_feed(&first), -ECANCELED);
 }
 
 ZTEST(task_watchdog, test_direct_reset_stops_and_reboots)
@@ -501,7 +507,9 @@ ZTEST(task_watchdog, test_interrupt_hold_closes_gate_and_keeps_feed_with_blocked
     zassert_equal(atomic_get(&edges) > before, IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL));
     zassert_equal(watchdog_task_feed(&first), -ECANCELED);
     struct watchdog_fault fault;
-    zassert_equal(watchdog_fault_get(&fault), -ENOENT);
+    zassert_ok(watchdog_fault_get(&fault));
+    zassert_equal(fault.reason, WATCHDOG_FAULT_REPORTED);
+    zassert_equal(fault.action, WATCHDOG_ACTION_HOLD);
     k_sem_give(&queue_release);
     k_sleep(K_MSEC(10));
 }
@@ -509,9 +517,9 @@ ZTEST(task_watchdog, test_interrupt_hold_closes_gate_and_keeps_feed_with_blocked
 #ifdef CONFIG_TEST_WATCHDOG_INIT_FAILURE
 ZTEST(task_watchdog, test_explicit_initialization_failure)
 {
-    struct status_application_fault fault;
+    struct watchdog_fault fault;
     zassert_equal(status_phase_get(), STATUS_FAULT_LOCKED);
-    zassert_ok(status_application_fault_get(&fault));
+    zassert_ok(watchdog_fault_get(&fault));
     zassert_equal(fault.action, WATCHDOG_ACTION_HOLD);
     zassert_equal(fault.error, -EIO);
     k_sleep(K_MSEC(200));

@@ -127,7 +127,7 @@ app/main.c                         启动顺序、采样周期与休眠
 `main.c` 中的 `startup()` 显式组织状态与输入初始化、点表注册、端口和总线
 建立、参数恢复、INIT 和采集启动。启动成功后按周期调用 `acquisition_cycle()`；
 不再设置独立的 startup 文件或设备服务兼容入口。
-`app/status/inc/status.h` 定义业务阶段并维护最近故障。启动失败留驻，运行故障按调用点动作处理。
+`app/status/inc/status.h` 定义业务阶段，最近故障统一通过 `watchdog_fault_get()` 查询。启动失败留驻，运行故障按调用点动作处理。
 MCUboot 镜像在 `startup()` 完成必要初始化后调用 `boot_write_img_confirmed()` 确认一次；
 确认失败留驻，不再执行运行健康窗口或参数存储条件检查。
 多任务看门狗由 watchdog 工作队列检查，硬件定时器按健康结果有效期喂狗；任务显式登记，status 负责产品故障处置；无活动登记项时持续喂狗，现有任务暂未接入，见[任务看门狗](docs/task-watchdog.md)。
@@ -201,7 +201,7 @@ IDU-pre/
 | 接口 | 职责 |
 | --- | --- |
 | `acquisition/acquisition.h` | 产品输入初始化和 DI/AI 测点更新 |
-| `status/inc/status.h` | 业务阶段、故障状态和 LED 策略 |
+| `status/inc/status.h` | 整机阶段和 LED 策略 |
 | `process/points.h` | 周期参数及测点业务回调 |
 | `protocol/inc/protocol.h` | 点表注册、`protocol_ports_init()` 注册入口及常驻配置声明 |
 | `<transmit/server.h>` | 每端口启动、配置更新及健康维护 |
