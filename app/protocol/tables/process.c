@@ -1,7 +1,7 @@
 #include "protocol.h"
-#include "../tables.h"
 #include "signal_ids.h"
 #include "process/points.h"
+#include <dataprocess/model.h>
 #include <zephyr/sys/util.h>
 
 /* 每行显式配置全部字段；默认值来自 DP，读回调通过 FLAG_READ_CALLBACK 启用。 */
@@ -299,7 +299,7 @@ static const DM_SIG_CFG_S local_process_rows[] = {
     },
 };
 
-/* 与测点表在同一编译单元，指针及数量均为编译期常量。 */
+/* 与测点表在同一编译单元，指针及数量均为编译期常量；仅供 process_runtime 使用。 */
 const struct dp_model_cfg protocol_local_model = {
     .device_id = DEVICE_LOCAL,
     .points = local_process_rows,
