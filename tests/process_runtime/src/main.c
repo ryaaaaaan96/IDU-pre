@@ -3,18 +3,17 @@
 #include <dataprocess/points.h>
 #include <dataprocess/params.h>
 #include <zephyr/ztest.h>
-#include <platform_callback.h>
+#include <dataprocess/model.h>
 #include <dataprocess/point_parameters.h>
 
 ZTEST(process_runtime, test_local_process_without_communication)
 {
-    zassert_equal(dp_register_devices(NULL, 1), -EINVAL);
-    zassert_equal(dp_register_devices((const DEV_TABLE_S[]){{0}}, 0), -EINVAL);
+    zassert_equal(dp_register_models(NULL, 1), -EINVAL);
+    zassert_equal(dp_register_models((const struct dp_model_cfg[]){{0}}, 0), -EINVAL);
     zassert_ok(protocol_init());
-    zassert_equal(dp_register_devices(dp_config()->reference_devices, 1), -EBUSY);
-    zassert_equal(dp_register_config_provider(NULL), -EBUSY);
-    zassert_equal(dp_config()->reference_device_count, 1);
-    zassert_equal(dp_config()->reference_devices[0].dev_id, DEVICE_LOCAL);
+    zassert_equal(dp_register_models(dp_config()->models, 1), -EBUSY);
+    zassert_equal(dp_config()->model_count, 1);
+    zassert_equal(dp_config()->models[0].device_id, DEVICE_LOCAL);
     zassert_equal(dp_config()->device_count, 0);
     zassert_equal(dp_config()->collect_count, 0);
     DM_SIG_DATA_S parameters;

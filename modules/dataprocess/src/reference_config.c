@@ -1,4 +1,5 @@
 #include <platform_callback.h>
+#include <dataprocess/model.h>
 #include <dataprocess/points.h>
 #include <dataprocess/params.h>
 #include <dataprocess/point_parameters.h>
@@ -10,8 +11,8 @@
 LOG_MODULE_REGISTER(dp_configuration, LOG_LEVEL_INF);
 
 K_MUTEX_DEFINE(configuration_lock);
-static const DEV_TABLE_S *registered_devices;
-static uint16_t registered_device_count;
+static const struct dp_model_cfg *registered_models;
+static size_t registered_model_count;
 static CFG_GET_DEV_TBL get_devices;
 static CFG_GET_DEV_NUM get_device_count;
 static PARA_GET_RANGE_DEF get_range;
@@ -30,7 +31,15 @@ static const uint8_t zero_defaults[144];
 
 static const DM_SIG_CFG_S *configured_signal(uint16_t dev, uint16_t sig)
 {
-    if (!dev || dev > UINT8_MAX) { return NULL; }
+    if (!dev) { return NULL; }
+    for (size_t i = 0; i < registered_model_count; ++i) {
+        const struct dp_model_cfg *model = &registered_models[i];
+        if (model->device_id != dev) { continue; }
+        for (size_t n = 0; n < model->point_count; ++n) {
+            if (model->points[n].sig_id == sig) { return &model->points[n]; }
+        }
+        return NULL;
+    }
     const DEV_TABLE_S *devices = pltcb_cfg_get_dev_tbl();
     size_t count = pltcb_cfg_get_dev_num();
     for (size_t i = 0; devices && i < count; ++i) {
@@ -96,27 +105,36 @@ int dp_register_parameter_country(uint16_t country, dp_country_parameter_fn over
         k_mutex_unlock(&configuration_lock); \
     }
 
-int dp_register_devices(const DEV_TABLE_S *devices, uint16_t count)
+int dp_register_models(const struct dp_model_cfg *models, size_t count)
 {
     if (k_is_in_isr()) { return -EWOULDBLOCK; }
-    if (!devices || !count || count > CONFIG_DP_MAX_DEVICES + 2) { return -EINVAL; }
-    k_mutex_lock(&configuration_lock, K_FOREVER);
-    int err = frozen || initializing || dp_config() || registered_devices ||
-              get_devices || get_device_count || native_provider ? -EBUSY : 0;
-    if (!err) {
-        registered_devices = devices;
-        registered_device_count = count;
+    if (!models || !count || count > CONFIG_DP_POINTS_MAX_POINTS) { return -EINVAL; }
+    size_t points = 0;
+    for (size_t i = 0; i < count; ++i) {
+        if (!models[i].device_id || !models[i].points || !models[i].point_count ||
+            models[i].point_count > CONFIG_DP_POINTS_MAX_POINTS - points) { return -EINVAL; }
+        points += models[i].point_count;
+        for (size_t n = 0; n < i; ++n) {
+            if (models[n].device_id == models[i].device_id) { return -EEXIST; }
+        }
+        for (size_t n = 0; n < models[i].point_count; ++n) {
+            if (models[i].points[n].sig_flag & FLAG_COLLECT) { return -ENOTSUP; }
+        }
     }
+    k_mutex_lock(&configuration_lock, K_FOREVER);
+    int err = frozen || initializing || dp_config() || registered_models ||
+              get_devices || get_device_count || native_provider ? -EBUSY : 0;
+    if (!err) { registered_models = models; registered_model_count = count; }
     k_mutex_unlock(&configuration_lock);
     return err;
 }
 
-/* 旧回调接口不覆盖已直接登记的设备表。 */
+/* 已登记模型时不允许再安装设备目录回调。 */
 void pltcb_reg_cfg_get_dev_tbl(CFG_GET_DEV_TBL callback)
 {
     if (k_is_in_isr()) { return; }
     k_mutex_lock(&configuration_lock, K_FOREVER);
-    if (!frozen && !initializing && !dp_config() && !registered_devices) {
+    if (!frozen && !initializing && !dp_config() && !registered_models) {
         get_devices = callback;
     }
     k_mutex_unlock(&configuration_lock);
@@ -126,7 +144,7 @@ void pltcb_reg_cfg_get_dev_num(CFG_GET_DEV_NUM callback)
 {
     if (k_is_in_isr()) { return; }
     k_mutex_lock(&configuration_lock, K_FOREVER);
-    if (!frozen && !initializing && !dp_config() && !registered_devices) {
+    if (!frozen && !initializing && !dp_config() && !registered_models) {
         get_device_count = callback;
     }
     k_mutex_unlock(&configuration_lock);
@@ -139,12 +157,12 @@ REGISTER_CALLBACK(pltcb_reg_cfg_get_init_reg_num, CFG_GET_INIT_REG_NUM, get_init
 
 const DEV_TABLE_S *pltcb_cfg_get_dev_tbl(void)
 {
-    return registered_devices ? registered_devices : get_devices ? get_devices() : NULL;
+    return get_devices ? get_devices() : NULL;
 }
 
 uint16_t pltcb_cfg_get_dev_num(void)
 {
-    return registered_devices ? registered_device_count : get_device_count ? get_device_count() : 0;
+    return get_device_count ? get_device_count() : 0;
 }
 
 const TIME_DATA_SET_S *pltcb_cfg_get_timer_reg_tbl(void)
@@ -183,7 +201,7 @@ int dp_register_config_provider(dp_config_provider_fn provider)
     if (k_is_in_isr()) { return -EWOULDBLOCK; }
     k_mutex_lock(&configuration_lock, K_FOREVER);
     int err = frozen || initializing || dp_config() ? -EBUSY : 0;
-    if (!err && registered_devices) { err = -EBUSY; }
+    if (!err && registered_models) { err = -EBUSY; }
     if (!err) { native_provider = provider; }
     k_mutex_unlock(&configuration_lock);
     return err;
@@ -274,12 +292,13 @@ out:
     return err;
 }
 
+static struct dp_equip_cfg compiled;
+
 #if defined(CONFIG_DP_REFERENCE_TABLES)
 /* 仅传输标识和配置对象需要可写存储；
  * 三张源表及默认值均保留在应用持有的 Flash 中。
  */
 static struct dp_device_cfg devices[CONFIG_DP_MAX_DEVICES];
-static struct dp_equip_cfg compiled;
 
 static int word_order(uint8_t encoded, dp_word_order_t *order)
 {
@@ -293,7 +312,9 @@ static int word_order(uint8_t encoded, dp_word_order_t *order)
     }
 }
 
-static int point_values(uint8_t dev, const DM_SIG_CFG_S *signal, struct dp_point_cfg *p)
+#endif
+
+static int point_values(uint16_t dev, const DM_SIG_CFG_S *signal, struct dp_point_cfg *p)
 {
     if (!signal->sig_size || signal->sig_size > DP_POINT_WORDS * 2 ||
         signal->sig_size > 144 || !signal->sig_id) { return -EINVAL; }
@@ -397,6 +418,7 @@ static int point_values(uint8_t dev, const DM_SIG_CFG_S *signal, struct dp_point
 }
 
 
+#if defined(CONFIG_DP_REFERENCE_TABLES)
 static const DM_SIG_CFG_S *signal_row(const DEV_TABLE_S *dev, uint16_t sig)
 {
     const DEV_TBL_CFG_S *group = &dev->ptl_tbl_cfg[0];
@@ -561,6 +583,35 @@ static int reference_transmit(const struct dp_equip_cfg *cfg, size_t index,
     return -ENOENT;
 }
 
+#endif
+
+static int model_point(const struct dp_equip_cfg *cfg, size_t index,
+                       struct dp_point_cfg *point)
+{
+    for (size_t i = 0; i < cfg->model_count; ++i) {
+        const struct dp_model_cfg *model = &cfg->models[i];
+        if (index < model->point_count) {
+            return point_values(model->device_id, &model->points[index], point);
+        }
+        index -= model->point_count;
+    }
+    return -ENOENT;
+}
+
+static int compile_models(void)
+{
+    compiled = (struct dp_equip_cfg){
+        .models = registered_models,
+        .model_count = registered_model_count,
+        .point_get = model_point,
+    };
+    for (size_t i = 0; i < registered_model_count; ++i) {
+        compiled.point_count += registered_models[i].point_count;
+    }
+    return dp_validate(&compiled);
+}
+
+#if defined(CONFIG_DP_REFERENCE_TABLES)
 static int compile_tables(void)
 {
     const DEV_TABLE_S *table = pltcb_cfg_get_dev_tbl();
@@ -632,19 +683,27 @@ static int compile_tables(void)
 
 #endif
 
+static int compile_configuration(void)
+{
+    if (registered_models) { return compile_models(); }
+#if defined(CONFIG_DP_REFERENCE_TABLES)
+    return compile_tables();
+#else
+    return -ENOTSUP;
+#endif
+}
+
 int dp_reference_prepare(const struct dp_equip_cfg **cfg)
 {
     if (!cfg || k_is_in_isr()) { return -EINVAL; }
     *cfg = NULL;
     k_mutex_lock(&configuration_lock, K_FOREVER);
     int err = -ENOTSUP;
-#if defined(CONFIG_DP_REFERENCE_TABLES)
     if (native_provider || initializing) { err = -EBUSY; }
     else if (frozen || dp_config()) {
         err = dp_config() == &compiled ? 0 : -EBUSY;
-    } else { err = compile_tables(); }
+    } else { err = compile_configuration(); }
     if (!err) { *cfg = &compiled; }
-#endif
     k_mutex_unlock(&configuration_lock);
     return err;
 }
@@ -664,12 +723,8 @@ int dp_init(void)
             err = dp_init_config(native_provider());
         }
     } else {
-#if defined(CONFIG_DP_REFERENCE_TABLES)
-        err = compile_tables();
+        err = compile_configuration();
         if (!err) { err = dp_init_config(&compiled); }
-#else
-        err = -ENOTSUP;
-#endif
     }
     initializing = false;
     frozen = !err;

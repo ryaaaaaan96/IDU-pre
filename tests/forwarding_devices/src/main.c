@@ -1,3 +1,4 @@
+#include "../../../app/protocol/device_binding.h"
 #include "../../fixtures/tr_tasks.h"
 #include "../../fixtures/dp_tasks.h"
 #include <dataprocess/points.h>
@@ -135,7 +136,7 @@ static void *setup(void)
         };
         zassert_ok(dp_table_registry_bind(old_bindings, ARRAY_SIZE(old_bindings), devices));
     } else {
-        zassert_ok(dp_data_device_bind(data_devices, ARRAY_SIZE(data_devices), devices));
+        zassert_ok(protocol_bind_devices(data_devices, ARRAY_SIZE(data_devices), devices));
     }
     pltcb_reg_cfg_get_dev_tbl(get_devices); pltcb_reg_cfg_get_dev_num(get_count);
     zassert_ok(dp_init()); fixture_start_dp();

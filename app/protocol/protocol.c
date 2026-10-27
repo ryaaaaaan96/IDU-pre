@@ -1,3 +1,4 @@
+#include "device_binding.h"
 #include "protocol.h"
 #include "tables.h"
 #include "signal_ids.h"
@@ -25,7 +26,7 @@ static const struct data_device_cfg bindings[] = {
     {
         .dev_id = DEVICE_LOCAL,
         .process_table = TABLE_LOCAL_PROCESS,
-        .collect_table = DP_DATA_DEFAULT_COLLECT_TABLE,
+        .collect_table = PROTOCOL_NO_COLLECT_TABLE,
         .collect_port = DP_DEVICE_DEFAULT_PORT,
         .collect_addr = DP_DEVICE_DEFAULT_ADDRESS,
     },
@@ -54,7 +55,7 @@ uint16_t protocol_device_count(void)
 int protocol_register_point_tables(void)
 {
     if (dp_config()) { return -EBUSY; }
-    int err = dp_data_device_bind(bindings, ARRAY_SIZE(bindings), devices);
+    int err = protocol_bind_devices(bindings, ARRAY_SIZE(bindings), devices);
     if (err) { return err; }
     pltcb_reg_cfg_get_dev_tbl(protocol_device_table);
     pltcb_reg_cfg_get_dev_num(protocol_device_count);

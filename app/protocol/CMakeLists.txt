@@ -8,6 +8,6 @@ if(CONFIG_IDU_PRE)
   target_sources(app PRIVATE process_runtime.c)
 else()
   # 既有通信测试仍验证保留的完整装配。
-  target_sources(app PRIVATE protocol.c tables/collect.c tables/transmit.c)
+  target_sources(app PRIVATE protocol.c device_binding.c tables/collect.c tables/transmit.c)
   target_sources_ifdef(CONFIG_IDU_IAPV3 app PRIVATE tables/segments.c)
 endif()

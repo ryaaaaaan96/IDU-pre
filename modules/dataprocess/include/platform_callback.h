@@ -60,12 +60,6 @@ void pltcb_para_recover_fininsh(void);
  * recover_default=false， 不会强制用默认值覆盖 NVS。 CONFIG_DP_REFERENCE_TABLES
  * 向引擎提供受支持的常量表。
  */
-/**
- * @brief 初始化前直接登记设备表与数量；不复制数组。
- * @note 表及其引用须常驻，登记后不得修改。与设备表回调和原生配置提供者互斥。
- * @return 0 成功，-EINVAL 参数无效，-EWOULDBLOCK ISR 调用，-EBUSY 配置已登记或冻结。
- */
-int dp_register_devices(const DEV_TABLE_S *devices, uint16_t count);
 void pltcb_reg_cfg_get_dev_tbl(CFG_GET_DEV_TBL callback);
 const DEV_TABLE_S *pltcb_cfg_get_dev_tbl(void);
 void pltcb_reg_cfg_get_dev_num(CFG_GET_DEV_NUM callback);

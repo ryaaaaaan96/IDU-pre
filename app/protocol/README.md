@@ -3,10 +3,13 @@
 ## 当前阶段：仅运行 process（2026-10-27）
 
 按本轮优化要求，产品只编译 `process_runtime.c` 和 `tables/process.c`。
-当前应用不使用 `data_device_cfg`，由应用查找 process 登记表并装配本地 `DEV_TABLE_S`，
-通过 `dp_register_devices(devices, ARRAY_SIZE(devices))` 一次登记指针和数量，无需设备表 getter 回调。
-设备数组由应用持有，登记后只读且常驻；DP 仍负责通用配置校验和初始化。
-启动顺序：本地点表注册 → `dp_init()` → `dp_process_init()` → `dp_reference_init()`。
+当前使用 `struct dp_model_cfg`：设备 ID、测点定义指针、测点数量。
+应用查找 process 表后调用 `dp_register_models(models, ARRAY_SIZE(models))`，DP 不接收产品的采集/转发装配配置。
+模型数组和测点定义由应用持有，登记后只读且常驻；多个设备可以共用测点定义，实时值按设备 ID 分开。
+当前不再使用 `DEV_TABLE_S`、七个协议槽、设备 getter 或 `dp_register_devices()`。
+`data_device_cfg` 和设备装配实现已移至本目录 `device_binding.h/.c`；原 DP 的 `dp_data_device_bind()` 已删除，
+停用通信配置改为调用应用内部的 `protocol_bind_devices()`。模型初始化不调用 `dp_reference_init()`。
+启动顺序：本地点表注册 → `dp_init()` → `dp_process_init()`。
 当前不创建 DP 样本/业务线程；本地 `dp_set_sig_value()` 在调用线程中同步完成处理。
 异步提交、定时业务及延后保存暂不启用，通用模块的线程处理函数保留。
 只绑定 `DEVICE_LOCAL`，不生成采集关系；本地 DI/AI 继续由 acquisition 读取并写入 DP。
@@ -22,7 +25,7 @@ IAP 自身初始化、MCUboot、Shell、LED、看门狗和本地采样保持原�
 原因是既有南向未决意图引用远端设备，临时只绑定本地设备可能触发原有的不兼容格式清空策略。
 因此本地参数的 Flash 加载、保存、恢复命令也暂不可用，已有 NVS 不由本入口修改；后续接回持久化时单独验证。
 
-重新启用时，先重新审查通信装配，再将产品 CMake 切回原 `protocol.c`、`init.c`、`tasks.c`、
+重新启用时，先重新审查通信装配，不要直接切回旧装配；须按 DP 模型接口重新接入 `protocol.c`、`init.c`、`tasks.c`、
 `ports.c` 和相应点表，移除 `process_runtime.c`，避免重复符号；恢复参数后端、总线和任务启动顺序。
 现有通信测试仍编译保留的原配置；`tests/process_runtime` 单独验证当前入口。
 下文是保留实现的说明，不代表当前固件启用了通信。
@@ -77,8 +80,8 @@ transmit 的 `TR_TABLE_DEFAULT_BYTE_ORDER`。这些是编译期字段常量，�
 不增加初始化调用或 RAM 模板。地址、设备/信号 ID、类型、长度和轮询策略仍由应用填写。
 
 数据设备使用 `data_device_cfg`，逐项声明 process、可选 collect、采集总线和南向站号。
-`collect_table=DP_DATA_DEFAULT_COLLECT_TABLE`（零）表示不生成采集目标，并忽略采集口和站号。
-`protocol_register_point_tables()` 先调用 `dp_data_device_bind()`，再登记 pltcb 数据目录回调。
+`collect_table=PROTOCOL_NO_COLLECT_TABLE`（零）表示不生成采集目标，并忽略采集口和站号。
+停用通信配置中的 `protocol_register_point_tables()` 调用应用内部 `protocol_bind_devices()`，再登记原目录回调；当前产品使用前述模型接口。
 模块按表标识解析，不依赖链接顺序，缺表、错误类型、重复身份及非法采集关系明确失败。
 
 北向使用独立 `tr_forward_cfg protocol_forwarding`，声明转发身份、逻辑口、普通转发表、可选协议段和广播策略。

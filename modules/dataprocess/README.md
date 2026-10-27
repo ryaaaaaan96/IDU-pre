@@ -10,13 +10,17 @@ NVS 参数持久化。把本目录加入 `ZEPHYR_EXTRA_MODULES`，启用
 采集归属。运行时不调用采集或转发模块；寄存器编码和 Modbus 回调由
 transmit 提供。数据池数值采用主机字节序、低字在前。
 
-固定设备配置可通过 `<platform_callback.h>` 中的
-`dp_register_devices(const DEV_TABLE_S *devices, uint16_t count)` 一次登记，随后调用 `dp_init()`。
-数组及引用的点表由调用方持有且须常驻，登记后不可修改；不复制整表。
-接口拒绝空表、零数量、超出容量和 ISR 调用；重复登记、已初始化或正在初始化返回错误。
-与设备表 getter 回调、原生配置提供者互斥。旧 getter 注册保留给既有调用方，不能覆盖已直接登记的数组。
-产品 `data_device_cfg` 是旧通信装配方式；当前 process 应用装配 `DEV_TABLE_S` 后直接登记，
-不将采集口/从站的产品配置传给当前运行入口。
+产品数据模型通过 `<dataprocess/model.h>` 中的
+`dp_register_models(const struct dp_model_cfg *models, size_t count)` 一次登记，随后调用 `dp_init()`。
+每个模型只有设备 ID、处理测点表和数量，没有串口、Modbus 地址、采集表或转发表。
+模型数组和测点定义由应用持有且须常驻，登记后不可修改；共用表的多个模型持有独立实时值。
+模型容量由总测点预算约束，不借用采集设备数量限制；设备 ID 为 uint16_t，不限制为通信站号范围。
+登记拒绝空模型、重复设备 ID、超量配置、ISR 调用和 FLAG_COLLECT；业务字段仍由初始化校验。
+模型初始化不要求启用 `DP_REFERENCE_TABLES`，纯模型测试关闭该选项且不启用 collect/transmit。
+模型登记与参考目录回调、原生配置提供者互斥，初始化后不可重新登记。
+`dp_register_devices()` 与 `dp_data_device_bind()` 已删除，不提供别名。
+产品装配 `data_device_cfg` 和 `protocol_bind_devices()` 归应用 protocol，不再定义于 DP 模块。
+参考目录处理暂留供停用通信实现及其测试使用，当前产品不通过该路径初始化。
 
 点值缓冲区在 `dp_init_config()` 中按实际总字数通过 Zephyr `k_malloc()` 一次申请，
 随后按偏移供各点使用；服务运行期间不重新分配或释放。初始化失败不会安装配置，

@@ -1,10 +1,21 @@
 #include <dataprocess/points.h>
+#include <dataprocess/model.h>
 #include <errno.h>
 #include <string.h>
 
 struct dp_key dp_config_key(const struct dp_equip_cfg *cfg, size_t index)
 {
     if (!cfg || index >= cfg->point_count) { return (struct dp_key){0}; }
+    if (cfg->models) {
+        for (size_t i = 0; i < cfg->model_count; ++i) {
+            const struct dp_model_cfg *model = &cfg->models[i];
+            if (index < model->point_count) {
+                return (struct dp_key){model->device_id, model->points[index].sig_id};
+            }
+            index -= model->point_count;
+        }
+        return (struct dp_key){0};
+    }
     if (!cfg->point_get) {
         return cfg->points ? cfg->points[index].key : (struct dp_key){0};
     }
@@ -58,6 +69,20 @@ const struct dp_transmit_cfg *dp_config_transmit(const struct dp_equip_cfg *cfg,
 int dp_config_index(const struct dp_equip_cfg *cfg, struct dp_key key)
 {
     if (!cfg) { return -EINVAL; }
+    if (cfg->models) {
+        size_t offset = 0;
+        for (size_t i = 0; i < cfg->model_count; ++i) {
+            const struct dp_model_cfg *model = &cfg->models[i];
+            if (model->device_id == key.dev_id) {
+                for (size_t n = 0; n < model->point_count; ++n) {
+                    if (model->points[n].sig_id == key.sig_id) { return offset + n; }
+                }
+                return -ENOENT;
+            }
+            offset += model->point_count;
+        }
+        return -ENOENT;
+    }
     /* 参考目录支持按键查找，无需计算每个默认值。 */
     if (cfg->point_get && cfg->reference_devices) {
         size_t offset = 0;

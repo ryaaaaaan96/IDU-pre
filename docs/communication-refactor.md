@@ -1,6 +1,7 @@
 # 采集与转发重构方案
 
 > 2026-10-27 阶段调整：产品暂时只运行 process，CO/TR 原实现保留待重新启用。
+> 当前 DP 使用纯数据模型，原通信接入须按模型接口重新设计；不直接恢复旧七槽目录。
 > 当前运行入口和恢复位置见 [protocol 说明](../app/protocol/README.md)。下文记录保留的完整通信方案。
 
 状态：2026-10-22，10 项实施任务已完成，完整主机/native 回归和固件构建、验签、导出均通过。依据[正式规格](../.scratch/communication-boundaries/spec.md)；逐项结果见[实施验证](../.scratch/communication-boundaries/validation.md)。

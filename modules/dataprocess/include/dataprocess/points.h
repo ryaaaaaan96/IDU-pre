@@ -147,7 +147,11 @@ struct dp_transmit_cfg {
     dp_word_order_t order;
 };
 
+struct dp_model_cfg;
+
 struct dp_equip_cfg {
+    const struct dp_model_cfg *models;
+    size_t model_count;
     const struct dp_point_cfg *points;
     size_t point_count;
     const struct dp_device_cfg *devices;

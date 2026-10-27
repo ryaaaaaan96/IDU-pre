@@ -3,16 +3,10 @@
 #include "inc/signal_ids.h"
 #include "tables.h"
 #include <dataprocess/process.h>
-#include <platform_callback.h>
+#include <dataprocess/model.h>
 
-/* 设备归属由应用声明；处理表本身仍常驻 Flash。 */
-static DEV_TABLE_S devices[] = {
-    {
-        .dev_id = DEVICE_LOCAL,
-        .port = DP_DEVICE_DEFAULT_PORT,
-        .coll_addr = DP_DEVICE_DEFAULT_ADDRESS,
-        .dev_code = DP_DEVICE_DEFAULT_CODE,
-    },
+static struct dp_model_cfg models[] = {
+    {.device_id = DEVICE_LOCAL},
 };
 
 int protocol_register_point_tables(void)
@@ -21,13 +15,9 @@ int protocol_register_point_tables(void)
     const struct dp_registered_table *process;
     int err = dp_table_registry_find(TABLE_LOCAL_PROCESS, PRO_DATA_PROCESS, &process);
     if (err) { return err; }
-    if (process->count > UINT16_MAX) { return -EOVERFLOW; }
-    devices[0].ptl_tbl_cfg[0] = (DEV_TBL_CFG_S){
-        .proto_type = PRO_DATA_PROCESS,
-        .pst_table = process->rows,
-        .sig_num = process->count,
-    };
-    return dp_register_devices(devices, ARRAY_SIZE(devices));
+    models[0].points = process->rows;
+    models[0].point_count = process->count;
+    return dp_register_models(models, ARRAY_SIZE(models));
 }
 
 int protocol_init(void)
@@ -45,6 +35,5 @@ int protocol_init(void)
         .timer_count = DP_PROCESS_DEFAULT_COUNT,
     };
     err = dp_process_init(&plan);
-    if (!err) { err = dp_reference_init(); }
     return err;
 }

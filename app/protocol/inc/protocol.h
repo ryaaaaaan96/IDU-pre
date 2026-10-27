@@ -8,7 +8,7 @@
 #include <data_process.h>
 
 /**
- * @brief 装配并直接登记产品设备表；随后由调用者执行通用模块 dp_init()。
+ * @brief 装配并登记产品数据模型；随后由调用者执行通用模块 dp_init()。
  */
 int protocol_register_point_tables(void);
 /**

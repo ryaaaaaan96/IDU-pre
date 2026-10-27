@@ -147,7 +147,6 @@ ZTEST(reference_configuration, test_original_tables_validate_before_initializati
     zassert_equal(dp_init(), -1);
     pltcb_reg_cfg_get_dev_tbl(get_table);
     pltcb_reg_cfg_get_dev_num(device_count);
-    zassert_equal(dp_register_devices(table, ARRAY_SIZE(table)), -EBUSY);
     pltcb_reg_para_range_def_cb(defaults);
     pltcb_reg_cfg_get_init_reg_tbl(get_init);
     pltcb_reg_cfg_get_init_reg_num(init_count);
@@ -301,7 +300,6 @@ ZTEST(reference_configuration, test_original_tables_validate_before_initializati
 
     zassert_equal(dp_init(), -1);
     zassert_equal(dp_register_config_provider(no_native_config), -EBUSY);
-    zassert_equal(dp_register_devices(table, ARRAY_SIZE(table)), -EBUSY);
     pltcb_reg_cfg_get_dev_tbl(empty_table);
     zassert_equal(pltcb_cfg_get_dev_tbl(), table);
 }

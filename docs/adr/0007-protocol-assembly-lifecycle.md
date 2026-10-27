@@ -54,3 +54,12 @@ IAP 保留参数保存失败时阻止升级提交/重启的约束。
 当前 process 由应用查找处理表并装配 DEV_TABLE_S，调用 dp_register_devices 传入常驻数组和数量。
 删除产品 getter 回调，不在当前路径传入 data_device_cfg；设备和表选择归应用，DP 校验并消费通用设备目录。
 为保留暂时停用的通信实现，旧回调和 dp_data_device_bind 兼容接口暂不删除。
+
+### 产品模型接口替代设备目录登记
+
+用户明确本轮以产品重构为目标，不以旧接口兼容为约束。删除 dp_register_devices 和模块中的 dp_data_device_bind，
+产品不再组装 DEV_TABLE_S/七槽协议目录。DP 接收 dp_model_cfg（设备 ID、测点表、数量），
+保留处理行的值类型、默认值、范围和回调语义；不把通信配置混入模型。
+模型允许共享定义且运行值隔离，不创建线程，也不调用旧参考任务登记初始化。
+原 data_device_cfg 装配逻辑归 protocol/device_binding，停用通信测试改为引用该应用实现。
+本决定替代上一段固定 DEV_TABLE_S 数组直接登记的过渡方案。
