@@ -27,11 +27,14 @@ struct watchdog_task {
     struct watchdog_task *next;
 };
 
-/** @brief 故障处理动作；上报方请求或 watchdog 内部默认值，回调只读。 */
+/**
+ * @brief 故障处理动作；上报方请求或 watchdog 内部默认值，回调只读。
+ * @note 产品终止故障只使用 HOLD 或 RESET；可恢复异常由业务模块自行处理。
+ */
 typedef enum {
-    WATCHDOG_ACTION_CONTINUE = 0,
-    WATCHDOG_ACTION_HOLD = 1,
-    WATCHDOG_ACTION_RESET = 2,
+    WATCHDOG_ACTION_CONTINUE = 0, /**< 现有诊断兼容行为；不用于新的产品终止故障。 */
+    WATCHDOG_ACTION_HOLD = 1, /**< 停止业务并保留现场，等待人工重启。 */
+    WATCHDOG_ACTION_RESET = 2, /**< 停止业务并请求自动重启。 */
 } watchdog_action_t;
 
 typedef enum {
@@ -71,6 +74,8 @@ typedef enum {
 int watchdog_init(watchdog_fault_cb_t notify);
 /**
  * @brief 同步上报业务故障，通知初始化时绑定的唯一回调；线程和 ISR 均可调用。
+ * @note 产品约定：仅上报本次启动不可恢复的故障，使用 HOLD 或 RESET；不提供清除或恢复业务接口。
+ * @note 重试、离线重连等可恢复异常由业务模块处理，不通过此终止故障通道上报。
  * @note 通知前更新最近故障；不改写监控锁存；回调只读，动作由本次调用决定。
  * @note description 必须非空且常驻；故障阶段与处理策略由接收者判断。
  * @param reset_delay_ms 毫秒；仅动作为 RESET 时使用，其他动作忽略。0 立即复位。
