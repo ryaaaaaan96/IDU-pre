@@ -6,7 +6,7 @@
 #define APPLICATION_PROTOCOL_H
 
 /**
- * @brief 登记本地模型、挂载参数区并冻结配置。
+ * @brief 逐组登记本地模型；参数区在首次访问参数时挂载。
  */
 int protocol_init(void);
 

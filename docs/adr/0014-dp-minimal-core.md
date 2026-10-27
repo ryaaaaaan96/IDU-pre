@@ -13,8 +13,8 @@
 
 把 `modules/dataprocess` 收缩为最小原子核心：
 
-1. 唯一入口 `dp_start(models, count, params_area)`：校验模型、按实际字数申请点值、
-   挂载参数区并冻结配置。
+1. 唯一入口 `dp_register_model(model, params_area)`：业务层逐组登记；每组校验后
+   按实际字数申请自己的点值块。参数区在首次访问参数接口时挂载。
 2. 只保留单点同步写读：`dp_set_sig_value()`、`dp_get_sig_value()`、`dp_read()`。
 3. 点表行只解释常量、本地点、持久参数、范围、读回调和命令回调。
    命令点执行 `handler`，不保存触发值；状态点执行 `read`。

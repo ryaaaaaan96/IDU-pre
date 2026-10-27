@@ -9,14 +9,68 @@
 
 | 头文件 | 内容 |
 | --- | --- |
-| `dataprocess/model.h` | `struct dp_model_cfg`、`dp_start()` |
+| `dataprocess/model.h` | `struct dp_model_cfg`、`dp_register_model()` |
 | `dataprocess/points.h` | 值/状态、`dp_set_sig_value()`、`dp_get_sig_value()`、`dp_read()`、`dp_stop()` |
 | `dataprocess/params.h` | 参数读取、恢复默认、刷新、状态 |
 | `dataprocess/reference_tables.h` | 应用点表行 `DM_SIG_CFG_S` 与标志 |
 
-`dp_start(models, count, params_area)` 校验模型、按实际字数申请点值、挂载参数区
-并冻结配置。参数区不可用时记录状态并继续使用 RAM 默认值；模型错误返回 `-errno`。
+`dp_register_model(model, params_area)` 每次登记一组：校验行定义、按本组实际字数
+申请点值块并初始化。业务层按处理表逐组调用，顺序不限；登记错误返回 `-errno`。
+`params_area` 由首次调用确定，后续必须一致，否则返回 `-EINVAL`。
+
+参数区在第一次访问参数接口时挂载，不可用时记录状态并继续使用 RAM 默认值。
 `DP_NO_PARAMS` 仅用于无 Flash 的测试。
+
+## 多组模型
+
+每个处理表文件持有自己的行数组和模型描述，业务层把指针放进常量数组并逐组登记：
+
+```c
+/* app/protocol/tables/process.c */
+static const DM_SIG_CFG_S local_rows[] = { ... };
+const struct dp_model_cfg protocol_local_model = {
+    .device_id = DEVICE_LOCAL,
+    .points = local_rows,
+    .point_count = ARRAY_SIZE(local_rows),
+};
+
+/* app/protocol/tables/remote_process.c */
+static const DM_SIG_CFG_S remote_rows[] = { ... };
+const struct dp_model_cfg protocol_remote_model = {
+    .device_id = DEVICE_REMOTE_IO,
+    .points = remote_rows,
+    .point_count = ARRAY_SIZE(remote_rows),
+};
+
+/* app/protocol/process_runtime.c */
+extern const struct dp_model_cfg protocol_local_model;
+extern const struct dp_model_cfg protocol_remote_model;
+
+static const struct dp_model_cfg *const product_models[] = {
+    &protocol_local_model,
+    &protocol_remote_model,
+};
+
+int protocol_init(void)
+{
+    const uint8_t storage_id = DT_FIXED_PARTITION_ID(DT_ALIAS(idu_settings));
+
+    for (size_t i = 0; i < ARRAY_SIZE(product_models); ++i) {
+        int err = dp_register_model(product_models[i], storage_id);
+        if (err) { return err; }
+    }
+    return 0;
+}
+```
+
+约束：
+
+- 每组必须使用不同 `device_id`，重复返回 `-EEXIST`，该组不生效。
+- 不同组可以复用相同 `sig_id`，键是 `(device_id, sig_id)`。
+- 点数、点值字数和持久参数数量按已登记模型累计校验，超限返回 `-ENOSPC`/`-EINVAL`。
+- 逐组登记没有冻结步骤；但参数区一旦挂载，再登记含持久参数的表返回 `-EBUSY`。
+  业务层应在读取参数前完成所有登记。
+- 每组点值独立申请，登记失败不会回滚之前成功的组。
 
 ## 点表行
 
@@ -57,6 +111,7 @@ NVS、`NVS_DATA_CRC` 和 `KERNEL_MEM_POOL`，要求 `FLASH`、`FLASH_MAP`、
 | 配置 | 默认 | 用途 |
 | --- | ---: | --- |
 | `DP_POINT_WORDS` | 16 | 单点最大字数 |
+| `DP_MODELS_MAX` | 4 | 可登记的模型组数 |
 | `DP_POINTS_MAX_POINTS` | 32 | 静态状态槽 |
 | `DP_POINTS_VALUE_WORDS` | 512 | 点值总字数上限 |
 | `DP_PARAMS_MAX_COUNT` | 8 | 持久参数上限 |

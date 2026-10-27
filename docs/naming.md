@@ -21,12 +21,13 @@
 模块的一次性装配与初始化接口使用 `*_init()`；同时提供默认配置和显式配置入口时，
 分别使用 `*_init()` 与 `*_init_config(config)`，例如 IAP 的两种初始化方式。
 运行期启动操作保留 `*_start()`，例如放行已创建的线程和启动测点定时器。
+登记只读配置使用 `*_register_model()`，每个处理表调用一次，不表示创建线程或启动定时器。
 
 | 初始化内容 | 接口 |
 | --- | --- |
 | IAP 项目配置 / 显式配置 | `iap_init()` / `iap_init_config(config)` |
 | 看门狗实例 | `watchdog_init()` |
-| DP 模型、点值和参数 | `dp_start()` |
+| DP 模型、点值和参数 | `dp_register_model()`，逐组登记 |
 | 产品本地 process | `protocol_init()` |
 | 硬件输入 | `acquisition_inputs_init()` / `acquisition_cycle()` |
 | 看门狗、状态 | `watchdog_init()` / `status_init()` |

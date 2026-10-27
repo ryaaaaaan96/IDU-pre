@@ -17,12 +17,20 @@ struct stored_point {
     uint16_t quality;
 };
 
-static const struct dp_model_cfg *models;
+/* 每个模型独立申请点值块。 */
+struct model_slot {
+    const struct dp_model_cfg *cfg;
+    uint16_t *values;
+    size_t first;
+};
+
+static struct model_slot slots[CONFIG_DP_MODELS_MAX];
 static size_t model_count;
 static size_t point_count;
+static size_t value_words;
+static size_t param_points;
 static struct stored_point states[CONFIG_DP_POINTS_MAX_POINTS];
 static uint32_t generation;
-static atomic_t ready;
 static atomic_t stopped;
 static K_MUTEX_DEFINE(store_lock);
 
@@ -143,28 +151,26 @@ static int row_view(uint16_t dev, const DM_SIG_CFG_S *row, struct dp_point_cfg *
 
 const struct dp_point_cfg *dp_config_point(size_t index, struct dp_point_cfg *scratch)
 {
-    if (!models || !scratch) { return NULL; }
+    if (!scratch) { return NULL; }
     for (size_t i = 0; i < model_count; ++i) {
-        if (index < models[i].point_count) {
-            return row_view(models[i].device_id, &models[i].points[index], scratch) ?
+        const struct model_slot *slot = &slots[i];
+        if (index < slot->first + slot->cfg->point_count) {
+            return row_view(slot->cfg->device_id,
+                            &slot->cfg->points[index - slot->first], scratch) ?
                    NULL : scratch;
         }
-        index -= models[i].point_count;
     }
     return NULL;
 }
 
 int dp_config_index(struct dp_key key)
 {
-    size_t offset = 0;
     if (!key.dev_id || !key.sig_id) { return -EINVAL; }
     for (size_t i = 0; i < model_count; ++i) {
-        if (models[i].device_id != key.dev_id) {
-            offset += models[i].point_count;
-            continue;
-        }
-        for (size_t n = 0; n < models[i].point_count; ++n) {
-            if (models[i].points[n].sig_id == key.sig_id) { return offset + n; }
+        const struct dp_model_cfg *cfg = slots[i].cfg;
+        if (cfg->device_id != key.dev_id) { continue; }
+        for (size_t n = 0; n < cfg->point_count; ++n) {
+            if (cfg->points[n].sig_id == key.sig_id) { return slots[i].first + n; }
         }
         return -ENOENT;
     }
@@ -172,90 +178,79 @@ int dp_config_index(struct dp_key key)
 }
 
 size_t dp_point_count(void) { return point_count; }
-bool dp_ready(void) { return atomic_get(&ready) != 0; }
 
-static int validate_models(const struct dp_model_cfg *cfg, size_t count)
+int dp_register_model(const struct dp_model_cfg *model, uint8_t params_area)
 {
-    if (!cfg || !count || count > CONFIG_DP_POINTS_MAX_POINTS) { return -EINVAL; }
-    size_t total = 0, words = 0, params = 0;
-    for (size_t i = 0; i < count; ++i) {
-        const struct dp_model_cfg *model = &cfg[i];
-        if (!model->device_id || !model->points || !model->point_count ||
-            model->point_count > CONFIG_DP_POINTS_MAX_POINTS - total) {
+    if (dp_stopped()) { return -ECANCELED; }
+    if (k_is_in_isr()) { return -EWOULDBLOCK; }
+    if (!model || !model->device_id || !model->points || !model->point_count) {
+        return -EINVAL;
+    }
+    if (model_count == ARRAY_SIZE(slots)) { return -ENOSPC; }
+    if (model->point_count > CONFIG_DP_POINTS_MAX_POINTS - point_count) {
+        return -EINVAL;
+    }
+    for (size_t i = 0; i < model_count; ++i) {
+        if (slots[i].cfg->device_id == model->device_id) { return -EEXIST; }
+    }
+
+    size_t words = 0, params = 0;
+    for (size_t n = 0; n < model->point_count; ++n) {
+        struct dp_point_cfg p;
+        if (row_view(model->device_id, &model->points[n], &p)) { return -EINVAL; }
+        words += p.width;
+        if (value_words + words > CONFIG_DP_POINTS_VALUE_WORDS) { return -ENOSPC; }
+        if (p.source == DP_SOURCE_PARAMETER && ++params > CONFIG_DP_PARAMS_MAX_COUNT) {
+            return -ENOSPC;
+        }
+        for (size_t m = 0; m < n; ++m) {
+            if (model->points[m].sig_id == model->points[n].sig_id) { return -EEXIST; }
+        }
+    }
+    if (param_points + params > CONFIG_DP_PARAMS_MAX_COUNT) { return -ENOSPC; }
+    if (params && dp_params_mounted()) { return -EBUSY; }
+
+    uint16_t *values = k_malloc(words * sizeof(*values));
+    if (!values) { return -ENOMEM; }
+    int err = dp_params_configure(params_area);
+    if (err) {
+        k_free(values);
+        return err;
+    }
+
+    const size_t first = point_count;
+    size_t offset = 0;
+    for (size_t n = 0; n < model->point_count; ++n) {
+        struct dp_point_cfg p;
+        if (row_view(model->device_id, &model->points[n], &p)) {
+            k_free(values);
             return -EINVAL;
         }
-        total += model->point_count;
-        for (size_t n = 0; n < model->point_count; ++n) {
-            struct dp_point_cfg p;
-            if (row_view(model->device_id, &model->points[n], &p)) { return -EINVAL; }
-            words += p.width;
-            if (words > CONFIG_DP_POINTS_VALUE_WORDS) { return -ENOSPC; }
-            if (p.source == DP_SOURCE_PARAMETER &&
-                ++params > CONFIG_DP_PARAMS_MAX_COUNT) { return -ENOSPC; }
-            for (size_t m = 0; m < n; ++m) {
-                if (model->points[m].sig_id == model->points[n].sig_id) {
-                    return -EEXIST;
-                }
-            }
-        }
-        for (size_t m = 0; m < i; ++m) {
-            if (cfg[m].device_id == model->device_id) { return -EEXIST; }
-        }
+        struct stored_point *state = &states[first + n];
+        state->words = values + offset;
+        state->sampled_at = 0;
+        state->generation = 0;
+        state->error = p.source == DP_SOURCE_CONSTANT ? 0 : -ENODATA;
+        state->quality = p.source == DP_SOURCE_CONSTANT ?
+                        DP_QUALITY_GOOD : DP_QUALITY_UNINITIALIZED;
+        memcpy(state->words, p.initial.words, p.width * 2);
+        offset += p.width;
     }
-    return 0;
-}
-
-int dp_start(const struct dp_model_cfg *cfg, size_t count, uint8_t params_area)
-{
-    if (atomic_get(&ready)) { return -EALREADY; }
-    if (dp_stopped()) { return -ECANCELED; }
-    int err = validate_models(cfg, count);
-    if (err) { return err; }
-    size_t words = 0;
-    for (size_t i = 0; i < count; ++i) {
-        for (size_t n = 0; n < cfg[i].point_count; ++n) {
-            struct dp_point_cfg p;
-            if (row_view(cfg[i].device_id, &cfg[i].points[n], &p)) { return -EINVAL; }
-            words += p.width;
-        }
-    }
-    uint16_t *storage = k_malloc(words * sizeof(*storage));
-    if (!storage) { return -ENOMEM; }
-    models = cfg;
-    model_count = count;
-    point_count = 0;
-    size_t offset = 0;
-    for (size_t i = 0; i < count; ++i) {
-        for (size_t n = 0; n < cfg[i].point_count; ++n) {
-            struct dp_point_cfg p;
-            if (row_view(cfg[i].device_id, &cfg[i].points[n], &p)) {
-                k_free(storage); models = NULL; model_count = 0; point_count = 0;
-                return -EINVAL;
-            }
-            states[point_count].words = storage + offset;
-            states[point_count].sampled_at = 0;
-            states[point_count].generation = 0;
-            states[point_count].error = p.source == DP_SOURCE_CONSTANT ? 0 : -ENODATA;
-            states[point_count].quality = p.source == DP_SOURCE_CONSTANT ?
-                                          DP_QUALITY_GOOD : DP_QUALITY_UNINITIALIZED;
-            memcpy(states[point_count].words, p.initial.words, p.width * 2);
-            offset += p.width;
-            ++point_count;
-        }
-    }
-    err = params_area == DP_NO_PARAMS ? -ENODEV : dp_params_init(params_area);
-    if (err && params_area != DP_NO_PARAMS) {
-        LOG_WRN("Parameter storage unavailable (%d)", err);
-    }
-    generation = 0;
-    atomic_set(&ready, 1);
+    slots[model_count].cfg = model;
+    slots[model_count].values = values;
+    slots[model_count].first = first;
+    ++model_count;
+    point_count += model->point_count;
+    value_words += words;
+    param_points += params;
     return 0;
 }
 
 int dp_read(struct dp_key key, struct dp_point_state *state)
 {
     if (dp_stopped()) { return -ECANCELED; }
-    if (!atomic_get(&ready) || !state || k_is_in_isr()) { return -EINVAL; }
+    if (!state || k_is_in_isr()) { return -EINVAL; }
+    if (!model_count) { return -ENODEV; }
     int index = dp_config_index(key);
     if (index < 0) { return index; }
     struct dp_point_cfg p;

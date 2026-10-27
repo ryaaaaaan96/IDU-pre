@@ -3,13 +3,20 @@
 [文档导航](../../docs/README.md) · [DP 模块](../../modules/dataprocess/README.md)
 
 当前产品只运行本地 process：`app/protocol/tables/process.c` 定义一份编译期只读
-模型，`app/protocol/process_runtime.c` 通过 `dp_start()` 登记模型、挂载
-`idu-settings` 参数区并冻结配置。不创建 DP 线程，也不编译采集/转发模块。
+模型，`app/protocol/process_runtime.c` 的 `product_models[]` 逐组调用
+`dp_register_model()`，参数区在首次访问参数接口时挂载。不创建 DP 线程，
+也不编译采集/转发模块。
+
+以后增加第二张处理表时，不需要改 DP：新表文件导出自己的 `struct dp_model_cfg`，
+在 `process_runtime.c` 声明 extern，并往 `product_models[]` 追加一个指针。
+两组必须使用不同 `device_id`，点位、字数和参数预算跨组累计；
+示例见 [DP 模块](../../modules/dataprocess/README.md#多组模型)。
 
 ## 启动顺序
 
 1. `main.c` 初始化状态、输入和可选 IAP。
-2. `protocol_init()` 调用 `dp_start(&protocol_local_model, 1, storage_id)`。
+2. `protocol_init()` 对 `product_models[]` 中每张表调用一次
+   `dp_register_model(&protocol_local_model, storage_id)`。
 3. DP 校验 26 行本地模型、申请 63 words 点值、挂载参数区。
 4. 主循环调用 `acquisition_cycle()`，通过 `dp_set_sig_value()` 同步写本地测点。
 

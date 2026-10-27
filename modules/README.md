@@ -19,7 +19,7 @@
 ## DP 使用
 
 - `app/protocol/tables/process.c` 持有编译期只读模型。
-- `app/protocol/process_runtime.c` 调用 `dp_start()`。
+- `app/protocol/process_runtime.c` 在 `product_models[]` 中逐组调用 `dp_register_model()`。
 - `app/acquisition/acquisition.c` 同步写本地测点。
 - `app/process/points.c` 提供参数命令和状态回调。
 

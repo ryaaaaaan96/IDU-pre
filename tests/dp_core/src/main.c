@@ -7,7 +7,8 @@
 #include <zephyr/storage/flash_map.h>
 #include <zephyr/ztest.h>
 
-enum { DEV = 7 };
+enum { DEV = 7, DEV_ALT = 8 };
+/* 两组模型故意使用相同 sig_id，验证键按 (device_id, sig_id) 隔离。 */
 enum { SIG_LOCAL = 1, SIG_CONST, SIG_PARAM, SIG_CMD, SIG_STATUS };
 
 static int command(struct dp_key key, const struct dp_value *value)
@@ -62,36 +63,85 @@ static const DM_SIG_CFG_S rows[] = {
     },
 };
 
-static const struct dp_model_cfg model = {
-    .device_id = DEV,
-    .points = rows,
-    .point_count = ARRAY_SIZE(rows),
+static const DM_SIG_CFG_S alt_rows[] = {
+    {
+        .sig_id = SIG_LOCAL, .sig_size = 2, .data_type = DATA_TYPE_U16,
+        .data = {.def_value.u16 = 0x1111, .min_value.u16 = 0,
+                 .max_value.u16 = UINT16_MAX},
+    },
+    {
+        .sig_id = SIG_PARAM, .sig_size = 2,
+        .sig_flag = FLAG_PERSISTENCE | FLAG_RANGE_CHECK,
+        .data_type = DATA_TYPE_U16,
+        .data = {.def_value.u16 = 600, .min_value.u16 = 100,
+                 .max_value.u16 = 1000},
+    },
 };
 
-static void read_u16(uint16_t sig, uint16_t expected)
+/* 业务层逐组登记，顺序不限。 */
+static const struct dp_model_cfg models[] = {
+    {.device_id = DEV, .points = rows, .point_count = ARRAY_SIZE(rows)},
+    {.device_id = DEV_ALT, .points = alt_rows,
+     .point_count = ARRAY_SIZE(alt_rows)},
+};
+
+/* 参数区挂载后再加入持久参数必须被拒绝。 */
+static const DM_SIG_CFG_S late_rows[] = {
+    {
+        .sig_id = SIG_PARAM, .sig_size = 2, .sig_flag = FLAG_PERSISTENCE,
+        .data_type = DATA_TYPE_U16,
+        .data = {.def_value.u16 = 0, .min_value.u16 = 0,
+                 .max_value.u16 = UINT16_MAX},
+    },
+};
+
+static const struct dp_model_cfg late_model = {
+    .device_id = 9,
+    .points = late_rows,
+    .point_count = ARRAY_SIZE(late_rows),
+};
+
+static void read_u16(uint16_t dev, uint16_t sig, uint16_t expected)
 {
     uint8_t bytes[2] = {0};
-    zassert_equal(dp_get_sig_value(DEV, sig, sizeof(bytes), bytes), sizeof(bytes));
-    zassert_equal(bytes[0] | ((uint16_t)bytes[1] << 8), expected);
+    zassert_equal(dp_get_sig_value(dev, sig, sizeof(bytes), bytes), sizeof(bytes),
+                  "dev=%u sig=%u", dev, sig);
+    zassert_equal(bytes[0] | ((uint16_t)bytes[1] << 8), expected,
+                  "dev=%u sig=%u", dev, sig);
 }
 
-static void write_u16(uint16_t sig, uint16_t value, int expected)
+static void write_u16(uint16_t dev, uint16_t sig, uint16_t value, int expected)
 {
     uint8_t bytes[2] = {(uint8_t)value, (uint8_t)(value >> 8)};
-    int err = dp_set_sig_value(DEV, sig, sizeof(bytes), bytes);
-    zassert_equal(err, expected, "sig=%u value=%u err=%d", sig, value, err);
+    int err = dp_set_sig_value(dev, sig, sizeof(bytes), bytes);
+    zassert_equal(err, expected, "dev=%u sig=%u value=%u err=%d",
+                  dev, sig, value, err);
 }
 
 ZTEST(dp_core, test_core)
 {
     const uint8_t area = DT_FIXED_PARTITION_ID(DT_ALIAS(idu_settings));
     const char *phase = getenv("IDU_DP_PHASE");
-    zassert_ok(dp_start(&model, 1, area));
+
+    static const struct dp_model_cfg duplicate = {
+        .device_id = DEV, .points = alt_rows,
+        .point_count = ARRAY_SIZE(alt_rows),
+    };
+    zassert_equal(dp_register_model(NULL, area), -EINVAL);
+    zassert_ok(dp_register_model(&models[0], area));
+    zassert_equal(dp_register_model(&duplicate, area), -EEXIST);
+    zassert_equal(dp_register_model(&models[1], (uint8_t)(area + 1)), -EINVAL);
+    zassert_ok(dp_register_model(&models[1], area));
+    zassert_equal(dp_register_model(&models[1], area), -EEXIST);
 
     if (phase && !strcmp(phase, "verify")) {
-        read_u16(SIG_PARAM, 700);
+        read_u16(DEV, SIG_PARAM, 700);
+        read_u16(DEV_ALT, SIG_PARAM, 800);
         zassert_ok(dp_params_restore(DEV));
-        read_u16(SIG_PARAM, 500);
+        read_u16(DEV, SIG_PARAM, 500);
+        read_u16(DEV_ALT, SIG_PARAM, 800);
+        zassert_ok(dp_params_restore(DEV_ALT));
+        read_u16(DEV_ALT, SIG_PARAM, 600);
         return;
     }
 
@@ -103,31 +153,52 @@ ZTEST(dp_core, test_core)
     zassert_equal(constant[2], 0x34);
     zassert_equal(constant[3], 0x12);
 
-    write_u16(SIG_LOCAL, 0x1234, 0);
-    read_u16(SIG_LOCAL, 0x1234);
-    write_u16(SIG_LOCAL, 0x1234, 0);
+    write_u16(DEV, SIG_LOCAL, 0x1234, 0);
+    read_u16(DEV, SIG_LOCAL, 0x1234);
+    write_u16(DEV, SIG_LOCAL, 0x1234, 0);
     zassert_equal(dp_set_sig_value(DEV, SIG_LOCAL, 1, (uint8_t[]){0}), -EMSGSIZE);
     zassert_equal(dp_set_sig_value(DEV, 99, 2, (uint8_t[]){0, 0}), -ENOENT);
 
-    read_u16(SIG_PARAM, 500);
-    write_u16(SIG_PARAM, 700, 0);
-    read_u16(SIG_PARAM, 700);
-    write_u16(SIG_PARAM, 2000, -ERANGE);
+    /* 同名的 sig_id 在另一组模型里是独立测点。 */
+    read_u16(DEV_ALT, SIG_LOCAL, 0x1111);
+    write_u16(DEV_ALT, SIG_LOCAL, 0x2222, 0);
+    read_u16(DEV_ALT, SIG_LOCAL, 0x2222);
+    read_u16(DEV, SIG_LOCAL, 0x1234);
+
+    read_u16(DEV, SIG_PARAM, 500);
+    write_u16(DEV, SIG_PARAM, 700, 0);
+    read_u16(DEV, SIG_PARAM, 700);
+    write_u16(DEV, SIG_PARAM, 2000, -ERANGE);
     zassert_equal(dp_set_sig_value(DEV, SIG_CONST, 4, (uint8_t[]){1, 0, 0, 0}),
                   -EACCES);
 
-    write_u16(SIG_CMD, 0x1234, -EINVAL);
-    write_u16(SIG_CMD, 0xa55a, 0);
+    /* 参数按设备分别提交和恢复。 */
+    read_u16(DEV_ALT, SIG_PARAM, 600);
+    write_u16(DEV_ALT, SIG_PARAM, 800, 0);
+    read_u16(DEV_ALT, SIG_PARAM, 800);
+    read_u16(DEV, SIG_PARAM, 700);
+    zassert_ok(dp_params_restore(DEV));
+    read_u16(DEV, SIG_PARAM, 500);
+    read_u16(DEV_ALT, SIG_PARAM, 800);
+    zassert_ok(dp_params_restore(DEV_ALT));
+    read_u16(DEV_ALT, SIG_PARAM, 600);
+    write_u16(DEV, SIG_PARAM, 700, 0);
+    write_u16(DEV_ALT, SIG_PARAM, 800, 0);
+
+    write_u16(DEV, SIG_CMD, 0x1234, -EINVAL);
+    write_u16(DEV, SIG_CMD, 0xa55a, 0);
 
     struct dp_point_state state;
     zassert_ok(dp_read((struct dp_key){DEV, SIG_STATUS}, &state));
     zassert_true(state.value.words[0] & DP_PARAM_STORAGE_READY);
+    zassert_ok(dp_read((struct dp_key){DEV_ALT, SIG_PARAM}, &state));
+    zassert_equal(state.value.words[0], 800);
+    zassert_equal(dp_register_model(&late_model, area), -EBUSY);
 
-    zassert_ok(dp_params_restore(DEV));
-    read_u16(SIG_PARAM, 500);
-    write_u16(SIG_PARAM, 700, 0);
     dp_stop();
     zassert_equal(dp_set_sig_value(DEV, SIG_LOCAL, 2, (uint8_t[]){0, 0}),
+                  -ECANCELED);
+    zassert_equal(dp_set_sig_value(DEV_ALT, SIG_LOCAL, 2, (uint8_t[]){0, 0}),
                   -ECANCELED);
 }
 

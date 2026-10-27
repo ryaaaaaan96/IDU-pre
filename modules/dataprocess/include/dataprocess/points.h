@@ -64,11 +64,14 @@ struct dp_model_cfg {
 #define DP_NO_PARAMS 0xFF
 
 /**
- * @brief 校验模型、分配点值、挂载参数区并冻结配置。
+ * @brief 登记一组模型；业务层逐组调用，顺序不限。
  *
- * 参数区失败时保留默认值并返回 0，由状态接口报告存储错误；模型错误返回 -errno。
+ * 每组用不同 device_id 区分，可复用相同 sig_id；点值字数和持久参数数量按全部
+ * 已登记模型累计校验。params_area 由首次调用确定，后续调用须传同一值。
+ * 参数区在第一次访问参数接口时挂载；失败只记录状态并继续使用 RAM 默认值。
+ * 登记本组后仍可登记其他组，但不能在参数区挂载后再加入持久参数（-EBUSY）。
  */
-int dp_start(const struct dp_model_cfg *models, size_t count, uint8_t params_area);
+int dp_register_model(const struct dp_model_cfg *model, uint8_t params_area);
 
 /**
  * @brief 同步写入单个点，字节长度必须等于配置长度。

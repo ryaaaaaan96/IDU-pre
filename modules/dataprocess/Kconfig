@@ -19,6 +19,14 @@ config DP_POINT_WORDS
     default 16
     range 2 72
 
+config DP_MODELS_MAX
+    int "Maximum registered model groups"
+    default 4
+    range 1 64
+    help
+      One group per process table. Each group costs a small slot; points are
+      still bounded by DP_POINTS_MAX_POINTS.
+
 config DP_POINTS_MAX_POINTS
     int "Maximum configured points"
     default 32

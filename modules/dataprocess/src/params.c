@@ -21,6 +21,7 @@ static bool stored[CONFIG_DP_PARAMS_MAX_COUNT];
 static struct nvs_fs fs;
 static uint8_t partition_id;
 static struct dp_param_status status;
+static bool configured;
 static bool ready;
 static K_MUTEX_DEFINE(params_lock);
 static K_MUTEX_DEFINE(status_lock);
@@ -34,6 +35,8 @@ struct param_buffers {
 };
 
 static struct param_buffers *buffers;
+
+static int ensure_mounted(void);
 
 static const struct dp_point_cfg *param(size_t index, struct dp_point_cfg *scratch)
 {
@@ -157,7 +160,9 @@ static int apply(const bool *selected)
 
 int dp_params_write(struct dp_key key, const struct dp_value *value)
 {
-    if (!ready || !buffers || !value) { return -ENODEV; }
+    if (!value) { return -EINVAL; }
+    int err = ensure_mounted();
+    if (err) { return err; }
     k_mutex_lock(&params_lock, K_FOREVER);
     int index = index_of(key);
     if (index < 0) {
@@ -172,14 +177,16 @@ int dp_params_write(struct dp_key key, const struct dp_value *value)
     buffers->staged[index] = *value;
     bool selected[CONFIG_DP_PARAMS_MAX_COUNT] = {0};
     selected[index] = true;
-    int err = apply(selected);
+    err = apply(selected);
     k_mutex_unlock(&params_lock);
     return err;
 }
 
 int dp_params_read(struct dp_key key, struct dp_point_state *state)
 {
-    if (!ready || !buffers || !state) { return -ENODEV; }
+    if (!state) { return -EINVAL; }
+    int err = ensure_mounted();
+    if (err) { return err; }
     int index = index_of(key);
     if (index < 0) { return index; }
     k_mutex_lock(&params_lock, K_FOREVER);
@@ -190,7 +197,8 @@ int dp_params_read(struct dp_key key, struct dp_point_state *state)
 
 int dp_params_restore(uint16_t dev_id)
 {
-    if (!ready || !buffers) { return -ENODEV; }
+    int err = ensure_mounted();
+    if (err) { return err; }
     k_mutex_lock(&params_lock, K_FOREVER);
     bool selected[CONFIG_DP_PARAMS_MAX_COUNT] = {0};
     bool found = false;
@@ -202,7 +210,7 @@ int dp_params_restore(uint16_t dev_id)
         selected[i] = true;
         found = true;
     }
-    int err = found ? apply(selected) : -ENOENT;
+    err = found ? apply(selected) : -ENOENT;
     k_mutex_unlock(&params_lock);
     return err;
 }
@@ -210,20 +218,15 @@ int dp_params_restore(uint16_t dev_id)
 void dp_params_get_status(struct dp_param_status *out)
 {
     if (!out) { return; }
+    (void)ensure_mounted();
     k_mutex_lock(&status_lock, K_FOREVER);
     *out = status;
     k_mutex_unlock(&status_lock);
 }
 
-int dp_params_recover(void)
-{
-    return (ready && (status.flags & DP_PARAM_STORAGE_READY)) ? 0 : -EROFS;
-}
+int dp_params_recover(void) { return ensure_mounted() == 0 ? 0 : -EROFS; }
 
-int dp_params_flush(void)
-{
-    return (status.flags & DP_PARAM_STORAGE_READY) ? 0 : -EROFS;
-}
+int dp_params_flush(void) { return ensure_mounted() == 0 ? 0 : -EROFS; }
 
 int dp_params_prepare_reboot(void) { return dp_params_flush(); }
 
@@ -332,31 +335,57 @@ static int mount_locked(void)
     return err;
 }
 
-int dp_params_init(uint8_t area_id)
+/* 由首次登记确定分区；后续登记必须一致。 */
+int dp_params_configure(uint8_t area_id)
 {
-    if (ready) { return -EALREADY; }
-    if (area_id == DP_NO_PARAMS) { return -ENODEV; }
+    if (!configured) {
+        partition_id = area_id;
+        configured = true;
+        return 0;
+    }
+    return partition_id == area_id ? 0 : -EINVAL;
+}
+
+bool dp_params_mounted(void) { return ready; }
+
+/* 调用方持有 params_lock；首次访问时完成缓存分配、参数枚举和 NVS 挂载。 */
+static int mount_once(void)
+{
+    if (ready) {
+        return (status.flags & DP_PARAM_STORAGE_READY) ? 0 : -EROFS;
+    }
+    /* 尚未登记任何模型时不锁存，允许登记后再次访问。 */
+    if (!configured) { return -ENODEV; }
+    ready = true;
+    if (partition_id == DP_NO_PARAMS) {
+        set_status(-ENODEV, 0);
+        return -ENODEV;
+    }
     buffers = k_malloc(sizeof(*buffers));
-    if (!buffers) { set_status(-ENOMEM, 0); ready = true; return -ENOMEM; }
+    if (!buffers) {
+        set_status(-ENOMEM, 0);
+        return -ENOMEM;
+    }
     memset(buffers, 0, sizeof(*buffers));
-    partition_id = area_id;
     for (size_t i = 0; i < dp_point_count(); ++i) {
         struct dp_point_cfg p;
         if (!dp_config_point(i, &p)) { continue; }
         if (p.source != DP_SOURCE_PARAMETER) { continue; }
         if (param_count == CONFIG_DP_PARAMS_MAX_COUNT) {
-            ready = true;
+            set_status(-ENOSPC, 0);
             return -ENOSPC;
         }
         defs[param_count++] = i;
     }
     for (size_t i = 0; i < param_count; ++i) {
         struct dp_point_cfg p;
-        if (!param(i, &p)) { ready = true; return -ENOENT; }
+        if (!param(i, &p)) {
+            set_status(-ENOENT, 0);
+            return -ENOENT;
+        }
         buffers->staged[i] = p.initial;
         buffers->durable_stage[i] = p.initial;
     }
-    ready = true;
     if (!param_count) {
         set_status(0, DP_PARAM_STORAGE_READY);
         return 0;
@@ -366,5 +395,13 @@ int dp_params_init(uint8_t area_id)
         LOG_ERR("Parameter storage initialization failed (%d)", err);
         set_status(err, 0);
     }
+    return err;
+}
+
+static int ensure_mounted(void)
+{
+    k_mutex_lock(&params_lock, K_FOREVER);
+    int err = mount_once();
+    k_mutex_unlock(&params_lock);
     return err;
 }

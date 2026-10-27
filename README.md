@@ -62,7 +62,7 @@ device list
 
 ```text
 app/main.c                    启动、采样周期、故障留驻
-  ├─ app/protocol/            本地模型和 dp_start()
+  ├─ app/protocol/            本地模型和 dp_register_model()
   ├─ app/acquisition/         读取 DI/AI，同步写 DP
   ├─ app/process/points.c     采样周期、参数命令、参数状态
   └─ app/status/              整机状态、LED、故障
@@ -74,7 +74,7 @@ modules/gd32e505/             SoC、时钟、ADC
 ```
 
 启动顺序：`status_init()` → `acquisition_inputs_init()` → 可选 `iap_init()` →
-`protocol_init()`（`dp_start()`）→ 镜像确认。主循环按 `points_sample_period_ms()`
+`protocol_init()`（逐组 `dp_register_model()`）→ 镜像确认。主循环按 `points_sample_period_ms()`
 采样并写点；终止故障后只留驻诊断，不恢复业务。
 
 ## 文档
