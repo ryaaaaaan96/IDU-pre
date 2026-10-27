@@ -63,3 +63,9 @@ LED 使用 status 内的 delayable work，在已有系统工作队列直接调�
 复位不等待日志后端、LED 或工作队列；仅测试钩子允许复位返回后继续提交显示与维护工作。
 HOLD 保持外部喂狗，停止业务与任务监控。日志仍逐次提交，不增加应用日志缓冲队列；
 LOG_MODE_DEFERRED 和关闭 LOG_BLOCK_IN_THREAD 为 status 的构建要求。
+
+## 2026-10-27：监控自动处置与显式复位区分
+
+监控故障通知改在 watchdog 的系统工作队列执行，硬件定时器在三倍检查周期有效期过后独立停喂。
+显式 status_report_fault(RESET) 仍同步调用 watchdog_reset，底层 sys_reboot 由 watchdog 持有，不等待工作队列。
+HOLD 显式关闭检查并保留喂狗；队列恢复不得清除已锁存监控故障。status 不再另设硬件错误轮询工作。

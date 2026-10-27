@@ -109,7 +109,7 @@ PD8 为最高位。寄存器 DI bit0 对应 DI1，bit15 对应 DI16。
   200 ms 无边沿时复位；原主循环与 DP 隐式活性检查已解除。
   Modbus 无有效收包约 20 s 时重置端口，恢复 TX 完成中断丢失等状态；
   工作线程持续卡住 20 s 或重配与回退均失败时上报协议维护故障。检测以采样周期为粒度。
-  `modules/watchdog` 将停止或 GPIO 错误锁定，任务时限策略由 status 管理；
+  `modules/watchdog` 将停止或 GPIO 错误锁定，任务检查与有效期归 watchdog，产品故障动作由 status 选择；
   `app/status/` 记录采集故障阶段和错误码。停止喂狗不会将 PC13 改为浮空。
 - RS485 使用 Zephyr Modbus RTU，115200/8N1，PA15 控制 DE。
   启用非标准串行配置选项以保留旧固件的 8N1；Zephyr 默认无校验时

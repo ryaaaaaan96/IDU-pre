@@ -26,9 +26,9 @@ int application_cycle(void);
 typedef enum { WATCHDOG_INIT, LED_START, INPUTS_INIT, IAP_INIT, TABLES_INIT, DP_INIT, DATA_BIND, TASKS_PREPARE,
                NETWORK_INIT, PORT_OPEN, COLLECT_INIT, PARAMS_INIT, PARAMS_RECOVER,
                PROCESS_INIT, REFERENCE_INIT, COLLECT_START, FORWARD_INIT,
-               SAMPLE, PUBLISH, PROTOCOL, LED, CHECKPOINT, WATCHDOG_CHECK, SERVICES } service_t;
+               SAMPLE, PUBLISH, PROTOCOL, LED, CHECKPOINT, SERVICES } service_t;
 static int errors[SERVICES];
-static unsigned calls[SERVICES], checks, stops, reboots;
+static unsigned calls[SERVICES], stops, reboots;
 static bool healthy, boot_ready, checkpoint_ready;
 static unsigned dp_health_checks;
 static int led_set_error;
@@ -76,7 +76,6 @@ static int service(service_t service)
         [PROTOCOL] = STATUS_RUN,
         [LED] = STATUS_RUN,
         [CHECKPOINT] = STATUS_RUN,
-        [WATCHDOG_CHECK] = STATUS_RUN,
     };
     zassert_equal(status_phase_get(), phases[service]);
     if (service <= FORWARD_INIT) {
@@ -87,12 +86,11 @@ static int service(service_t service)
     return errors[service];
 }
 
-int __wrap_watchdog_external_init(void) { return service(WATCHDOG_INIT); }
-int __wrap_watchdog_external_error(void)
+static watchdog_fault_cb_t watchdog_notify;
+int __wrap_watchdog_init(watchdog_fault_cb_t notify)
 {
-    ++checks;
-    ++calls[WATCHDOG_CHECK];
-    return errors[WATCHDOG_CHECK];
+    watchdog_notify = notify;
+    return service(WATCHDOG_INIT);
 }
 int acquisition_inputs_init(void) { return service(INPUTS_INIT); }
 int protocol_register_point_tables(void) { return service(TABLES_INIT); }
@@ -153,8 +151,11 @@ int co_polling_init(void) { return service(COLLECT_START); }
 uint16_t points_sample_period_ms(void) { return 500; }
 int iap_init(void) { return service(IAP_INIT); }
 int protocol_forwarding_init(void) { return service(FORWARD_INIT); }
-void __wrap_watchdog_external_stop(void) { ++stops; }
-void status_request_reboot(void) { ++reboots; }
+void __wrap_watchdog_stop(watchdog_stop_mode_t mode)
+{
+    if (mode == WATCHDOG_STOP_ALL) { ++stops; }
+}
+void __wrap_watchdog_reset(void) { ++reboots; }
 void iap_stop(void) {}
 
 static struct gpio_driver_data indicator_data;
@@ -265,7 +266,7 @@ static void initialize_fixture(void)
     memset(errors, 0, sizeof(errors));
     memset(calls, 0, sizeof(calls));
     published = false;
-    checks = stops = reboots = 0;
+    stops = reboots = 0;
     healthy = boot_ready = true;
     dp_health_checks = 0;
     checkpoint_ready = false;
@@ -316,7 +317,7 @@ static void check_startup_failure(service_t failed)
     zassert_equal(stops, 0);
     zassert_equal(reboots, 0);
     zassert_equal(fault_snapshot().action, STATUS_ACTION_HOLD);
-    zassert_equal(checks, 0);
+    zassert_equal(calls[CHECKPOINT], 0);
     zassert_equal(application_cycle(), -EACCES);
     zassert_equal(startup(), -EALREADY);
     zassert_equal(fault_snapshot().error, -EIO);
@@ -327,7 +328,7 @@ ZTEST(acquisition, test_startup_failure_watchdog_init)
     check_startup_failure(WATCHDOG_INIT);
     k_msleep(250);
     zassert_equal(reboots, 0);
-    zassert_equal(checks, 0);
+    zassert_equal(calls[CHECKPOINT], 0);
 }
 
 ZTEST(acquisition, test_startup_failure_led_start)
@@ -416,9 +417,8 @@ ZTEST(acquisition, test_success_updates_points_and_checks_trial_health)
     zassert_ok(application_cycle());
     zassert_equal(status_phase_get(), STATUS_RUN);
     zassert_true(published);
-    zassert_equal(checks, 1);
-    zassert_equal(stops, 0);
     zassert_equal(calls[CHECKPOINT], 1);
+    zassert_equal(stops, 0);
     zassert_true(checkpoint_ready);
     boot_ready = false;
     zassert_ok(application_cycle());
@@ -439,7 +439,6 @@ ZTEST(acquisition, test_failed_acquisition_stops_before_maintenance)
     zassert_str_equal(fault_snapshot().description, "Input point update failed");
     zassert_equal(calls[PROTOCOL], 0);
     zassert_equal(calls[CHECKPOINT], 0);
-    zassert_equal(checks, 0);
     zassert_equal(stops, 1);
 }
 
@@ -448,7 +447,6 @@ static void check_cycle_failure(service_t failed, const char *description)
     zassert_ok(startup());
     errors[failed] = -EIO;
     zassert_equal(application_cycle(), -EIO);
-    zassert_equal(checks, 0);
     zassert_equal(calls[CHECKPOINT], 0);
     zassert_equal(stops, 1);
     zassert_equal(fault_snapshot().phase, STATUS_RUNTIME);
@@ -490,8 +488,9 @@ ZTEST(acquisition, test_confirmation_failure_stops_watchdog)
 ZTEST(acquisition, test_gpio_watchdog_error_prevents_trial_confirmation)
 {
     zassert_ok(startup());
-    errors[WATCHDOG_CHECK] = -EIO;
-    zassert_equal(application_cycle(), -EIO);
+    const struct watchdog_fault fault = {.reason = WATCHDOG_FAULT_GPIO, .error = -EIO};
+    watchdog_notify(&fault);
+    zassert_equal(application_cycle(), -EACCES);
     zassert_equal(fault_snapshot().phase, STATUS_RUNTIME);
     zassert_equal(calls[CHECKPOINT], 0);
     zassert_equal(stops, 1);
@@ -706,7 +705,7 @@ ZTEST(acquisition, test_storage_failure_keeps_sampling_without_confirmation)
     zassert_ok(application_cycle());
     zassert_false(checkpoint_ready);
     zassert_equal(status_degradation_get().storage_error, -EIO);
-    zassert_equal(checks, 1);
+    zassert_equal(calls[CHECKPOINT], 1);
 }
 
 ZTEST(acquisition, test_pending_recovery_prevents_confirmation_until_resolved)
@@ -729,13 +728,13 @@ ZTEST(acquisition, test_remote_outage_is_diagnostic_and_keeps_watchdog_progress)
     remote_state = CO_DEVICE_OFFLINE;
     zassert_ok(application_cycle());
     zassert_equal(status_degradation_get().remote_offline, 1);
-    zassert_equal(checks, 1);
+    zassert_equal(calls[CHECKPOINT], 1);
     zassert_equal(stops, 0);
     remote_state = CO_DEVICE_INITIALIZING;
     zassert_ok(application_cycle());
     zassert_equal(status_degradation_get().remote_offline, 0);
     zassert_equal(status_degradation_get().remote_initializing, 1);
-    zassert_equal(checks, 2);
+    zassert_equal(calls[CHECKPOINT], 2);
 }
 
 ZTEST(acquisition, test_shared_wire_station_conflict_fails_before_ports_or_workers)
@@ -759,7 +758,7 @@ ZTEST(acquisition, test_storage_fault_survives_successful_operation_until_storag
     zassert_ok(application_cycle());
     zassert_equal(status_degradation_get().storage_error, -EIO);
     zassert_false(checkpoint_ready);
-    zassert_equal(checks, 2);
+    zassert_equal(calls[CHECKPOINT], 2);
     parameter_flags = DP_PARAM_STORAGE_READY;
     zassert_ok(application_cycle());
     zassert_equal(status_degradation_get().storage_error, 0);

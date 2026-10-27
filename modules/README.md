@@ -24,7 +24,7 @@ compatibility.
 
 | Module | Public headers | Responsibility |
 | --- | --- | --- |
-| `watchdog` | `watchdog/watchdog.h` | Independent external GPIO feeding and explicit software task deadlines; product fault policy stays in status |
+| `watchdog` | `watchdog/watchdog.h` | Workqueue task checks, expiring health results, GPIO feeding and reset; product fault policy stays in status |
 | [`vport`](vport/README.md) | `vport/vport.h` | Generic complete-message callbacks, ownership isolation and per-port send serialization |
 | [`modbus`](modbus/README.md) | `modbus_support/{rtu,transport}.h` | Allocation-free RTU conversion, shared serial access and reviewed Zephyr compatibility; optional forwarding hooks |
 | `dataprocess` | `data_process.h`, `platform_callback.h`, `dataprocess/{points,process,params}.h` | Shared data contracts/store, `dp_*` processing, optional NVS |
@@ -196,19 +196,18 @@ It combines named digital and analog inputs, interprets bit order and address sw
 and treats failed reads as invalid samples. Pins are read sequentially, not simultaneously.
 The watchdog remains an independent GPIO-based service.
 
-The external watchdog service uses `WATCHDOG_MONITOR` to avoid conflicting with
-Zephyr's existing `WATCHDOG` driver option.
+Software checking uses `WATCHDOG_SOFTWARE`; GPIO feeding uses `WATCHDOG_EXTERNAL`.
+Both are independent of Zephyr's hardware `WATCHDOG` driver option.
 
 The application calls Zephyr ADC channel setup and read APIs directly and applies
 its configured averaging count. There is no separate analog wrapper module.
 
-`watchdog_init()` starts periodic feeding on a configured on-chip GPIO using a
-kernel timer. GPIO toggles must be nonblocking and ISR-safe. `watchdog_error()`
-queries the current error without changing the feed cadence; `watchdog_stop()`
-permanently stops feeding and keeps the pin driven at its last level. GPIO errors
-also latch and stop feeding. Initialization is serialized, query/stop synchronize
-with timer callbacks. Task deadline policy belongs to application status, not to
-this physical backend. No particular external watchdog IC is assumed.
+`watchdog_init()` reads the devicetree GPIO configuration and starts optional
+workqueue checks and GPIO feeding. Only completed successful checks renew health,
+which expires after three software check intervals. The hardware timer suppresses
+feeding when health expires; all fault notifications run on the system workqueue.
+`watchdog_reset()` stops monitoring and feeding before invoking the cold-reset
+primitive. See [watchdog interface and timing](watchdog/README.md).
 
 `app/acquisition/acquisition.c` constructs descriptors from the product devicetree,
 checks the current conversion's 12-bit/3.3 V contract and writes DI/AI points directly

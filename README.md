@@ -130,7 +130,7 @@ app/main.c                         启动顺序、采样周期与休眠
 `app/status/inc/status.h` 定义业务阶段，启动或采集失败时保留最初故障、停止喂狗，
 并拒绝继续执行。MCUboot 确认条件由 `status` 检查 Flash 和参数事务状态，
 持续健康窗口由 `status/image_confirm.c` 判断。
-多任务看门狗由 watchdog 模块管理，调用任务显式登记，status 负责故障处置；无活动登记项时持续喂狗，现有任务暂未接入，见[任务看门狗](docs/task-watchdog.md)。
+多任务看门狗由 watchdog 工作队列检查，硬件定时器按健康结果有效期喂狗；任务显式登记，status 负责产品故障处置；无活动登记项时持续喂狗，现有任务暂未接入，见[任务看门狗](docs/task-watchdog.md)。
 
 新增功能时，通用机制放进对应模块，产品数据放进 `protocol/`，测点业务放进 `process/`。
 启动依赖顺序由 `main.c` 管理，每周期工作由 `acquisition` 编排；不在这些文件中

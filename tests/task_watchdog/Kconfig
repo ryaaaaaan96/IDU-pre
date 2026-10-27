@@ -4,3 +4,6 @@ rsource "../../app/status/Kconfig"
 
 config TEST_WATCHDOG_INIT_FAILURE
     bool "Inject external watchdog GPIO initialization failure"
+
+config TEST_WATCHDOG_BLOCK_FIRST_CHECK
+    bool "Block system workqueue before watchdog initialization"

@@ -9,6 +9,16 @@ config WATCHDOG_EXTERNAL
     depends on GPIO
     help
       Initialize the app,gpio-watchdog devicetree GPIO when the application
-      explicitly calls watchdog_external_init(), then periodically toggle it.
+      explicitly calls watchdog_init(), then periodically toggle it.
       When disabled,
       leave the GPIO untouched and do not start the feed timer.
+
+config WATCHDOG_CHECK_INTERVAL_MS
+    int "Task watchdog check interval in milliseconds"
+    depends on WATCHDOG_SOFTWARE
+    default 100
+    range 1 60000
+    help
+      Run task checks on the system workqueue at this interval. Only completed,
+      successful checks renew health. Results and startup grace remain valid
+      for exactly three times this interval.

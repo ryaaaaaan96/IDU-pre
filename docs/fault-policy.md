@@ -1,78 +1,64 @@
 # 本地故障策略与诊断
 
-故障上报显式提供阶段、错误码、常驻描述和最终动作：
+故障上报显式提供阶段、非零错误码、常驻英文描述和最终动作：
 
 ```c
-status_report_fault(STATUS_INIT, err, "Input initialization failed",
-                    STATUS_ACTION_HOLD);
-status_report_fault(STATUS_RUNTIME, err, "Watchdog feed output failed", STATUS_ACTION_RESET);
+status_report_fault(STATUS_INIT, err, "Input initialization failed", STATUS_ACTION_HOLD);
+status_report_fault(STATUS_RUNTIME, err, "Input point update failed", STATUS_ACTION_RESET);
 ```
 
-`STATUS_INIT` / `STATUS_RUNTIME` 表示故障发生于初始化或运行阶段，运行时不再设置采样、发布等细分业务阶段。错误码表示失败原因，描述说明故障来源；同一个 `-EIO` 可来自不同硬件。
-描述使用英文，必须是字符串常量或始终有效的常驻字符串，函数保存指针，不复制或动态格式化。
-`status` 不比较描述字符串、不维护故障来源枚举或动作映射表，直接执行调用方的最终动作。
+描述保存指针，不复制或按字符串选择策略；应使用字符串常量或常驻存储。
+STATUS_INIT / STATUS_RUNTIME 表示故障阶段，整机只维护未配置、启动、运行与故障锁存阶段。
 
-动作直接在 C 调用点使用 `status_action_t` 的枚举值：
+| 动作 | 行为 |
+| --- | --- |
+| CONTINUE | 仅更新最近故障和提交日志，不恢复已经停止的业务 |
+| HOLD | 锁存终止状态，停止业务与任务检查，显式保留外部喂狗 |
+| RESET | 锁存终止状态，停止业务与全部监控，调用 watchdog_reset |
 
-- `STATUS_ACTION_CONTINUE`：记录后继续，仅运行期可用。
-- `STATUS_ACTION_HOLD`：停止业务并留驻。
-- `STATUS_ACTION_RESET`：请求复位。
+初始化阶段不允许 CONTINUE，传入时返回 -EINVAL。启动初始化失败默认 HOLD，运行故障默认 RESET，动作直接写在 C 调用点。
+每次报告更新描述、阶段、错误、时间和请求动作，不判断重复、首次或升级，不维护故障历史。
+status_application_fault_get 返回一致的最近故障快照；fault.action 是最近请求，不代表业务已恢复。
+重复终止请求允许重复调用停止接口，业务停止标志复位前不清除。
 
-启动初始化失败明确使用 `STATUS_ACTION_HOLD`，停止业务并保留故障现场，避免固定故障循环重启。
-运行期故障继续使用 `STATUS_ACTION_RESET`；需要改变某处策略时直接修改该处枚举。
-main 进入后，status_init 显式调用 watchdog_external_init；模块读取设备树并开始定时喂狗，
-不在 POST_KERNEL 启动。看门狗初始化成功后，启动故障留驻仍持续喂狗；看门狗自身初始化失败时不再检查未初始化实例，
-也不请求软件复位，但无法保证外部硬件看门狗不会复位。
-不通过 Kconfig 数字配置动作。`WATCHDOG_SOFTWARE` / `WATCHDOG_EXTERNAL` 分别控制软件监控与外部喂狗，
-不改变故障动作。初始化阶段传入 `STATUS_ACTION_CONTINUE` 返回 `-EINVAL`。
+## Watchdog 与产品处理
 
-每次上报都更新描述、阶段、错误、时间和请求动作，并输出日志；快照表示最近一次故障，
-不保存历史，也不判断是否重复。删除独立的终止描述和动作强度比较。
-动作直接执行：继续只记录，留驻停止业务，复位优先停喂、关闭业务准入后请求复位。
-业务停止状态独立锁存，后续继续动作不会恢复业务；重复终止请求允许重复调用停止接口。
+main 调用 status_init，再调用统一 watchdog_init；模块内部读取设备树并启动硬件喂狗及工作队列检查。
+引脚和硬件周期来自 app,gpio-watchdog 节点，软件周期来自 WATCHDOG_CHECK_INTERVAL_MS。
+首次检查宽限和健康结果有效期固定为三倍软件周期。只有完整检查通过才能续期，任务心跳不续期。
 
-终止时 DP/CO 拒绝新业务，北向静默，IAP 拒绝新上传；保留 Shell、日志和 RAM 快照。
-普通留驻继续喂外狗，调试留驻不启动看门狗。已经开始的操作到安全边界后停止，
-不能撤销已执行的南向命令或升级提交，详细边界见 [ADR 0011](adr/0011-terminal-faults-and-runtime-budgets.md)。
+watchdog 在系统 workqueue 检查任务并回调故障。status 根据任务超时、检查结果过期、GPIO 错误选择产品动作。
+硬件定时器只判断健康结果并操作 GPIO；队列卡死时过期后停喂，由外部芯片兜底，通知要等队列恢复。
+过期故障不会在队列恢复时清除。HOLD 显式调用 watchdog_stop(MONITOR) 后允许喂狗，诊断仍保留。
+仅软件配置没有外部兜底，队列阻塞期间不能主动执行该队列上的故障回调。
 
-`status.c` 私有持有唯一整机状态，启动调用 `status_init()`，每次上电只初始化一次。
-重复调用返回 `-EALREADY`，初始化失败后也不重新初始化硬件。业务阶段通过
-`status_set_phase()` / `status_phase_get()` 访问，健康检查使用 `status_progress()`。
-`status_application_fault_get()` 读取一致的最近故障快照；任务详情使用
-`watchdog_task_fault_get()`。故障记录不跨复位保存，故障路径不写 Flash。
+模块初始化错误直接返回，status 进入启动 HOLD，不重试初始化，也不再轮询未初始化硬件。
+已成功启动的喂狗在启动 HOLD 中继续；硬件自身初始化失败时，不能保证外部芯片不会复位。
+软件/硬件配置分别控制检查与 GPIO 操作，不改写调用点的显式故障动作。
 
-指示灯使用 GPIO，初始化失败立即返回终止故障。仅配置成功才允许后续引脚访问；
-首次离开 `STATUS_STARTING` 时启动周期工作，运行态按错过周期奇偶翻转，故障强制常亮。
-协议层通过 `status_update_degradation()` 提交离线数量和存储诊断，
-`status_degradation_get()` 返回一致副本；远端离线和允许的存储降级不直接触发终止。
+## 显式复位与同步路径
 
-从应用目录构建调试固件：
+status_report_fault 可从线程或 ISR 调用，同步锁存故障并关闭业务准入。
+RESET 先调用 watchdog_stop(ALL)，再关闭协议/IAP 准入，提交非阻塞日志并调用 watchdog_reset。
+底层 sys_reboot 仅由 watchdog 调用，status 不直接接触复位原语；复位不等待 workqueue、日志或 LED。
+测试允许复位入口返回，产品冷复位正常不返回。HOLD 保留系统队列中的 LED 更新。
 
-```bash
-./scripts/build.sh --extra-conf "$PWD/conf/debug.conf"
-```
+开启日志时要求 LOG_MODE_DEFERRED 并关闭 LOG_BLOCK_IN_THREAD，构建拒绝同步日志或等待日志缓冲的配置。
+每次报告仍提交日志，不增加应用日志队列、不等待复位前刷出，日志落盘不属于复位前保证。
 
-例如让某处运行期故障留驻，直接写：
+终止时 DP/CO 拒绝新业务，北向静默，IAP 拒绝新上传。已开始的通信和 Flash 操作到安全边界后停止；
+不挂起持锁线程、不撤销已执行的南向命令或升级提交。故障路径不写 Flash，诊断不跨重启保存。
+详细决策历史见 [ADR 0011](adr/0011-terminal-faults-and-runtime-budgets.md)。
 
-```c
-status_report_fault(STATUS_RUNTIME, err, "Sample publication failed", STATUS_ACTION_HOLD);
-```
+## 产品状态与指示
 
-新增故障时，在调用点给出初始化／运行阶段、错误码、英文常驻描述和枚举动作，
-按业务有效性决定能否继续，无需增加来源枚举或 Kconfig 动作配置。
-验收使用 `bash tests/runtime/run.sh`，采样单场景使用 `tests/acquisition/run.py`；
-测试以独立进程隔离每次启动，不通过清零内部状态模拟重启。完整入口为 `bash tests/run.sh`。
+status 保留整机阶段、最近产品故障、远端/存储降级、LED 和镜像确认。
+远端离线或允许的存储降级不停止本地采样，不主动停止硬件喂狗。
+status_progress 只推进镜像健康确认；旧的硬件错误轮询工作已删除。
 
-整机状态和看门狗产品编排位于 status.c；软件期限与硬件喂狗实现归 modules/watchdog。
-LED 单独位于 status_led.c/.h，名为 status_led 的延时工作独立更新 GPIO；
-status.c 的后台工作只检查外部喂狗错误。两者均使用系统工作队列，不新增工作线程。
-进入运行时启动 LED 周期工作，故障时提交立即更新请求；初始化失败后不访问 LED 引脚。
+LED 初始化失败终止启动；未成功配置时不访问 GPIO。运行态由独立 delayable work 更新，终止故障常亮。
+系统队列拥堵可能延迟 LED，不能将灯的更新速度当作任务监控或停喂保证。
 
-## 2026-10-27：短小同步故障路径
-
-保留两个 k_timer。软件监控使用有序链表，将查找/调整期限放在线程接口，定时器只检查表头。
-status 同步记录最新故障、停止软件监控；RESET 优先停喂，再执行协议/IAP 的非阻塞准入关闭。
-这些停止接口只设置门控并唤醒线程，不等待已开始事务结束；不得在此路径追加 Flash 或线程退出等待。
-日志开启时必须选择 LOG_MODE_DEFERRED 并关闭 LOG_BLOCK_IN_THREAD，构建拒绝同步后端或等待日志缓冲的配置。
-每次报告仍提交日志，不合并为“只输出最近一次”的工作，也不新建日志队列；复位前不等待日志刷出。
-LED/辅助维护由系统工作队列执行，RESET 请求不依赖该队列。系统队列阻塞时，HOLD 仍继续硬件喂狗，RESET 仍执行停喂/复位。
+调试构建使用 `./scripts/build.sh --extra-conf "$PWD/conf/debug.conf"` 关闭软件/硬件监控，显式 RESET 仍有效。
+验证使用 tests/runtime/run.sh、tests/acquisition/run.py、tests/task_watchdog/run_modes.sh；独立进程模拟每次启动。
+当前模块契约见[任务检查与健康有效期](task-watchdog.md)。实板波形、时延和实际复位链另行验证。

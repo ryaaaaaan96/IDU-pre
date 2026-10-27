@@ -8,15 +8,13 @@
 #ifdef CONFIG_IDU_IAPV3
 #include <iap/iap.h>
 #endif
+#include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
-#include <zephyr/sys/reboot.h>
 #include <errno.h>
 
 LOG_MODULE_REGISTER(app_status, LOG_LEVEL_INF);
 
 /* ==================== 整机状态与后台工作声明 ==================== */
-
-#define WATCHDOG_CHECK_INTERVAL_MS 100
 
 void protocol_stop(void);
 static struct {
@@ -30,51 +28,28 @@ static struct {
     struct image_confirm image_confirm;
 #endif
 } application;
-static void maintain(struct k_work *work);
-static K_WORK_DELAYABLE_DEFINE(maintenance, maintain);
 
 /* ==================== 看门狗配置与故障策略 ==================== */
 
-static void task_timeout_notify(void)
+static void watchdog_fault(const struct watchdog_fault *fault)
 {
-    /* 保留 ISR 安全的故障门控，不依赖系统工作队列获得调度。 */
     status_phase_t current = status_phase_get();
-    if (current == STATUS_FAULT_LOCKED) { return; }
+    /* 已显式留驻后只接受新的硬件故障，不用旧监控通知覆盖产品故障。 */
+    if (current == STATUS_FAULT_LOCKED && fault->reason != WATCHDOG_FAULT_GPIO) { return; }
     status_fault_phase_t phase = current == STATUS_STARTING ? STATUS_INIT : STATUS_RUNTIME;
-    (void)status_report_fault(phase, -ETIMEDOUT, "Task heartbeat timed out",
-                              phase == STATUS_INIT ? STATUS_ACTION_HOLD : STATUS_ACTION_RESET);
-}
-
-static bool watchdog_ready;
-
-static int status_watchdog_init(void)
-{
-    /* 此处决定启动时机；模块内部读取设备树并执行硬件操作。 */
-    int err = watchdog_external_init();
-    watchdog_ready = !err;
-    if (err) { return err; }
-    if (IS_ENABLED(CONFIG_WATCHDOG_SOFTWARE)) {
-        return watchdog_task_monitor_init(task_timeout_notify);
+    const char *description;
+    switch (fault->reason) {
+    case WATCHDOG_FAULT_TASK: description = "Task heartbeat timed out"; break;
+    case WATCHDOG_FAULT_CHECK: description = "Watchdog health check expired"; break;
+    case WATCHDOG_FAULT_GPIO: description = "Watchdog feed output failed"; break;
+    default: return;
     }
-    return 0;
-}
-
-static int status_watchdog_check(status_fault_phase_t phase)
-{
-    if (!watchdog_ready) {
-        return 0;
-    }
-    int err = watchdog_external_error();
-    if (err) {
-        return status_report_fault(phase, err, "Watchdog feed output failed", STATUS_ACTION_RESET);
-    }
-    return 0;
+    status_action_t action = phase == STATUS_INIT && fault->reason != WATCHDOG_FAULT_GPIO ?
+                             STATUS_ACTION_HOLD : STATUS_ACTION_RESET;
+    (void)status_report_fault(phase, fault->error, description, action);
 }
 
 /* ==================== 整机状态、故障与健康检查 ==================== */
-
-/* 复位属于硬件接口；测试适配实现允许调用返回。 */
-__weak void status_request_reboot(void) { sys_reboot(SYS_REBOOT_COLD); }
 
 status_phase_t status_phase_get(void)
 {
@@ -133,11 +108,10 @@ int status_report_fault(status_fault_phase_t phase, int error,
     application.fault.action = action;
     if (action != STATUS_ACTION_CONTINUE) {
         status_runtime.phase = STATUS_FAULT_LOCKED;
-        watchdog_task_monitor_stop();
+        watchdog_stop(action == STATUS_ACTION_RESET ? WATCHDOG_STOP_ALL : WATCHDOG_STOP_MONITOR);
     }
     k_spin_unlock(&status_runtime.lock, key);
     /* 关键动作先执行，不依赖日志后端、LED 工作或系统队列获得调度。 */
-    if (action == STATUS_ACTION_RESET) { watchdog_external_stop(); }
     if (action != STATUS_ACTION_CONTINUE) {
         protocol_stop();
 #ifdef CONFIG_IDU_IAPV3
@@ -147,31 +121,13 @@ int status_report_fault(status_fault_phase_t phase, int error,
 
     /* 使用 Zephyr 延后、非阻塞日志，只提交记录，不等待日志后端。 */
     LOG_ERR("%s: phase %d error %d action %d", description, phase, error, action);
-    if (action == STATUS_ACTION_RESET) { status_request_reboot(); }
+    if (action == STATUS_ACTION_RESET) { watchdog_reset(); }
 
     /* RESET 正常不返回；测试复位钩子返回时仍允许更新现场显示。 */
     if (action != STATUS_ACTION_CONTINUE) {
         status_led_refresh();
-        k_work_reschedule(&maintenance, K_NO_WAIT);
     }
     return action == STATUS_ACTION_CONTINUE ? 0 : error;
-}
-
-/* 故障留驻后主循环停止，此工作仍检查外部喂狗错误。 */
-static void maintain(struct k_work *work)
-{
-    ARG_UNUSED(work);
-    status_phase_t phase = status_phase_get();
-    if (phase == STATUS_UNCONFIGURED) {
-        return;
-    }
-    k_spinlock_key_t key = k_spin_lock(&status_runtime.lock);
-    bool check_watchdog = application.fault.action != STATUS_ACTION_RESET;
-    k_spin_unlock(&status_runtime.lock, key);
-    if (check_watchdog) {
-        (void)status_watchdog_check(phase == STATUS_STARTING ? STATUS_INIT : STATUS_RUNTIME);
-    }
-    k_work_reschedule(&maintenance, K_MSEC(WATCHDOG_CHECK_INTERVAL_MS));
 }
 
 int status_init(void)
@@ -184,7 +140,7 @@ int status_init(void)
     status_runtime.phase = STATUS_STARTING;
     k_spin_unlock(&status_runtime.lock, key);
 
-    int err = status_watchdog_init();
+    int err = watchdog_init(watchdog_fault);
     if (err) {
         return status_report_fault(STATUS_INIT, err, "Watchdog initialization failed", STATUS_ACTION_HOLD);
     }
@@ -206,24 +162,19 @@ void status_set_phase(status_phase_t phase)
     k_spin_unlock(&status_runtime.lock, key);
     if (start) {
         status_led_start();
-        k_work_reschedule(&maintenance, K_MSEC(WATCHDOG_CHECK_INTERVAL_MS));
     }
 }
 
 int status_progress(void)
 {
     if (status_phase_get() != STATUS_RUN) { return -EACCES; }
-    int err = status_watchdog_check(STATUS_RUNTIME);
-    if (err) {
-        return err;
-    }
 #ifdef CONFIG_BOOTLOADER_MCUBOOT
     const struct device *flash = DEVICE_DT_GET(DT_NODELABEL(external_flash));
     struct dp_param_status parameters;
     dp_params_get_status(&parameters);
     bool ready = device_is_ready(flash) && (parameters.flags & DP_PARAM_STORAGE_READY) &&
                  !(parameters.flags & DP_PARAM_PENDING);
-    err = image_confirm_checkpoint(&application.image_confirm, k_uptime_get(), ready);
+    int err = image_confirm_checkpoint(&application.image_confirm, k_uptime_get(), ready);
     if (err) { return status_report_fault(STATUS_RUNTIME, err, "Image confirmation failed",
                                              STATUS_ACTION_RESET); }
 #endif

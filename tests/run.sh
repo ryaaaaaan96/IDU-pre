@@ -52,7 +52,9 @@ bash applications/IDU-pre/tests/iap/run.sh
 for suite in adc io vport modbus_support communication shared_rs485 simulator pipeline models collector collect_state collect_modbus transmit forwarding_devices transmit_port dataprocess reference_dp reference_ports reference_config reference_services; do
     env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
         "applications/IDU-pre/tests/$suite" -d "$test_dir/$suite"
-    if [[ "$suite" == forwarding_devices ]]; then
+    if [[ "$suite" == io ]]; then
+        python3 applications/IDU-pre/tests/io/run.py "$test_dir/$suite/zephyr/zephyr.exe"
+    elif [[ "$suite" == forwarding_devices ]]; then
         timeout 30s "$test_dir/$suite/zephyr/zephyr.exe" -flash_in_ram
         # 用旧的合并绑定持久化，再以独立转发条目启动。
         rm -f -- "$flash_test_file"

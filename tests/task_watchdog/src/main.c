@@ -4,16 +4,19 @@
 #include <zephyr/sys/reboot.h>
 #include <zephyr/ztest.h>
 #include "nsi_cpu_es_if.h"
+#ifndef CONFIG_WATCHDOG_CHECK_INTERVAL_MS
+#define CONFIG_WATCHDOG_CHECK_INTERVAL_MS 100
+#endif
 
 static atomic_t edges, feed_configures;
-static atomic_t protocol_stop_calls, last_stop_in_isr, last_feed_error_at_stop;
+static atomic_t protocol_stop_calls, last_stop_in_isr;
 static atomic_t queue_blocked;
-static bool expect_blocked_queue;
+static bool expect_check_fault, expect_direct_reset;
+static void block_queue(void);
 void protocol_stop(void)
 {
     atomic_inc(&protocol_stop_calls);
     atomic_set(&last_stop_in_isr, k_is_in_isr());
-    atomic_set(&last_feed_error_at_stop, watchdog_external_error());
 }
 static struct gpio_driver_data gpio_data;
 static const struct gpio_driver_config gpio_config = {.port_pin_mask = UINT32_MAX};
@@ -39,20 +42,30 @@ static struct watchdog_task *expected;
 
 FUNC_NORETURN void __wrap_sys_reboot(int type)
 {
-    struct watchdog_task_fault fault, after;
+    struct watchdog_fault fault, after;
     struct watchdog_task_snapshot task;
     const struct watchdog_task_config config = {.name = "late", .timeout_ms = 100};
-    bool ok = expected && type == SYS_REBOOT_COLD &&
-        !watchdog_task_fault_get(&fault) && !watchdog_task_get(expected, &task) &&
-        fault.error == -ETIMEDOUT && atomic_get(&protocol_stop_calls) > 0 &&
-        atomic_get(&last_feed_error_at_stop) ==
-            (IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL) ? -ECANCELED : 0) &&
-        (!expect_blocked_queue || (atomic_get(&queue_blocked) && k_is_in_isr())) &&
-        !strcmp(fault.task.name, "silent") && (task.flags & WATCHDOG_TASK_FAULT) &&
-        watchdog_task_feed(expected) == -ECANCELED &&
-        watchdog_task_sleep_forever(expected) == -ECANCELED &&
-        watchdog_task_register(&extra, &config) == -ECANCELED &&
-        !watchdog_task_fault_get(&after) && after.occurred_ms == fault.occurred_ms;
+    atomic_val_t before = atomic_get(&edges);
+    if (!k_is_in_isr()) { k_sleep(K_MSEC(30)); }
+    bool ok = type == SYS_REBOOT_COLD && atomic_get(&edges) == before;
+    if (expect_direct_reset) {
+        ok = ok && watchdog_task_feed(&first) ==
+             (IS_ENABLED(CONFIG_WATCHDOG_SOFTWARE) ? -ECANCELED : -EACCES);
+    } else {
+        ok = ok && !k_is_in_isr() && !watchdog_fault_get(&fault) &&
+             atomic_get(&protocol_stop_calls) > 0 && fault.error == -ETIMEDOUT;
+        if (expect_check_fault) {
+            ok = ok && fault.reason == WATCHDOG_FAULT_CHECK && !fault.task.name;
+        } else {
+            ok = ok && expected && !watchdog_task_get(expected, &task) &&
+                 fault.reason == WATCHDOG_FAULT_TASK &&
+                 !strcmp(fault.task.name, "silent") && (task.flags & WATCHDOG_TASK_FAULT) &&
+                 watchdog_task_feed(expected) == -ECANCELED &&
+                 watchdog_task_sleep_forever(expected) == -ECANCELED;
+        }
+        ok = ok && watchdog_task_register(&extra, &config) == -ECANCELED &&
+             !watchdog_fault_get(&after) && after.occurred_ms == fault.occurred_ms;
+    }
     printk("WATCHDOG_RESET_%s\n", ok ? "PASS" : "FAIL");
     nsi_exit(ok ? 0 : 1);
     CODE_UNREACHABLE;
@@ -65,16 +78,19 @@ static void *setup(void)
     zassert_equal(atomic_get(&feed_configures), 0);
     k_sleep(K_MSEC(30));
     zassert_equal(atomic_get(&edges), 0);
-    zassert_equal(watchdog_external_error(), IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL) ? -EACCES : 0);
+    struct watchdog_fault fault;
+    zassert_equal(watchdog_fault_get(&fault), -ENOENT);
+    if (IS_ENABLED(CONFIG_TEST_WATCHDOG_BLOCK_FIRST_CHECK)) { block_queue(); }
     if (IS_ENABLED(CONFIG_TEST_WATCHDOG_INIT_FAILURE)) {
         zassert_equal(status_init(), -EIO);
-        zassert_equal(watchdog_external_error(), -EIO);
+        zassert_ok(watchdog_fault_get(&fault));
+        zassert_equal(fault.error, -EIO);
         return NULL;
     }
     zassert_ok(status_init());
     zassert_equal(atomic_get(&feed_configures), IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL));
-    zassert_ok(watchdog_external_error());
-    status_set_phase(STATUS_RUN);
+    zassert_equal(watchdog_fault_get(&fault), -ENOENT);
+    if (!IS_ENABLED(CONFIG_TEST_WATCHDOG_BLOCK_FIRST_CHECK)) { status_set_phase(STATUS_RUN); }
     return NULL;
 }
 ZTEST(task_watchdog, test_registration_and_independent_heartbeats)
@@ -111,8 +127,8 @@ ZTEST(task_watchdog, test_zero_registered_continues_past_legacy_timeout)
     atomic_val_t before = atomic_get(&edges);
     k_sleep(K_MSEC(40));
     zassert_equal(atomic_get(&edges) > before, IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL));
-    struct watchdog_task_fault fault;
-    zassert_equal(watchdog_task_fault_get(&fault), -ENOENT);
+    struct watchdog_fault fault;
+    zassert_equal(watchdog_fault_get(&fault), -ENOENT);
     status_set_phase(STATUS_RUN);
     zassert_ok(status_progress());
 }
@@ -156,7 +172,7 @@ ZTEST(task_watchdog, test_registration_validation_without_fixed_capacity)
         zassert_ok(watchdog_task_sleep_forever(&additional[i]));
     }
     zassert_equal(watchdog_task_get(NULL, &after), -EINVAL);
-    zassert_equal(watchdog_task_fault_get(NULL), -EINVAL);
+    zassert_equal(watchdog_fault_get(NULL), -EINVAL);
 }
 ZTEST(task_watchdog, test_explicit_hold_keeps_feed_without_task_fault)
 {
@@ -168,8 +184,8 @@ ZTEST(task_watchdog, test_explicit_hold_keeps_feed_without_task_fault)
     zassert_equal(atomic_get(&edges) > before, IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL));
     zassert_equal(watchdog_task_feed(&first), -ECANCELED);
     zassert_equal(watchdog_task_register(&extra, &config), -ECANCELED);
-    struct watchdog_task_fault fault;
-    zassert_equal(watchdog_task_fault_get(&fault), -ENOENT);
+    struct watchdog_fault fault;
+    zassert_equal(watchdog_fault_get(&fault), -ENOENT);
 }
 ZTEST(task_watchdog, test_permanent_sleep_and_explicit_reregistration)
 {
@@ -323,7 +339,7 @@ ZTEST(task_watchdog, test_concurrent_snapshots_are_consistent)
 }
 ZTEST(task_watchdog, test_configuration_switches)
 {
-    zassert_equal(watchdog_external_init(), IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL) ? -EALREADY : 0);
+    zassert_equal(watchdog_init(NULL), -EINVAL);
     zassert_equal(atomic_get(&feed_configures), IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL));
     const struct watchdog_task_config config = {.name = "optional", .timeout_ms = 100};
     int err = watchdog_task_register(&first, &config);
@@ -352,19 +368,114 @@ static void block_queue(void)
     zassert_ok(k_sem_take(&queue_entered, K_SECONDS(1)));
 }
 
-ZTEST(task_watchdog, test_blocked_workqueue_does_not_prevent_timeout_stops_and_reboots)
+ZTEST(task_watchdog, test_check_expiry_with_blocked_workqueue_stops_and_reboots)
 {
     block_queue();
     atomic_val_t before = atomic_get(&edges);
-    k_sleep(K_MSEC(30));
+    k_sleep(K_MSEC(CONFIG_WATCHDOG_CHECK_INTERVAL_MS));
     zassert_equal(atomic_get(&edges) > before, IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL));
-    const struct watchdog_task_config config = {.name = "silent", .timeout_ms = 50};
-    expected = &first;
-    expect_blocked_queue = true;
-    zassert_ok(watchdog_task_register(&first, &config));
-    k_sleep(K_MSEC(200));
-    zassert_unreachable("Blocked workqueue prevented timeout handling");
+    k_sleep(K_MSEC(3 * CONFIG_WATCHDOG_CHECK_INTERVAL_MS + 30));
+    struct watchdog_fault fault;
+    if (IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL)) {
+        zassert_ok(watchdog_fault_get(&fault));
+        zassert_equal(fault.reason, WATCHDOG_FAULT_CHECK);
+        before = atomic_get(&edges);
+        k_sleep(K_MSEC(30));
+        zassert_equal(atomic_get(&edges), before);
+    } else {
+        zassert_equal(watchdog_fault_get(&fault), -ENOENT);
+    }
+    zassert_equal(atomic_get(&protocol_stop_calls), 0);
+    expect_check_fault = true;
+    k_sem_give(&queue_release);
+    k_sleep(K_MSEC(100));
+    zassert_unreachable("Expired health was renewed after queue recovery");
 }
+
+ZTEST(task_watchdog, test_heartbeats_do_not_renew_health_stops_and_reboots)
+{
+    block_queue();
+    const struct watchdog_task_config config = {.name = "active", .timeout_ms = 10000};
+    zassert_ok(watchdog_task_register(&first, &config));
+    for (int i = 0; i < 4; ++i) {
+        int err = watchdog_task_feed(&first);
+        zassert_true(err == 0 || err == -ECANCELED);
+        k_sleep(K_MSEC(CONFIG_WATCHDOG_CHECK_INTERVAL_MS));
+    }
+    struct watchdog_fault fault;
+    if (IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL)) {
+        zassert_ok(watchdog_fault_get(&fault));
+        zassert_equal(fault.reason, WATCHDOG_FAULT_CHECK);
+    }
+    expect_check_fault = true;
+    k_sem_give(&queue_release);
+    k_sleep(K_MSEC(100));
+    zassert_unreachable("Task heartbeats concealed stalled checks");
+}
+
+ZTEST(task_watchdog, test_short_queue_delay_does_not_expire_health)
+{
+    block_queue();
+    k_sleep(K_MSEC(CONFIG_WATCHDOG_CHECK_INTERVAL_MS));
+    struct watchdog_fault fault;
+    zassert_equal(watchdog_fault_get(&fault), -ENOENT);
+    k_sem_give(&queue_release);
+    k_sleep(K_MSEC(4 * CONFIG_WATCHDOG_CHECK_INTERVAL_MS));
+    zassert_equal(watchdog_fault_get(&fault), -ENOENT);
+    zassert_equal(status_phase_get(), STATUS_RUN);
+}
+
+ZTEST(task_watchdog, test_explicit_hold_after_expiry_keeps_feed_without_clearing_fault)
+{
+    block_queue();
+    k_sleep(K_MSEC(3 * CONFIG_WATCHDOG_CHECK_INTERVAL_MS + 30));
+    if (IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL)) {
+        struct watchdog_fault fault;
+        zassert_ok(watchdog_fault_get(&fault));
+        zassert_equal(fault.reason, WATCHDOG_FAULT_CHECK);
+    }
+    (void)status_report_fault(STATUS_RUNTIME, -EIO, "Explicit diagnostic hold", STATUS_ACTION_HOLD);
+    atomic_val_t before = atomic_get(&edges);
+    k_sleep(K_MSEC(40));
+    zassert_equal(atomic_get(&edges) > before, IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL));
+    k_sem_give(&queue_release);
+    k_sleep(K_MSEC(40));
+    zassert_equal(status_phase_get(), STATUS_FAULT_LOCKED);
+    zassert_equal(atomic_get(&protocol_stop_calls), 1);
+}
+
+ZTEST(task_watchdog, test_direct_reset_stops_and_reboots)
+{
+    block_queue();
+    const struct watchdog_task_config config = {.name = "reset", .timeout_ms = 2000};
+    zassert_equal(watchdog_task_register(&first, &config),
+                  IS_ENABLED(CONFIG_WATCHDOG_SOFTWARE) ? 0 : -EACCES);
+    expect_direct_reset = true;
+    watchdog_reset();
+    zassert_unreachable("Reset returned");
+}
+
+#ifdef CONFIG_TEST_WATCHDOG_BLOCK_FIRST_CHECK
+ZTEST(task_watchdog, test_startup_grace_expires_before_first_check)
+{
+    k_sleep(K_MSEC(3 * CONFIG_WATCHDOG_CHECK_INTERVAL_MS + 30));
+    struct watchdog_fault fault;
+    zassert_ok(watchdog_fault_get(&fault));
+    zassert_equal(fault.reason, WATCHDOG_FAULT_CHECK);
+    atomic_val_t before = atomic_get(&edges);
+    k_sleep(K_MSEC(30));
+    zassert_equal(atomic_get(&edges), before);
+    k_sem_give(&queue_release);
+    k_sleep(K_MSEC(30));
+    zassert_equal(status_phase_get(), STATUS_FAULT_LOCKED);
+    zassert_ok(watchdog_fault_get(&fault));
+    zassert_equal(fault.reason, WATCHDOG_FAULT_CHECK);
+    /* 应用启动 HOLD 显式允许喂狗，但不能把过期记录改为健康。 */
+    before = atomic_get(&edges);
+    k_sleep(K_MSEC(40));
+    zassert_true(atomic_get(&edges) > before);
+}
+#endif
 
 static atomic_t hold_result;
 static void report_hold(struct k_timer *timer)
@@ -387,12 +498,10 @@ ZTEST(task_watchdog, test_interrupt_hold_closes_gate_and_keeps_feed_with_blocked
     zassert_equal(status_phase_get(), STATUS_FAULT_LOCKED);
     zassert_equal(atomic_get(&protocol_stop_calls), 1);
     zassert_equal(atomic_get(&last_stop_in_isr), 1);
-    zassert_equal(atomic_get(&last_feed_error_at_stop), 0);
     zassert_equal(atomic_get(&edges) > before, IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL));
-    zassert_ok(watchdog_external_error());
     zassert_equal(watchdog_task_feed(&first), -ECANCELED);
-    struct watchdog_task_fault fault;
-    zassert_equal(watchdog_task_fault_get(&fault), -ENOENT);
+    struct watchdog_fault fault;
+    zassert_equal(watchdog_fault_get(&fault), -ENOENT);
     k_sem_give(&queue_release);
     k_sleep(K_MSEC(10));
 }
@@ -407,8 +516,10 @@ ZTEST(task_watchdog, test_explicit_initialization_failure)
     zassert_equal(fault.error, -EIO);
     k_sleep(K_MSEC(200));
     zassert_equal(atomic_get(&edges), 0);
-    zassert_equal(watchdog_external_error(), -EIO);
-    zassert_equal(watchdog_external_init(), -EALREADY);
+    struct watchdog_fault watchdog_fault;
+    zassert_ok(watchdog_fault_get(&watchdog_fault));
+    zassert_equal(watchdog_fault.error, -EIO);
+    zassert_equal(status_init(), -EALREADY);
     zassert_equal(atomic_get(&feed_configures), 1);
 }
 #endif
