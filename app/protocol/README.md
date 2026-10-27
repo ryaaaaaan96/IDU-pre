@@ -5,7 +5,7 @@
 按本轮优化要求，产品只编译 `process_runtime.c` 和 `tables/process.c`。
 启动顺序：本地点表注册 → `dp_init()` → `dp_process_init()` → `dp_reference_init()` → DP 样本/业务线程。
 只绑定 `DEVICE_LOCAL`，不生成采集关系；本地 DI/AI 继续由 acquisition 读取并写入 DP。
-`protocol_stop()` 只停止 DP；`protocol_error()` 暂保留兼容入口并返回 0。
+不提供 protocol 错误查询、停止接口或停止标志；故障回调直接调用 `dp_stop()`，不增加转调层。
 
 原 `protocol.c`、`init.c`、`tasks.c`、`ports.c/.h`、`tasks.h`、采集表、转发表与协议段表
 归为**暂时废弃、待重新启用**的通信实现，原文件不改动、不删除。产品构建不编译这些实现，

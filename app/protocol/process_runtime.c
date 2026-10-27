@@ -5,7 +5,6 @@
 #include <dataprocess/points.h>
 #include <dataprocess/process.h>
 #include <platform_callback.h>
-#include <zephyr/sys/atomic.h>
 
 static const struct data_device_cfg bindings[] = {
     {
@@ -20,21 +19,9 @@ static DEV_TABLE_S devices[ARRAY_SIZE(bindings)];
 static struct k_thread samples, business;
 K_THREAD_STACK_DEFINE(sample_stack, CONFIG_DP_POINTS_STACK_SIZE);
 K_THREAD_STACK_DEFINE(business_stack, CONFIG_DP_PROCESS_STACK_SIZE);
-static atomic_t stopped;
 
 const DEV_TABLE_S *protocol_device_table(void) { return devices; }
 uint16_t protocol_device_count(void) { return ARRAY_SIZE(devices); }
-bool protocol_stopped(void) { return atomic_get(&stopped) != 0; }
-
-/* 保留调用方接口；当前没有通信维护任务。 */
-int protocol_error(void) { return 0; }
-
-void protocol_stop(void)
-{
-    atomic_set(&stopped, 1);
-    dp_stop();
-}
-
 int protocol_register_point_tables(void)
 {
     if (dp_config()) { return -EBUSY; }
@@ -47,7 +34,6 @@ int protocol_register_point_tables(void)
 
 int protocol_init(void)
 {
-    if (protocol_stopped()) { return -ECANCELED; }
     int err = protocol_register_point_tables();
     if (!err) { err = dp_init(); }
     if (err) { return err; }
@@ -69,7 +55,6 @@ int protocol_init(void)
                     dp_samples_task, NULL, NULL, NULL, 5, 0, K_FOREVER);
     k_thread_create(&business, business_stack, K_THREAD_STACK_SIZEOF(business_stack),
                     dp_business_task, NULL, NULL, NULL, 6, 0, K_FOREVER);
-    if (protocol_stopped()) { return -ECANCELED; }
     k_thread_start(&samples);
     k_thread_start(&business);
     return 0;

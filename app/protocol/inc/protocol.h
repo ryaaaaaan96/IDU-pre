@@ -15,6 +15,9 @@ int protocol_register_point_tables(void);
  * @brief 当前仅初始化本地 process 并启动 DP 线程；通信装配暂时停用。
  */
 int protocol_init(void);
+const DEV_TABLE_S *protocol_device_table(void);
+uint16_t protocol_device_count(void);
+/* 以下只供暂时停用的旧通信实现及其回归测试使用，当前产品不提供这些符号。 */
 /**
  * @brief 已锁存的本地通信维护故障，不驱动首次启动或采样。
  */
@@ -26,9 +29,7 @@ int protocol_error(void);
  */
 void protocol_stop(void);
 bool protocol_stopped(void);
-const DEV_TABLE_S *protocol_device_table(void);
-uint16_t protocol_device_count(void);
-/* 以下为暂时停用的通信装配声明，当前产品入口不调用。 */
+
 struct tr_forward_cfg;
 struct co_port_config;
 struct co_bus_cfg;

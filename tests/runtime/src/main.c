@@ -105,7 +105,7 @@ static bool terminal_result(watchdog_action_t action)
     struct dp_point_state point;
     return !watchdog_fault_get(&fault) && fault.description && !strcmp(fault.description, expected_description) &&
         fault.error < 0 && (fault.reason != WATCHDOG_FAULT_REPORTED || fault.action == action) &&
-        protocol_stopped() &&
+        dp_stopped() &&
         dp_read((struct dp_key){DEVICE_LOCAL, SIGNAL_DI}, &point) == -ECANCELED;
 }
 FUNC_NORETURN void __wrap_sys_reboot(int type)
@@ -155,7 +155,7 @@ ZTEST(runtime, test_real_main_fault_policy)
     if (!expected_description) {
         k_msleep(1800);
         zassert_true(atomic_get(&samples) >= 3);
-        zassert_false(protocol_stopped());
+        zassert_false(dp_stopped());
         zassert_equal(watchdog_fault_get(&fault), -ENOENT);
         struct dp_param_status storage;
         dp_params_get_status(&storage);
@@ -189,7 +189,7 @@ ZTEST(runtime, test_real_main_fault_policy)
     if (status_phase_get() != STATUS_FAULT_LOCKED) {
         zassert_str_equal(expected_description, "Indicator output failed");
         zassert_str_equal(fault.description, expected_description);
-        zassert_false(protocol_stopped());
+        zassert_false(dp_stopped());
         int before = atomic_get(&samples);
         k_msleep(1100);
         zassert_true(atomic_get(&samples) > before);

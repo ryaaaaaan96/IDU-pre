@@ -1,6 +1,6 @@
 #include "status/inc/status.h"
 #include "status_led.h"
-#include "protocol/inc/protocol.h"
+#include <dataprocess/points.h>
 #include <watchdog/watchdog.h>
 #ifdef CONFIG_IDU_IAPV3
 #include <iap/iap.h>
@@ -84,7 +84,7 @@ static int status_watchdog_fault(const struct watchdog_fault *fault)
     }
 
     /* 关闭业务准入并提交日志；回调返回后由 watchdog 执行最终动作。 */
-    protocol_stop();
+    dp_stop();
 #ifdef CONFIG_IDU_IAPV3
     iap_stop();
 #endif

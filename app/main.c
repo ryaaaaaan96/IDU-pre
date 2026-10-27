@@ -52,7 +52,7 @@ int startup(void)
     return 0;
 }
 
-/* 主循环维护通信，采样函数只读硬件并写测点。 */
+/* 主循环定期采样并写入测点。 */
 int application_cycle(void)
 {
     if (status_phase_get() != STATUS_RUN) {
@@ -61,10 +61,6 @@ int application_cycle(void)
     int err = acquisition_cycle();
     if (err) {
         return watchdog_report_fault(err, "Input point update failed", WATCHDOG_ACTION_RESET, 200);
-    }
-    err = protocol_error();
-    if (err) {
-        return watchdog_report_fault(err, "Protocol maintenance failed", WATCHDOG_ACTION_RESET, 200);
     }
     return 0;
 }

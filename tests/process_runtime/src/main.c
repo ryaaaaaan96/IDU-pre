@@ -20,10 +20,8 @@ ZTEST(process_runtime, test_local_process_without_communication)
     dp_params_get_status(&storage);
     zassert_false(storage.flags & DP_PARAM_STORAGE_READY);
     zassert_true(dp_get_sig_value(DEVICE_REMOTE_IO, SIGNAL_DI, sizeof(result), result) < 0);
-    zassert_ok(protocol_error());
-    protocol_stop();
-    protocol_stop();
-    zassert_true(protocol_stopped());
+    dp_stop();
+    dp_stop();
     zassert_not_equal(protocol_init(), 0);
     zassert_not_equal(dp_set_sig_value(DEVICE_LOCAL, SIGNAL_DI, sizeof(value), value), 0);
 }

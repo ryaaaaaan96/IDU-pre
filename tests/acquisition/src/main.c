@@ -28,7 +28,7 @@ int application_cycle(void);
 typedef enum { WATCHDOG_SERVICE_INIT, LED_START, INPUTS_INIT, IAP_INIT, TABLES_INIT, DP_INIT, DATA_BIND, TASKS_PREPARE,
                NETWORK_INIT, PORT_OPEN, COLLECT_INIT, PARAMS_INIT, PARAMS_RECOVER,
                PROCESS_INIT, REFERENCE_INIT, COLLECT_START, FORWARD_INIT, IMAGE_CONFIRM,
-               SAMPLE, PUBLISH, PROTOCOL, LED, SERVICES } service_t;
+               SAMPLE, PUBLISH, LED, SERVICES } service_t;
 static int errors[SERVICES];
 static unsigned calls[SERVICES];
 static bool healthy, boot_ready;
@@ -36,9 +36,9 @@ static unsigned dp_health_checks;
 static int led_set_error;
 static bool indicator_on;
 static unsigned indicator_edges, sample_delay_ms;
-static bool protocol_halted;
-void protocol_stop(void) { protocol_halted = true; }
-bool protocol_stopped(void) { return protocol_halted; }
+static bool dp_halted;
+void dp_stop(void) { dp_halted = true; }
+bool protocol_stopped(void) { return dp_halted; }
 static bool published;
 static int previous_startup_service;
 static uint16_t parameter_flags;
@@ -75,7 +75,6 @@ static int service(service_t service)
         [FORWARD_INIT] = STATUS_STARTING,
         [SAMPLE] = STATUS_RUN,
         [PUBLISH] = STATUS_RUN,
-        [PROTOCOL] = STATUS_RUN,
         [LED] = STATUS_RUN,
         [IMAGE_CONFIRM] = STATUS_STARTING,
     };
@@ -257,11 +256,6 @@ int acquisition_cycle(void)
 
 const struct tr_forward_cfg protocol_forwarding;
 
-int protocol_error(void)
-{
-    return service(PROTOCOL);
-}
-
 int boot_write_img_confirmed(void)
 {
     return service(IMAGE_CONFIRM);
@@ -277,7 +271,7 @@ static void initialize_fixture(void)
     led_set_error = 0;
     indicator_on = false;
     indicator_edges = sample_delay_ms = 0;
-    protocol_halted = false;
+    dp_halted = false;
     previous_startup_service = -1;
     parameter_flags = DP_PARAM_STORAGE_READY;
     parameter_storage_error = 0;
@@ -308,7 +302,7 @@ static struct watchdog_fault fault_snapshot(void)
 static void check_runtime_reset(void)
 {
     zassert_equal(status_phase_get(), STATUS_FAULT_LOCKED);
-    zassert_true(protocol_halted);
+    zassert_true(dp_halted);
     if (expected_description) {
         zassert_str_equal(fault_snapshot().description, expected_description);
     }
@@ -330,7 +324,7 @@ static void check_startup_failure(service_t failed)
     for (service_t s = WATCHDOG_SERVICE_INIT; s <= IMAGE_CONFIRM; ++s) {
         zassert_equal(calls[s], s <= failed ? 1 : 0);
     }
-    zassert_true(protocol_halted);
+    zassert_true(dp_halted);
     zassert_equal(fault_snapshot().action, WATCHDOG_ACTION_HOLD);
     zassert_equal(calls[IMAGE_CONFIRM], failed == IMAGE_CONFIRM ? 1 : 0);
     zassert_equal(application_cycle(), -EACCES);
@@ -439,7 +433,7 @@ ZTEST(acquisition, test_success_confirms_at_startup_and_updates_points)
     zassert_equal(status_phase_get(), STATUS_RUN);
 }
 
-ZTEST(acquisition, test_failed_acquisition_stops_before_maintenance)
+ZTEST(acquisition, test_failed_acquisition_stops_before_publication)
 {
     zassert_ok(startup());
     errors[SAMPLE] = -ENODEV;
@@ -449,7 +443,6 @@ ZTEST(acquisition, test_failed_acquisition_stops_before_maintenance)
     zassert_equal(application_cycle(), -ENODEV);
     zassert_equal(calls[PUBLISH], 0);
     zassert_false(published);
-    zassert_equal(calls[PROTOCOL], 0);
     zassert_equal(calls[IMAGE_CONFIRM], 1);
     k_sleep(K_MSEC(300));
     zassert_unreachable("Runtime fault did not reach the reboot hook");
@@ -470,11 +463,6 @@ static void check_cycle_failure(service_t failed, const char *description)
 ZTEST(acquisition, test_point_write_failure_is_terminal)
 {
     check_cycle_failure(PUBLISH, "Input point update failed");
-}
-
-ZTEST(acquisition, test_protocol_failure_is_terminal)
-{
-    check_cycle_failure(PROTOCOL, "Protocol maintenance failed");
 }
 
 ZTEST(acquisition, test_unregistered_dp_has_no_implicit_deadline)
@@ -552,7 +540,7 @@ ZTEST(acquisition, test_explicit_fault_actions_record_latest_error)
     zassert_equal_ptr(fault.description, first);
     zassert_equal(fault.action, WATCHDOG_ACTION_CONTINUE);
     zassert_equal(status_phase_get(), STATUS_RUN);
-    zassert_false(protocol_halted);
+    zassert_false(dp_halted);
 
     zassert_equal(watchdog_report_fault(-ETIMEDOUT, "Input unavailable", WATCHDOG_ACTION_HOLD, 0), -ETIMEDOUT);
     fault = fault_snapshot();
@@ -560,7 +548,7 @@ ZTEST(acquisition, test_explicit_fault_actions_record_latest_error)
     zassert_equal(fault.error, -ETIMEDOUT);
     zassert_equal(fault.action, WATCHDOG_ACTION_HOLD);
     zassert_equal(status_phase_get(), STATUS_FAULT_LOCKED);
-    zassert_true(protocol_halted);
+    zassert_true(dp_halted);
 
     zassert_equal(watchdog_report_fault(-ECANCELED, "Subsequent cancellation", WATCHDOG_ACTION_HOLD, 0), -ECANCELED);
     zassert_str_equal(fault_snapshot().description, "Subsequent cancellation");
@@ -607,7 +595,7 @@ ZTEST(acquisition, test_led_tracks_startup_healthy_cycles_and_fault)
     zassert_true(indicator_on);
     k_sleep(K_MSEC(100));
     zassert_true(indicator_on);
-    zassert_true(protocol_halted);
+    zassert_true(dp_halted);
 }
 
 ZTEST(acquisition, test_led_selects_pattern_by_phase)
