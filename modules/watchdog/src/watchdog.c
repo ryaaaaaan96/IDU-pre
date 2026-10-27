@@ -1,8 +1,8 @@
 #include <watchdog/watchdog.h>
 #include <zephyr/kernel.h>
+#include <zephyr/sys/atomic.h>
 #include <zephyr/sys/reboot.h>
 #include <errno.h>
-#include <zephyr/sys/atomic.h>
 #ifdef CONFIG_WATCHDOG_EXTERNAL
 #include <zephyr/drivers/gpio.h>
 #define DT_DRV_COMPAT app_gpio_watchdog
@@ -13,106 +13,112 @@ BUILD_ASSERT(DT_INST_PROP(0, feed_interval_ms) > 0,
 static const struct gpio_dt_spec feed_gpio = GPIO_DT_SPEC_INST_GET(0, feed_gpios);
 #endif
 
-/* ==================== 共享健康状态 ==================== */
+/* ==================== 运行控制与诊断 ==================== */
 
-static struct k_spinlock lock;
-/* 定时器只访问原子交接状态，不访问 monitor 或任务链表。 */
-#define FEED_ENABLED BIT(0)
-#define FEED_CHECKING BIT(1)
-#define FEED_UNHEALTHY BIT(2)
-#define FEED_GPIO_FAILED BIT(3)
-static atomic_t feed_state;
-static atomic_t feed_deadline_ms;
-struct feed_event {
-    int error;
-    watchdog_fault_reason_t reason;
-    int64_t occurred_ms;
-};
-/* 最多一个过期事件，以及 HOLD 后可能出现的一个 GPIO 故障。 */
-K_MSGQ_DEFINE(feed_events, sizeof(struct feed_event), 2, 4);
-/* 最近故障供统一查询，监控锁存仍独立决定健康状态和待通知事件。 */
-static struct watchdog_fault latest_fault;
-static struct {
-    bool initialized;
-    bool stopped;
-    bool checking;
-    bool notified;
-    int64_t healthy_until_ms;
-    struct watchdog_task *active;
+/* 模式是任务检查和喂狗许可的唯一来源，线程与中断使用同一套规则。 */
+typedef enum {
+    WATCHDOG_UNINITIALIZED,
+    WATCHDOG_MONITORING,
+    WATCHDOG_FAULTED,
+    WATCHDOG_HOLDING,
+    WATCHDOG_RESET_PENDING,
+    WATCHDOG_STOPPED,
+} watchdog_mode_t;
+
+#define RESET_DELAY_MAX_MS (60U * 1000U)
+#define WATCHDOG_VALIDITY_MS (3U * CONFIG_WATCHDOG_CHECK_INTERVAL_MS)
+
+static atomic_t mode;
+static atomic_t gpio_failed; /* GPIO 失败不因 HOLD 或延时复位而恢复。 */
+static atomic_t healthy_until_ms;
+static struct k_spinlock lock; /* 只保护任务、回调绑定、诊断和复位期限。 */
+static struct watchdog_task *active_tasks;
+static watchdog_fault_cb_t fault_callback;
+static int64_t reset_deadline_ms;
+
+/* 序号只用于诊断排序，避免旧的排队通知覆盖后来的业务上报。 */
+struct fault_event {
+    uint32_t sequence;
     struct watchdog_fault fault;
-    watchdog_fault_cb_t notify;
-} monitor;
+};
+static atomic_t fault_sequence;
+static struct fault_event latest_fault;
+/* 一次监控故障，以及随后可能出现的一次 GPIO 故障。 */
+K_MSGQ_DEFINE(fault_events, sizeof(struct fault_event), 2, 4);
 static void check_tasks(struct k_work *work);
 static K_WORK_DELAYABLE_DEFINE(check_work, check_tasks);
+static void request_reset(uint32_t delay_ms);
 
-/* 健康结果有效期及首次检查宽限均为软件检查周期的三倍。 */
-#ifdef CONFIG_WATCHDOG_SOFTWARE
-#define WATCHDOG_VALIDITY_MS (3LL * CONFIG_WATCHDOG_CHECK_INTERVAL_MS)
-#else
-#define WATCHDOG_VALIDITY_MS 0LL
-#endif
-
-/* 调用方持锁。监控故障只锁存一次；新的 GPIO 失败可升级已留驻的任务故障。 */
-static void record_fault(watchdog_fault_reason_t reason, int error,
-                         const struct watchdog_task *task, int64_t occurred_ms)
+static bool health_expired(void)
 {
-    if (monitor.fault.error &&
-        (reason != WATCHDOG_FAULT_FEED_GPIO || monitor.fault.reason == WATCHDOG_FAULT_FEED_GPIO)) {
-        return;
+    return (int32_t)(k_uptime_get_32() - (uint32_t)atomic_get(&healthy_until_ms)) >= 0;
+}
+
+static int handle_fault(const struct watchdog_fault *fault)
+{
+    int err = fault_callback(fault); /* 不持锁，先维护状态、关闭业务并提交日志。 */
+    if (fault->action == WATCHDOG_ACTION_HOLD) {
+        watchdog_stop(WATCHDOG_STOP_MONITOR);
+    } else if (fault->action == WATCHDOG_ACTION_RESET) {
+        request_reset(fault->reset_delay_ms);
     }
-    atomic_or(&feed_state, FEED_UNHEALTHY);
-    monitor.notified = false;
-    monitor.fault = (struct watchdog_fault){
-        .reason = reason, .error = error, .occurred_ms = occurred_ms,
+    return err;
+}
+
+/* 调用方保护任务对象；定时器只传 NULL。模式锁存防止重复入队和健康恢复。
+ * 这里只入队；调用方释放模块锁后再安排检查工作。
+ */
+static bool queue_fault(watchdog_fault_reason_t reason, int error,
+                        struct watchdog_task *task)
+{
+    if (reason == WATCHDOG_FAULT_FEED_GPIO) {
+        if (!atomic_cas(&gpio_failed, 0, 1)) { return false; }
+        (void)atomic_cas(&mode, WATCHDOG_MONITORING, WATCHDOG_FAULTED);
+    } else if (!atomic_cas(&mode, WATCHDOG_MONITORING, WATCHDOG_FAULTED)) {
+        return false;
+    }
+    static const char *const descriptions[] = {
+        [WATCHDOG_FAULT_TASK] = "Task heartbeat timed out",
+        [WATCHDOG_FAULT_CHECK] = "Watchdog health check expired",
+        [WATCHDOG_FAULT_FEED_GPIO] = "Watchdog feed output failed",
     };
-    switch (reason) {
-    case WATCHDOG_FAULT_TASK: monitor.fault.description = "Task heartbeat timed out"; break;
-    case WATCHDOG_FAULT_CHECK: monitor.fault.description = "Watchdog health check expired"; break;
-    case WATCHDOG_FAULT_FEED_GPIO: monitor.fault.description = "Watchdog feed output failed"; break;
-    default: break;
+    struct fault_event event = {
+        .sequence = (uint32_t)atomic_inc(&fault_sequence) + 1U,
+        .fault = {
+            .reason = reason, .error = error, .occurred_ms = k_uptime_get(),
+            .description = descriptions[reason],
+            .action = WATCHDOG_ACTION_RESET, .reset_delay_ms = 200,
+        },
+    };
+    if (task) {
+        task->state.flags = WATCHDOG_TASK_FAULT;
+        event.fault.task = task->state;
     }
-    if (task) { monitor.fault.task = task->state; }
-    latest_fault = monitor.fault;
+    (void)k_msgq_put(&fault_events, &event, K_NO_WAIT);
+    return true;
 }
 
-/* 调用方持锁。合并定时器事件，记录和回调仍走原有监控路径。 */
-static void collect_feed_events(void)
-{
-    struct feed_event event;
-    while (k_msgq_get(&feed_events, &event, K_NO_WAIT) == 0) {
-        record_fault(event.reason, event.error, NULL, event.occurred_ms);
-    }
-}
-
-/* ==================== 硬件定时器：原子交接，不获取共享锁 ==================== */
+/* ==================== 硬件定时器：只判断喂狗许可并操作 GPIO ==================== */
 
 #ifdef CONFIG_WATCHDOG_EXTERNAL
 static void feed(struct k_timer *timer)
 {
-    atomic_val_t state = atomic_get(&feed_state);
-    if (!(state & FEED_ENABLED) || (state & FEED_GPIO_FAILED) ||
-        ((state & FEED_CHECKING) && (state & FEED_UNHEALTHY))) {
+    watchdog_mode_t current = atomic_get(&mode);
+    if (atomic_get(&gpio_failed) ||
+        (current != WATCHDOG_MONITORING && current != WATCHDOG_HOLDING &&
+         current != WATCHDOG_RESET_PENDING)) {
         return;
     }
-
-    struct feed_event event = {.reason = WATCHDOG_FAULT_CHECK};
-    event.error = gpio_pin_toggle_dt(&feed_gpio);
-    if (event.error) {
-        atomic_or(&feed_state, FEED_GPIO_FAILED);
+    int err = gpio_pin_toggle_dt(&feed_gpio);
+    if (err) {
+        queue_fault(WATCHDOG_FAULT_FEED_GPIO, err, NULL);
+        k_work_reschedule(&check_work, K_NO_WAIT);
         k_timer_stop(timer);
-        event.reason = WATCHDOG_FAULT_FEED_GPIO;
-    } else if ((atomic_get(&feed_state) & FEED_CHECKING) &&
-               (int32_t)(k_uptime_get_32() - (uint32_t)atomic_get(&feed_deadline_ms)) >= 0) {
-        /* 本轮先喂狗，再锁存过期；后续周期不再喂狗。 */
-        atomic_or(&feed_state, FEED_UNHEALTHY);
-        event.error = -ETIMEDOUT;
-    } else {
-        return;
+    } else if (current == WATCHDOG_MONITORING && health_expired()) {
+        /* 本轮先喂狗，再锁存过期；下一周期不再喂狗。 */
+        queue_fault(WATCHDOG_FAULT_CHECK, -ETIMEDOUT, NULL);
+        k_work_reschedule(&check_work, K_NO_WAIT);
     }
-
-    event.occurred_ms = k_uptime_get();
-    (void)k_msgq_put(&feed_events, &event, K_NO_WAIT);
-    k_work_reschedule(&check_work, K_NO_WAIT);
 }
 static K_TIMER_DEFINE(feed_timer, feed, NULL);
 
@@ -126,174 +132,183 @@ static int configure_feed(void)
 }
 #endif
 
-/* ==================== 工作队列：检查任务并发布有时效的健康结果 ==================== */
+/* ==================== 工作队列：检查任务，消费故障事件 ==================== */
 
 static void check_tasks(struct k_work *work)
 {
     ARG_UNUSED(work);
-    struct watchdog_fault fault;
-    watchdog_fault_cb_t notify = NULL;
     k_spinlock_key_t key = k_spin_lock(&lock);
-    collect_feed_events();
-    if (monitor.checking && !monitor.fault.error) {
+    if (atomic_get(&mode) == WATCHDOG_MONITORING) {
+        struct watchdog_task *first = NULL;
+        for (struct watchdog_task *task = active_tasks; task; task = task->next) {
+            if (!first || task->deadline_ms < first->deadline_ms) { first = task; }
+        }
         int64_t now = k_uptime_get();
-        if (now >= monitor.healthy_until_ms) {
-            record_fault(WATCHDOG_FAULT_CHECK, -ETIMEDOUT, NULL, k_uptime_get());
-        } else {
-            struct watchdog_task *first = NULL;
-            for (struct watchdog_task *task = monitor.active; task; task = task->next) {
-                if (!first || task->deadline_ms < first->deadline_ms) { first = task; }
-            }
-            now = k_uptime_get();
-            /* 只允许完整检查通过且旧结果尚未过期时续期。 */
-            if (now >= monitor.healthy_until_ms) {
-                record_fault(WATCHDOG_FAULT_CHECK, -ETIMEDOUT, NULL, k_uptime_get());
-            } else if (first && first->deadline_ms <= now) {
-                first->state.flags = WATCHDOG_TASK_FAULT;
-                record_fault(WATCHDOG_FAULT_TASK, -ETIMEDOUT, first, now);
-            } else {
-                monitor.healthy_until_ms = now + WATCHDOG_VALIDITY_MS;
-                atomic_set(&feed_deadline_ms, (uint32_t)monitor.healthy_until_ms);
-            }
+        if (health_expired()) {
+            queue_fault(WATCHDOG_FAULT_CHECK, -ETIMEDOUT, NULL);
+        } else if (first && first->deadline_ms <= now) {
+            queue_fault(WATCHDOG_FAULT_TASK, -ETIMEDOUT, first);
+        } else if (atomic_get(&mode) == WATCHDOG_MONITORING) {
+            atomic_set(&healthy_until_ms, (uint32_t)(now + WATCHDOG_VALIDITY_MS));
         }
     }
-    if (monitor.fault.error && !monitor.notified) {
-        monitor.notified = true;
-        fault = monitor.fault;
-        notify = monitor.notify;
+    k_spin_unlock(&lock, key);
+
+    struct fault_event event;
+    for (;;) {
+        /* 出队与诊断更新不可分开，避免查询漏掉正在交接的故障。 */
+        key = k_spin_lock(&lock);
+        int err = k_msgq_get(&fault_events, &event, K_NO_WAIT);
+        if (err) {
+            k_spin_unlock(&lock, key);
+            break;
+        }
+        if ((int32_t)(event.sequence - latest_fault.sequence) > 0) { latest_fault = event; }
+        k_spin_unlock(&lock, key);
+        watchdog_mode_t current = atomic_get(&mode);
+        bool notify = current == WATCHDOG_FAULTED ||
+            (event.fault.reason == WATCHDOG_FAULT_FEED_GPIO &&
+             (current == WATCHDOG_HOLDING || current == WATCHDOG_RESET_PENDING));
+        if (notify) { handle_fault(&event.fault); }
     }
-#ifdef CONFIG_WATCHDOG_SOFTWARE
-    if (monitor.checking && !monitor.fault.error) {
+    if (atomic_get(&mode) == WATCHDOG_MONITORING) {
         k_work_reschedule(&check_work, K_MSEC(CONFIG_WATCHDOG_CHECK_INTERVAL_MS));
     }
-#endif
-    k_spin_unlock(&lock, key);
-    if (notify) { notify(&fault); }
 }
 
-/* ==================== 统一生命周期与复位 ==================== */
+/* ==================== 初始化、故障上报和停止 ==================== */
 
 int watchdog_init(watchdog_fault_cb_t notify)
 {
     if (!notify) { return -EINVAL; }
     if (k_is_in_isr()) { return -EWOULDBLOCK; }
     k_spinlock_key_t key = k_spin_lock(&lock);
-    if (monitor.initialized) {
+    if (fault_callback || atomic_get(&mode) != WATCHDOG_UNINITIALIZED) {
         k_spin_unlock(&lock, key);
         return -EALREADY;
     }
-    monitor.initialized = true;
-    monitor.notify = notify;
+    fault_callback = notify; /* 绑定后不替换，失败也不重新初始化。 */
     k_spin_unlock(&lock, key);
 #ifdef CONFIG_WATCHDOG_EXTERNAL
     int err = configure_feed();
     if (err) {
+        atomic_set(&gpio_failed, 1);
+        atomic_set(&mode, WATCHDOG_STOPPED);
         key = k_spin_lock(&lock);
-        record_fault(WATCHDOG_FAULT_FEED_GPIO, err, NULL, k_uptime_get());
-        monitor.notified = true; /* 初始化错误由返回值交给调用者处理。 */
+        latest_fault = (struct fault_event){
+            .sequence = (uint32_t)atomic_inc(&fault_sequence) + 1U,
+            .fault = {
+                .reason = WATCHDOG_FAULT_FEED_GPIO, .error = err,
+                .occurred_ms = k_uptime_get(), .description = "Watchdog feed output failed",
+            },
+        };
         k_spin_unlock(&lock, key);
-        return err;
+        return err; /* 初始化失败交给调用者处理，不排队重复通知。 */
     }
 #endif
     key = k_spin_lock(&lock);
-    if (monitor.stopped) {
+    atomic_set(&healthy_until_ms, k_uptime_get_32() + WATCHDOG_VALIDITY_MS);
+    if (!atomic_cas(&mode, WATCHDOG_UNINITIALIZED, WATCHDOG_MONITORING)) {
         k_spin_unlock(&lock, key);
         return -ECANCELED;
     }
-    monitor.checking = IS_ENABLED(CONFIG_WATCHDOG_SOFTWARE);
-    monitor.healthy_until_ms = k_uptime_get() + WATCHDOG_VALIDITY_MS;
 #ifdef CONFIG_WATCHDOG_EXTERNAL
-    atomic_set(&feed_deadline_ms, (uint32_t)monitor.healthy_until_ms);
-    atomic_set(&feed_state, FEED_ENABLED | (monitor.checking ? FEED_CHECKING : 0));
     k_timer_start(&feed_timer, K_MSEC(DT_INST_PROP(0, feed_interval_ms)),
                   K_MSEC(DT_INST_PROP(0, feed_interval_ms)));
 #endif
-#ifdef CONFIG_WATCHDOG_SOFTWARE
-    /* 首次工作立即提交；尚未执行时仅允许三倍检查周期的启动宽限。 */
     k_work_reschedule(&check_work, K_NO_WAIT);
-#endif
     k_spin_unlock(&lock, key);
     return 0;
 }
 
-/* 主动上报独立于任务故障锁存，不能使 CONTINUE 停止硬件喂狗。 */
-int watchdog_report_fault(int error,
-                          const char *description, watchdog_action_t action)
+int watchdog_report_fault(int error, const char *description,
+                          watchdog_action_t action, uint32_t reset_delay_ms)
 {
-    if (!error ||
-        !description || !description[0] || (unsigned int)action > WATCHDOG_ACTION_RESET) {
-        return -EINVAL;
-    }
+    if (!error || !description || !description[0] ||
+        (unsigned int)action > WATCHDOG_ACTION_RESET) { return -EINVAL; }
     k_spinlock_key_t key = k_spin_lock(&lock);
-    watchdog_fault_cb_t notify = monitor.notify;
-    if (!notify) {
+    if (!fault_callback) {
         k_spin_unlock(&lock, key);
         return -EACCES;
     }
-    collect_feed_events();
-    const struct watchdog_fault fault = {
-        .reason = WATCHDOG_FAULT_REPORTED,
-        .error = error,
-        .occurred_ms = k_uptime_get(),
-        .action = action,
-        .description = description,
+    struct fault_event event = {
+        .sequence = (uint32_t)atomic_inc(&fault_sequence) + 1U,
+        .fault = {
+            .reason = WATCHDOG_FAULT_REPORTED, .error = error,
+            .occurred_ms = k_uptime_get(), .description = description,
+            .action = action, .reset_delay_ms = reset_delay_ms,
+        },
     };
-    latest_fault = fault;
+    latest_fault = event;
     k_spin_unlock(&lock, key);
-    return notify(&fault);
+    return handle_fault(&event.fault);
 }
 
-void watchdog_stop(watchdog_stop_mode_t mode)
+void watchdog_stop(watchdog_stop_mode_t stop)
 {
-    if (mode != WATCHDOG_STOP_MONITOR && mode != WATCHDOG_STOP_ALL) { return; }
-    k_spinlock_key_t key = k_spin_lock(&lock);
-    monitor.initialized = true;
-    monitor.stopped = true;
-    monitor.checking = false;
-    atomic_val_t clear = FEED_CHECKING | FEED_UNHEALTHY;
-    if (mode == WATCHDOG_STOP_ALL) { clear |= FEED_ENABLED; }
-    atomic_and(&feed_state, ~clear);
-    (void)k_work_cancel_delayable(&check_work);
-    if (mode == WATCHDOG_STOP_ALL) {
+    if (stop != WATCHDOG_STOP_MONITOR && stop != WATCHDOG_STOP_ALL) { return; }
+    if (stop == WATCHDOG_STOP_ALL) {
+        atomic_set(&mode, WATCHDOG_STOPPED);
 #ifdef CONFIG_WATCHDOG_EXTERNAL
         k_timer_stop(&feed_timer);
 #endif
+    } else {
+        atomic_val_t current;
+        do {
+            current = atomic_get(&mode);
+            if (current == WATCHDOG_STOPPED || current == WATCHDOG_RESET_PENDING) { return; }
+        } while (!atomic_cas(&mode, current, WATCHDOG_HOLDING));
+    }
+    (void)k_work_cancel_delayable(&check_work);
+}
+
+/* ==================== 私有复位：线程与中断使用同一路径 ==================== */
+
+static void reset_expired(struct k_timer *timer)
+{
+    ARG_UNUSED(timer);
+    watchdog_stop(WATCHDOG_STOP_ALL);
+    sys_reboot(SYS_REBOOT_COLD);
+}
+static K_TIMER_DEFINE(reset_timer, reset_expired, NULL);
+
+static void request_reset(uint32_t delay_ms)
+{
+    if (!delay_ms) { reset_expired(NULL); return; }
+    atomic_val_t current;
+    do {
+        current = atomic_get(&mode);
+        if (current == WATCHDOG_STOPPED) { break; }
+    } while (!atomic_cas(&mode, current, WATCHDOG_RESET_PENDING));
+    (void)k_work_cancel_delayable(&check_work);
+    k_spinlock_key_t key = k_spin_lock(&lock);
+    int64_t now = k_uptime_get();
+    int64_t deadline = now + MIN(delay_ms, RESET_DELAY_MAX_MS);
+    if (!reset_deadline_ms || deadline < reset_deadline_ms) {
+        reset_deadline_ms = deadline;
+        k_timer_start(&reset_timer, K_MSEC((uint32_t)(deadline - now)), K_NO_WAIT);
     }
     k_spin_unlock(&lock, key);
 }
 
-void watchdog_reset(void)
-{
-    watchdog_stop(WATCHDOG_STOP_ALL);
-    sys_reboot(SYS_REBOOT_COLD);
-}
-
-/* ==================== 任务心跳与诊断快照 ==================== */
+/* ==================== 任务心跳与只读诊断 ==================== */
 
 static int task_service_error(void)
 {
     if (k_is_in_isr()) { return -EWOULDBLOCK; }
-    collect_feed_events();
-    if (!IS_ENABLED(CONFIG_WATCHDOG_SOFTWARE) || !monitor.initialized) { return -EACCES; }
-    if (!monitor.checking || monitor.fault.error) { return -ECANCELED; }
-    return 0;
+    if (!fault_callback) { return -EACCES; }
+    return atomic_get(&mode) == WATCHDOG_MONITORING ? 0 : -ECANCELED;
 }
 
-/* 调用方持锁，迟到的心跳或退出请求不能掩盖任务超时；通知仍由工作队列执行。 */
 static int task_deadline_check(struct watchdog_task *task)
 {
     if (k_uptime_get() < task->deadline_ms) { return 0; }
-    task->state.flags = WATCHDOG_TASK_FAULT;
-    record_fault(WATCHDOG_FAULT_TASK, -ETIMEDOUT, task, k_uptime_get());
-    k_work_reschedule(&check_work, K_NO_WAIT);
-    return -ETIMEDOUT;
+    return queue_fault(WATCHDOG_FAULT_TASK, -ETIMEDOUT, task) ? -ETIMEDOUT : -ECANCELED;
 }
 
 int watchdog_task_register(struct watchdog_task *task, const struct watchdog_task_config *config)
 {
-    if (!task || !config || !config->name || !config->name[0] || !config->timeout_ms) {
-        return -EINVAL;
-    }
+    if (!task || !config || !config->name || !config->name[0] || !config->timeout_ms) { return -EINVAL; }
     k_spinlock_key_t key = k_spin_lock(&lock);
     int err = task_service_error();
     if (!err && (task->state.flags & WATCHDOG_TASK_ACTIVE)) { err = -EALREADY; }
@@ -304,8 +319,8 @@ int watchdog_task_register(struct watchdog_task *task, const struct watchdog_tas
             .last_feed_ms = now, .flags = WATCHDOG_TASK_ACTIVE,
         };
         task->deadline_ms = now + config->timeout_ms;
-        task->next = monitor.active;
-        monitor.active = task;
+        task->next = active_tasks;
+        active_tasks = task;
     }
     k_spin_unlock(&lock, key);
     return err;
@@ -323,6 +338,7 @@ int watchdog_task_feed(struct watchdog_task *task)
         task->deadline_ms = task->state.last_feed_ms + task->state.timeout_ms;
     }
     k_spin_unlock(&lock, key);
+    if (err == -ETIMEDOUT) { k_work_reschedule(&check_work, K_NO_WAIT); }
     return err;
 }
 
@@ -335,14 +351,15 @@ int watchdog_task_sleep_forever(struct watchdog_task *task)
     if (!err && (task->state.flags & WATCHDOG_TASK_ACTIVE)) {
         err = task_deadline_check(task);
         if (!err) {
-            struct watchdog_task **link = &monitor.active;
-            while (*link != task) { link = &(*link)->next; }
-            *link = task->next;
-            task->next = NULL;
+            struct watchdog_task **next = &active_tasks;
+            while (*next != task) { next = &(*next)->next; }
+            *next = task->next;
             task->state.flags = WATCHDOG_TASK_SLEEP_FOREVER;
+            task->next = NULL;
         }
     }
     k_spin_unlock(&lock, key);
+    if (err == -ETIMEDOUT) { k_work_reschedule(&check_work, K_NO_WAIT); }
     return err;
 }
 
@@ -360,9 +377,13 @@ int watchdog_fault_get(struct watchdog_fault *snapshot)
 {
     if (!snapshot) { return -EINVAL; }
     k_spinlock_key_t key = k_spin_lock(&lock);
-    collect_feed_events();
-    int err = latest_fault.error ? 0 : -ENOENT;
-    if (!err) { *snapshot = latest_fault; }
+    struct fault_event newest = latest_fault, pending;
+    /* 只查看未处理事件，不消费、不改变运行模式，也不触发通知。 */
+    for (uint32_t i = 0; k_msgq_peek_at(&fault_events, &pending, i) == 0; ++i) {
+        if ((int32_t)(pending.sequence - newest.sequence) > 0) { newest = pending; }
+    }
+    int err = newest.fault.error ? 0 : -ENOENT;
+    if (!err) { *snapshot = newest.fault; }
     k_spin_unlock(&lock, key);
     return err;
 }

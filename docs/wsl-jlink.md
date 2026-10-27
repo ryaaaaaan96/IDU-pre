@@ -449,7 +449,8 @@ west attach -d build/IDU-pre/mcuboot-iapv3/IDU-pre -r jlink \
 
 常规 `prj.conf` 默认启用看门狗。单步调试时从应用目录执行
 `./scripts/build.sh --extra-conf "$PWD/conf/debug.conf"`，显式设置
-`CONFIG_WATCHDOG_SOFTWARE=n` 与 `CONFIG_WATCHDOG_EXTERNAL=n`：应用跳过任务监控和外部喂狗初始化；
+`CONFIG_WATCHDOG_EXTERNAL=n`：应用跳过外部喂狗初始化，软件监控仍随模块初始化运行。
+需要暂停软件监控时，可由应用显式调用 `watchdog_stop(WATCHDOG_STOP_MONITOR)`，本次启动不能重新启用，需复位恢复；它不会取消已经安排的复位。
 调用点明确请求的 RESET 仍会复位，调试配置不改写故障动作。
 PC13 保持 MCUboot 早期设置的浮空状态，不恢复输出。需重新构建、下载并从
 MCUboot 复位启动后生效；此配置不会主动禁用旧固件已经启用的看门狗。

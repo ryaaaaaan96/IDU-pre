@@ -1005,3 +1005,21 @@ CO 后端回调和 Modbus 事务接口显式接收 `dev_id`；vport 来源结构
 删除 app/status/image_confirm.c/.h、status_progress 和 tests/image_confirm，历史健康窗口验收记录不再代表当前行为。
 acquisition 夹具通过真实 startup 验证初始化顺序、确认失败 HOLD、初始化失败不确认、成功确认一次、
 运行周期不重复确认，以及参数降级/待恢复事务不再阻止确认。固件构建验证真实 MCUboot 接口链接。
+
+## 2026-10-27：指示灯阶段图案表
+
+`app/status/status_led.c` 把阶段到显示的映射集中为一张表：未初始化常灭、启动中亮/灭各
+500 ms、运行中亮/灭各 100 ms、终止故障常亮。显示引擎支持常灭、常亮和等时闪烁，阶段切换时
+记录图案起点并由系统工作队列重绘；迟到执行只跳到下一个边沿，不补放已错过的周期。
+`status_set_phase(STATUS_RUN)` 和故障回调统一调用 `status_led_sync()`。
+
+acquisition 42 个独立进程、runtime 16 个场景及 task_watchdog 72 个独立进程通过；
+MCUboot + IAPv3 构建及签名验证通过，应用 Flash 151356 B、RAM 120076 B，SGZ 152464 字节。
+日志位于工作区 `build/acquisition-led-*.log`、`build/runtime-led.log`、
+`build/task-watchdog-led-*.log`、`build/watchdog-*.log` 和 `build/firmware-led.log`；未实板验证。
+设计及验收见[阶段图案表记录](../.scratch/led-patterns/spec.md)。
+
+## 2026-10-27：LED 状态内部步骤循环
+
+LED 播放改为每个指示状态独立的亮灭/持续时间步骤表，重复状态不重启，新状态从第一步开始，队列延迟不再跳过边沿。此前等时闪烁和绝对相位追赶的验收记录仅表示历史行为。
+本轮采集/LED 44 个及运行时 17 个独立 native 场景通过，MCUboot + IAPv3 构建、签名验证、SGZ 导出通过；未进行实板波形验证。详见 [.scratch/led-state-sequence](../.scratch/led-state-sequence/issues/01-player.md)。

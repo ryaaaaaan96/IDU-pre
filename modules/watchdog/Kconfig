@@ -1,9 +1,3 @@
-config WATCHDOG_SOFTWARE
-    bool "Software task watchdog"
-    help
-      Monitor explicitly registered task heartbeat deadlines independently
-      of the external watchdog. Report timeouts through a caller callback.
-
 config WATCHDOG_EXTERNAL
     bool "External GPIO watchdog"
     depends on GPIO
@@ -15,7 +9,6 @@ config WATCHDOG_EXTERNAL
 
 config WATCHDOG_CHECK_INTERVAL_MS
     int "Task watchdog check interval in milliseconds"
-    depends on WATCHDOG_SOFTWARE
     default 100
     range 1 60000
     help

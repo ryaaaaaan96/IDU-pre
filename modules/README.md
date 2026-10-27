@@ -196,18 +196,27 @@ It combines named digital and analog inputs, interprets bit order and address sw
 and treats failed reads as invalid samples. Pins are read sequentially, not simultaneously.
 The watchdog remains an independent GPIO-based service.
 
-Software checking uses `WATCHDOG_SOFTWARE`; GPIO feeding uses `WATCHDOG_EXTERNAL`.
-Both are independent of Zephyr's hardware `WATCHDOG` driver option.
+Software checking always runs after `watchdog_init()` succeeds; it has no independent
+configuration switch. GPIO feeding uses `WATCHDOG_EXTERNAL`. This module is independent
+of Zephyr's hardware `WATCHDOG` driver option.
 
 The application calls Zephyr ADC channel setup and read APIs directly and applies
 its configured averaging count. There is no separate analog wrapper module.
 
-`watchdog_init()` reads the devicetree GPIO configuration and starts optional
-workqueue checks and GPIO feeding. Only completed successful checks renew health,
+`watchdog_init()` reads the devicetree GPIO configuration and starts workqueue
+checks and optional GPIO feeding. Only completed successful checks renew health,
 which expires after three software check intervals. The hardware timer suppresses
 feeding when health expires; all fault notifications run on the system workqueue.
-`watchdog_reset()` stops monitoring and feeding before invoking the cold-reset
-primitive. See [watchdog interface and timing](watchdog/README.md).
+`watchdog_report_fault(error, description, action, reset_delay_ms)` is the fault entry.
+The fault callback is read-only; actions come from the reporter or the watchdog's own
+policy. Internal monitor faults request RESET after 200 ms; initialization errors return
+to the caller, which may explicitly request HOLD. Registration is owned by the application,
+not by generic modules.
+Only RESET uses the uint32_t millisecond delay: zero resets immediately;
+otherwise a private one-shot timer performs the reset. HOLD and CONTINUE ignore the delay.
+Monitoring stops during a reset delay while available hardware feeding continues.
+Repeated requests can advance but cannot postpone the deadline; log output and parameter
+persistence are not guaranteed. See [watchdog interface and timing](watchdog/README.md).
 
 `app/acquisition/acquisition.c` constructs descriptors from the product devicetree,
 checks the current conversion's 12-bit/3.3 V contract and writes DI/AI points directly
@@ -220,10 +229,10 @@ It also binds the external watchdog configuration and reports completed cycles.
 With MCUboot enabled, healthy progress invokes `status/image_confirm.c` to
 qualify and confirm the trial image. The confirmation state belongs to
 `application_status`; acquisition only orchestrates sampling, publication and communication.
-Current policy is steady on during startup/fault and one toggle per successful
-sample; specific fault blink codes are intentionally left for product definition.
-Fast sampling/publication phases only update state.
-LED failures stop healthy progress and cannot override the original fault.
+The phase-to-pattern table maps unconfigured to off, startup to a slow blink,
+run to a 100 ms blink and terminal fault to steady on. Phase changes request an immediate redraw; the system work queue may delay
+actual output, and the sampling rate does not affect the display.
+LED failures lock the terminal fault and cannot override the original fault.
 
 ## Integration
 

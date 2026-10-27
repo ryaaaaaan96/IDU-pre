@@ -161,7 +161,7 @@ ZTEST(runtime, test_real_main_fault_policy)
     }
     for (int i = 0; i < 300; ++i) {
         if (!strcmp(scenario, "force-reset") && atomic_get(&samples)) {
-            (void)watchdog_report_fault(-EIO, "Explicit reset test", WATCHDOG_ACTION_RESET);
+            (void)watchdog_report_fault(-EIO, "Explicit reset test", WATCHDOG_ACTION_RESET, 200);
         }
         if (!strcmp(scenario, "maintenance") && atomic_get(&samples) && !maintenance_injected) {
             zassert_ok(modbus_disable(modbus_iface_get_by_name("RAW_1")));
@@ -188,7 +188,11 @@ ZTEST(runtime, test_real_main_fault_policy)
         zassert_ok(dp_read((struct dp_key){DEVICE_LOCAL, SIGNAL_DI}, &point));
         zassert_equal(point.quality, DP_QUALITY_GOOD);
     } else {
-        zassert_true(terminal_result(WATCHDOG_ACTION_HOLD), "normal RESET must have exited via reboot");
+        if (fault.reason != WATCHDOG_FAULT_REPORTED || fault.action == WATCHDOG_ACTION_RESET) {
+            k_msleep(500);
+            zassert_unreachable("Delayed RESET did not reach the reboot hook");
+        }
+        zassert_true(terminal_result(WATCHDOG_ACTION_HOLD));
         k_msleep(150); /* 等待当前操作到达可取消的安全位置。 */
         int before = atomic_get(&samples);
         int sent = atomic_get(&transmitted_bytes);

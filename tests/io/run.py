@@ -14,7 +14,6 @@ for case in cases:
     print(result.stderr, end="", file=sys.stderr)
     if result.returncode:
         raise SystemExit(result.returncode)
-    marker = "PROJECT EXECUTION SUCCESSFUL"
-    if marker not in result.stdout:
+    if "GPIO_RESET_PASS" not in result.stdout and "PROJECT EXECUTION SUCCESSFUL" not in result.stdout:
         raise SystemExit("Scenario did not reach its acceptance boundary: " + case)
 print(f"GPIO watchdog acceptance: {len(cases)} fresh-process scenarios passed")

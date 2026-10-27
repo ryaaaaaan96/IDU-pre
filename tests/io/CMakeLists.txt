@@ -5,3 +5,5 @@ list(APPEND ZEPHYR_EXTRA_MODULES ${IDU_APP}/modules/watchdog)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(io_module_tests)
 target_sources(app PRIVATE src/main.c)
+
+zephyr_ld_options(-Wl,--wrap=sys_reboot)

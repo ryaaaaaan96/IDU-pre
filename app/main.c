@@ -31,7 +31,7 @@ int startup(void)
     }
     if (err) {
         if (status_phase_get() != STATUS_FAULT_LOCKED) {
-            (void)watchdog_report_fault(err, description, WATCHDOG_ACTION_HOLD);
+            (void)watchdog_report_fault(err, description, WATCHDOG_ACTION_HOLD, 0);
         }
         return err;
     }
@@ -40,7 +40,7 @@ int startup(void)
     /* 必要初始化完成后确认镜像，不再设置运行健康计时窗口。 */
     err = boot_write_img_confirmed();
     if (err) {
-        return watchdog_report_fault(err, "Image confirmation failed", WATCHDOG_ACTION_HOLD);
+        return watchdog_report_fault(err, "Image confirmation failed", WATCHDOG_ACTION_HOLD, 0);
     }
 #endif
     status_set_phase(STATUS_RUN);
@@ -55,11 +55,11 @@ int application_cycle(void)
     }
     int err = acquisition_cycle();
     if (err) {
-        return watchdog_report_fault(err, "Input point update failed", WATCHDOG_ACTION_RESET);
+        return watchdog_report_fault(err, "Input point update failed", WATCHDOG_ACTION_RESET, 200);
     }
     err = protocol_error();
     if (err) {
-        return watchdog_report_fault(err, "Protocol maintenance failed", WATCHDOG_ACTION_RESET);
+        return watchdog_report_fault(err, "Protocol maintenance failed", WATCHDOG_ACTION_RESET, 200);
     }
     return 0;
 }

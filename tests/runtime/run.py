@@ -6,9 +6,8 @@ import sys
 executable, policy, *cases = sys.argv[1:]
 if not cases:
     cases = ["publish", "sample", "led", "led-init", "input-init", "maintenance"]
-    if policy != "debug":
-        cases.append("task-timeout")
-    else:
+    cases.append("task-timeout")
+    if policy == "debug":
         cases.append("force-reset")
 for case in cases:
     reset = policy in ("reset", "debug") and case not in ("led-init", "input-init", "protocol-init")

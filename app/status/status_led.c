@@ -1,68 +1,113 @@
-#include <watchdog/watchdog.h>
 #include "status_led.h"
-#include "status/inc/status.h"
+#include <watchdog/watchdog.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/kernel.h>
+#include <zephyr/sys/atomic.h>
 #include <errno.h>
 
+/* ==================== 各状态的循环步骤 ==================== */
+
+typedef struct {
+    bool on;
+    uint32_t duration_ms; /**< 0 表示保持当前电平，不再调度。 */
+} status_led_step_t;
+
+typedef struct {
+    const status_led_step_t *steps;
+    size_t count;
+} status_led_pattern_t;
+
+static const status_led_step_t starting_steps[] = {
+    {.on = true, .duration_ms = 100},
+    {.on = false, .duration_ms = 100},
+    {.on = true, .duration_ms = 500},
+    {.on = false, .duration_ms = 500},
+};
+static const status_led_step_t run_steps[] = {
+    {.on = true, .duration_ms = 500},
+    {.on = false, .duration_ms = 500},
+};
+static const status_led_step_t fault_steps[] = {
+    {.on = true, .duration_ms = 100},
+    {.on = false, .duration_ms = 100},
+};
+static const status_led_pattern_t patterns[] = {
+    [STATUS_LED_STARTING] = {.steps = starting_steps, .count = ARRAY_SIZE(starting_steps)},
+    [STATUS_LED_RUN] = {.steps = run_steps, .count = ARRAY_SIZE(run_steps)},
+    [STATUS_LED_FAULT] = {.steps = fault_steps, .count = ARRAY_SIZE(fault_steps)},
+};
+BUILD_ASSERT(ARRAY_SIZE(patterns) == STATUS_LED_STATE_COUNT);
+
+/* ==================== 步骤播放：仅工作队列推进循环 ==================== */
+
 static const struct gpio_dt_spec run_led = GPIO_DT_SPEC_GET(DT_ALIAS(led0), gpios);
-static bool led_ready;
-static int64_t next_toggle_ms;
+static atomic_t ready;
+static atomic_t requested_state;
+/* 初始化结束后，只有工作队列读写当前状态、步骤和已输出电平。 */
+static status_led_state_t active_state;
+static size_t step_index;
+static bool output_on;
 static void update(struct k_work *work);
 static K_WORK_DELAYABLE_DEFINE(status_led, update);
-
-int status_led_init(void)
-{
-    if (!gpio_is_ready_dt(&run_led)) {
-        return -ENODEV;
-    }
-    int err = gpio_pin_configure_dt(&run_led, GPIO_OUTPUT_ACTIVE);
-    led_ready = !err;
-    return err;
-}
 
 static void update(struct k_work *work)
 {
     ARG_UNUSED(work);
-    if (!led_ready) {
-        return;
+    status_led_state_t state = atomic_get(&requested_state);
+    if (state != active_state) {
+        active_state = state;
+        step_index = 0;
     }
-    status_phase_t phase = status_phase_get();
+    const status_led_pattern_t *pattern = &patterns[state];
+    const status_led_step_t *step = &pattern->steps[step_index];
     int err = 0;
-    if (phase == STATUS_RUN) {
-        int64_t now = k_uptime_get();
-        if (now >= next_toggle_ms) {
-            /* 按错过的周期数决定翻转，保持既有调度抖动语义。 */
-            int64_t periods = (now - next_toggle_ms) / STATUS_LED_HALF_PERIOD_MS + 1;
-            next_toggle_ms += periods * STATUS_LED_HALF_PERIOD_MS;
-            if (periods & 1) {
-                err = gpio_pin_toggle_dt(&run_led);
-            }
+    if (step->on != output_on) {
+        err = gpio_pin_set_dt(&run_led, step->on);
+        if (!err) { output_on = step->on; }
+    }
+    if (err) {
+        /* 故障图案本身失败时不递归上报，保留原故障。 */
+        if (state != STATUS_LED_FAULT) {
+            (void)watchdog_report_fault(err, "Indicator output failed",
+                state == STATUS_LED_STARTING ? WATCHDOG_ACTION_HOLD : WATCHDOG_ACTION_RESET, 200);
         }
-    } else {
-        err = gpio_pin_set_dt(&run_led, 1);
+    } else if (step->duration_ms) {
+        step_index = (step_index + 1) % pattern->count;
+        /* 不覆盖切换状态时已安排的立即刷新；延迟时不跳过步骤。 */
+        k_work_schedule(&status_led, K_MSEC(step->duration_ms));
     }
-    if (err && phase != STATUS_FAULT_LOCKED) {
-        (void)watchdog_report_fault(err, "Indicator output failed",
-                                 phase == STATUS_STARTING ? WATCHDOG_ACTION_HOLD : WATCHDOG_ACTION_RESET);
+    /* GPIO 操作或故障回调期间可能切换状态，下一次执行从新状态的第一步开始。 */
+    if (atomic_get(&requested_state) != state) {
+        k_work_reschedule(&status_led, K_NO_WAIT);
     }
-    /* 输出期间可能被其他线程或驱动回调锁存故障，当轮就转为常亮。 */
-    if (phase != STATUS_FAULT_LOCKED && status_phase_get() == STATUS_FAULT_LOCKED) {
-        (void)gpio_pin_set_dt(&run_led, 1);
-    }
-    k_work_reschedule(&status_led, K_MSEC(STATUS_LED_HALF_PERIOD_MS));
 }
 
-void status_led_start(void)
+/* ==================== 初始化与状态选择 ==================== */
+
+int status_led_init(status_led_state_t state)
 {
-    next_toggle_ms = k_uptime_get() + STATUS_LED_HALF_PERIOD_MS;
-    /* 不推迟故障路径已经提交的立即更新。 */
-    k_work_schedule(&status_led, K_MSEC(STATUS_LED_HALF_PERIOD_MS));
+    if ((unsigned int)state >= ARRAY_SIZE(patterns)) { return -EINVAL; }
+    if (atomic_get(&ready)) { return -EALREADY; }
+    if (!gpio_is_ready_dt(&run_led)) { return -ENODEV; }
+    const status_led_step_t *first = &patterns[state].steps[0];
+    int err = gpio_pin_configure_dt(&run_led,
+        first->on ? GPIO_OUTPUT_ACTIVE : GPIO_OUTPUT_INACTIVE);
+    if (err) { return err; }
+    active_state = state;
+    step_index = first->duration_ms ? 1 % patterns[state].count : 0;
+    output_on = first->on;
+    atomic_set(&requested_state, state);
+    atomic_set(&ready, 1);
+    if (first->duration_ms) {
+        k_work_schedule(&status_led, K_MSEC(first->duration_ms));
+    }
+    return 0;
 }
 
-void status_led_refresh(void)
+void status_led_set(status_led_state_t state)
 {
-    if (led_ready) {
+    if ((unsigned int)state >= ARRAY_SIZE(patterns) || !atomic_get(&ready)) { return; }
+    if (atomic_set(&requested_state, state) != state) {
         k_work_reschedule(&status_led, K_NO_WAIT);
     }
 }

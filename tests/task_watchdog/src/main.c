@@ -4,15 +4,14 @@
 #include <zephyr/sys/reboot.h>
 #include <zephyr/ztest.h>
 #include "nsi_cpu_es_if.h"
-#ifndef CONFIG_WATCHDOG_CHECK_INTERVAL_MS
-#define CONFIG_WATCHDOG_CHECK_INTERVAL_MS 100
-#endif
 
 static atomic_t edges, feed_configures;
 static atomic_t last_edge_ms;
 static atomic_t protocol_stop_calls, last_stop_in_isr;
 static atomic_t queue_blocked;
 static bool expect_check_fault, expect_direct_reset;
+static uint32_t expected_reset_delay_ms;
+static int64_t reset_requested_ms;
 static void block_queue(void);
 void protocol_stop(void)
 {
@@ -57,10 +56,15 @@ FUNC_NORETURN void __wrap_sys_reboot(int type)
     if (!k_is_in_isr()) { k_sleep(K_MSEC(30)); }
     bool ok = type == SYS_REBOOT_COLD && atomic_get(&edges) == before;
     if (expect_direct_reset) {
+        if (expected_reset_delay_ms) {
+            int64_t elapsed = k_uptime_get() - reset_requested_ms;
+            ok = ok && k_is_in_isr() && elapsed >= expected_reset_delay_ms &&
+                 elapsed < expected_reset_delay_ms + 30;
+        }
         ok = ok && watchdog_task_feed(&first) ==
-             (IS_ENABLED(CONFIG_WATCHDOG_SOFTWARE) ? -ECANCELED : -EACCES);
+             (k_is_in_isr() ? -EWOULDBLOCK : -ECANCELED);
     } else {
-        ok = ok && !k_is_in_isr() && !watchdog_fault_get(&fault) &&
+        ok = ok && k_is_in_isr() && !watchdog_fault_get(&fault) &&
              atomic_get(&protocol_stop_calls) > 0 && fault.error == -ETIMEDOUT;
         if (expect_check_fault) {
             ok = ok && fault.reason == WATCHDOG_FAULT_CHECK && !fault.task.name;
@@ -68,10 +72,10 @@ FUNC_NORETURN void __wrap_sys_reboot(int type)
             ok = ok && expected && !watchdog_task_get(expected, &task) &&
                  fault.reason == WATCHDOG_FAULT_TASK &&
                  !strcmp(fault.task.name, "silent") && (task.flags & WATCHDOG_TASK_FAULT) &&
-                 watchdog_task_feed(expected) == -ECANCELED &&
-                 watchdog_task_sleep_forever(expected) == -ECANCELED;
+                 watchdog_task_feed(expected) == -EWOULDBLOCK &&
+                 watchdog_task_sleep_forever(expected) == -EWOULDBLOCK;
         }
-        ok = ok && watchdog_task_register(&extra, &config) == -ECANCELED &&
+        ok = ok && watchdog_task_register(&extra, &config) == -EWOULDBLOCK &&
              !watchdog_fault_get(&after) && after.occurred_ms == fault.occurred_ms;
     }
     printk("WATCHDOG_RESET_%s\n", ok ? "PASS" : "FAIL");
@@ -125,8 +129,10 @@ ZTEST(task_watchdog, test_one_missing_heartbeat_stops_and_reboots)
     expected = &first;
     for (int i = 0; i < 10; ++i) {
         k_sleep(K_MSEC(30));
-        zassert_ok(watchdog_task_feed(&second));
+        int err = watchdog_task_feed(&second);
+        zassert_true(err == 0 || err == -ECANCELED);
     }
+    k_sleep(K_MSEC(500));
     zassert_unreachable("Missing heartbeat did not reboot");
 }
 ZTEST(task_watchdog, test_zero_registered_continues_past_legacy_timeout)
@@ -186,7 +192,7 @@ ZTEST(task_watchdog, test_explicit_hold_keeps_feed_without_task_fault)
 {
     const struct watchdog_task_config config = {.name = "first", .timeout_ms = 2000};
     zassert_ok(watchdog_task_register(&first, &config));
-    (void)watchdog_report_fault(-EIO, "Input initialization failed", WATCHDOG_ACTION_HOLD);
+    (void)watchdog_report_fault(-EIO, "Input initialization failed", WATCHDOG_ACTION_HOLD, 0);
     atomic_val_t before = atomic_get(&edges);
     k_sleep(K_MSEC(40));
     zassert_equal(atomic_get(&edges) > before, IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL));
@@ -265,6 +271,7 @@ ZTEST(task_watchdog, test_resumed_deadline_stops_and_reboots)
     zassert_ok(watchdog_task_register(&first, &config));
     expected = &first;
     k_sleep(K_MSEC(300));
+    k_sleep(K_MSEC(500));
     zassert_unreachable("Resumed task did not time out");
 }
 ZTEST(task_watchdog, test_sleep_does_not_protect_peer_stops_and_reboots)
@@ -276,6 +283,7 @@ ZTEST(task_watchdog, test_sleep_does_not_protect_peer_stops_and_reboots)
     zassert_ok(watchdog_task_register(&first, &config));
     expected = &first;
     k_sleep(K_MSEC(300));
+    k_sleep(K_MSEC(500));
     zassert_unreachable("Peer task did not time out");
 }
 
@@ -289,6 +297,7 @@ ZTEST(task_watchdog, test_feeding_earliest_preserves_peer_deadline_stops_and_reb
     k_sleep(K_MSEC(60));
     zassert_ok(watchdog_task_feed(&first));
     k_sleep(K_MSEC(200));
+    k_sleep(K_MSEC(500));
     zassert_unreachable("Feeding the earliest task hid its peer deadline");
 }
 
@@ -305,6 +314,7 @@ ZTEST(task_watchdog, test_sleeping_earliest_preserves_peer_deadline_stops_and_re
     zassert_ok(watchdog_task_get(&second, &snapshot));
     zassert_equal(snapshot.flags, WATCHDOG_TASK_ACTIVE);
     k_sleep(K_MSEC(100));
+    k_sleep(K_MSEC(500));
     zassert_unreachable("Sleeping the earliest task cancelled its peer deadline");
 }
 
@@ -352,11 +362,10 @@ ZTEST(task_watchdog, test_configuration_switches)
     zassert_equal(watchdog_init(NULL), -EINVAL);
     zassert_equal(atomic_get(&feed_configures), IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL));
     const struct watchdog_task_config config = {.name = "optional", .timeout_ms = 100};
-    int err = watchdog_task_register(&first, &config);
-    zassert_equal(err, IS_ENABLED(CONFIG_WATCHDOG_SOFTWARE) ? 0 : -EACCES);
+    zassert_ok(watchdog_task_register(&first, &config));
     k_sleep(K_MSEC(30));
     zassert_equal(atomic_get(&edges) > 0, IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL));
-    if (!err) { zassert_ok(watchdog_task_sleep_forever(&first)); }
+    zassert_ok(watchdog_task_sleep_forever(&first));
 }
 
 /* 系统工作队列被阻塞时，定时检查、关键门控和复位仍须独立执行。 */
@@ -380,6 +389,8 @@ static void block_queue(void)
 
 ZTEST(task_watchdog, test_check_expiry_with_blocked_workqueue_stops_and_reboots)
 {
+    const struct watchdog_task_config config = {.name = "active", .timeout_ms = 10000};
+    zassert_ok(watchdog_task_register(&first, &config));
     block_queue();
     atomic_val_t before = atomic_get(&edges);
     k_sleep(K_MSEC(CONFIG_WATCHDOG_CHECK_INTERVAL_MS));
@@ -401,6 +412,7 @@ ZTEST(task_watchdog, test_check_expiry_with_blocked_workqueue_stops_and_reboots)
     expect_check_fault = true;
     k_sem_give(&queue_release);
     k_sleep(K_MSEC(100));
+    k_sleep(K_MSEC(500));
     zassert_unreachable("Expired health was renewed after queue recovery");
 }
 
@@ -422,6 +434,7 @@ ZTEST(task_watchdog, test_heartbeats_do_not_renew_health_stops_and_reboots)
     expect_check_fault = true;
     k_sem_give(&queue_release);
     k_sleep(K_MSEC(100));
+    k_sleep(K_MSEC(500));
     zassert_unreachable("Task heartbeats concealed stalled checks");
 }
 
@@ -446,7 +459,7 @@ ZTEST(task_watchdog, test_explicit_hold_after_expiry_keeps_feed_without_clearing
         zassert_ok(watchdog_fault_get(&fault));
         zassert_equal(fault.reason, WATCHDOG_FAULT_CHECK);
     }
-    (void)watchdog_report_fault(-EIO, "Explicit diagnostic hold", WATCHDOG_ACTION_HOLD);
+    (void)watchdog_report_fault(-EIO, "Explicit diagnostic hold", WATCHDOG_ACTION_HOLD, 0);
     atomic_val_t before = atomic_get(&edges);
     k_sleep(K_MSEC(40));
     zassert_equal(atomic_get(&edges) > before, IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL));
@@ -464,11 +477,96 @@ ZTEST(task_watchdog, test_direct_reset_stops_and_reboots)
 {
     block_queue();
     const struct watchdog_task_config config = {.name = "reset", .timeout_ms = 2000};
-    zassert_equal(watchdog_task_register(&first, &config),
-                  IS_ENABLED(CONFIG_WATCHDOG_SOFTWARE) ? 0 : -EACCES);
+    zassert_ok(watchdog_task_register(&first, &config));
     expect_direct_reset = true;
-    watchdog_reset();
+    (void)watchdog_report_fault(-EIO, "Requested reset", WATCHDOG_ACTION_RESET, 0);
+    k_sleep(K_MSEC(500));
     zassert_unreachable("Reset returned");
+}
+
+ZTEST(task_watchdog, test_delayed_reset_keeps_feed_with_blocked_queue_stops_and_reboots)
+{
+    block_queue();
+    expect_direct_reset = true;
+    expected_reset_delay_ms = 120;
+    reset_requested_ms = k_uptime_get();
+    atomic_val_t before = atomic_get(&edges);
+    (void)watchdog_report_fault(-EIO, "Requested reset", WATCHDOG_ACTION_RESET, expected_reset_delay_ms);
+    k_sleep(K_MSEC(40));
+    zassert_equal(atomic_get(&edges) > before, IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL));
+    (void)watchdog_report_fault(-EIO, "Requested reset", WATCHDOG_ACTION_RESET, 5000); /* 重复请求不得推迟第一次安排的期限。 */
+    k_sleep(K_MSEC(200));
+    zassert_unreachable("Delayed reset depended on the blocked workqueue");
+}
+
+static void delayed_reset_in_isr(struct k_timer *timer)
+{
+    ARG_UNUSED(timer);
+    reset_requested_ms = k_uptime_get();
+    (void)watchdog_report_fault(-EIO, "Requested reset", WATCHDOG_ACTION_RESET, expected_reset_delay_ms);
+}
+static K_TIMER_DEFINE(request_reset_timer, delayed_reset_in_isr, NULL);
+
+ZTEST(task_watchdog, test_interrupt_delayed_reset_stops_and_reboots)
+{
+    block_queue();
+    expect_direct_reset = true;
+    expected_reset_delay_ms = 80;
+    k_timer_start(&request_reset_timer, K_MSEC(10), K_NO_WAIT);
+    k_sleep(K_MSEC(200));
+    zassert_unreachable("Interrupt reset request failed");
+}
+
+ZTEST(task_watchdog, test_interrupt_reset_stays_paused_past_health_expiry_stops_and_reboots)
+{
+    block_queue();
+    expect_direct_reset = true;
+    expected_reset_delay_ms = 3 * CONFIG_WATCHDOG_CHECK_INTERVAL_MS + 100;
+    k_timer_start(&request_reset_timer, K_MSEC(10), K_NO_WAIT);
+    k_sleep(K_MSEC(20));
+    k_sem_give(&queue_release);
+    atomic_val_t before = atomic_get(&edges);
+    k_sleep(K_MSEC(3 * CONFIG_WATCHDOG_CHECK_INTERVAL_MS));
+    zassert_equal(atomic_get(&edges) > before, IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL));
+    struct watchdog_fault fault;
+    zassert_ok(watchdog_fault_get(&fault));
+    zassert_equal(fault.reason, WATCHDOG_FAULT_REPORTED);
+    k_sleep(K_MSEC(150));
+    zassert_unreachable("Paused monitor changed the reset deadline");
+}
+
+ZTEST(task_watchdog, test_zero_reset_overrides_delay_stops_and_reboots)
+{
+    block_queue();
+    expect_direct_reset = true;
+    (void)watchdog_report_fault(-EIO, "Requested reset", WATCHDOG_ACTION_RESET, 60000);
+    (void)watchdog_report_fault(-EIO, "Requested reset", WATCHDOG_ACTION_RESET, 0);
+    zassert_unreachable("Immediate reset waited for the previous timer");
+}
+
+ZTEST(task_watchdog, test_shorter_reset_request_advances_deadline_stops_and_reboots)
+{
+    block_queue();
+    expect_direct_reset = true;
+    (void)watchdog_report_fault(-EIO, "Requested reset", WATCHDOG_ACTION_RESET, 5000);
+    k_sleep(K_MSEC(20));
+    expected_reset_delay_ms = 80;
+    reset_requested_ms = k_uptime_get();
+    (void)watchdog_report_fault(-EIO, "Requested reset", WATCHDOG_ACTION_RESET, expected_reset_delay_ms);
+    k_sleep(K_MSEC(200));
+    zassert_unreachable("Earlier reset request did not advance the deadline");
+}
+
+ZTEST(task_watchdog, test_uint32_reset_delay_does_not_wrap)
+{
+    (void)watchdog_report_fault(-EIO, "Requested reset", WATCHDOG_ACTION_RESET, UINT32_MAX);
+    atomic_val_t before = atomic_get(&edges);
+    k_sleep(K_MSEC(40));
+    zassert_equal(atomic_get(&edges) > before, IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL));
+    struct watchdog_fault fault;
+    zassert_ok(watchdog_fault_get(&fault));
+    zassert_equal(fault.reason, WATCHDOG_FAULT_REPORTED);
+    zassert_equal(fault.reset_delay_ms, UINT32_MAX);
 }
 
 #ifdef CONFIG_TEST_WATCHDOG_BLOCK_FIRST_CHECK
@@ -478,19 +576,16 @@ ZTEST(task_watchdog, test_startup_grace_expires_before_first_check)
     struct watchdog_fault fault;
     zassert_ok(watchdog_fault_get(&fault));
     zassert_equal(fault.reason, WATCHDOG_FAULT_CHECK);
+    zassert_equal(fault.action, WATCHDOG_ACTION_RESET);
     atomic_val_t before = atomic_get(&edges);
     k_sleep(K_MSEC(30));
     zassert_equal(atomic_get(&edges), before);
+    expect_check_fault = true;
     k_sem_give(&queue_release);
-    k_sleep(K_MSEC(30));
-    zassert_equal(status_phase_get(), STATUS_FAULT_LOCKED);
-    zassert_ok(watchdog_fault_get(&fault));
-    zassert_equal(fault.reason, WATCHDOG_FAULT_CHECK);
-    /* 应用启动 HOLD 显式允许喂狗，但不能把过期记录改为健康。 */
-    before = atomic_get(&edges);
-    k_sleep(K_MSEC(40));
-    zassert_true(atomic_get(&edges) > before);
+    k_sleep(K_MSEC(300));
+    zassert_unreachable("Expired startup health did not reset after notification");
 }
+
 #endif
 
 static atomic_t hold_result;
@@ -498,7 +593,7 @@ static void report_hold(struct k_timer *timer)
 {
     ARG_UNUSED(timer);
     atomic_set(&hold_result, watchdog_report_fault(-EIO,
-               "Injected interrupt hold", WATCHDOG_ACTION_HOLD));
+               "Injected interrupt hold", WATCHDOG_ACTION_HOLD, 0));
 }
 static K_TIMER_DEFINE(hold_timer, report_hold, NULL);
 

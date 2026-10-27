@@ -13,7 +13,8 @@ if not cases:
 for case in cases:
     result = subprocess.run([executable, "-test=" + case], env={**os.environ, "IDU_ACQUISITION_CASE": case},
                             capture_output=True, text=True, timeout=30)
-    if result.returncode or "PROJECT EXECUTION SUCCESSFUL" not in result.stdout:
+    if result.returncode or ("PROJECT EXECUTION SUCCESSFUL" not in result.stdout and
+                             "ACQUISITION_RESET_PASS" not in result.stdout):
         print(result.stdout, end="")
         print(result.stderr, end="", file=sys.stderr)
         raise SystemExit("Acquisition case failed: " + case)
