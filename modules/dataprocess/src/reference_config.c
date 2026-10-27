@@ -10,6 +10,8 @@
 LOG_MODULE_REGISTER(dp_configuration, LOG_LEVEL_INF);
 
 K_MUTEX_DEFINE(configuration_lock);
+static const DEV_TABLE_S *registered_devices;
+static uint16_t registered_device_count;
 static CFG_GET_DEV_TBL get_devices;
 static CFG_GET_DEV_NUM get_device_count;
 static PARA_GET_RANGE_DEF get_range;
@@ -29,8 +31,8 @@ static const uint8_t zero_defaults[144];
 static const DM_SIG_CFG_S *configured_signal(uint16_t dev, uint16_t sig)
 {
     if (!dev || dev > UINT8_MAX) { return NULL; }
-    const DEV_TABLE_S *devices = get_devices ? get_devices() : NULL;
-    size_t count = get_device_count ? get_device_count() : 0;
+    const DEV_TABLE_S *devices = pltcb_cfg_get_dev_tbl();
+    size_t count = pltcb_cfg_get_dev_num();
     for (size_t i = 0; devices && i < count; ++i) {
         if (devices[i].dev_id != dev) { continue; }
         const DEV_TBL_CFG_S *group = &devices[i].ptl_tbl_cfg[0];
@@ -94,8 +96,41 @@ int dp_register_parameter_country(uint16_t country, dp_country_parameter_fn over
         k_mutex_unlock(&configuration_lock); \
     }
 
-REGISTER_CALLBACK(pltcb_reg_cfg_get_dev_tbl, CFG_GET_DEV_TBL, get_devices)
-REGISTER_CALLBACK(pltcb_reg_cfg_get_dev_num, CFG_GET_DEV_NUM, get_device_count)
+int dp_register_devices(const DEV_TABLE_S *devices, uint16_t count)
+{
+    if (k_is_in_isr()) { return -EWOULDBLOCK; }
+    if (!devices || !count || count > CONFIG_DP_MAX_DEVICES + 2) { return -EINVAL; }
+    k_mutex_lock(&configuration_lock, K_FOREVER);
+    int err = frozen || initializing || dp_config() || registered_devices ||
+              get_devices || get_device_count || native_provider ? -EBUSY : 0;
+    if (!err) {
+        registered_devices = devices;
+        registered_device_count = count;
+    }
+    k_mutex_unlock(&configuration_lock);
+    return err;
+}
+
+/* 旧回调接口不覆盖已直接登记的设备表。 */
+void pltcb_reg_cfg_get_dev_tbl(CFG_GET_DEV_TBL callback)
+{
+    if (k_is_in_isr()) { return; }
+    k_mutex_lock(&configuration_lock, K_FOREVER);
+    if (!frozen && !initializing && !dp_config() && !registered_devices) {
+        get_devices = callback;
+    }
+    k_mutex_unlock(&configuration_lock);
+}
+
+void pltcb_reg_cfg_get_dev_num(CFG_GET_DEV_NUM callback)
+{
+    if (k_is_in_isr()) { return; }
+    k_mutex_lock(&configuration_lock, K_FOREVER);
+    if (!frozen && !initializing && !dp_config() && !registered_devices) {
+        get_device_count = callback;
+    }
+    k_mutex_unlock(&configuration_lock);
+}
 REGISTER_CALLBACK(pltcb_reg_para_range_def_cb, PARA_GET_RANGE_DEF, get_range)
 REGISTER_CALLBACK(pltcb_reg_cfg_get_timer_reg_tbl, CFG_GET_TIMER_REG_TBL, get_timers)
 REGISTER_CALLBACK(pltcb_reg_cfg_get_timer_reg_num, CFG_GET_TIMER_REG_NUM, get_timer_count)
@@ -104,12 +139,12 @@ REGISTER_CALLBACK(pltcb_reg_cfg_get_init_reg_num, CFG_GET_INIT_REG_NUM, get_init
 
 const DEV_TABLE_S *pltcb_cfg_get_dev_tbl(void)
 {
-    return get_devices ? get_devices() : NULL;
+    return registered_devices ? registered_devices : get_devices ? get_devices() : NULL;
 }
 
 uint16_t pltcb_cfg_get_dev_num(void)
 {
-    return get_device_count ? get_device_count() : 0;
+    return registered_devices ? registered_device_count : get_device_count ? get_device_count() : 0;
 }
 
 const TIME_DATA_SET_S *pltcb_cfg_get_timer_reg_tbl(void)
@@ -148,6 +183,7 @@ int dp_register_config_provider(dp_config_provider_fn provider)
     if (k_is_in_isr()) { return -EWOULDBLOCK; }
     k_mutex_lock(&configuration_lock, K_FOREVER);
     int err = frozen || initializing || dp_config() ? -EBUSY : 0;
+    if (!err && registered_devices) { err = -EBUSY; }
     if (!err) { native_provider = provider; }
     k_mutex_unlock(&configuration_lock);
     return err;

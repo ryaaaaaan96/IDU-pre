@@ -10,6 +10,14 @@ NVS 参数持久化。把本目录加入 `ZEPHYR_EXTRA_MODULES`，启用
 采集归属。运行时不调用采集或转发模块；寄存器编码和 Modbus 回调由
 transmit 提供。数据池数值采用主机字节序、低字在前。
 
+固定设备配置可通过 `<platform_callback.h>` 中的
+`dp_register_devices(const DEV_TABLE_S *devices, uint16_t count)` 一次登记，随后调用 `dp_init()`。
+数组及引用的点表由调用方持有且须常驻，登记后不可修改；不复制整表。
+接口拒绝空表、零数量、超出容量和 ISR 调用；重复登记、已初始化或正在初始化返回错误。
+与设备表 getter 回调、原生配置提供者互斥。旧 getter 注册保留给既有调用方，不能覆盖已直接登记的数组。
+产品 `data_device_cfg` 是旧通信装配方式；当前 process 应用装配 `DEV_TABLE_S` 后直接登记，
+不将采集口/从站的产品配置传给当前运行入口。
+
 点值缓冲区在 `dp_init_config()` 中按实际总字数通过 Zephyr `k_malloc()` 一次申请，
 随后按偏移供各点使用；服务运行期间不重新分配或释放。初始化失败不会安装配置，
 分配失败返回 `-ENOMEM`，申请后初始化失败会释放缓冲区，允许修正条件后重试。

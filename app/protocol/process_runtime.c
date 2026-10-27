@@ -5,27 +5,29 @@
 #include <dataprocess/process.h>
 #include <platform_callback.h>
 
-static const struct data_device_cfg bindings[] = {
+/* 设备归属由应用声明；处理表本身仍常驻 Flash。 */
+static DEV_TABLE_S devices[] = {
     {
         .dev_id = DEVICE_LOCAL,
-        .process_table = TABLE_LOCAL_PROCESS,
-        .collect_table = DP_DATA_DEFAULT_COLLECT_TABLE,
-        .collect_port = DP_DEVICE_DEFAULT_PORT,
-        .collect_addr = DP_DEVICE_DEFAULT_ADDRESS,
+        .port = DP_DEVICE_DEFAULT_PORT,
+        .coll_addr = DP_DEVICE_DEFAULT_ADDRESS,
+        .dev_code = DP_DEVICE_DEFAULT_CODE,
     },
 };
-static DEV_TABLE_S devices[ARRAY_SIZE(bindings)];
 
-const DEV_TABLE_S *protocol_device_table(void) { return devices; }
-uint16_t protocol_device_count(void) { return ARRAY_SIZE(devices); }
 int protocol_register_point_tables(void)
 {
     if (dp_config()) { return -EBUSY; }
-    int err = dp_data_device_bind(bindings, ARRAY_SIZE(bindings), devices);
+    const struct dp_registered_table *process;
+    int err = dp_table_registry_find(TABLE_LOCAL_PROCESS, PRO_DATA_PROCESS, &process);
     if (err) { return err; }
-    pltcb_reg_cfg_get_dev_tbl(protocol_device_table);
-    pltcb_reg_cfg_get_dev_num(protocol_device_count);
-    return 0;
+    if (process->count > UINT16_MAX) { return -EOVERFLOW; }
+    devices[0].ptl_tbl_cfg[0] = (DEV_TBL_CFG_S){
+        .proto_type = PRO_DATA_PROCESS,
+        .pst_table = process->rows,
+        .sig_num = process->count,
+    };
+    return dp_register_devices(devices, ARRAY_SIZE(devices));
 }
 
 int protocol_init(void)

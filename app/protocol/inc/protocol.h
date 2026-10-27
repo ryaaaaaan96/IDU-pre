@@ -8,15 +8,13 @@
 #include <data_process.h>
 
 /**
- * @brief 注册产品点表回调；随后由调用者执行通用模块 dp_init()。
+ * @brief 装配并直接登记产品设备表；随后由调用者执行通用模块 dp_init()。
  */
 int protocol_register_point_tables(void);
 /**
  * @brief 当前仅同步初始化本地 process；不创建 DP 线程，通信装配暂时停用。
  */
 int protocol_init(void);
-const DEV_TABLE_S *protocol_device_table(void);
-uint16_t protocol_device_count(void);
 /* 以下只供暂时停用的旧通信实现及其回归测试使用，当前产品不提供这些符号。 */
 /**
  * @brief 已锁存的本地通信维护故障，不驱动首次启动或采样。

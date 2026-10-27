@@ -3,6 +3,9 @@
 ## 当前阶段：仅运行 process（2026-10-27）
 
 按本轮优化要求，产品只编译 `process_runtime.c` 和 `tables/process.c`。
+当前应用不使用 `data_device_cfg`，由应用查找 process 登记表并装配本地 `DEV_TABLE_S`，
+通过 `dp_register_devices(devices, ARRAY_SIZE(devices))` 一次登记指针和数量，无需设备表 getter 回调。
+设备数组由应用持有，登记后只读且常驻；DP 仍负责通用配置校验和初始化。
 启动顺序：本地点表注册 → `dp_init()` → `dp_process_init()` → `dp_reference_init()`。
 当前不创建 DP 样本/业务线程；本地 `dp_set_sig_value()` 在调用线程中同步完成处理。
 异步提交、定时业务及延后保存暂不启用，通用模块的线程处理函数保留。

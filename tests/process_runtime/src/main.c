@@ -3,14 +3,25 @@
 #include <dataprocess/points.h>
 #include <dataprocess/params.h>
 #include <zephyr/ztest.h>
+#include <platform_callback.h>
+#include <dataprocess/point_parameters.h>
 
 ZTEST(process_runtime, test_local_process_without_communication)
 {
+    zassert_equal(dp_register_devices(NULL, 1), -EINVAL);
+    zassert_equal(dp_register_devices((const DEV_TABLE_S[]){{0}}, 0), -EINVAL);
     zassert_ok(protocol_init());
-    zassert_equal(protocol_device_count(), 1);
-    zassert_equal(protocol_device_table()[0].dev_id, DEVICE_LOCAL);
+    zassert_equal(dp_register_devices(dp_config()->reference_devices, 1), -EBUSY);
+    zassert_equal(dp_register_config_provider(NULL), -EBUSY);
+    zassert_equal(dp_config()->reference_device_count, 1);
+    zassert_equal(dp_config()->reference_devices[0].dev_id, DEVICE_LOCAL);
     zassert_equal(dp_config()->device_count, 0);
     zassert_equal(dp_config()->collect_count, 0);
+    DM_SIG_DATA_S parameters;
+    bool restore;
+    zassert_ok(dp_point_parameters_get(DP_COUNTRY_COMMON, DEVICE_LOCAL,
+                                      SIGNAL_SAMPLE_PERIOD, &parameters, &restore));
+    zassert_equal(parameters.def_value.u16, CONFIG_IDU_SAMPLE_PERIOD_MS);
     uint8_t value[] = {0xaa, 0x55};
     uint8_t result[2] = {0};
     zassert_ok(dp_set_sig_value(DEVICE_LOCAL, SIGNAL_DI, sizeof(value), value));
