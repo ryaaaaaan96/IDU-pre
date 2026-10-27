@@ -135,6 +135,7 @@ ZTEST(runtime, test_real_main_fault_policy)
     else if (!strcmp(scenario, "protocol-init")) { expected_description = "Protocol initialization failed"; }
     else if (!strcmp(scenario, "maintenance")) { expected_description = "Protocol maintenance failed"; }
     else if (!strcmp(scenario, "task-timeout")) { expected_description = "Task heartbeat timed out"; }
+    else if (!strcmp(scenario, "hold")) { expected_description = "Explicit hold test"; }
     else if (!strcmp(scenario, "force-reset")) { expected_description = "Explicit reset test"; }
     else if (!strcmp(scenario, "storage-degraded")) { expected_description = NULL; }
     else { zassert_unreachable("Unknown scenario"); }
@@ -143,6 +144,12 @@ ZTEST(runtime, test_real_main_fault_policy)
                                         discard_transmitted, NULL);
     k_thread_create(&application_thread, application_stack, K_THREAD_STACK_SIZEOF(application_stack),
                      run_application, NULL, NULL, NULL, 10, 0, K_NO_WAIT);
+    /* 启动流程可包含产品设置的延时；等待运行或终止状态后再注入故障。 */
+    for (int i = 0; i < 6000; ++i) {
+        status_phase_t phase = status_phase_get();
+        if (phase == STATUS_RUN || phase == STATUS_FAULT_LOCKED) { break; }
+        k_msleep(10);
+    }
     bool maintenance_injected = false;
     struct watchdog_fault fault;
     if (!expected_description) {
@@ -160,6 +167,9 @@ ZTEST(runtime, test_real_main_fault_policy)
         return;
     }
     for (int i = 0; i < 300; ++i) {
+        if (!strcmp(scenario, "hold") && atomic_get(&samples)) {
+            (void)watchdog_report_fault(-EIO, "Explicit hold test", WATCHDOG_ACTION_HOLD, 0);
+        }
         if (!strcmp(scenario, "force-reset") && atomic_get(&samples)) {
             (void)watchdog_report_fault(-EIO, "Explicit reset test", WATCHDOG_ACTION_RESET, 200);
         }
@@ -203,10 +213,15 @@ ZTEST(runtime, test_real_main_fault_policy)
             int value = gpio_pin_get_raw(gpio, 1);
             edges += value != previous; previous = value;
         }
+        int indicator_before = atomic_get(&led_edges);
+        k_msleep(5200); /* 覆盖主线程至少两次定期诊断输出。 */
+        zassert_equal(k_thread_join(&application_thread, K_NO_WAIT), -EBUSY);
         zassert_equal(atomic_get(&samples), before);
         zassert_equal(atomic_get(&transmitted_bytes), sent);
         zassert_equal(edges > 0, IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL));
-        if (strcmp(scenario, "led") && strcmp(scenario, "led-init")) { zassert_true(indicator_on); }
+        if (strcmp(scenario, "led") && strcmp(scenario, "led-init")) {
+            zassert_true(atomic_get(&led_edges) > indicator_before);
+        }
     }
     printk("RUNTIME_POLICY_PASS\n");
 }

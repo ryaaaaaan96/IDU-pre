@@ -1023,3 +1023,7 @@ MCUboot + IAPv3 构建及签名验证通过，应用 Flash 151356 B、RAM 120076
 
 LED 播放改为每个指示状态独立的亮灭/持续时间步骤表，重复状态不重启，新状态从第一步开始，队列延迟不再跳过边沿。此前等时闪烁和绝对相位追赶的验收记录仅表示历史行为。
 本轮采集/LED 44 个及运行时 17 个独立 native 场景通过，MCUboot + IAPv3 构建、签名验证、SGZ 导出通过；未进行实板波形验证。详见 [.scratch/led-state-sequence](../.scratch/led-state-sequence/issues/01-player.md)。
+
+## 2026-10-27：主线程 HOLD 留驻诊断
+
+主线程终止正常业务后留驻，每 5 秒查询打印最近故障。运行时 19 个场景和选定启动场景 19 个通过，当前 MCUboot + IAPv3 构建、签名与 SGZ 导出通过。完整采集套件仍有旧 LED 时序断言与当前产品图案不一致，未作为本轮通过项。未实板验证，详见 [.scratch/main-fault-hold](../.scratch/main-fault-hold/issues/01-main-loop.md)。
