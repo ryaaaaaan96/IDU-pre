@@ -1,3 +1,4 @@
+#include <watchdog/watchdog.h>
 #include "status_led.h"
 #include "status/inc/status.h"
 #include <zephyr/drivers/gpio.h>
@@ -42,9 +43,8 @@ static void update(struct k_work *work)
         err = gpio_pin_set_dt(&run_led, 1);
     }
     if (err && phase != STATUS_FAULT_LOCKED) {
-        status_fault_phase_t fault_phase = phase == STATUS_STARTING ? STATUS_INIT : STATUS_RUNTIME;
-        (void)status_report_fault(fault_phase, err, "Indicator output failed",
-                                 fault_phase == STATUS_INIT ? STATUS_ACTION_HOLD : STATUS_ACTION_RESET);
+        (void)watchdog_report_fault(err, "Indicator output failed",
+                                 phase == STATUS_STARTING ? WATCHDOG_ACTION_HOLD : WATCHDOG_ACTION_RESET);
     }
     /* 输出期间可能被其他线程或驱动回调锁存故障，当轮就转为常亮。 */
     if (phase != STATUS_FAULT_LOCKED && status_phase_get() == STATUS_FAULT_LOCKED) {

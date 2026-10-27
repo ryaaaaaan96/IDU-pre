@@ -23,7 +23,7 @@
 int startup(void);
 int application_cycle(void);
 
-typedef enum { WATCHDOG_INIT, LED_START, INPUTS_INIT, IAP_INIT, TABLES_INIT, DP_INIT, DATA_BIND, TASKS_PREPARE,
+typedef enum { WATCHDOG_SERVICE_INIT, LED_START, INPUTS_INIT, IAP_INIT, TABLES_INIT, DP_INIT, DATA_BIND, TASKS_PREPARE,
                NETWORK_INIT, PORT_OPEN, COLLECT_INIT, PARAMS_INIT, PARAMS_RECOVER,
                PROCESS_INIT, REFERENCE_INIT, COLLECT_START, FORWARD_INIT,
                SAMPLE, PUBLISH, PROTOCOL, LED, CHECKPOINT, SERVICES } service_t;
@@ -54,7 +54,7 @@ const struct co_port_config protocol_collect_port;
 static int service(service_t service)
 {
     static const status_phase_t phases[SERVICES] = {
-        [WATCHDOG_INIT] = STATUS_STARTING,
+        [WATCHDOG_SERVICE_INIT] = STATUS_STARTING,
         [LED_START] = STATUS_STARTING,
         [INPUTS_INIT] = STATUS_STARTING,
         [TABLES_INIT] = STATUS_STARTING,
@@ -86,11 +86,13 @@ static int service(service_t service)
     return errors[service];
 }
 
+int __real_watchdog_init(watchdog_fault_cb_t notify);
 static watchdog_fault_cb_t watchdog_notify;
 int __wrap_watchdog_init(watchdog_fault_cb_t notify)
 {
     watchdog_notify = notify;
-    return service(WATCHDOG_INIT);
+    zassert_ok(__real_watchdog_init(notify));
+    return service(WATCHDOG_SERVICE_INIT);
 }
 int acquisition_inputs_init(void) { return service(INPUTS_INIT); }
 int protocol_register_point_tables(void) { return service(TABLES_INIT); }
@@ -199,7 +201,7 @@ static int toggle_indicator(const struct device *dev, gpio_port_pins_t pins)
     int err = write_indicator(!indicator_level);
     if (fault_on_toggle) {
         fault_on_toggle = false;
-        (void)status_report_fault(STATUS_RUNTIME, -EIO, "Injected concurrent fault", STATUS_ACTION_HOLD);
+        (void)watchdog_report_fault(-EIO, "Injected concurrent fault", WATCHDOG_ACTION_HOLD);
     }
     return err;
 }
@@ -306,17 +308,17 @@ static void check_startup_failure(service_t failed)
     zassert_equal(fault_snapshot().phase, STATUS_INIT);
     zassert_equal(fault_snapshot().error, -EIO);
     const char *description = "Protocol initialization failed";
-    if (failed == WATCHDOG_INIT) { description = "Watchdog initialization failed"; }
+    if (failed == WATCHDOG_SERVICE_INIT) { description = "Watchdog initialization failed"; }
     else if (failed == LED_START) { description = "Indicator initialization failed"; }
     else if (failed == INPUTS_INIT) { description = "Input initialization failed"; }
     else if (failed == IAP_INIT) { description = "Upgrade service initialization failed"; }
     zassert_str_equal(fault_snapshot().description, description);
-    for (service_t s = WATCHDOG_INIT; s <= FORWARD_INIT; ++s) {
+    for (service_t s = WATCHDOG_SERVICE_INIT; s <= FORWARD_INIT; ++s) {
         zassert_equal(calls[s], s <= failed ? 1 : 0);
     }
     zassert_equal(stops, 0);
     zassert_equal(reboots, 0);
-    zassert_equal(fault_snapshot().action, STATUS_ACTION_HOLD);
+    zassert_equal(fault_snapshot().action, WATCHDOG_ACTION_HOLD);
     zassert_equal(calls[CHECKPOINT], 0);
     zassert_equal(application_cycle(), -EACCES);
     zassert_equal(startup(), -EALREADY);
@@ -325,7 +327,7 @@ static void check_startup_failure(service_t failed)
 
 ZTEST(acquisition, test_startup_failure_watchdog_init)
 {
-    check_startup_failure(WATCHDOG_INIT);
+    check_startup_failure(WATCHDOG_SERVICE_INIT);
     k_msleep(250);
     zassert_equal(reboots, 0);
     zassert_equal(calls[CHECKPOINT], 0);
@@ -500,7 +502,7 @@ ZTEST(acquisition, test_lifecycle_guards)
 {
     zassert_equal(status_phase_get(), STATUS_UNCONFIGURED);
     zassert_equal(status_progress(), -EACCES);
-    zassert_equal(status_report_fault(STATUS_RUNTIME, -EIO, "Input point update failed", STATUS_ACTION_RESET), -EACCES);
+    zassert_equal(watchdog_report_fault(-EIO, "Input point update failed", WATCHDOG_ACTION_RESET), -EACCES);
     zassert_equal(application_cycle(), -EACCES);
     zassert_equal(calls[SAMPLE], 0);
     zassert_ok(startup());
@@ -510,20 +512,28 @@ ZTEST(acquisition, test_lifecycle_guards)
     struct status_application_fault fault;
     zassert_equal(status_application_fault_get(&fault), -ENOENT);
     zassert_equal(calls[TABLES_INIT], 1);
-    zassert_equal(calls[WATCHDOG_INIT], 1);
+    zassert_equal(calls[WATCHDOG_SERVICE_INIT], 1);
     zassert_equal(calls[LED_START], 1);
+}
+
+ZTEST(acquisition, test_startup_cannot_continue_after_fault)
+{
+    zassert_ok(status_init());
+    zassert_equal(watchdog_report_fault(-EIO, "Initialization cannot continue",
+                                       WATCHDOG_ACTION_CONTINUE), -EINVAL);
+    zassert_equal(status_phase_get(), STATUS_STARTING);
+    struct status_application_fault fault;
+    zassert_equal(status_application_fault_get(&fault), -ENOENT);
 }
 
 ZTEST(acquisition, test_fault_arguments_do_not_change_state)
 {
     zassert_ok(startup());
-    zassert_equal(status_report_fault((status_fault_phase_t)-1, -EIO, "Invalid phase", STATUS_ACTION_RESET), -EINVAL);
-    zassert_equal(status_report_fault(STATUS_RUNTIME, 0, "Invalid error code", STATUS_ACTION_RESET), -EINVAL);
-    zassert_equal(status_report_fault(STATUS_RUNTIME, -EIO, NULL, STATUS_ACTION_RESET), -EINVAL);
-    zassert_equal(status_report_fault(STATUS_RUNTIME, -EIO, "", STATUS_ACTION_RESET), -EINVAL);
-    zassert_equal(status_report_fault(STATUS_RUNTIME, -EIO, "Invalid action", (status_action_t)-1), -EINVAL);
-    zassert_equal(status_report_fault(STATUS_RUNTIME, -EIO, "Invalid action", (status_action_t)3), -EINVAL);
-    zassert_equal(status_report_fault(STATUS_INIT, -EIO, "Initialization cannot continue", STATUS_ACTION_CONTINUE), -EINVAL);
+    zassert_equal(watchdog_report_fault(0, "Invalid error code", WATCHDOG_ACTION_RESET), -EINVAL);
+    zassert_equal(watchdog_report_fault(-EIO, NULL, WATCHDOG_ACTION_RESET), -EINVAL);
+    zassert_equal(watchdog_report_fault(-EIO, "", WATCHDOG_ACTION_RESET), -EINVAL);
+    zassert_equal(watchdog_report_fault(-EIO, "Invalid action", (watchdog_action_t)-1), -EINVAL);
+    zassert_equal(watchdog_report_fault(-EIO, "Invalid action", (watchdog_action_t)3), -EINVAL);
     struct status_application_fault fault;
     zassert_equal(status_application_fault_get(&fault), -ENOENT);
     zassert_equal(status_phase_get(), STATUS_RUN);
@@ -535,36 +545,36 @@ ZTEST(acquisition, test_explicit_fault_actions_record_latest_error)
 {
     zassert_ok(startup());
     static const char first[] = "Auxiliary output error";
-    zassert_ok(status_report_fault(STATUS_RUNTIME, -EIO, first, STATUS_ACTION_CONTINUE));
+    zassert_ok(watchdog_report_fault(-EIO, first, WATCHDOG_ACTION_CONTINUE));
     struct status_application_fault fault = fault_snapshot();
     zassert_equal_ptr(fault.description, first);
-    zassert_equal(fault.action, STATUS_ACTION_CONTINUE);
+    zassert_equal(fault.action, WATCHDOG_ACTION_CONTINUE);
     zassert_equal(status_phase_get(), STATUS_RUN);
     zassert_false(protocol_halted);
 
-    zassert_equal(status_report_fault(STATUS_RUNTIME, -ETIMEDOUT, "Input unavailable", STATUS_ACTION_HOLD), -ETIMEDOUT);
+    zassert_equal(watchdog_report_fault(-ETIMEDOUT, "Input unavailable", WATCHDOG_ACTION_HOLD), -ETIMEDOUT);
     fault = fault_snapshot();
     zassert_str_equal(fault.description, "Input unavailable");
     zassert_equal(fault.error, -ETIMEDOUT);
-    zassert_equal(fault.action, STATUS_ACTION_HOLD);
+    zassert_equal(fault.action, WATCHDOG_ACTION_HOLD);
     zassert_equal(status_phase_get(), STATUS_FAULT_LOCKED);
     zassert_true(protocol_halted);
     zassert_equal(stops, 0);
     zassert_equal(reboots, 0);
 
-    zassert_equal(status_report_fault(STATUS_RUNTIME, -ECANCELED, "Subsequent cancellation", STATUS_ACTION_HOLD), -ECANCELED);
-    zassert_equal(status_report_fault(STATUS_RUNTIME, -EIO, "Reset requested", STATUS_ACTION_RESET), -EIO);
+    zassert_equal(watchdog_report_fault(-ECANCELED, "Subsequent cancellation", WATCHDOG_ACTION_HOLD), -ECANCELED);
+    zassert_equal(watchdog_report_fault(-EIO, "Reset requested", WATCHDOG_ACTION_RESET), -EIO);
     fault = fault_snapshot();
     zassert_str_equal(fault.description, "Reset requested");
-    zassert_equal(fault.action, STATUS_ACTION_RESET);
+    zassert_equal(fault.action, WATCHDOG_ACTION_RESET);
     zassert_equal(stops, 1);
     zassert_equal(reboots, 1);
-    zassert_equal(status_report_fault(STATUS_RUNTIME, -EIO, "Duplicate reset", STATUS_ACTION_RESET), -EIO);
+    zassert_equal(watchdog_report_fault(-EIO, "Duplicate reset", WATCHDOG_ACTION_RESET), -EIO);
     zassert_equal(reboots, 2);
-    zassert_equal(status_report_fault(STATUS_RUNTIME, -EIO, "Lower action", STATUS_ACTION_HOLD), -EIO);
-    zassert_ok(status_report_fault(STATUS_RUNTIME, -EIO, "Continue after reset", STATUS_ACTION_CONTINUE));
+    zassert_equal(watchdog_report_fault(-EIO, "Lower action", WATCHDOG_ACTION_HOLD), -EIO);
+    zassert_ok(watchdog_report_fault(-EIO, "Continue after reset", WATCHDOG_ACTION_CONTINUE));
     zassert_equal(status_phase_get(), STATUS_FAULT_LOCKED);
-    zassert_equal(fault_snapshot().action, STATUS_ACTION_CONTINUE);
+    zassert_equal(fault_snapshot().action, WATCHDOG_ACTION_CONTINUE);
     zassert_str_equal(fault_snapshot().description, "Continue after reset");
     zassert_equal(reboots, 2);
     zassert_equal(stops, 2);
@@ -577,7 +587,7 @@ ZTEST(acquisition, test_status_records_latest_fault_without_resuming_business)
     led_set_error = -ENODEV; /* 故障指示本身失败不能覆盖采样错误。 */
     errors[SAMPLE] = -EIO;
     zassert_equal(application_cycle(), -EIO);
-    (void)status_report_fault(STATUS_RUNTIME, -ETIMEDOUT, "Task heartbeat timed out", STATUS_ACTION_RESET);
+    (void)watchdog_report_fault(-ETIMEDOUT, "Task heartbeat timed out", WATCHDOG_ACTION_RESET);
     status_set_phase(STATUS_RUN);
     zassert_equal(status_phase_get(), STATUS_FAULT_LOCKED);
     zassert_equal(fault_snapshot().phase, STATUS_RUNTIME);
@@ -601,7 +611,7 @@ ZTEST(acquisition, test_led_tracks_startup_healthy_cycles_and_fault)
     zassert_false(indicator_on);
     k_sleep(K_MSEC(STATUS_LED_HALF_PERIOD_MS));
     zassert_true(indicator_on);
-    (void)status_report_fault(STATUS_RUNTIME, -EIO, "Input point update failed", STATUS_ACTION_RESET);
+    (void)watchdog_report_fault(-EIO, "Input point update failed", WATCHDOG_ACTION_RESET);
     zassert_true(indicator_on);
     k_sleep(K_MSEC(STATUS_LED_HALF_PERIOD_MS));
     zassert_true(indicator_on);
@@ -640,7 +650,7 @@ ZTEST(acquisition, test_late_indicator_skips_edges_and_fault_takes_priority)
     zassert_equal(while_delayed, before);
     zassert_equal(indicator_edges, before + 1); /* 跳过错过的三次边沿，不补放。 */
     zassert_false(indicator_on);
-    (void)status_report_fault(STATUS_RUNTIME, -EIO, "Input point update failed", STATUS_ACTION_RESET);
+    (void)watchdog_report_fault(-EIO, "Input point update failed", WATCHDOG_ACTION_RESET);
     k_msleep(10);
     zassert_true(indicator_on);
     unsigned fault_edges = indicator_edges;
@@ -656,7 +666,7 @@ ZTEST(acquisition, test_fault_during_gpio_toggle_forces_indicator_on)
     k_msleep(110);
     zassert_equal(status_phase_get(), STATUS_FAULT_LOCKED);
     zassert_true(indicator_on);
-    zassert_equal(fault_snapshot().action, STATUS_ACTION_HOLD);
+    zassert_equal(fault_snapshot().action, WATCHDOG_ACTION_HOLD);
     zassert_equal(stops, 0);
 }
 
@@ -690,7 +700,7 @@ ZTEST(acquisition, test_initial_led_output_failure_stops_startup)
     zassert_equal(calls[INPUTS_INIT], 0);
     zassert_equal(stops, 0);
     zassert_equal(reboots, 0);
-    zassert_equal(fault_snapshot().action, STATUS_ACTION_HOLD);
+    zassert_equal(fault_snapshot().action, WATCHDOG_ACTION_HOLD);
     zassert_equal(fault_snapshot().phase, STATUS_INIT);
 }
 

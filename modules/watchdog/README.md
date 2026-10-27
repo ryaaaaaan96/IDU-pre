@@ -6,6 +6,7 @@
 | 接口 | 作用 |
 | --- | --- |
 | `watchdog_init(notify)` | 每次上电只尝试一次，读取硬件配置并启动检查/喂狗 |
+| `watchdog_report_fault(error, description, action)` | 同步通知唯一回调，返回回调结果，不依赖 status |
 | `watchdog_stop(mode)` | MONITOR 停止检查但保留喂狗；ALL 同时停检查和喂狗 |
 | `watchdog_reset()` | 同步停止全部监控和喂狗，调用 sys_reboot 冷复位 |
 | `watchdog_task_register/feed/sleep_forever` | 显式登记、报告进展、退出任务期限监控 |
@@ -59,9 +60,15 @@ GPIO 必须是支持 ISR 安全访问的片上 GPIO。由 main → status_init �
 ## 故障与应用动作
 
 任务超时、检查过期锁存后拒绝后续心跳，不因工作队列恢复或新心跳自动复原。
-故障回调只在系统 workqueue、模块锁外执行，快照只在回调期间有效；初始化失败不重复通知。
+监控故障回调在系统 workqueue、模块锁外执行，快照只在回调期间有效；初始化失败不重复通知。
 新的 GPIO 故障可替换此前的监控故障，用于应用已留驻后硬件喂狗失败的升级处理。
 
-模块只报告事实。应用选择 HOLD 时显式 stop(MONITOR)，停止检查并允许继续喂狗，但不清除诊断；
+主动上报只需错误码、常驻描述和 WATCHDOG_ACTION_CONTINUE / HOLD / RESET，不需要整机阶段。
+它在调用者上下文同步通知（可以来自 ISR），不改变监控锁存故障，也不续期健康结果。
+watchdog_fault_get 仅返回监控诊断，不是主动上报的历史。回调必须非阻塞、ISR 安全且不能递归上报；
+主动上报返回回调结果，内部监控通知忽略回调返回值。软件/硬件监控关闭时仍可上报。
+应用在 status_init 中绑定唯一回调，status 自行判断故障阶段、记录故障并执行产品策略，不设额外转调入口。
+
+应用选择 HOLD 时显式 stop(MONITOR)，停止检查并允许继续喂狗，但不清除诊断；
 选择 RESET 时 stop(ALL) 并调用 watchdog_reset。后者直接调用底层冷复位，不等待系统队列、日志或显示。
 工作队列卡死时，故障通知不能运行；硬件定时器仍会按三倍有效期停喂，由外部芯片兜底复位。

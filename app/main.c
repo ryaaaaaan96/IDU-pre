@@ -1,3 +1,4 @@
+#include <watchdog/watchdog.h>
 #include "acquisition/acquisition.h"
 #include "process/points.h"
 #include "protocol/inc/protocol.h"
@@ -25,7 +26,7 @@ int startup(void)
     }
     if (err) {
         if (status_phase_get() != STATUS_FAULT_LOCKED) {
-            (void)status_report_fault(STATUS_INIT, err, description, STATUS_ACTION_HOLD);
+            (void)watchdog_report_fault(err, description, WATCHDOG_ACTION_HOLD);
         }
         return err;
     }
@@ -42,12 +43,12 @@ int application_cycle(void)
     }
     int err = acquisition_cycle();
     if (err) {
-        return status_report_fault(STATUS_RUNTIME, err, "Input point update failed", STATUS_ACTION_RESET);
+        return watchdog_report_fault(err, "Input point update failed", WATCHDOG_ACTION_RESET);
     }
     protocol_update_status();
     err = protocol_error();
     if (err) {
-        return status_report_fault(STATUS_RUNTIME, err, "Protocol maintenance failed", STATUS_ACTION_RESET);
+        return watchdog_report_fault(err, "Protocol maintenance failed", WATCHDOG_ACTION_RESET);
     }
     return status_progress();
 }

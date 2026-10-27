@@ -178,7 +178,7 @@ ZTEST(task_watchdog, test_explicit_hold_keeps_feed_without_task_fault)
 {
     const struct watchdog_task_config config = {.name = "first", .timeout_ms = 2000};
     zassert_ok(watchdog_task_register(&first, &config));
-    (void)status_report_fault(STATUS_INIT, -EIO, "Input initialization failed", STATUS_ACTION_HOLD);
+    (void)watchdog_report_fault(-EIO, "Input initialization failed", WATCHDOG_ACTION_HOLD);
     atomic_val_t before = atomic_get(&edges);
     k_sleep(K_MSEC(40));
     zassert_equal(atomic_get(&edges) > before, IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL));
@@ -434,7 +434,7 @@ ZTEST(task_watchdog, test_explicit_hold_after_expiry_keeps_feed_without_clearing
         zassert_ok(watchdog_fault_get(&fault));
         zassert_equal(fault.reason, WATCHDOG_FAULT_CHECK);
     }
-    (void)status_report_fault(STATUS_RUNTIME, -EIO, "Explicit diagnostic hold", STATUS_ACTION_HOLD);
+    (void)watchdog_report_fault(-EIO, "Explicit diagnostic hold", WATCHDOG_ACTION_HOLD);
     atomic_val_t before = atomic_get(&edges);
     k_sleep(K_MSEC(40));
     zassert_equal(atomic_get(&edges) > before, IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL));
@@ -481,8 +481,8 @@ static atomic_t hold_result;
 static void report_hold(struct k_timer *timer)
 {
     ARG_UNUSED(timer);
-    atomic_set(&hold_result, status_report_fault(STATUS_RUNTIME, -EIO,
-               "Injected interrupt hold", STATUS_ACTION_HOLD));
+    atomic_set(&hold_result, watchdog_report_fault(-EIO,
+               "Injected interrupt hold", WATCHDOG_ACTION_HOLD));
 }
 static K_TIMER_DEFINE(hold_timer, report_hold, NULL);
 
@@ -512,7 +512,7 @@ ZTEST(task_watchdog, test_explicit_initialization_failure)
     struct status_application_fault fault;
     zassert_equal(status_phase_get(), STATUS_FAULT_LOCKED);
     zassert_ok(status_application_fault_get(&fault));
-    zassert_equal(fault.action, STATUS_ACTION_HOLD);
+    zassert_equal(fault.action, WATCHDOG_ACTION_HOLD);
     zassert_equal(fault.error, -EIO);
     k_sleep(K_MSEC(200));
     zassert_equal(atomic_get(&edges), 0);

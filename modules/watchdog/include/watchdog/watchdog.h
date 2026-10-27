@@ -27,10 +27,18 @@ struct watchdog_task {
     struct watchdog_task *next;
 };
 
+/** @brief 调用方指定的故障处理动作。 */
+typedef enum {
+    WATCHDOG_ACTION_CONTINUE = 0,
+    WATCHDOG_ACTION_HOLD = 1,
+    WATCHDOG_ACTION_RESET = 2,
+} watchdog_action_t;
+
 typedef enum {
     WATCHDOG_FAULT_TASK, /**< 已登记任务超时。 */
     WATCHDOG_FAULT_CHECK, /**< 检查结果或首次检查宽限过期。 */
     WATCHDOG_FAULT_GPIO, /**< 硬件引脚初始化或翻转失败。 */
+    WATCHDOG_FAULT_REPORTED, /**< 其他模块主动上报，附带描述和动作。 */
 } watchdog_fault_reason_t;
 
 /** @brief 模块锁存的故障；非任务故障的 task.name 为空。 */
@@ -38,11 +46,17 @@ struct watchdog_fault {
     watchdog_fault_reason_t reason;
     int error;
     int64_t occurred_ms;
+    watchdog_action_t action; /**< 仅主动上报有效。 */
+    const char *description; /**< 仅主动上报有效，调用方保证字符串常驻。 */
     struct watchdog_task_snapshot task;
 };
 
-/** @brief 故障通知只在系统 workqueue 中调用；snapshot 仅在回调期间有效。 */
-typedef void (*watchdog_fault_cb_t)(const struct watchdog_fault *snapshot);
+/**
+ * @brief 故障快照仅在回调期间有效，调用时不持有模块锁。
+ * @note 监控故障在系统 workqueue 通知；主动上报在调用者上下文同步通知，可能来自 ISR。
+ * @note 回调须非阻塞、ISR 安全；不得递归调用 watchdog_report_fault。
+ */
+typedef int (*watchdog_fault_cb_t)(const struct watchdog_fault *snapshot);
 
 typedef enum {
     WATCHDOG_STOP_MONITOR, /**< 关闭检查，保留硬件喂狗，用于应用显式留驻。 */
@@ -55,6 +69,17 @@ typedef enum {
  * @note 在线程中串行调用，notify 必须非空；初始化错误直接返回，不回调。
  */
 int watchdog_init(watchdog_fault_cb_t notify);
+/**
+ * @brief 同步上报业务故障，通知初始化时绑定的唯一回调；线程和 ISR 均可调用。
+ * @note 不修改监控锁存故障或健康有效期；停止业务和复位策略由回调负责。
+ * @note description 必须非空且常驻；故障阶段与处理策略由接收者判断。
+ * @retval 0 回调处理成功。
+ * @retval -EINVAL 参数无效。
+ * @retval -EACCES 尚未绑定回调。
+ * @return 返回回调处理结果；复位通常不返回。
+ */
+int watchdog_report_fault(int error,
+                          const char *description, watchdog_action_t action);
 /** @brief 非阻塞停止，可在 ISR 调用；不能重新启用任务监控。 */
 void watchdog_stop(watchdog_stop_mode_t mode);
 /** @brief 同步停喂并调用底层冷复位；不等待工作队列或日志。需 CONFIG_REBOOT。 */

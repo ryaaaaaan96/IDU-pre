@@ -9,6 +9,7 @@
 #define STATUS_H
 
 #include <stdint.h>
+#include <watchdog/watchdog.h>
 
 /* 整机状态与故障接口。 */
 
@@ -25,18 +26,11 @@ typedef enum {
     STATUS_INIT,
     STATUS_RUNTIME,
 } status_fault_phase_t;
-/** @brief 调用方指定的故障处理动作。 */
-typedef enum {
-    STATUS_ACTION_CONTINUE = 0,
-    STATUS_ACTION_HOLD = 1,
-    STATUS_ACTION_RESET = 2,
-} status_action_t;
-
 /** @brief 整机最近一次故障的一致快照。 */
 struct status_application_fault {
     const char *description; /**< 最近一次故障的常驻描述字符串。 */
     status_fault_phase_t phase; /**< 最近一次故障发生于初始化或运行阶段。 */
-    status_action_t action; /**< 最近一次故障请求的处理动作，不代表业务是否已停止。 */
+    watchdog_action_t action; /**< 最近一次故障请求的处理动作，不代表业务是否已停止。 */
     int error; /**< 最近一次故障的错误码。 */
     int64_t occurred_ms; /**< 最近一次故障发生时的系统运行时间，单位为毫秒。 */
 };
@@ -96,23 +90,5 @@ int status_progress(void);
 
 /** @brief 读取当前阶段，可在线程或 ISR 中调用。 */
 status_phase_t status_phase_get(void);
-
-/**
- * @brief 记录本次故障并执行调用方指定的动作。
- * @param[in] phase 初始化或运行阶段。
- * @param[in] error 非零错误码，通常为负 errno。
- * @param[in] description 非空的常驻描述字符串；记录时保留指针，不复制或格式化。
- * @param[in] action 记录继续、停止业务留驻或请求复位。
- * @retval 0 仅记录后继续。
- * @retval -EINVAL 参数无效，或初始化阶段选择继续。
- * @retval -EACCES 状态尚未初始化。
- * @return 终止动作在复位未接管时返回传入的错误码。
- * @note 可在 ISR 中调用；开启日志时要求 LOG_MODE_DEFERRED、关闭 LOG_BLOCK_IN_THREAD，不等待日志后端。
- * @note 故障门控和 RESET 停喂/复位同步执行，不等待工作队列；LED 更新延后。
- * @note 不按描述字符串选择策略，不隐式转换调试动作。
- * @note 每次更新故障快照；已停止业务不会因后续 CONTINUE 恢复。
- */
-int status_report_fault(status_fault_phase_t phase, int error,
-                        const char *description, status_action_t action);
 
 #endif

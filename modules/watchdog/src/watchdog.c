@@ -180,6 +180,29 @@ int watchdog_init(watchdog_fault_cb_t notify)
     return 0;
 }
 
+/* 主动上报独立于任务故障锁存，不能使 CONTINUE 停止硬件喂狗。 */
+int watchdog_report_fault(int error,
+                          const char *description, watchdog_action_t action)
+{
+    if (!error ||
+        !description || !description[0] || (unsigned int)action > WATCHDOG_ACTION_RESET) {
+        return -EINVAL;
+    }
+    k_spinlock_key_t key = k_spin_lock(&lock);
+    watchdog_fault_cb_t notify = monitor.notify;
+    k_spin_unlock(&lock, key);
+    if (!notify) { return -EACCES; }
+
+    const struct watchdog_fault fault = {
+        .reason = WATCHDOG_FAULT_REPORTED,
+        .error = error,
+        .occurred_ms = k_uptime_get(),
+        .action = action,
+        .description = description,
+    };
+    return notify(&fault);
+}
+
 void watchdog_stop(watchdog_stop_mode_t mode)
 {
     if (mode != WATCHDOG_STOP_MONITOR && mode != WATCHDOG_STOP_ALL) { return; }

@@ -69,3 +69,13 @@ LOG_MODE_DEFERRED 和关闭 LOG_BLOCK_IN_THREAD 为 status 的构建要求。
 监控故障通知改在 watchdog 的系统工作队列执行，硬件定时器在三倍检查周期有效期过后独立停喂。
 显式 status_report_fault(RESET) 仍同步调用 watchdog_reset，底层 sys_reboot 由 watchdog 持有，不等待工作队列。
 HOLD 显式关闭检查并保留喂狗；队列恢复不得清除已锁存监控故障。status 不再另设硬件错误轮询工作。
+
+## 2026-10-27：故障上报统一归 watchdog
+
+其他模块通过 watchdog_report_fault(error, description, action) 上报，移除公开 status_report_fault。
+动作枚举归 watchdog，调用方不依赖 status，也不传整机阶段；status 根据自身状态判断阶段。
+status_init 仍绑定唯一回调并启动 watchdog，不引入多订阅者或 main 故障入口。
+status 的一个私有回调直接完成记录、状态更新和故障动作，不另设转调函数。
+主动上报在调用者上下文同步通知，允许 ISR；回调返回值交给主动上报者，内部监控通知忽略返回值。
+主动上报不覆盖监控锁存诊断、不改变健康有效期；CONTINUE 不停喂，终止后的 CONTINUE 不恢复业务。
+此项替代前文调用点直接依赖 status 上报、显式提供阶段的接口约定。

@@ -30,7 +30,8 @@ flowchart TD
 过期结果不能在恢复检查时重新续期；HOLD 显式关闭检查后可保留喂狗，但诊断不清除。
 
 status 只负责整机状态、产品故障动作、LED 与镜像确认。它不轮询硬件错误、不解析引脚、不调用 sys_reboot；
-通过故障回调选择 HOLD 或调用 watchdog_reset。watchdog 不依赖产品的协议/IAP 接口。
+通过故障回调选择 HOLD 或调用 watchdog_reset。其他模块统一调用 watchdog_report_fault(error, description, action)，
+无需引用 status 或指定整机阶段；主动上报同步回调，内部监控故障仍在 workqueue 通知。watchdog 不依赖产品的协议/IAP 接口。
 
 本轮测试覆盖四种开关、三倍有效期、首次检查宽限、队列阻塞恢复、迟到心跳、HOLD、GPIO 故障和直接复位。
 结果见[验收记录](../.scratch/watchdog-workqueue/validation.md)。主机/native 测试不替代实板波形和复位链验证。
