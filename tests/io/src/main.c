@@ -6,6 +6,7 @@
 static struct gpio_driver_data gpio_data;
 static const struct gpio_driver_config gpio_config = {.port_pin_mask = UINT32_MAX};
 static atomic_t toggle_error, configure_error, toggles, configurations, notifications;
+static atomic_t query_during_toggle, toggle_queries;
 static gpio_flags_t output_flags;
 static bool callback_in_isr;
 static struct watchdog_fault reported;
@@ -21,6 +22,12 @@ static int configure(const struct device *dev, gpio_pin_t pin, gpio_flags_t flag
 static int toggle(const struct device *dev, gpio_port_pins_t pins)
 {
     ARG_UNUSED(dev); ARG_UNUSED(pins);
+    if (atomic_get(&query_during_toggle)) {
+        struct watchdog_fault fault;
+        zassert_true(k_is_in_isr());
+        zassert_equal(watchdog_fault_get(&fault), -ENOENT);
+        atomic_inc(&toggle_queries);
+    }
     if (atomic_get(&toggle_error)) { return atomic_get(&toggle_error); }
     atomic_inc(&toggles);
     return 0;
@@ -70,6 +77,7 @@ ZTEST(io_modules, test_gpio_error_latches_and_notifies_from_workqueue)
     zassert_equal(atomic_get(&notifications), 1);
     zassert_false(callback_in_isr);
     atomic_clear(&toggle_error);
+    watchdog_stop(WATCHDOG_STOP_MONITOR); /* HOLD 不能恢复失败的喂狗 GPIO。 */
     k_sleep(K_MSEC(30));
     zassert_equal(atomic_get(&toggles), 0);
     zassert_equal(atomic_get(&notifications), 1);
@@ -92,6 +100,17 @@ ZTEST(io_modules, test_initialization_error_is_returned_without_retry)
     struct watchdog_fault fault;
     zassert_ok(watchdog_fault_get(&fault));
     zassert_equal(fault.error, -EIO);
+}
+
+/* GPIO 驱动内回调诊断查询，验证定时器未持有模块共享锁。 */
+ZTEST(io_modules, test_timer_does_not_hold_monitor_lock)
+{
+    atomic_set(&query_during_toggle, 1);
+    zassert_ok(watchdog_init(notify));
+    k_sleep(K_MSEC(40));
+    watchdog_stop(WATCHDOG_STOP_ALL);
+    zassert_true(atomic_get(&toggle_queries) > 0);
+    zassert_equal(atomic_get(&toggle_queries), atomic_get(&toggles));
 }
 
 ZTEST(io_modules, test_invalid_arguments_do_not_start_module)
