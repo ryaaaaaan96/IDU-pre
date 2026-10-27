@@ -1,0 +1,197 @@
+{
+  "baudrate": 115200,
+  "north_unit": 16,
+  "reply_delay_ms": 3,
+  "frame_gap_ms": 4,
+  "idle_guard_ms": 80,
+  "timeout_s": 5,
+  "stop_on_failure": true,
+  "slaves": {
+    "1": {
+      "online": true,
+      "holding": {
+        "30459": 1,
+        "40000": 100,
+        "40001": 0,
+        "40002": 0
+      },
+      "input": {
+        "8150": 257,
+        "8151": 256,
+        "8152": 21930,
+        "8163": 100,
+        "8164": 200
+      }
+    },
+    "2": {
+      "online": true,
+      "holding": {
+        "30459": 2,
+        "40000": 100,
+        "40001": 0,
+        "40002": 0
+      },
+      "input": {
+        "8150": 257,
+        "8151": 256,
+        "8152": 21930,
+        "8163": 100,
+        "8164": 200
+      }
+    }
+  },
+  "steps": [
+    {
+      "name": "Initial discovery and periodic DI polling",
+      "op": "poll",
+      "unit": 1,
+      "fc": 4,
+      "address": 8152,
+      "seconds": 90,
+      "min_count": 1
+    },
+    {
+      "name": "AI periodic polling",
+      "op": "poll",
+      "unit": 1,
+      "fc": 4,
+      "address": 8163,
+      "seconds": 15,
+      "min_count": 1
+    },
+    {
+      "name": "Read collected DI cache",
+      "op": "read",
+      "fc": 4,
+      "address": 10000,
+      "values": [
+        21930
+      ]
+    },
+    {
+      "name": "Read collected AI cache",
+      "op": "read",
+      "fc": 4,
+      "address": 10001,
+      "values": [
+        100,
+        200
+      ]
+    },
+    {
+      "name": "Single register forwarding",
+      "op": "write",
+      "fc": 6,
+      "address": 31500,
+      "values": [
+        321
+      ],
+      "south_address": 40000,
+      "south_values": [
+        321
+      ]
+    },
+    {
+      "name": "Read forwarded parameter cache",
+      "op": "read",
+      "fc": 3,
+      "address": 31500,
+      "values": [
+        321
+      ]
+    },
+    {
+      "name": "Signed low-word-first forwarding",
+      "op": "write",
+      "fc": 16,
+      "address": 31501,
+      "values": [
+        64302,
+        65535
+      ],
+      "south_address": 40001,
+      "south_values": [
+        64302,
+        65535
+      ]
+    },
+    {
+      "name": "Read signed parameter cache",
+      "op": "read",
+      "fc": 3,
+      "address": 31501,
+      "values": [
+        64302,
+        65535
+      ]
+    },
+    {
+      "name": "Disconnect slave",
+      "op": "online",
+      "unit": 1,
+      "value": false
+    },
+    {
+      "name": "Allow offline detection",
+      "op": "wait",
+      "seconds": 45
+    },
+    {
+      "name": "Offline discovery probes",
+      "op": "poll",
+      "unit": 1,
+      "fc": 4,
+      "address": 8150,
+      "seconds": 40,
+      "min_count": 1
+    },
+    {
+      "name": "Offline write fails without southbound write",
+      "op": "write",
+      "fc": 6,
+      "address": 31500,
+      "values": [
+        322
+      ],
+      "exception": 11,
+      "no_south_write": true
+    },
+    {
+      "name": "Reconnect slave",
+      "op": "online",
+      "unit": 1,
+      "value": true
+    },
+    {
+      "name": "Collection resumes after rediscovery",
+      "op": "poll",
+      "unit": 1,
+      "fc": 4,
+      "address": 8152,
+      "seconds": 50,
+      "min_count": 1
+    },
+    {
+      "name": "Write after reconnect",
+      "op": "write",
+      "fc": 6,
+      "address": 31500,
+      "values": [
+        323
+      ],
+      "south_address": 40000,
+      "south_values": [
+        323
+      ]
+    },
+    {
+      "name": "Read parameter after reconnect",
+      "op": "read",
+      "fc": 3,
+      "address": 31500,
+      "values": [
+        323
+      ]
+    }
+  ]
+}

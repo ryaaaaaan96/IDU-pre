@@ -20,6 +20,7 @@
 | 查询协议和存储语义 | [点表、寄存器与参数事务](point-tables.md) | 点值/质量、扩展寄存器、NVS/下发恢复、真实采集口 |
 | 使用模块 | [模块接口](../modules/README.md)、[DP](../modules/dataprocess/README.md) | 依赖、配置、API 单位、同步/异步与事务约束 |
 | 扩展逻辑通信端口 | [vport](../modules/vport/README.md) | 回调端口、CO/TR 收发入口、来源保持与缓冲区所有权 |
+| 自动进行同线回环测试 | [Python 回环脚本](forward-loopback.md) | 可配置南向模拟、北向下发、离线/恢复及结果记录 |
 | 联调北向到南向下发 | [参数下发测试](north-south-test.md) | 10 秒采集周期、模拟从站配置、单字/双字映射及 RTU 测试帧 |
 | 查看现有端口接入 | [通信端口接入](communication-ports.md) | 同线 RS485 采集/转发、回调绑定、完整报文分流及恢复 |
 | 迁移参考平台接口 | [参考平台对照](reference-platform.md) | 原库证据、79/89 名称覆盖、差异、const/RAM 分工 |
