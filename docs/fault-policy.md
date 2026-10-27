@@ -23,7 +23,9 @@ status_application_fault_get 返回一致的最近故障快照；fault.action �
 
 ## Watchdog 与产品处理
 
-main 调用 status_init，再调用统一 watchdog_init；模块内部读取设备树并启动硬件喂狗及工作队列检查。
+main 只调用 status_init；status 内部通过 watchdog_init(status_watchdog_fault) 绑定唯一故障回调并启动监控，然后初始化 LED。
+watchdog 内部读取设备树并启动硬件喂狗及工作队列检查，不引用 status，也不提供多订阅者注册表。
+status 回调集中选择产品故障动作，业务调用点继续通过 status_report_fault 上报；main 不增加故障处理入口。
 引脚和硬件周期来自 app,gpio-watchdog 节点，软件周期来自 WATCHDOG_CHECK_INTERVAL_MS。
 首次检查宽限和健康结果有效期固定为三倍软件周期。只有完整检查通过才能续期，任务心跳不续期。
 

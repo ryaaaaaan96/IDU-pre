@@ -68,11 +68,12 @@ void status_update_degradation(uint16_t offline, uint16_t initializing, int stor
 struct status_degradation status_degradation_get(void);
 
 /**
- * @brief 初始化状态单例、LED 和看门狗。
+ * @brief 初始化状态单例，绑定唯一故障回调并启动看门狗，然后初始化 LED。
  * @retval 0 指示灯及所需看门狗初始化成功。
  * @retval -EALREADY 本次上电已调用过初始化。
  * @return 其他错误码表示初始化故障；复位策略可能不返回。
  * @note 仅由启动线程调用；软件监控与外部喂狗分别由 WATCHDOG_SOFTWARE / WATCHDOG_EXTERNAL 控制。
+ * @note main 只调用本接口，不单独初始化看门狗；watchdog 不依赖 status。
  * @note 所有启动服务成功后，调用方须设置 STATUS_RUN。
  * @note 指示灯初始化失败必须终止启动，运行期 LED 继续策略对此不生效。
  */

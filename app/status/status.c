@@ -29,27 +29,7 @@ static struct {
 #endif
 } application;
 
-/* ==================== 看门狗配置与故障策略 ==================== */
-
-static void watchdog_fault(const struct watchdog_fault *fault)
-{
-    status_phase_t current = status_phase_get();
-    /* 已显式留驻后只接受新的硬件故障，不用旧监控通知覆盖产品故障。 */
-    if (current == STATUS_FAULT_LOCKED && fault->reason != WATCHDOG_FAULT_GPIO) { return; }
-    status_fault_phase_t phase = current == STATUS_STARTING ? STATUS_INIT : STATUS_RUNTIME;
-    const char *description;
-    switch (fault->reason) {
-    case WATCHDOG_FAULT_TASK: description = "Task heartbeat timed out"; break;
-    case WATCHDOG_FAULT_CHECK: description = "Watchdog health check expired"; break;
-    case WATCHDOG_FAULT_GPIO: description = "Watchdog feed output failed"; break;
-    default: return;
-    }
-    status_action_t action = phase == STATUS_INIT && fault->reason != WATCHDOG_FAULT_GPIO ?
-                             STATUS_ACTION_HOLD : STATUS_ACTION_RESET;
-    (void)status_report_fault(phase, fault->error, description, action);
-}
-
-/* ==================== 整机状态、故障与健康检查 ==================== */
+/* ==================== 状态维护与诊断查询 ==================== */
 
 status_phase_t status_phase_get(void)
 {
@@ -88,6 +68,22 @@ int status_application_fault_get(struct status_application_fault *snapshot)
     return err;
 }
 
+void status_set_phase(status_phase_t phase)
+{
+    bool start = false;
+    k_spinlock_key_t key = k_spin_lock(&status_runtime.lock);
+    if (status_runtime.phase == STATUS_STARTING && phase == STATUS_RUN) {
+        status_runtime.phase = STATUS_RUN;
+        start = true;
+    }
+    k_spin_unlock(&status_runtime.lock, key);
+    if (start) {
+        status_led_start();
+    }
+}
+
+/* ==================== 故障记录与产品处理动作 ==================== */
+
 int status_report_fault(status_fault_phase_t phase, int error,
                         const char *description, status_action_t action)
 {
@@ -111,23 +107,43 @@ int status_report_fault(status_fault_phase_t phase, int error,
         watchdog_stop(action == STATUS_ACTION_RESET ? WATCHDOG_STOP_ALL : WATCHDOG_STOP_MONITOR);
     }
     k_spin_unlock(&status_runtime.lock, key);
-    /* 关键动作先执行，不依赖日志后端、LED 工作或系统队列获得调度。 */
-    if (action != STATUS_ACTION_CONTINUE) {
-        protocol_stop();
-#ifdef CONFIG_IDU_IAPV3
-        iap_stop();
-#endif
+    /* CONTINUE 只记录，不解除此前已经锁存的状态或业务停止标志。 */
+    if (action == STATUS_ACTION_CONTINUE) {
+        LOG_ERR("%s: phase %d error %d action %d", description, phase, error, action);
+        return 0;
     }
 
-    /* 使用 Zephyr 延后、非阻塞日志，只提交记录，不等待日志后端。 */
+    /* 关键动作不等待工作队列；RESET 已在锁内停喂，日志也不阻塞。 */
+    protocol_stop();
+#ifdef CONFIG_IDU_IAPV3
+    iap_stop();
+#endif
     LOG_ERR("%s: phase %d error %d action %d", description, phase, error, action);
     if (action == STATUS_ACTION_RESET) { watchdog_reset(); }
 
     /* RESET 正常不返回；测试复位钩子返回时仍允许更新现场显示。 */
-    if (action != STATUS_ACTION_CONTINUE) {
-        status_led_refresh();
+    status_led_refresh();
+    return error;
+}
+
+/* ==================== 看门狗故障回调与统一初始化 ==================== */
+
+static void status_watchdog_fault(const struct watchdog_fault *fault)
+{
+    status_phase_t current = status_phase_get();
+    /* 已显式留驻后只接受新的硬件故障，不用旧监控通知覆盖产品故障。 */
+    if (current == STATUS_FAULT_LOCKED && fault->reason != WATCHDOG_FAULT_GPIO) { return; }
+    status_fault_phase_t phase = current == STATUS_STARTING ? STATUS_INIT : STATUS_RUNTIME;
+    const char *description;
+    switch (fault->reason) {
+    case WATCHDOG_FAULT_TASK: description = "Task heartbeat timed out"; break;
+    case WATCHDOG_FAULT_CHECK: description = "Watchdog health check expired"; break;
+    case WATCHDOG_FAULT_GPIO: description = "Watchdog feed output failed"; break;
+    default: return;
     }
-    return action == STATUS_ACTION_CONTINUE ? 0 : error;
+    status_action_t action = phase == STATUS_INIT && fault->reason != WATCHDOG_FAULT_GPIO ?
+                             STATUS_ACTION_HOLD : STATUS_ACTION_RESET;
+    (void)status_report_fault(phase, fault->error, description, action);
 }
 
 int status_init(void)
@@ -140,7 +156,7 @@ int status_init(void)
     status_runtime.phase = STATUS_STARTING;
     k_spin_unlock(&status_runtime.lock, key);
 
-    int err = watchdog_init(watchdog_fault);
+    int err = watchdog_init(status_watchdog_fault);
     if (err) {
         return status_report_fault(STATUS_INIT, err, "Watchdog initialization failed", STATUS_ACTION_HOLD);
     }
@@ -151,19 +167,7 @@ int status_init(void)
     return 0;
 }
 
-void status_set_phase(status_phase_t phase)
-{
-    bool start = false;
-    k_spinlock_key_t key = k_spin_lock(&status_runtime.lock);
-    if (status_runtime.phase == STATUS_STARTING && phase == STATUS_RUN) {
-        status_runtime.phase = STATUS_RUN;
-        start = true;
-    }
-    k_spin_unlock(&status_runtime.lock, key);
-    if (start) {
-        status_led_start();
-    }
-}
+/* ==================== 试运行镜像健康确认 ==================== */
 
 int status_progress(void)
 {
