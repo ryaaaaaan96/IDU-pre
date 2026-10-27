@@ -69,3 +69,10 @@ IAP 保留参数保存失败时阻止升级提交/重启的约束。
 按用户要求删除 device_binding.c/.h 及 protocol_bind_devices 产品转换接口。
 当前 data_device_cfg 只在 process_runtime.c 内定义，包含设备 ID 和 process 表 ID；同文件直接生成 DP 模型并登记。
 不把旧采集校验和七槽目录转换并入当前运行入口。停用通信测试直接使用已有目录装配函数，移除仅验证已删除转换接口的用例。
+
+### 编译期固定产品模型
+
+用户要求模型在编译期固定，删除应用侧 dp_config/EBUSY 判断。
+本地测点表和 const protocol_local_model 在 tables/process.c 中共同定义，用 ARRAY_SIZE 自动计算测点数。
+process_runtime.c 仅传入只读模型指针与数量，不运行时查表、不写模型数组，不保留 data_device_cfg。
+重复登记由 DP 统一拒绝；模型描述为只读常量，实时数据仍由 DP 独立分配和更新。

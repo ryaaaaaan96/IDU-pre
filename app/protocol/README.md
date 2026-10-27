@@ -4,11 +4,10 @@
 
 按本轮优化要求，产品只编译 `process_runtime.c` 和 `tables/process.c`。
 当前使用 `struct dp_model_cfg`：设备 ID、测点定义指针、测点数量。
-应用查找 process 表后调用 `dp_register_models(models, ARRAY_SIZE(models))`，DP 不接收产品的采集/转发装配配置。
-模型数组和测点定义由应用持有，登记后只读且常驻；多个设备可以共用测点定义，实时值按设备 ID 分开。
-当前不再使用 `DEV_TABLE_S`、七个协议槽、设备 getter 或 `dp_register_devices()`。
-`data_device_cfg` 仅在 `process_runtime.c` 内定义，只有设备 ID 与 process 表 ID。
-同一文件遍历产品声明、查找测点表、生成模型并一次登记；不单设 binding 文件或通用转换接口。
+`tables/process.c` 与测点表一起定义 `const protocol_local_model`，表指针和 `ARRAY_SIZE` 数量均在编译期固定。
+`process_runtime.c` 直接登记该只读描述，不再运行时查表、生成模型或重复判断 `dp_config()`。
+模型和测点定义常驻只读存储；重复登记/初始化由 DP 统一拒绝。
+当前不再使用 `data_device_cfg`、可写 models 数组、七槽设备目录或 getter。
 模型初始化不调用 `dp_reference_init()`。
 启动顺序：本地点表注册 → `dp_init()` → `dp_process_init()`。
 当前不创建 DP 样本/业务线程；本地 `dp_set_sig_value()` 在调用线程中同步完成处理。

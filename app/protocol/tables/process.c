@@ -407,6 +407,13 @@ static const DM_SIG_CFG_S remote_process_rows[] = {
     },
 };
 
+/* 与测点表在同一编译单元，指针及数量均为编译期常量。 */
+const struct dp_model_cfg protocol_local_model = {
+    .device_id = DEVICE_LOCAL,
+    .points = local_process_rows,
+    .point_count = ARRAY_SIZE(local_process_rows),
+};
+
 static const STRUCT_SECTION_ITERABLE(dp_registered_table, local_process_table) = {
     .id = TABLE_LOCAL_PROCESS, .type = PRO_DATA_PROCESS,
     .rows = local_process_rows, .count = ARRAY_SIZE(local_process_rows),

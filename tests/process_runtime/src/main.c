@@ -14,6 +14,10 @@ ZTEST(process_runtime, test_local_process_without_communication)
     zassert_equal(dp_register_models(dp_config()->models, 1), -EBUSY);
     zassert_equal(dp_config()->model_count, 1);
     zassert_equal(dp_config()->models[0].device_id, DEVICE_LOCAL);
+    const struct dp_model_cfg *models = dp_config()->models;
+    zassert_equal(protocol_register_point_tables(), -EBUSY);
+    zassert_equal_ptr(dp_config()->models, models);
+    zassert_equal(models[0].device_id, DEVICE_LOCAL);
     zassert_equal(dp_config()->device_count, 0);
     zassert_equal(dp_config()->collect_count, 0);
     DM_SIG_DATA_S parameters;

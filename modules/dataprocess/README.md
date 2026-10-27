@@ -19,7 +19,7 @@ transmit 提供。数据池数值采用主机字节序、低字在前。
 模型初始化不要求启用 `DP_REFERENCE_TABLES`，纯模型测试关闭该选项且不启用 collect/transmit。
 模型登记与参考目录回调、原生配置提供者互斥，初始化后不可重新登记。
 `dp_register_devices()` 与 `dp_data_device_bind()` 已删除，不提供别名。
-产品装配 `data_device_cfg` 及模型生成逻辑集中在应用 `protocol/process_runtime.c`，不定义于 DP 模块。
+产品在 `tables/process.c` 定义编译期只读模型，`protocol/process_runtime.c` 直接登记；不再保留 `data_device_cfg` 或运行时模型生成逻辑。
 参考目录处理暂留供停用通信实现及其测试使用，当前产品不通过该路径初始化。
 
 点值缓冲区在 `dp_init_config()` 中按实际总字数通过 Zephyr `k_malloc()` 一次申请，
