@@ -302,7 +302,7 @@ cd /home/ryan/Documents/zephyrproject
 
 ```bash
 ./scripts/flash.sh --host 172.30.96.1 --port 2331
-./scripts/flash.sh --host 172.30.96.1 --hex build/hex/IDU-pre-mcuboot-smp/IDU-pre-factory.hex
+./scripts/flash.sh --host 172.30.96.1 --hex build/hex/IDU-pre-mcuboot-iapv3/IDU-pre-factory.hex
 ./scripts/flash.sh --help
 ```
 

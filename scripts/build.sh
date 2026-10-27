@@ -6,8 +6,8 @@ app_dir="$(cd -- "$script_dir/.." && pwd)"
 workspace_dir="$(cd -- "$app_dir/../.." && pwd)"
 
 if [[ "${1:-}" == --help || "${1:-}" == -h ]]; then
-    echo "Usage: $0 [idu_pre] [--mcuboot] [--iapv3 | --smp-uart | --no-upload] [options...]"
-    echo "All builds use MCUboot; IAPv3 is the default upload protocol."
+    echo "Usage: $0 [idu_pre] [--mcuboot] [--iapv3 | --no-upload] [options...]"
+    echo "All builds use MCUboot; IAPv3 is the only upload protocol."
     exit 0
 fi
 

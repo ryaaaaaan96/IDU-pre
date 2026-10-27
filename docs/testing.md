@@ -8,6 +8,25 @@ AIDC 产品代码、专用测试及导入工具已移除；下方日期章节保
 其中的旧构建命令和文件路径不再作为当前操作入口。
 当前构建入口为 `./applications/IDU-pre/scripts/build.sh`（从工作区根目录运行）；旧记录中的根目录 `build.sh` 已移入 `scripts/`。
 
+## 2026-10-27 移除 SMP 上传入口
+
+用户要求删除 SMP 上传配置。`conf/smp-uart.conf`、`boards/smp-uart.overlay`
+和 `--smp-uart` 已删除，构建只剩默认 IAPv3 与 `--no-upload`；IAPv3 成为唯一
+接收器，USART0 恢复为普通 Shell/日志口。决策记录见
+[ADR 0013](adr/0013-iapv3-only-upload.md)。
+
+- `tests/test_mcuboot_image.py` 6 项、`tests/test_build_configuration.py` 8 项通过。
+- 默认 IAPv3 构建、导出、验签通过：应用 Flash 153,696 B / RAM 120,060 B，
+  MCUboot Flash 36,836 B / RAM 18,096 B，SGZ 154,816 B。
+- `--no-upload` 构建、导出、验签通过：应用 Flash 132,120 B / RAM 91,204 B。
+- `tests/test_mcuboot_artifacts.py` 对两个导出目录均通过（签名、HEX/工厂镜像范围、
+  5 项拒绝用例）。
+- 两次构建无编译警告，`git diff --check` 通过。
+
+`build/IDU-pre/mcuboot` 目录残留旧布局的 CMake 缓存（引用已删除的
+`boards/mcuboot-boot.overlay`），本次以 `--pristine always` 重建；未修改依赖。
+未执行实板升级、串口交互或时序验证。
+
 ## 2026-10-24 采集决策集中与公共 Modbus 支持
 
 `modules/modbus` 独立提供无分配 RTU 校验/编解码、公共串口接入及构建期兼容；
@@ -206,10 +225,10 @@ Flash 设备和起始地址，不包含 DP 私有头文件。现有格式的记�
 IDU_LEGACY_IAP_DIR=/path/to/io-interface-board/code/APP/Project/Iapv3 \
   bash applications/IDU-pre/tests/iap/run.sh
 
-# 构建 SMP 固件后检查导出产物
+# 构建 IAPv3 固件后检查导出产物
 source .venv/bin/activate
 python applications/IDU-pre/tests/test_mcuboot_artifacts.py \
-  build/hex/IDU-pre-mcuboot-smp
+  build/hex/IDU-pre-mcuboot-iapv3
 ```
 
 默认测试不需要旧源码。旧压缩器和外部 SGZ 样本相关测试在未提供输入时明确跳过；

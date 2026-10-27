@@ -114,13 +114,10 @@ def main():
                         help="Append an application devicetree overlay (repeatable)")
     parser.add_argument("--pristine", choices=("auto", "always"), default="auto")
     upload = parser.add_mutually_exclusive_group()
-    upload.add_argument("--smp-uart", action="store_true", help="Enable SMP over USART0")
     upload.add_argument("--iapv3", action="store_true", help="IAPv3 RS485 AES/SGZ transport (default)")
     upload.add_argument("--no-upload", action="store_true", help="Build without an upload receiver")
     args = parser.parse_args()
-    if args.iapv3 and args.smp_uart:
-        parser.error("--iapv3 is an upload protocol and an alternative to --smp-uart")
-    args.iapv3 = args.iapv3 or not (args.smp_uart or args.no_upload)
+    args.iapv3 = not args.no_upload
     key = args.key.expanduser().resolve() if args.key else WORKSPACE / "build/keys/IDU-pre-dev.pem"
     if args.key and not key.is_file():
         parser.error("--key must refer to an existing signing key")
@@ -133,17 +130,13 @@ def main():
             os.umask(old_mask)
     if not args.key:
         print(f"Using local development key: {key}; retain it for subsequent updates.", flush=True)
-    suffix = ("-smp" if args.smp_uart else "") + ("-iapv3" if args.iapv3 else "")
+    suffix = "-iapv3" if args.iapv3 else ""
     build = WORKSPACE / f"build/IDU-pre/mcuboot{suffix}"
     conf = [APP / "bootloader/app.conf"]
-    if args.smp_uart:
-        conf.append(APP / "conf/smp-uart.conf")
     overlays = [APP / "bootloader/app.overlay"]
     if args.iapv3:
         conf.append(APP / "conf/iapv3.conf")
         overlays.append(APP / "boards/iapv3.overlay")
-    if args.smp_uart:
-        overlays.append(APP / "boards/smp-uart.overlay")
     conf.extend(path.expanduser().resolve() for path in args.extra_conf)
     overlays.extend(path.expanduser().resolve() for path in args.extra_overlay)
     command = ["west", "build", "-p", args.pristine, "--sysbuild", "-b", "idu_pre", APP,

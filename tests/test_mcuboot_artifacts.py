@@ -67,6 +67,6 @@ def check(folder):
 
 
 if __name__ == "__main__":
-    folders = [Path(p) for p in sys.argv[1:]] or [ROOT / "build/hex/IDU-pre-mcuboot-smp"]
+    folders = [Path(p) for p in sys.argv[1:]] or [ROOT / "build/hex/IDU-pre-mcuboot-iapv3"]
     for folder in folders:
         check(folder.resolve())

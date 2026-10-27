@@ -1,3 +1,0 @@
-/ {
-    chosen { zephyr,uart-mcumgr = &usart0; };
-};

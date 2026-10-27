@@ -81,8 +81,7 @@ class ImageExport(unittest.TestCase):
         key = self.root / "key.pem"
         key.touch()
         for flags, suffix, iap in (([], "-iapv3", True),
-                                   (["--no-upload"], "", False),
-                                   (["--smp-uart"], "-smp", False)):
+                                   (["--no-upload"], "", False)):
             with self.subTest(flags=flags), patch.object(builder, "run") as run, \
                     patch.object(builder, "export") as export, \
                     patch("sys.argv", ["build_mcuboot", "--key", str(key), *flags]):

@@ -80,6 +80,7 @@ config IDU_IAPV3
     depends on BOOTLOADER_MCUBOOT && !MCUMGR_GRP_IMG
     depends on IAP_CONFIGURED && IAP_REBOOT_DP_PARAMS && TR_MODBUS_ADAPTER
     help
-      Alternative to SMP image upload on the fitted MV-IO RS485 port.
-      Accepts a single ARM QuickLZ level-3 SGZ containing a signed MCUboot
-      ECDSA-P256 image. Delta and downstream-device upgrades are unsupported.
+      Only firmware upload receiver: legacy Modbus AES/SGZ on the fitted
+      MV-IO RS485 port. Accepts a single ARM QuickLZ level-3 SGZ containing
+      a signed MCUboot ECDSA-P256 image. Delta and downstream-device
+      upgrades are unsupported.

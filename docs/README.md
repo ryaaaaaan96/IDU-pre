@@ -6,7 +6,7 @@
 
 | 任务 | 文档 | 内容边界 |
 | --- | --- | --- |
-| 构建或升级固件 | [构建、分区与升级](build-and-upgrade.md) | 配置选择、分区、产物、签名密钥、MCUboot/SMP/IAPv3 |
+| 构建或升级固件 | [构建、分区与升级](build-and-upgrade.md) | 配置选择、分区、产物、签名密钥、MCUboot/IAPv3 |
 | 配置代码跳转 | [VS Code 与 clangd](editor.md) | Sysbuild 应用编译数据库、后台索引及编辑器参数 |
 | 调整启动程序配置 | [MCUboot 配置目录](../bootloader/README.md) | 本板启动配置、分区及与应用升级代码的边界 |
 | 核对硬件 | [硬件与板级适配](hardware.md) | 时钟、引脚、Flash、看门狗和已实现行为 |

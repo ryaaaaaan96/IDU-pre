@@ -88,8 +88,6 @@ CONFIG_SHELL_BACKEND_SERIAL_LOG_LEVEL_INF=y
 
 `kernel heap` 查看共享系统堆占用，`kernel thread stacks` 查看线程栈使用估计。
 GDB 的 `p`、`bt` 等命令仍在主机 GDB 中执行。
-可选 `--smp-uart` 固件将 USART0 RX 交给专用 SMP 升级传输，因此关闭串口 Shell 后端；
-该方案仍输出 UART 日志。USART2 RS485 的采集和转发配置不受影响。
 
 离线设备每个探测周期仅发送一包，不执行正常采集的额外重试。
 当前 `prj.conf` 的 `CONFIG_IDU_COLLECT_PROBE_MS=30000` 设置离线探测间隔为

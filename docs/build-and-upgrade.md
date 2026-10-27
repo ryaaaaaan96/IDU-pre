@@ -3,7 +3,7 @@
 [文档导航](README.md) · [验证说明](testing.md) · [硬件说明](hardware.md)
 
 以下命令均从 West 工作区根目录执行。全部固件使用 MCUboot；默认启用 IAPv3，
-SMP 和无上传入口使用各自的构建/导出目录。旧 BOOT 构建和旧路径迁移代码已删除。
+无上传入口使用独立的构建/导出目录。旧 BOOT 构建和旧路径迁移代码已删除。
 
 ## 配置选择
 
@@ -11,11 +11,10 @@ SMP 和无上传入口使用各自的构建/导出目录。旧 BOOT 构建和旧
 | --- | --- |
 | 默认 MCUboot + IAPv3 | `./applications/IDU-pre/scripts/build.sh` |
 | MCUboot，无上传入口 | `./applications/IDU-pre/scripts/build.sh --no-upload` |
-| MCUboot + SMP UART | `./applications/IDU-pre/scripts/build.sh --mcuboot --smp-uart` |
 | MCUboot + IAPv3 | `./applications/IDU-pre/scripts/build.sh --mcuboot --iapv3` |
 
-所有构建使用同一套 IDU 产品点表和业务。IAPv3 与 SMP 是互斥的升级入口选项，
-不是不同产品方案；不再保留 AIDC 产品分支。
+所有构建使用同一套 IDU 产品点表和业务。IAPv3 是唯一的镜像上传接收器，
+`--no-upload` 只关闭接收器，不切换产品点表；不再保留 AIDC 产品分支。
 南北向共用 RS485 的联调配置见[端口说明](communication-ports.md)。
 
 从包含旧产品分支的版本更新后，首次执行 `./applications/IDU-pre/scripts/build.sh --pristine always`
@@ -106,11 +105,9 @@ MCUboot 负责启动校验、镜像安装和升级状态管理。本配置选择
 ECDSA P-256 签名、`swap-scratch` 交换、试运行后确认；未确认的试运行镜像
 在下次复位时回退。MCUboot 是独立启动程序，不是链接进主应用的一个任务。
 官方说明：[Zephyr + MCUboot](https://docs.mcuboot.com/readme-zephyr.html)、
-[升级与回退设计](https://docs.mcuboot.com/design.html)、
-[Zephyr MCUmgr](https://docs.zephyrproject.org/latest/services/device_mgmt/mcumgr.html)。
+[升级与回退设计](https://docs.mcuboot.com/design.html)。
 
-标准 SMP 和[IAPv3](#iapv3) 使用独立的应用配置，共用同一 MCUboot
-签名和交换布局。SMP 接收签名 BIN；IAPv3 接收封装该 BIN 的 AES/SGZ 包。
+[IAPv3](#iapv3) 是唯一的应用级升级入口，接收封装签名 BIN 的 AES/SGZ 包。
 包内必须是针对新地址构建并签名的 MCUboot 镜像。旧 `IAPV3_INFO` 不再作为新
 启动程序的升级命令；参数只使用独立 NVS。
 
@@ -136,11 +133,8 @@ MCUboot 在板级早期初始化中将 PC13 设为浮空输入；
 # MCUboot + IAPv3，独立目录输出
 ./applications/IDU-pre/scripts/build.sh
 
-# 增加标准 SMP 升级入口：USART0，115200 8N1；USART2 共用采集/转发
-./applications/IDU-pre/scripts/build.sh --mcuboot --smp-uart
-
 # 后续版本：使用同一签名密钥，更新镜像版本
-./applications/IDU-pre/scripts/build.sh --mcuboot --smp-uart --version 0.1.1+1
+./applications/IDU-pre/scripts/build.sh --version 0.1.1+1
 ```
 
 脚本首次生成本地开发密钥 `build/keys/IDU-pre-dev.pem`（权限 600），后续复用；
@@ -148,32 +142,20 @@ MCUboot 在板级早期初始化中将 PC13 设为浮空输入；
 正式设备使用 `--key /受控目录/签名密钥.pem`。固件和导出目录只包含公钥，
 已经安装的 MCUboot 只能接受其公钥对应的签名。
 
-标准 SMP 配置输出在 `build/hex/IDU-pre-mcuboot-smp/`：
-
-| 文件 | 用途 |
-| --- | --- |
-| `IDU-pre-factory.hex` | MCUboot 与签名应用合并，用于首次安装新布局 |
-| `IDU-pre-boot.hex` | MCUboot 单独产物 |
-| `IDU-pre.hex` | 签名应用 HEX，要求设备已有匹配的 MCUboot |
-| `IDU-pre-update.bin` | 后续通过 SMP 上传的签名镜像 |
-| `IDU-pre-public.pem` | 对应公钥 |
-| `IDU-pre-validation.json` | 签名、向量、边界检查及产物摘要；明确记录未做硬件验证 |
-
-`--no-upload` 的输出目录为 `build/hex/IDU-pre-mcuboot/`；默认 IAPv3 为
-`build/hex/IDU-pre-mcuboot-iapv3/`；SMP 为
-`build/hex/IDU-pre-mcuboot-smp/`。HEX 与升级 BIN 从同一次签名结果生成，避免两次 ECDSA 签名造成内容差异。
+`--no-upload` 的输出目录为 `build/hex/IDU-pre-mcuboot/`，默认 IAPv3 为
+`build/hex/IDU-pre-mcuboot-iapv3/`。HEX 与升级 BIN 从同一次签名结果生成，
+避免两次 ECDSA 签名造成内容差异；产物清单见 [IAPv3](#iapv3) 一节。
 
 首次切换需要通过调试器安装新 BOOT 和新应用，**不能仅把新应用发给旧 BOOT**。
 首次安装还应清空外部 `0x300000..0x371fff` 的新 slot1/scratch 区，保留参数和
 NVS；普通后续升级由 MCUboot 管理交换区，不能擅自清空仍保存回退镜像的 slot1。
 当前尚未配置实物烧录 runner，也没有执行擦除或烧录。Windows 主机连接 J-Link、WSL 通过远程 GDB 调试的操作见 [WSL/J-Link 方案](wsl-jlink.md)。
 
-SMP 客户端执行“上传 `IDU-pre-update.bin` → 查询镜像 → 把新镜像设为 test →
-复位”。新应用完成输入、可选 IAP 和协议等必要初始化后，直接调用
+新应用完成输入、可选 IAP 和协议等必要初始化后，直接调用
 boot_write_img_confirmed 确认一次，再进入运行状态；确认失败则启动留驻。
 删除连续 10 秒、间隔 1.5 秒和 60 秒超时条件，参数存储降级与远端离线不阻止确认。
 确认只证明必要初始化完成，不验证后续运行稳定性；确认后发生的运行故障不再触发试运行回退。
-客户端仍采用 test 流程，初始化失败时保持未确认，后续复位可由 MCUboot 回退。
+初始化失败时保持未确认，后续复位可由 MCUboot 回退。
 升级/复位前应等待正在进行的参数操作和延后保存完成。
 
 桌面验证包括原有回归测试、启动确认测试、固件交叉编译、官方 imgtool
@@ -183,7 +165,7 @@ boot_write_img_confirmed 确认一次，再进入运行状态；确认失败则�
 ```bash
 source .venv/bin/activate
 python applications/IDU-pre/tests/test_mcuboot_artifacts.py \
-    build/hex/IDU-pre-mcuboot-smp
+    build/hex/IDU-pre-mcuboot-iapv3
 ```
 
 静态 RAM 的最新记录与历史容量对比见[验证说明](testing.md#静态-ram-记录)。
@@ -201,7 +183,7 @@ AES 密钥及 DP 参数保存策略。公钥文件默认跟随 MCUboot 签名配
 
 适用当前 MV-IO 单 ARM 硬件。升级地址段在 USART2/RS485 内路由。当前周期采集
 也使用同一条 RS485，上传主站必须留出总线窗口；实物上传与周期采集并行的性能仍需验证。
-此配置与 `--smp-uart` 互斥，不允许两个镜像上传端同时写 slot1。
+这是唯一的镜像上传入口；应用不再提供第二个写 slot1 的接收器。
 
 ```bash
 ./applications/IDU-pre/scripts/build.sh --mcuboot --iapv3

@@ -18,7 +18,7 @@ build/IDU-pre/mcuboot-iapv3/IDU-pre/compile_commands.json
 
 构建生成真实的编译命令、设备树头文件及 `autoconf.h`，供 clangd 解析。
 Sysbuild 顶层和 MCUboot 子目录的数据库不能替代应用镜像的数据库。
-切换到 SMP 或无上传入口的构建时，手动将 `.clangd` 的 `CompilationDatabase`
+切换到无上传入口的构建时，手动将 `.clangd` 的 `CompilationDatabase`
 调整为对应构建的应用镜像目录，再重启语言服务。
 
 VS Code 安装并启用 `llvm-vs-code-extensions.vscode-clangd`。

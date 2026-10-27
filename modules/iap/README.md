@@ -72,7 +72,8 @@ IDU 启用 IAPv3 时，`CONFIG_IDU_FORWARD_UNIT=247` 在产品配置阶段被明
 
 当前支持单 Cortex-M ARM 子文件、QuickLZ 1.5 level 3、512 字节 MCUboot
 头、SHA256、P-256 和双槽 scratch 交换；不支持多镜像、差分、下挂设备升级、
-offset/RAM-load/direct-XIP。IAP 与 SMP 镜像上传不能同时启用。
+offset/RAM-load/direct-XIP。应用只提供 IAP 一个镜像上传接收器，
+不会再与第二个写端并发写主／备槽。
 
 暂存和日志按 4 KiB 单元管理，底层擦除页必须能整除 4 KiB；暂存写对齐不大于
 16 字节，日志至少两个单元。初始化检查容量、页布局及与主／备槽的重叠。

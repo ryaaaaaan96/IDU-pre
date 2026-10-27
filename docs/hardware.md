@@ -57,7 +57,6 @@ CFG1 的 PREDV0 低四位应为 4（除以 5），PLLPRESEL 和 PREDV0SEL 均为
 默认 IAPv3 配置在同一 USART0 启用串口 Shell，提示符 `AIDC:~$ `；
 命令见[项目说明](../README.md#串口调试命令)。日志使用 Shell 后端输出，
 避免普通 UART 日志与提示符交错。串口工具使用文本模式，命令以 CR 或 CRLF 结束。
-SMP 专用 UART 配置关闭串口 Shell 后端，避免两个接收处理器占用 USART0。
 
 ## 引脚映射
 
