@@ -40,6 +40,8 @@ Zephyr Shell，提示符为 `AIDC:~$ `。以文本模式发送命令并以回车
 
 ```text
 help
+clear
+kernel reboot cold
 kernel version
 kernel uptime
 kernel thread list
@@ -94,6 +96,9 @@ GDB 的 `p`、`bt` 等命令仍在主机 GDB 中执行。
 30 秒，从上次失败探测结束时计时；应用也可通过每设备的 `co_device_policy.probe_ms`
 指定不同间隔。正常初始化和轮询仍使用 `CONFIG_IDU_COLLECT_RETRIES`。
 终端只在设备状态变化时记录一次，反复探测超时不重复打印掉线日志。
+
+`clear` 清除终端显示，不清除故障记录；后台日志仍会继续输出，需要终端支持 VT100。
+`kernel reboot cold` 使用 Zephyr 官方命令直接冷复位，不通过终止故障上报；重启不保证排除实际故障原因。
 
 ## 阅读文档
 
