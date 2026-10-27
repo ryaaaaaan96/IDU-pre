@@ -136,7 +136,6 @@ def main():
     overlays = [APP / "bootloader/app.overlay"]
     if args.iapv3:
         conf.append(APP / "conf/iapv3.conf")
-        overlays.append(APP / "boards/iapv3.overlay")
     conf.extend(path.expanduser().resolve() for path in args.extra_conf)
     overlays.extend(path.expanduser().resolve() for path in args.extra_overlay)
     command = ["west", "build", "-p", args.pristine, "--sysbuild", "-b", "idu_pre", APP,

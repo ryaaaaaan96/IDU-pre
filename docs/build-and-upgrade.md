@@ -60,7 +60,7 @@ IDU NVS、IAP 和 MCUboot 的有效存储偏移保持不变：
 | --- | --- | --- |
 | IDU NVS 参数/事务 | 0x010000 | 16 KiB |
 | IAP 日志（启用 IAP 时） | 0x018000 | 16 KiB |
-| IAP SGZ 暂存（启用 IAP 时） | 0x201000 | 960 KiB |
+| IAP SGZ 暂存（启用 IAP 时） | 0x201000 | 512 KiB |
 | MCUboot slot1 | 0x300000 | 448 KiB |
 | MCUboot scratch | 0x370000 | 8 KiB |
 
@@ -174,9 +174,10 @@ python applications/IDU-pre/tests/test_mcuboot_artifacts.py \
 ## IAPv3 / AES / SGZ 兼容升级
 
 接收、解包、验签和结果恢复由 [`modules/iap`](../modules/iap/README.md) 提供。
-`boards/iapv3.overlay` 的 `iap,staging`／`iap,journal` 选择分区，执行地址和
+板级 DTS 的 `iap,staging`／`iap,journal` 选择分区，执行地址和
 RAM 范围取自 `slot0_partition`／`zephyr,sram`；`conf/iapv3.conf` 配置镜像上限、
-AES 密钥及 DP 参数保存策略。公钥文件默认跟随 MCUboot 签名配置。
+暂存容量、堆预算、AES 密钥及 DP 参数保存策略。公钥文件默认跟随 MCUboot
+签名配置。分区属于板级布局，所有构建共用，不再使用单独的 overlay。
 无需独立的 IDU IAP 适配 `.c`，启动顺序与初始化成功后的镜像确认仍由应用编排。
 自动导出 SGZ 时读取本次构建的 `.config`；单独运行 `pack_sgz.py` 时也可用
 `--config <应用 .config>` 保持密钥和上限一致。
@@ -239,8 +240,10 @@ FC03/04 读取、FC06/16 写入；FC16 按完整寄存器数判断长度，兼�
 内容一致；乱序包和跨扇区包均支持。Flash 按需擦除，解包线程独立于转发线程。
 
 IAP 配置额外划分两个外部 NOR 区域：`0x18000–0x1BFFF` 为独立 NVS
-升级日志，`0x201000–0x2F0FFF` 为 960 KiB SGZ 暂存。
+升级日志，`0x201000–0x280FFF` 为 512 KiB SGZ 暂存。
 slot1 位于 `0x300000`，不会从应用直接写当前镜像或 BOOT。
+暂存容量与 `CONFIG_IAP_MAX_CONTAINER_SIZE` 成对维护：容器为签名镜像加上分包
+开销，上限 0x6e000 的镜像即使按未压缩帧膨胀也在 512 KiB 以内。
 日志使用固定 48 字节小端布局和自身 CRC；当前 IDU 的 DP 参数模块还启用全局
 `NVS_DATA_CRC`。IAP 模块不切换该选项，迁移已有 NVS 数据时须保持此配置一致。
 

@@ -34,7 +34,7 @@
 
 - 应用不再设置 `communication/`。`protocol/ports.c` 声明传输绑定并实现应用收发编排回调，`protocol.c` 选择转发设备和广播策略，`tables/segments.c` 以 `MB_TABLE_SEG_T` 直接归 tr_forward_cfg.protocol_segments 绑定 IAP；协议段按首地址分派并自行校验变长报文，标准 `tr_segment` 保留完整范围检查；状态/命令在 process 表绑定回调，transmit 表只映射地址，模拟配置已移至 `tests/fixtures/`，产品不编译模拟从机。`protocol_init()` 显式注册样本、掉线失效和参数读写回调，调用 `protocol_ports_init()`、`co_port_open()` 和 `co_init_bus()`，配置每设备策略，加载参数并装配业务计划，再调用 `co_polling_init()` 与 `tr_forward_init()`，成功后放行 DP/CO。`tr_forward_service()` 仅维护已初始化入口，北向站号在初始化固定；远端发现不阻塞本地启动。`acquisition` 查询协议维护故障，远端状态和存储错误直接查询 CO/DP，不汇总复制到 status。IAP 由独立 Kconfig 开关启用，通用模拟后端仅用于模块测试；模块不得包含产品头文件或直接读取 IDU 设备树别名。
 
-- 不恢复旧 MV-IO 特殊协议、247 地址门控、跨空洞跳读、补零保留区、无效写 ACK 或旧 BOOT 路径迁移。当前 dp_/co_/tr_ 参考接口和实际采集设备点表继续保留；IAPv3 的线协议仍由 iap 模块维护。产品分区集中在 `bootloader/partitions.dtsi`，板级 DTS 引用，IAP 暂存/日志由 overlay 补充。
+- 不恢复旧 MV-IO 特殊协议、247 地址门控、跨空洞跳读、补零保留区、无效写 ACK 或旧 BOOT 路径迁移。当前 dp_/co_/tr_ 参考接口和实际采集设备点表继续保留；IAPv3 的线协议仍由 iap 模块维护。产品分区集中在 `bootloader/partitions.dtsi`，板级 DTS 引用，IAP 暂存/日志直接声明在板级 DTS，不再使用单独 overlay。
 
 - 产品点表、设备绑定、启动计划、服务和端口配置逐字段显式初始化，包括点表 data 的三个值。缺省值使用所属模块的编译期字段常量，见 modules/README.md；标识、地址、类型、长度和周期由应用明确配置。Zephyr 联合体只初始化所选模式的成员，运行态对象按模块接口初始化，不使用自定义整行宏代替配置。
 

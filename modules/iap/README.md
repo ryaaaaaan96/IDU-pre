@@ -11,7 +11,7 @@ IDU 无需编写独立的 IAP 适配 `.c`。配置由以下内容提供：
 
 | 配置内容 | 来源 |
 | --- | --- |
-| SGZ 暂存、结果日志分区 | [`boards/iapv3.overlay`](../../boards/iapv3.overlay) 中的 `chosen`：`iap,staging`、`iap,journal` |
+| SGZ 暂存、结果日志分区 | 板级 DTS 的 `chosen`：`iap,staging`、`iap,journal`（不再使用单独 overlay） |
 | MCUboot 主／备槽 | `slot0_partition`、`slot1_partition`，布局由 [`bootloader/`](../../bootloader/README.md) 配置 |
 | 镜像执行地址 | `DT_FIXED_PARTITION_ADDR(slot0_partition)`，包括 Flash 映射基址 |
 | 合法栈地址范围 | `chosen` 中 `zephyr,sram` 节点的地址和大小；允许初始 SP 等于 RAM 顶端 |

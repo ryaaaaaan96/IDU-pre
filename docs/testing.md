@@ -8,6 +8,25 @@ AIDC 产品代码、专用测试及导入工具已移除；下方日期章节保
 其中的旧构建命令和文件路径不再作为当前操作入口。
 当前构建入口为 `./applications/IDU-pre/scripts/build.sh`（从工作区根目录运行）；旧记录中的根目录 `build.sh` 已移入 `scripts/`。
 
+## 2026-10-27 IAPv3 布局下沉与暂存收敛
+
+`boards/iapv3.overlay` 删除，IAP 暂存/日志分区与 `chosen` 收进板级 DTS，
+外部 Flash 布局只保留一个来源；构建脚本不再拼 IAP overlay。SGZ 暂存由
+960 KiB 收敛到 512 KiB，`CONFIG_IAP_MAX_CONTAINER_SIZE` 同步为 524288，
+IAP 堆预算由 16384 降到 12288。journal 保持 16 KiB，避免既有 NVS 内容失配。
+记录见 [.scratch/iapv3-layout](../.scratch/iapv3-layout/spec.md)。
+
+- 默认 IAPv3 构建通过、无警告；设备树确认暂存为 `0x201000 0x80000`。
+- 应用 Flash 106,100 B / RAM 78,676 B，MCUboot 36,868 B / 18,096 B。
+  当前工作树已改为本地 process 装配，数值不可与上一版直接对比；
+  系统堆符号 45,404 B，比同配置调整前少 4,096 B。
+- `test_mcuboot_artifacts.py`、`test_mcuboot_image.py`（6 项）、
+  `test_build_configuration.py`（8 项）通过；`tests/iap/run.sh` 通过，
+  2 项跨进程探针按设计跳过。
+- SGZ 导出 106,960 B，远低于 512 KiB 容器上限。
+
+未执行实板上传，也未测量升级并发时的堆峰值；旧上位机的实际容器大小仍需实机确认。
+
 ## 2026-10-27 移除 SMP 上传入口
 
 用户要求删除 SMP 上传配置。`conf/smp-uart.conf`、`boards/smp-uart.overlay`
