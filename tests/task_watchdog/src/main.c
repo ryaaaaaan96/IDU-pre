@@ -6,7 +6,15 @@
 #include "nsi_cpu_es_if.h"
 
 static atomic_t edges, feed_configures;
-void protocol_stop(void) {}
+static atomic_t protocol_stop_calls, last_stop_in_isr, last_feed_error_at_stop;
+static atomic_t queue_blocked;
+static bool expect_blocked_queue;
+void protocol_stop(void)
+{
+    atomic_inc(&protocol_stop_calls);
+    atomic_set(&last_stop_in_isr, k_is_in_isr());
+    atomic_set(&last_feed_error_at_stop, watchdog_external_error());
+}
 static struct gpio_driver_data gpio_data;
 static const struct gpio_driver_config gpio_config = {.port_pin_mask = UINT32_MAX};
 static int configure(const struct device *dev, gpio_pin_t pin, gpio_flags_t flags)
@@ -36,7 +44,10 @@ FUNC_NORETURN void __wrap_sys_reboot(int type)
     const struct watchdog_task_config config = {.name = "late", .timeout_ms = 100};
     bool ok = expected && type == SYS_REBOOT_COLD &&
         !watchdog_task_fault_get(&fault) && !watchdog_task_get(expected, &task) &&
-        fault.error == -ETIMEDOUT &&
+        fault.error == -ETIMEDOUT && atomic_get(&protocol_stop_calls) > 0 &&
+        atomic_get(&last_feed_error_at_stop) ==
+            (IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL) ? -ECANCELED : 0) &&
+        (!expect_blocked_queue || (atomic_get(&queue_blocked) && k_is_in_isr())) &&
         !strcmp(fault.task.name, "silent") && (task.flags & WATCHDOG_TASK_FAULT) &&
         watchdog_task_feed(expected) == -ECANCELED &&
         watchdog_task_sleep_forever(expected) == -ECANCELED &&
@@ -320,6 +331,70 @@ ZTEST(task_watchdog, test_configuration_switches)
     k_sleep(K_MSEC(30));
     zassert_equal(atomic_get(&edges) > 0, IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL));
     if (!err) { zassert_ok(watchdog_task_sleep_forever(&first)); }
+}
+
+/* 系统工作队列被阻塞时，定时检查、关键门控和复位仍须独立执行。 */
+K_SEM_DEFINE(queue_entered, 0, 1);
+K_SEM_DEFINE(queue_release, 0, 1);
+static void block_system_queue(struct k_work *work)
+{
+    ARG_UNUSED(work);
+    atomic_set(&queue_blocked, 1);
+    k_sem_give(&queue_entered);
+    (void)k_sem_take(&queue_release, K_FOREVER);
+    atomic_set(&queue_blocked, 0);
+}
+static K_WORK_DEFINE(queue_blocker, block_system_queue);
+
+static void block_queue(void)
+{
+    k_work_submit(&queue_blocker);
+    zassert_ok(k_sem_take(&queue_entered, K_SECONDS(1)));
+}
+
+ZTEST(task_watchdog, test_blocked_workqueue_does_not_prevent_timeout_stops_and_reboots)
+{
+    block_queue();
+    atomic_val_t before = atomic_get(&edges);
+    k_sleep(K_MSEC(30));
+    zassert_equal(atomic_get(&edges) > before, IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL));
+    const struct watchdog_task_config config = {.name = "silent", .timeout_ms = 50};
+    expected = &first;
+    expect_blocked_queue = true;
+    zassert_ok(watchdog_task_register(&first, &config));
+    k_sleep(K_MSEC(200));
+    zassert_unreachable("Blocked workqueue prevented timeout handling");
+}
+
+static atomic_t hold_result;
+static void report_hold(struct k_timer *timer)
+{
+    ARG_UNUSED(timer);
+    atomic_set(&hold_result, status_report_fault(STATUS_RUNTIME, -EIO,
+               "Injected interrupt hold", STATUS_ACTION_HOLD));
+}
+static K_TIMER_DEFINE(hold_timer, report_hold, NULL);
+
+ZTEST(task_watchdog, test_interrupt_hold_closes_gate_and_keeps_feed_with_blocked_workqueue)
+{
+    block_queue();
+    const struct watchdog_task_config config = {.name = "held", .timeout_ms = 50};
+    zassert_ok(watchdog_task_register(&first, &config));
+    atomic_val_t before = atomic_get(&edges);
+    k_timer_start(&hold_timer, K_MSEC(10), K_NO_WAIT);
+    k_sleep(K_MSEC(150));
+    zassert_equal(atomic_get(&hold_result), -EIO);
+    zassert_equal(status_phase_get(), STATUS_FAULT_LOCKED);
+    zassert_equal(atomic_get(&protocol_stop_calls), 1);
+    zassert_equal(atomic_get(&last_stop_in_isr), 1);
+    zassert_equal(atomic_get(&last_feed_error_at_stop), 0);
+    zassert_equal(atomic_get(&edges) > before, IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL));
+    zassert_ok(watchdog_external_error());
+    zassert_equal(watchdog_task_feed(&first), -ECANCELED);
+    struct watchdog_task_fault fault;
+    zassert_equal(watchdog_task_fault_get(&fault), -ENOENT);
+    k_sem_give(&queue_release);
+    k_sleep(K_MSEC(10));
 }
 
 #ifdef CONFIG_TEST_WATCHDOG_INIT_FAILURE

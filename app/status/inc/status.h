@@ -106,7 +106,9 @@ status_phase_t status_phase_get(void);
  * @retval -EINVAL 参数无效，或初始化阶段选择继续。
  * @retval -EACCES 状态尚未初始化。
  * @return 终止动作在复位未接管时返回传入的错误码。
- * @note 可在 ISR 中调用；不按描述字符串选择策略，不隐式转换调试动作。
+ * @note 可在 ISR 中调用；开启日志时要求 LOG_MODE_DEFERRED、关闭 LOG_BLOCK_IN_THREAD，不等待日志后端。
+ * @note 故障门控和 RESET 停喂/复位同步执行，不等待工作队列；LED 更新延后。
+ * @note 不按描述字符串选择策略，不隐式转换调试动作。
  * @note 每次更新故障快照；已停止业务不会因后续 CONTINUE 恢复。
  */
 int status_report_fault(status_fault_phase_t phase, int error,

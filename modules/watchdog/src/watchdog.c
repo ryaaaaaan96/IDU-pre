@@ -144,22 +144,30 @@ static bool task_monitor_stopped(void)
     return stopped || tasks.fault.task.name;
 }
 
-/* 调用方持有监控锁。 */
-static struct watchdog_task *earliest_task(void)
+/* 线程接口在锁内维护有序链表；定时器只需查看表头。 */
+static void task_insert(struct watchdog_task *task)
 {
-    struct watchdog_task *first = NULL;
-    for (struct watchdog_task *task = tasks.active; task; task = task->next) {
-        if (!first || task->deadline_ticks < first->deadline_ticks) {
-            first = task;
-        }
+    struct watchdog_task **link = &tasks.active;
+    while (*link && (*link)->deadline_ticks <= task->deadline_ticks) {
+        link = &(*link)->next;
     }
-    return first;
+    task->next = *link;
+    *link = task;
+}
+
+/* 调用方已确认任务活动且持有监控锁。 */
+static void task_remove(struct watchdog_task *task)
+{
+    struct watchdog_task **link = &tasks.active;
+    while (*link != task) { link = &(*link)->next; }
+    *link = task->next;
+    task->next = NULL;
 }
 
 /* 用一个单次定时器跟踪最早期限。 */
 static void schedule_next_task(void)
 {
-    struct watchdog_task *next = earliest_task();
+    struct watchdog_task *next = tasks.active;
     if (task_monitor_stopped() || !next) {
         k_timer_stop(&task_timer);
     } else {
@@ -192,7 +200,7 @@ static void task_timer_expired(struct k_timer *expired_timer)
 {
     ARG_UNUSED(expired_timer);
     k_spinlock_key_t key = k_spin_lock(&monitor_lock);
-    struct watchdog_task *first = earliest_task();
+    struct watchdog_task *first = tasks.active;
     bool expired_task = first && first->deadline_ticks <= k_uptime_ticks() && task_trip(first);
     if (!task_monitor_stopped()) { schedule_next_task(); }
     k_spin_unlock(&monitor_lock, key);
@@ -215,8 +223,7 @@ int watchdog_task_register(struct watchdog_task *task, const struct watchdog_tas
             .last_feed_ms = k_uptime_get(), .flags = WATCHDOG_TASK_ACTIVE,
         };
         task->deadline_ticks = k_uptime_ticks() + k_ms_to_ticks_ceil64(config->timeout_ms);
-        task->next = tasks.active;
-        tasks.active = task;
+        task_insert(task);
         schedule_next_task();
     }
     k_spin_unlock(&monitor_lock, key);
@@ -237,8 +244,10 @@ int watchdog_task_feed(struct watchdog_task *task)
         err = -ETIMEDOUT;
     }
     if (!err) {
+        task_remove(task);
         task->state.last_feed_ms = k_uptime_get();
         task->deadline_ticks = k_uptime_ticks() + k_ms_to_ticks_ceil64(task->state.timeout_ms);
+        task_insert(task);
         schedule_next_task();
     }
     k_spin_unlock(&monitor_lock, key);
@@ -278,10 +287,7 @@ int watchdog_task_sleep_forever(struct watchdog_task *task)
             expired_task = task_trip(task);
             err = -ETIMEDOUT;
         } else {
-            struct watchdog_task **link = &tasks.active;
-            while (*link != task) { link = &(*link)->next; }
-            *link = task->next;
-            task->next = NULL;
+            task_remove(task);
             task->state.flags = WATCHDOG_TASK_SLEEP_FOREVER;
             schedule_next_task();
         }

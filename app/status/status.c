@@ -38,8 +38,9 @@ static K_WORK_DELAYABLE_DEFINE(maintenance, maintain);
 static void task_timeout_notify(void)
 {
     /* 保留 ISR 安全的故障门控，不依赖系统工作队列获得调度。 */
-    if (status_phase_get() == STATUS_FAULT_LOCKED) { return; }
-    status_fault_phase_t phase = status_phase_get() == STATUS_STARTING ? STATUS_INIT : STATUS_RUNTIME;
+    status_phase_t current = status_phase_get();
+    if (current == STATUS_FAULT_LOCKED) { return; }
+    status_fault_phase_t phase = current == STATUS_STARTING ? STATUS_INIT : STATUS_RUNTIME;
     (void)status_report_fault(phase, -ETIMEDOUT, "Task heartbeat timed out",
                               phase == STATUS_INIT ? STATUS_ACTION_HOLD : STATUS_ACTION_RESET);
 }
@@ -135,26 +136,25 @@ int status_report_fault(status_fault_phase_t phase, int error,
         watchdog_task_monitor_stop();
     }
     k_spin_unlock(&status_runtime.lock, key);
-    LOG_ERR("%s: phase %d error %d action %d", description, phase, error, action);
-    switch (action) {
-    case STATUS_ACTION_CONTINUE:
-        return 0;
-    case STATUS_ACTION_HOLD:
-    case STATUS_ACTION_RESET:
+    /* 关键动作先执行，不依赖日志后端、LED 工作或系统队列获得调度。 */
+    if (action == STATUS_ACTION_RESET) { watchdog_external_stop(); }
+    if (action != STATUS_ACTION_CONTINUE) {
         protocol_stop();
 #ifdef CONFIG_IDU_IAPV3
         iap_stop();
 #endif
+    }
+
+    /* 使用 Zephyr 延后、非阻塞日志，只提交记录，不等待日志后端。 */
+    LOG_ERR("%s: phase %d error %d action %d", description, phase, error, action);
+    if (action == STATUS_ACTION_RESET) { status_request_reboot(); }
+
+    /* RESET 正常不返回；测试复位钩子返回时仍允许更新现场显示。 */
+    if (action != STATUS_ACTION_CONTINUE) {
         status_led_refresh();
         k_work_reschedule(&maintenance, K_NO_WAIT);
-        if (action == STATUS_ACTION_RESET) {
-            watchdog_external_stop();
-            status_request_reboot();
-        }
-        return error;
-    default:
-        return -EINVAL;
     }
+    return action == STATUS_ACTION_CONTINUE ? 0 : error;
 }
 
 /* 故障留驻后主循环停止，此工作仍检查外部喂狗错误。 */

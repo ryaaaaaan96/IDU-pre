@@ -76,7 +76,11 @@ void watchdog_external_stop(void);
 
 /* ==================== 软件任务监控 ==================== */
 
-/** @brief 超时通知在监控锁外调用，可能处于 ISR；只能执行非阻塞操作。 */
+/**
+ * @brief 超时通知在监控锁外调用，可能处于 ISR 或发现迟到心跳的调用线程。
+ * @note 回调同步执行，必须短小、非阻塞；不得等待线程、操作 Flash 或同步输出日志。
+ * @note 关键停喂/复位不应依赖可能阻塞的系统工作队列，允许延后的处理再提交工作。
+ */
 typedef void (*watchdog_task_timeout_cb_t)(void);
 /** @brief 每次上电初始化一次；关闭软件监控时返回 -EACCES。 */
 int watchdog_task_monitor_init(watchdog_task_timeout_cb_t notify);
