@@ -35,10 +35,6 @@ python3 applications/IDU-pre/tests/test_mcuboot_image.py
 python3 applications/IDU-pre/tests/test_build_configuration.py
 python3 applications/IDU-pre/tests/test_debug_session.py
 
-env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
-    applications/IDU-pre/tests/image_confirm -d "$test_dir/image_confirm"
-timeout 30s "$test_dir/image_confirm/zephyr/zephyr.exe"
-
 # 公共状态接口、真实期限，以及不返回的复位接口。
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/task_watchdog -d "$test_dir/task_watchdog"

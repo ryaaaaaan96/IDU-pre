@@ -16,7 +16,7 @@
 | 输入映射 | `struct analog_point` 及 DI 位图配置，含 spec、device_id、signal_id |
 | 测点业务 | `points_parameter_command()`、`points_parameter_status()` |
 | 工程换算 | `acquisition.c` 的 AI 采样循环内直接换算 |
-| 健康与镜像确认 | `status_init()`、`status_*()`、`image_confirm_checkpoint()` |
+| 状态维护与镜像确认 | `status_init()`、`status_*()`；`startup()` 直接调用 `boot_write_img_confirmed()` |
 
 整机启动编排入口使用 `startup()`，集中组织各服务初始化。
 模块的一次性装配与初始化接口使用 `*_init()`；同时提供默认配置和显式配置入口时，
@@ -35,9 +35,9 @@
 `dp_process_timer_start()` 是运行期的定时器操作。这些接口保留启动含义，初始化顺序与执行上下文归属保持原约定。
 
 头文件与职责一致，例如 `acquisition/acquisition.h`、`process/points.h`、
-`status/inc/status.h`、`status/status_led.h`、`status/image_confirm.h`。
+`status/inc/status.h`、`status/status_led.h`。
 设备、信号、点表及逻辑口分别使用 `DEVICE_*`、`SIGNAL_*`、`TABLE_*`、`PORT_*` 等前缀。
-日志来源使用 `app_main`、`app_protocol`、`app_acquisition`、`image_confirm`。
+日志来源使用 `app_main`、`app_protocol`、`app_acquisition`。
 
 整机初始化期间处于 `STATUS_STARTING`；所有启动服务成功后进入 `STATUS_RUN`。
 运行期间保持 `STATUS_RUN`；不设置采样、发布和健康检查的细分阶段，终止故障仍锁定。
@@ -79,5 +79,5 @@ ADC 每行配置 spec、device_id 和 signal_id；DI 位图整体配置目标 de
 ## status 目录边界
 
 唯一对外头文件放在 `app/status/inc/status.h`，业务通过 `status/inc/status.h` 引用。
-全部 `.c` 放在 status 根目录；根目录的 status_led.h、image_confirm.h 为内部接口，
+全部 `.c` 放在 status 根目录；根目录的 status_led.h 为内部接口，
 普通业务不直接包含，单元测试可显式包含以验证内部组件。

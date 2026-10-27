@@ -156,7 +156,7 @@ build/IDU-pre/tests/reference_services/zephyr/zephyr.exe -flash_in_ram
 | `pipeline`、`models` | 无存储数据流、模型复用、多设备及多总线隔离 |
 | `dataprocess`、`collector`、`transmit` | 核心模块独立配置、采集调度、转发模式和恢复 |
 | `reference_config`、`reference_dp`、`reference_ports`、`reference_services` | 原表注册、同步字节接口、CO/TR 适配、策略回调和迁移 |
-| `image_confirm`、`iap`、`test_iap_codec.py` | 健康确认、独立 IAP 模块、配置驱动升级、收包/签名拒绝、SGZ/QuickLZ 边界 |
+| `acquisition`、`iap`、`test_iap_codec.py` | 初始化成功后确认一次、初始化失败不确认、确认失败留驻；独立 IAP 模块、收包/签名拒绝、SGZ/QuickLZ 边界 |
 | 应用 ADC 采样、`test_build_configuration.py` | 标准 ADC API、采样平均、硬件超时恢复、并发隔离与 Sysbuild 配置覆盖 |
 | `io` | GPIO 极性/位序/32 位边界、外部看门狗超时与 GPIO 故障锁定 |
 | `vport` | 端口登记、所有权隔离、完整报文、来源保持和错误边界 |
@@ -999,3 +999,9 @@ CO 后端回调和 Modbus 事务接口显式接收 `dev_id`；vport 来源结构
 硬件描述可继续使用，应用不启用 LED 驱动。初始化失败立即报告终止故障并返回，
 运行期的 LED 继续策略不放过启动失败，故障工作也不访问未初始化的引脚。当前验证见
 [GPIO 指示灯验收记录](../.scratch/gpio-indicator/validation.md)。
+
+## 2026-10-27：启动成功后直接确认镜像
+
+删除 app/status/image_confirm.c/.h、status_progress 和 tests/image_confirm，历史健康窗口验收记录不再代表当前行为。
+acquisition 夹具通过真实 startup 验证初始化顺序、确认失败 HOLD、初始化失败不确认、成功确认一次、
+运行周期不重复确认，以及参数降级/待恢复事务不再阻止确认。固件构建验证真实 MCUboot 接口链接。

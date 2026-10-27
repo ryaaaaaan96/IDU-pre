@@ -56,9 +56,10 @@ RESET 先调用 watchdog_stop(ALL)，再关闭协议/IAP 准入，提交非阻�
 
 ## 产品状态与指示
 
-status 保留整机阶段、最近产品故障、远端/存储降级、LED 和镜像确认。
+status 保留整机阶段、最近产品故障、远端/存储降级和 LED。
 远端离线或允许的存储降级不停止本地采样，不主动停止硬件喂狗。
-status_progress 只推进镜像健康确认；旧的硬件错误轮询工作已删除。
+startup 在必要初始化成功后直接调用 boot_write_img_confirmed，确认失败按初始化 HOLD 处理。
+不再保留 image_confirm.c、status_progress 或运行健康计时；存储降级和远端离线不阻止镜像确认。
 
 LED 初始化失败终止启动；未成功配置时不访问 GPIO。运行态由独立 delayable work 更新，终止故障常亮。
 系统队列拥堵可能延迟 LED，不能将灯的更新速度当作任务监控或停喂保证。

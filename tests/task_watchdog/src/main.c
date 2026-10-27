@@ -130,7 +130,7 @@ ZTEST(task_watchdog, test_zero_registered_continues_past_legacy_timeout)
     struct watchdog_fault fault;
     zassert_equal(watchdog_fault_get(&fault), -ENOENT);
     status_set_phase(STATUS_RUN);
-    zassert_ok(status_progress());
+    zassert_equal(status_phase_get(), STATUS_RUN);
 }
 ZTEST(task_watchdog, test_registration_validation_without_fixed_capacity)
 {

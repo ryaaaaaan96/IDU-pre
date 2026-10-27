@@ -17,7 +17,7 @@
 #include <zephyr/storage/flash_map.h>
 #include <string.h>
 #include <stdlib.h>
-#include "status/image_confirm.h"
+#include <zephyr/dfu/mcuboot.h>
 
 /* main.c 将 startup 保留在应用入口内，不提供公共头文件。 */
 int startup(void);
@@ -25,11 +25,11 @@ int application_cycle(void);
 
 typedef enum { WATCHDOG_SERVICE_INIT, LED_START, INPUTS_INIT, IAP_INIT, TABLES_INIT, DP_INIT, DATA_BIND, TASKS_PREPARE,
                NETWORK_INIT, PORT_OPEN, COLLECT_INIT, PARAMS_INIT, PARAMS_RECOVER,
-               PROCESS_INIT, REFERENCE_INIT, COLLECT_START, FORWARD_INIT,
-               SAMPLE, PUBLISH, PROTOCOL, LED, CHECKPOINT, SERVICES } service_t;
+               PROCESS_INIT, REFERENCE_INIT, COLLECT_START, FORWARD_INIT, IMAGE_CONFIRM,
+               SAMPLE, PUBLISH, PROTOCOL, LED, SERVICES } service_t;
 static int errors[SERVICES];
 static unsigned calls[SERVICES], stops, reboots;
-static bool healthy, boot_ready, checkpoint_ready;
+static bool healthy, boot_ready;
 static unsigned dp_health_checks;
 static int led_set_error;
 static bool indicator_on;
@@ -75,10 +75,10 @@ static int service(service_t service)
         [PUBLISH] = STATUS_RUN,
         [PROTOCOL] = STATUS_RUN,
         [LED] = STATUS_RUN,
-        [CHECKPOINT] = STATUS_RUN,
+        [IMAGE_CONFIRM] = STATUS_STARTING,
     };
     zassert_equal(status_phase_get(), phases[service]);
-    if (service <= FORWARD_INIT) {
+    if (service <= IMAGE_CONFIRM) {
         zassert_true((int)service > previous_startup_service, "Startup order changed");
         previous_startup_service = service;
     }
@@ -255,12 +255,9 @@ int protocol_error(void)
     return service(PROTOCOL);
 }
 
-int image_confirm_checkpoint(struct image_confirm *state, int64_t now, bool ready)
+int boot_write_img_confirmed(void)
 {
-    zassert_not_null(state);
-    zassert_true(now >= 0);
-    checkpoint_ready = ready;
-    return service(CHECKPOINT);
+    return service(IMAGE_CONFIRM);
 }
 
 static void initialize_fixture(void)
@@ -271,7 +268,6 @@ static void initialize_fixture(void)
     stops = reboots = 0;
     healthy = boot_ready = true;
     dp_health_checks = 0;
-    checkpoint_ready = false;
     led_set_error = 0;
     indicator_on = false;
     indicator_edges = sample_delay_ms = 0;
@@ -312,14 +308,15 @@ static void check_startup_failure(service_t failed)
     else if (failed == LED_START) { description = "Indicator initialization failed"; }
     else if (failed == INPUTS_INIT) { description = "Input initialization failed"; }
     else if (failed == IAP_INIT) { description = "Upgrade service initialization failed"; }
+    else if (failed == IMAGE_CONFIRM) { description = "Image confirmation failed"; }
     zassert_str_equal(fault_snapshot().description, description);
-    for (service_t s = WATCHDOG_SERVICE_INIT; s <= FORWARD_INIT; ++s) {
+    for (service_t s = WATCHDOG_SERVICE_INIT; s <= IMAGE_CONFIRM; ++s) {
         zassert_equal(calls[s], s <= failed ? 1 : 0);
     }
     zassert_equal(stops, 0);
     zassert_equal(reboots, 0);
     zassert_equal(fault_snapshot().action, WATCHDOG_ACTION_HOLD);
-    zassert_equal(calls[CHECKPOINT], 0);
+    zassert_equal(calls[IMAGE_CONFIRM], failed == IMAGE_CONFIRM ? 1 : 0);
     zassert_equal(application_cycle(), -EACCES);
     zassert_equal(startup(), -EALREADY);
     zassert_equal(fault_snapshot().error, -EIO);
@@ -330,7 +327,7 @@ ZTEST(acquisition, test_startup_failure_watchdog_init)
     check_startup_failure(WATCHDOG_SERVICE_INIT);
     k_msleep(250);
     zassert_equal(reboots, 0);
-    zassert_equal(calls[CHECKPOINT], 0);
+    zassert_equal(calls[IMAGE_CONFIRM], 0);
 }
 
 ZTEST(acquisition, test_startup_failure_led_start)
@@ -411,20 +408,21 @@ ZTEST(acquisition, test_failed_forwarding_never_starts_acquisition)
                   "Do not release acquisition before local protocol assembly completes");
 }
 
-ZTEST(acquisition, test_success_updates_points_and_checks_trial_health)
+ZTEST(acquisition, test_success_confirms_at_startup_and_updates_points)
 {
     zassert_ok(startup());
     zassert_equal(status_phase_get(), STATUS_RUN);
     zassert_equal(workers_started, 3);
+    zassert_equal(calls[IMAGE_CONFIRM], 1);
     zassert_ok(application_cycle());
     zassert_equal(status_phase_get(), STATUS_RUN);
     zassert_true(published);
-    zassert_equal(calls[CHECKPOINT], 1);
+    zassert_equal(calls[IMAGE_CONFIRM], 1);
     zassert_equal(stops, 0);
-    zassert_true(checkpoint_ready);
     boot_ready = false;
+    k_sleep(K_MSEC(1600)); /* 采样间隔不再影响已经完成的确认。 */
     zassert_ok(application_cycle());
-    zassert_false(checkpoint_ready);
+    zassert_equal(calls[IMAGE_CONFIRM], 1);
     zassert_equal(status_phase_get(), STATUS_RUN);
 }
 
@@ -440,7 +438,7 @@ ZTEST(acquisition, test_failed_acquisition_stops_before_maintenance)
     zassert_equal(fault_snapshot().error, -ENODEV);
     zassert_str_equal(fault_snapshot().description, "Input point update failed");
     zassert_equal(calls[PROTOCOL], 0);
-    zassert_equal(calls[CHECKPOINT], 0);
+    zassert_equal(calls[IMAGE_CONFIRM], 1);
     zassert_equal(stops, 1);
 }
 
@@ -449,7 +447,7 @@ static void check_cycle_failure(service_t failed, const char *description)
     zassert_ok(startup());
     errors[failed] = -EIO;
     zassert_equal(application_cycle(), -EIO);
-    zassert_equal(calls[CHECKPOINT], 0);
+    zassert_equal(calls[IMAGE_CONFIRM], 1);
     zassert_equal(stops, 1);
     zassert_equal(fault_snapshot().phase, STATUS_RUNTIME);
     zassert_str_equal(fault_snapshot().description, description);
@@ -477,31 +475,26 @@ ZTEST(acquisition, test_unregistered_dp_has_no_implicit_deadline)
     zassert_equal(status_phase_get(), STATUS_RUN);
 }
 
-ZTEST(acquisition, test_confirmation_failure_stops_watchdog)
+ZTEST(acquisition, test_confirmation_failure_holds_startup_without_sampling)
 {
-    zassert_ok(startup());
-    errors[CHECKPOINT] = -EIO;
-    zassert_equal(application_cycle(), -EIO);
-    zassert_equal(stops, 1);
-    zassert_equal(status_phase_get(), STATUS_FAULT_LOCKED);
-    zassert_equal(application_cycle(), -EACCES);
+    check_startup_failure(IMAGE_CONFIRM);
+    zassert_equal(calls[SAMPLE], 0);
 }
 
-ZTEST(acquisition, test_gpio_watchdog_error_prevents_trial_confirmation)
+ZTEST(acquisition, test_gpio_watchdog_error_stops_runtime_after_confirmation)
 {
     zassert_ok(startup());
     const struct watchdog_fault fault = {.reason = WATCHDOG_FAULT_GPIO, .error = -EIO};
     watchdog_notify(&fault);
     zassert_equal(application_cycle(), -EACCES);
     zassert_equal(fault_snapshot().phase, STATUS_RUNTIME);
-    zassert_equal(calls[CHECKPOINT], 0);
+    zassert_equal(calls[IMAGE_CONFIRM], 1);
     zassert_equal(stops, 1);
 }
 
 ZTEST(acquisition, test_lifecycle_guards)
 {
     zassert_equal(status_phase_get(), STATUS_UNCONFIGURED);
-    zassert_equal(status_progress(), -EACCES);
     zassert_equal(watchdog_report_fault(-EIO, "Input point update failed", WATCHDOG_ACTION_RESET), -EACCES);
     zassert_equal(application_cycle(), -EACCES);
     zassert_equal(calls[SAMPLE], 0);
@@ -593,7 +586,6 @@ ZTEST(acquisition, test_status_records_latest_fault_without_resuming_business)
     zassert_equal(fault_snapshot().phase, STATUS_RUNTIME);
     zassert_equal(fault_snapshot().error, -ETIMEDOUT);
     zassert_str_equal(fault_snapshot().description, "Task heartbeat timed out");
-    zassert_equal(status_progress(), -EACCES);
     zassert_equal(stops, 2);
 }
 
@@ -704,7 +696,7 @@ ZTEST(acquisition, test_initial_led_output_failure_stops_startup)
     zassert_equal(fault_snapshot().phase, STATUS_INIT);
 }
 
-ZTEST(acquisition, test_storage_failure_keeps_sampling_without_confirmation)
+ZTEST(acquisition, test_storage_degradation_does_not_block_startup_confirmation)
 {
     errors[PARAMS_INIT] = -EIO;
     parameter_flags = 0;
@@ -713,23 +705,22 @@ ZTEST(acquisition, test_storage_failure_keeps_sampling_without_confirmation)
     zassert_equal(calls[PROCESS_INIT], 1);
     zassert_equal(calls[COLLECT_START], 1);
     zassert_ok(application_cycle());
-    zassert_false(checkpoint_ready);
     zassert_equal(status_degradation_get().storage_error, -EIO);
-    zassert_equal(calls[CHECKPOINT], 1);
+    zassert_equal(calls[IMAGE_CONFIRM], 1);
 }
 
-ZTEST(acquisition, test_pending_recovery_prevents_confirmation_until_resolved)
+ZTEST(acquisition, test_pending_recovery_does_not_delay_startup_confirmation)
 {
     errors[PARAMS_RECOVER] = -ETIMEDOUT;
     parameter_flags = DP_PARAM_STORAGE_READY | DP_PARAM_PENDING;
     zassert_ok(startup());
+    zassert_equal(calls[IMAGE_CONFIRM], 1);
     zassert_equal(calls[COLLECT_START], 1);
     zassert_ok(application_cycle());
-    zassert_false(checkpoint_ready);
 
     parameter_flags = DP_PARAM_STORAGE_READY;
     zassert_ok(application_cycle());
-    zassert_true(checkpoint_ready);
+    zassert_equal(calls[IMAGE_CONFIRM], 1);
 }
 
 ZTEST(acquisition, test_remote_outage_is_diagnostic_and_keeps_watchdog_progress)
@@ -738,13 +729,13 @@ ZTEST(acquisition, test_remote_outage_is_diagnostic_and_keeps_watchdog_progress)
     remote_state = CO_DEVICE_OFFLINE;
     zassert_ok(application_cycle());
     zassert_equal(status_degradation_get().remote_offline, 1);
-    zassert_equal(calls[CHECKPOINT], 1);
+    zassert_equal(calls[IMAGE_CONFIRM], 1);
     zassert_equal(stops, 0);
     remote_state = CO_DEVICE_INITIALIZING;
     zassert_ok(application_cycle());
     zassert_equal(status_degradation_get().remote_offline, 0);
     zassert_equal(status_degradation_get().remote_initializing, 1);
-    zassert_equal(calls[CHECKPOINT], 2);
+    zassert_equal(calls[IMAGE_CONFIRM], 1);
 }
 
 ZTEST(acquisition, test_shared_wire_station_conflict_fails_before_ports_or_workers)
@@ -767,12 +758,10 @@ ZTEST(acquisition, test_storage_fault_survives_successful_operation_until_storag
     errors[PARAMS_INIT] = 0; /* 最近一次参数操作现已成功。 */
     zassert_ok(application_cycle());
     zassert_equal(status_degradation_get().storage_error, -EIO);
-    zassert_false(checkpoint_ready);
-    zassert_equal(calls[CHECKPOINT], 2);
+    zassert_equal(calls[IMAGE_CONFIRM], 1);
     parameter_flags = DP_PARAM_STORAGE_READY;
     zassert_ok(application_cycle());
     zassert_equal(status_degradation_get().storage_error, 0);
-    zassert_true(checkpoint_ready);
 }
 
 ZTEST_SUITE(acquisition, NULL, NULL, before, NULL, NULL);

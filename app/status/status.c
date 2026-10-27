@@ -1,10 +1,6 @@
 #include "status/inc/status.h"
 #include "status_led.h"
 #include <watchdog/watchdog.h>
-#ifdef CONFIG_BOOTLOADER_MCUBOOT
-#include <dataprocess/params.h>
-#include "image_confirm.h"
-#endif
 #ifdef CONFIG_IDU_IAPV3
 #include <iap/iap.h>
 #endif
@@ -24,9 +20,6 @@ static struct {
 static struct {
     struct status_application_fault fault;
     struct status_degradation degradation;
-#ifdef CONFIG_BOOTLOADER_MCUBOOT
-    struct image_confirm image_confirm;
-#endif
 } application;
 
 /* ==================== 状态维护与诊断查询 ==================== */
@@ -159,23 +152,5 @@ int status_init(void)
     if (err) {
         return watchdog_report_fault(err, "Indicator initialization failed", WATCHDOG_ACTION_HOLD);
     }
-    return 0;
-}
-
-/* ==================== 试运行镜像健康确认 ==================== */
-
-int status_progress(void)
-{
-    if (status_phase_get() != STATUS_RUN) { return -EACCES; }
-#ifdef CONFIG_BOOTLOADER_MCUBOOT
-    const struct device *flash = DEVICE_DT_GET(DT_NODELABEL(external_flash));
-    struct dp_param_status parameters;
-    dp_params_get_status(&parameters);
-    bool ready = device_is_ready(flash) && (parameters.flags & DP_PARAM_STORAGE_READY) &&
-                 !(parameters.flags & DP_PARAM_PENDING);
-    int err = image_confirm_checkpoint(&application.image_confirm, k_uptime_get(), ready);
-    if (err) { return watchdog_report_fault(err, "Image confirmation failed",
-                                             WATCHDOG_ACTION_RESET); }
-#endif
     return 0;
 }

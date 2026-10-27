@@ -6,6 +6,9 @@
 #ifdef CONFIG_IDU_IAPV3
 #include <iap/iap.h>
 #endif
+#ifdef CONFIG_BOOTLOADER_MCUBOOT
+#include <zephyr/dfu/mcuboot.h>
+#endif
 
 int startup(void)
 {
@@ -31,11 +34,18 @@ int startup(void)
         return err;
     }
 
+#ifdef CONFIG_BOOTLOADER_MCUBOOT
+    /* 必要初始化完成后确认镜像，不再设置运行健康计时窗口。 */
+    err = boot_write_img_confirmed();
+    if (err) {
+        return watchdog_report_fault(err, "Image confirmation failed", WATCHDOG_ACTION_HOLD);
+    }
+#endif
     status_set_phase(STATUS_RUN);
     return 0;
 }
 
-/* 维护通信和健康状态归主循环，采样函数只读硬件并写测点。 */
+/* 主循环维护通信，采样函数只读硬件并写测点。 */
 int application_cycle(void)
 {
     if (status_phase_get() != STATUS_RUN) {
@@ -50,7 +60,7 @@ int application_cycle(void)
     if (err) {
         return watchdog_report_fault(err, "Protocol maintenance failed", WATCHDOG_ACTION_RESET);
     }
-    return status_progress();
+    return 0;
 }
 
 int main(void)

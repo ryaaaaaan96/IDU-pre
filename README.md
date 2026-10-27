@@ -127,9 +127,9 @@ app/main.c                         启动顺序、采样周期与休眠
 `main.c` 中的 `startup()` 显式组织状态与输入初始化、点表注册、端口和总线
 建立、参数恢复、INIT 和采集启动。启动成功后按周期调用 `acquisition_cycle()`；
 不再设置独立的 startup 文件或设备服务兼容入口。
-`app/status/inc/status.h` 定义业务阶段，启动或采集失败时保留最初故障、停止喂狗，
-并拒绝继续执行。MCUboot 确认条件由 `status` 检查 Flash 和参数事务状态，
-持续健康窗口由 `status/image_confirm.c` 判断。
+`app/status/inc/status.h` 定义业务阶段并维护最近故障。启动失败留驻，运行故障按调用点动作处理。
+MCUboot 镜像在 `startup()` 完成必要初始化后调用 `boot_write_img_confirmed()` 确认一次；
+确认失败留驻，不再执行运行健康窗口或参数存储条件检查。
 多任务看门狗由 watchdog 工作队列检查，硬件定时器按健康结果有效期喂狗；任务显式登记，status 负责产品故障处置；无活动登记项时持续喂狗，现有任务暂未接入，见[任务看门狗](docs/task-watchdog.md)。
 
 新增功能时，通用机制放进对应模块，产品数据放进 `protocol/`，测点业务放进 `process/`。
@@ -166,7 +166,7 @@ IDU-pre/
 ├── app/
 │   ├── main.c           # 模块初始化顺序、采样周期与休眠
 │   ├── acquisition/     # 硬件输入映射、采样和同步写点
-│   ├── status/          # 业务状态、LED 策略、健康进度及镜像确认
+│   ├── status/          # 业务状态、故障策略和 LED
 │   ├── protocol/        # 点表及端口/协议配置；inc/ 配置契约；tables/ 三表
 │   └── process/         # 采样映射、工程换算及业务参数回调
 ├── modules/             # watchdog 及点表/升级/SoC 模块
@@ -201,8 +201,7 @@ IDU-pre/
 | 接口 | 职责 |
 | --- | --- |
 | `acquisition/acquisition.h` | 产品输入初始化和 DI/AI 测点更新 |
-| `status/inc/status.h` | 业务阶段、故障状态、LED 策略及健康进度 |
-| `status/image_confirm.h` | MCUboot 试运行健康确认 |
+| `status/inc/status.h` | 业务阶段、故障状态和 LED 策略 |
 | `process/points.h` | 周期参数及测点业务回调 |
 | `protocol/inc/protocol.h` | 点表注册、`protocol_ports_init()` 注册入口及常驻配置声明 |
 | `<transmit/server.h>` | 每端口启动、配置更新及健康维护 |
@@ -222,7 +221,7 @@ IDU-pre/
 回调。目录及依赖边界见[模块说明](modules/README.md#protocol-implementation-layout)。
 
 [`bootloader/`](bootloader/README.md) 保存本板 MCUboot 配置、分区和联合构建设置。
-MCUboot 源码仍使用 West 工作区中的独立仓库；`app/status/image_confirm.c` 负责应用健康确认。
+MCUboot 源码仍使用 West 工作区中的独立仓库；`app/main.c` 在必要初始化成功后确认镜像。
 [`modules/iap/`](modules/iap/README.md) 负责升级接收、解包和验签，分区／内存取自
 设备树，密钥来源、镜像上限和保存策略由 `conf/iapv3.conf` 等 Kconfig 配置提供，
 产品升级开关归 `app/Kconfig`，运行层和通信层直接调用 `iap_*`，不再保留
@@ -293,5 +292,4 @@ DP 提供 `dp_point_parameters_get()` 查询与初始化前的国家差异覆盖
 LED 单独位于 `status/status_led.c/.h`，其 `status_led` 延时工作运行在系统工作队列中。
 
 status 目录采用公开接口与内部实现分离的布局：`inc/status.h` 是唯一公开头文件；
-`status.c`、`status_led.c`、`image_confirm.c` 均位于根目录，
-对应的 `status_led.h`、`image_confirm.h` 仅供内部协作。
+`status.c`、`status_led.c` 位于根目录，`status_led.h` 仅供内部协作。

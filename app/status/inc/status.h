@@ -80,14 +80,6 @@ int status_init(void);
  */
 void status_set_phase(status_phase_t phase);
 
-/**
- * @brief 推进试运行镜像的健康确认；监控故障由 watchdog 回调上报。
- * @retval 0 检查通过，或故障策略允许继续。
- * @retval -EACCES 当前不处于 STATUS_RUN。
- * @return 其他错误码表示已报告故障；复位策略可能不返回。
- */
-int status_progress(void);
-
 /** @brief 读取当前阶段，可在线程或 ISR 中调用。 */
 status_phase_t status_phase_get(void);
 

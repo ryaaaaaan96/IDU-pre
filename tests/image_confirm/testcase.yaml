@@ -1,4 +1,0 @@
-tests:
-  idu.image.confirmation:
-    platform_allow: native_sim/native/64
-    tags: [idu, mcuboot]
