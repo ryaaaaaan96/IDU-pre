@@ -33,3 +33,11 @@ IAP 保留参数保存失败时阻止升级提交/重启的约束。
 实施验收依据见[正式规格](../../.scratch/communication-boundaries/spec.md)，快速阅读见[方案汇总](../communication-refactor.md)，
 问答过程保存在[边界讨论](../../.scratch/communication-boundaries/discussion.md)。
 具体接口与资源在后续实施中落实；规格发布本身不实施运行代码。ADR 0006 的数据设备与转发身份分离保持有效。
+
+## 2026-10-27：暂时只运行 process
+
+为先优化 process 的设计，用户要求暂时排除采集与转发，后续重新启用。
+当前产品改由 `process_runtime.c` 绑定本地 process 表并启动 DP 线程，原通信实现原样保留但不参与产品构建。
+本轮不改变通用 DP/CO/TR 接口，也不将通信处理迁入 process。
+参数区暂不挂载，避免仅本地配置误判南向未决事务并触发格式清空；当前使用 RAM 默认值。
+这是对本 ADR 完整装配流程的阶段性暂停，恢复步骤见 [protocol 说明](../../app/protocol/README.md)。

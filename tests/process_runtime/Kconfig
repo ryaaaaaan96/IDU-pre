@@ -1,0 +1,3 @@
+mainmenu "Process runtime tests"
+source "Kconfig.zephyr"
+rsource "../../app/Kconfig"

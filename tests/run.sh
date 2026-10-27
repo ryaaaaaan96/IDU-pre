@@ -45,7 +45,7 @@ bash applications/IDU-pre/tests/runtime/run.sh
 bash applications/IDU-pre/tests/iap/run.sh
 
 # ADC 契约、模块化遥测、可复用模型和事件驱动轮询。
-for suite in adc io vport modbus_support communication shared_rs485 simulator pipeline models collector collect_state collect_modbus transmit forwarding_devices transmit_port dataprocess reference_dp reference_ports reference_config reference_services; do
+for suite in adc io vport modbus_support communication shared_rs485 simulator pipeline models collector collect_state collect_modbus transmit forwarding_devices transmit_port process_runtime dataprocess reference_dp reference_ports reference_config reference_services; do
     env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
         "applications/IDU-pre/tests/$suite" -d "$test_dir/$suite"
     if [[ "$suite" == io ]]; then

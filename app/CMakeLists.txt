@@ -18,7 +18,7 @@ if(CONFIG_IDU_IAPV3 AND CONFIG_IDU_FORWARD_UNIT EQUAL 247)
 endif()
 
 target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_sources(app PRIVATE main.c protocol/ports.c)
+target_sources(app PRIVATE main.c)
 add_subdirectory(protocol)
 add_subdirectory(acquisition)
 add_subdirectory(status)

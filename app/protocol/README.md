@@ -1,5 +1,30 @@
 # 点表与协议配置
 
+## 当前阶段：仅运行 process（2026-10-27）
+
+按本轮优化要求，产品只编译 `process_runtime.c` 和 `tables/process.c`。
+启动顺序：本地点表注册 → `dp_init()` → `dp_process_init()` → `dp_reference_init()` → DP 样本/业务线程。
+只绑定 `DEVICE_LOCAL`，不生成采集关系；本地 DI/AI 继续由 acquisition 读取并写入 DP。
+`protocol_stop()` 只停止 DP；`protocol_error()` 暂保留兼容入口并返回 0。
+
+原 `protocol.c`、`init.c`、`tasks.c`、`ports.c/.h`、`tasks.h`、采集表、转发表与协议段表
+归为**暂时废弃、待重新启用**的通信实现，原文件不改动、不删除。产品构建不编译这些实现，
+不创建 CO 线程、TR 队列，不打开 RS485 接口；北向 Modbus 与 IAPv3 串口接收暂不可用。
+IAP 自身初始化、MCUboot、Shell、LED、看门狗和本地采样保持原流程。
+模块及 Kconfig 暂保留，停用运行装配不代表已经剥离全部编译依赖。
+
+当前使用 RAM 默认值，不调用 `dp_params_init()` 或 `dp_params_recover()`，不挂载参数区。
+原因是既有南向未决意图引用远端设备，临时只绑定本地设备可能触发原有的不兼容格式清空策略。
+因此本地参数的 Flash 加载、保存、恢复命令也暂不可用，已有 NVS 不由本入口修改；后续接回持久化时单独验证。
+
+重新启用时，先重新审查通信装配，再将产品 CMake 切回原 `protocol.c`、`init.c`、`tasks.c`、
+`ports.c` 和相应点表，移除 `process_runtime.c`，避免重复符号；恢复参数后端、总线和任务启动顺序。
+现有通信测试仍编译保留的原配置；`tests/process_runtime` 单独验证当前入口。
+下文是保留实现的说明，不代表当前固件启用了通信。
+
+## 保留的通信方案
+
+
 [文档导航](../../docs/README.md) · [点表与寄存器](../../docs/point-tables.md)
 
 本目录声明产品点表、设备关联、协议服务配置和端口编排。
