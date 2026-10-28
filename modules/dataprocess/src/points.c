@@ -25,6 +25,13 @@ SYS_HASHMAP_OA_LP_DEFINE_STATIC_ADVANCED(registration_keys,
     k_realloc,
     SYS_HASHMAP_CONFIG(SIZE_MAX, SYS_HASHMAP_DEFAULT_LOAD_FACTOR));
 
+#ifdef CONFIG_DP_HASH_LOOKUP
+SYS_HASHMAP_OA_LP_DEFINE_STATIC_ADVANCED(device_lookup,
+    sys_hash32,
+    k_realloc,
+    SYS_HASHMAP_CONFIG(SIZE_MAX, SYS_HASHMAP_DEFAULT_LOAD_FACTOR));
+#endif
+
 /* ==================== 内部实现 ==================== */
 
 static int check_value(const dp_point_config_t *point, const value_t *value)
@@ -107,6 +114,23 @@ dp_registered_table_t *dp_tables(void)
     return tables;
 }
 
+static dp_registered_table_t *find_table(uint16_t device_id)
+{
+#ifdef CONFIG_DP_HASH_LOOKUP
+    uint64_t value;
+    if (sys_hashmap_get(&device_lookup, device_id, &value)) {
+        return (dp_registered_table_t *)(uintptr_t)value;
+    }
+#else
+    for (dp_registered_table_t *table = tables; table; table = table->next) {
+        if (table->device_id == device_id) {
+            return table;
+        }
+    }
+#endif
+    return NULL;
+}
+
 static int find_point(uint16_t device_id,
     uint16_t signal_key,
     const dp_point_config_t **point,
@@ -116,22 +140,23 @@ static int find_point(uint16_t device_id,
     if (!device_id || !signal_key) {
         return -EINVAL;
     }
-    for (dp_registered_table_t *table = tables; table; table = table->next) {
-        if (table->device_id != device_id) {
-            continue;
-        }
-        for (size_t i = 0; i < table->point_count; ++i) {
-            if (table->points[i].signal_key != signal_key) {
-                continue;
-            }
-            *signal_index = i;
-            *state = &table->data[i];
-            *point = &table->points[i];
-            return 0;
-        }
+    dp_registered_table_t *table = find_table(device_id);
+    if (!table) {
         return -ENOENT;
     }
-    return -ENOENT;
+    size_t i;
+    for (i = 0; i < table->point_count; ++i) {
+        if (table->points[i].signal_key == signal_key) {
+            break;
+        }
+    }
+    if (i == table->point_count) {
+        return -ENOENT;
+    }
+    *signal_index = i;
+    *state = &table->data[i];
+    *point = &table->points[i];
+    return 0;
 }
 
 /* 将 hashmap 仅用作 key 集合；插入已有 key 返回 0。 */
@@ -173,10 +198,8 @@ int dp_register_table(uint16_t device_id, const dp_table_t *table)
     if (!device_id || !table || !table->points || !table->point_count) {
         return -EINVAL;
     }
-    for (const dp_registered_table_t *item = tables; item; item = item->next) {
-        if (item->device_id == device_id) {
-            return -EEXIST;
-        }
+    if (find_table(device_id)) {
+        return -EEXIST;
     }
     if (table->point_count > DP_MAX_ALLOCATABLE_POINTS) {
         return -EOVERFLOW;
@@ -203,14 +226,23 @@ int dp_register_table(uint16_t device_id, const dp_table_t *table)
             err = check_value(point, &entry->data[i].value);
         }
         if (err) {
-            k_free(entry);
-            return -EINVAL;
+            err = -EINVAL;
+            goto failed;
         }
     }
-    /* 整表校验及初值设置成功后才发布。 */
+#ifdef CONFIG_DP_HASH_LOOKUP
+    err = sys_hashmap_insert(&device_lookup, device_id, (uint64_t)(uintptr_t)entry, NULL);
+    if (err < 0) {
+        goto failed;
+    }
+#endif
+    /* 全部准备完成才发布；设备链表无需维护登记顺序。 */
     entry->next = tables;
     tables = entry;
     return 0;
+failed:
+    k_free(entry);
+    return err;
 }
 
 int dp_set_para(uint16_t device_id, uint16_t signal_key, const value_t *value)
@@ -293,21 +325,19 @@ int dp_restore_defaults(uint16_t device_id)
     if (!device_id) {
         return -EINVAL;
     }
-    for (dp_registered_table_t *table = tables; table; table = table->next) {
-        if (table->device_id != device_id) {
+    dp_registered_table_t *table = find_table(device_id);
+    if (!table) {
+        return -ENOENT;
+    }
+    uint32_t restored_at_s = dp_timestamp_s();
+    k_mutex_lock(&store_lock, K_FOREVER);
+    for (size_t i = 0; i < table->point_count; ++i) {
+        if (table->points[i].flags & DP_POINT_FLAG_SKIP_RESTORE) {
             continue;
         }
-        uint32_t restored_at_s = dp_timestamp_s();
-        k_mutex_lock(&store_lock, K_FOREVER);
-        for (size_t i = 0; i < table->point_count; ++i) {
-            if (table->points[i].flags & DP_POINT_FLAG_SKIP_RESTORE) {
-                continue;
-            }
-            table->data[i].value = table->points[i].data.initial;
-            table->data[i].updated_at_s = restored_at_s;
-        }
-        k_mutex_unlock(&store_lock);
-        return 0;
+        table->data[i].value = table->points[i].data.initial;
+        table->data[i].updated_at_s = restored_at_s;
     }
-    return -ENOENT;
+    k_mutex_unlock(&store_lock);
+    return 0;
 }

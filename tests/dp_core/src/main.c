@@ -160,13 +160,39 @@ ZTEST(dp_core, test_core)
     zassert_is_null(data(7, 0));
     fail_allocation = false;
     zassert_ok(dp_register_table(7, &table));
-    zassert_equal(active_map_allocations, 0);
+    zassert_equal(active_map_allocations, IS_ENABLED(CONFIG_DP_HASH_LOOKUP) ? 1 : 0);
     zassert_equal(dp_register_table(7, &table), -EEXIST);
     zassert_ok(dp_register_table(8, &table));
     zassert_equal(data(7, 1)->value.u16, 50);
     zassert_equal(data(8, 1)->value.u16, 50);
     zassert_equal(data(7, 1)->updated_at_s, 0);
 
+#ifdef CONFIG_DP_HASH_LOOKUP
+    /* 逐一失败于临时集合及设备索引扩容，旧设备始终可读。 */
+    for (uint16_t device = 10; device <= 11; ++device) {
+        size_t baseline = active_map_allocations;
+        bool registered = false;
+        for (int allowed = 0; allowed < 20; ++allowed) {
+            map_allocations_left = allowed;
+            int err = dp_register_table(device, &table);
+            if (!err) {
+                registered = true;
+                break;
+            }
+            zassert_equal(err, -ENOMEM);
+            zassert_is_null(data(device, 0));
+            zassert_equal(active_map_allocations, baseline);
+            read_u16(300, 50);
+        }
+        map_allocations_left = -1;
+        zassert_true(registered);
+        value_t value;
+        zassert_ok(dp_get_para(device, 99, &value));
+        zassert_equal(value.bytes[0], 1);
+        zassert_equal(dp_get_para(device, 999, &value), -ENOENT);
+    }
+#endif
+    size_t map_baseline = active_map_allocations;
     static dp_point_config_t duplicates[512];
     for (size_t i = 0; i < ARRAY_SIZE(duplicates); ++i) {
         duplicates[i] =
@@ -177,7 +203,7 @@ ZTEST(dp_core, test_core)
         .points = duplicates, .point_count = ARRAY_SIZE(duplicates)};
     for (size_t attempt = 0; attempt < 3; ++attempt) {
         zassert_equal(dp_register_table(9, &duplicate_table), -EEXIST);
-        zassert_equal(active_map_allocations, 0);
+        zassert_equal(active_map_allocations, map_baseline);
     }
     zassert_is_null(data(9, 0));
     const dp_point_config_t invalid[] = {

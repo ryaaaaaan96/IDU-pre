@@ -19,6 +19,14 @@ env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/process_runtime -d "$test_dir/process_runtime"
 timeout 30s "$test_dir/process_runtime/zephyr/zephyr.exe"
 
+# 同一套行为分别验证线性查找和常驻 hashmap 索引。
+for suite in dp_core process_runtime; do
+    env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
+        "applications/IDU-pre/tests/$suite" -d "$test_dir/$suite-hash" -- \
+        -DEXTRA_CONF_FILE=hash.conf
+    timeout 30s "$test_dir/$suite-hash/zephyr/zephyr.exe"
+done
+
 for suite in adc modbus_support; do
     env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
         "applications/IDU-pre/tests/$suite" -d "$test_dir/$suite"

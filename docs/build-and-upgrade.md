@@ -26,7 +26,8 @@ DP 最小核心的线程和容量配置集中在 `prj.conf`：
 
 | 配置 | 当前值 | 说明 |
 | --- | ---: | --- |
-| `CONFIG_DATAPROCESS` | y | 启用点值和参数核心 |
+| `CONFIG_DATAPROCESS` | y | 启用 RAM 点值核心 |
+| `CONFIG_DP_HASH_LOOKUP` | n | 可选设备 ID hashmap；测点始终线性查找 |
 | `CONFIG_COMMON_VALUE_WORDS` | 16 | 单点最大字数；每设备运行数据由 DP 内部分配 |
 | `CONFIG_MAIN_STACK_SIZE` | 4096 | 主循环、本地采样和 DP 同步调用 |
 | `CONFIG_SYSTEM_WORKQUEUE_STACK_SIZE` | 2048 | 看门狗等系统工作 |

@@ -7,6 +7,16 @@ menuconfig DATAPROCESS
 
 if DATAPROCESS
 
+config DP_HASH_LOOKUP
+    bool "Use hashmap index for device lookup"
+    default n
+    help
+      Keep a device_id-to-table index in RAM for average O(1) device lookup.
+      Disabled uses linear device lookup. Signals within a device always
+      use linear lookup. Includes additional buckets and resize memory.
+      Both modes preserve point-table row order. Device traversal order
+      is unspecified.
+
 config HEAP_MEM_POOL_ADD_SIZE_DATAPROCESS
     int "System heap budget for registered devices and point data (bytes)"
     default 2048
