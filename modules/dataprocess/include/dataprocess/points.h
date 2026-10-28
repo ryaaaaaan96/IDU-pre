@@ -49,8 +49,8 @@ typedef struct {
     uint16_t signal_id;
 } dp_key_t;
 
-typedef int (*dp_write_fn_t)(dp_key_t key, const dp_value_t *value);
-typedef int (*dp_read_fn_t)(dp_key_t key, dp_value_t *value);
+typedef int (*dp_write_callback_t)(dp_key_t key, const dp_value_t *value);
+typedef int (*dp_read_callback_t)(dp_key_t key, dp_value_t *value);
 
 /** @brief 点表字面值；大于 4 字节的初值使用常驻只读数组指针。 */
 typedef union {
@@ -63,7 +63,7 @@ typedef union {
 } dp_default_value_t;
 
 typedef struct {
-    dp_default_value_t initial;
+    dp_default_value_t default_value;
     dp_default_value_t minimum;
     dp_default_value_t maximum;
 } dp_point_limits_t;
@@ -73,8 +73,8 @@ typedef struct {
     uint8_t size;
     uint8_t flags;
     dp_value_type_t type;
-    dp_write_fn_t write;
-    dp_read_fn_t read;
+    dp_write_callback_t write_callback;
+    dp_read_callback_t read_callback;
     dp_point_limits_t data;
 } dp_point_def_t;
 

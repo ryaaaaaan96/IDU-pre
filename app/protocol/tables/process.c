@@ -11,10 +11,10 @@ static const dp_point_def_t local_process_rows[] = {
         .size = 2,
         .flags = DP_POINT_DEFAULT_FLAGS,
         .type = DP_TYPE_U16,
-        .write = points_parameter_command,
+        .write_callback = points_parameter_command,
         .data =
             {
-                .initial.u16 = DP_POINT_DEFAULT_VALUE,
+                .default_value.u16 = DP_POINT_DEFAULT_VALUE,
                 .minimum.u16 = DP_POINT_DEFAULT_VALUE,
                 .maximum.u16 = DP_POINT_DEFAULT_VALUE,
             },
@@ -24,10 +24,10 @@ static const dp_point_def_t local_process_rows[] = {
         .size = 2,
         .flags = DP_POINT_DEFAULT_FLAGS,
         .type = DP_TYPE_U16,
-        .write = points_parameter_command,
+        .write_callback = points_parameter_command,
         .data =
             {
-                .initial.u16 = DP_POINT_DEFAULT_VALUE,
+                .default_value.u16 = DP_POINT_DEFAULT_VALUE,
                 .minimum.u16 = DP_POINT_DEFAULT_VALUE,
                 .maximum.u16 = DP_POINT_DEFAULT_VALUE,
             },
@@ -37,10 +37,10 @@ static const dp_point_def_t local_process_rows[] = {
         .size = 8,
         .flags = FLAG_READ_CALLBACK,
         .type = DP_TYPE_WORDS,
-        .read = points_parameter_status,
+        .read_callback = points_parameter_status,
         .data =
             {
-                .initial.array = DP_POINT_DEFAULT_ARRAY,
+                .default_value.array = DP_POINT_DEFAULT_ARRAY,
                 .minimum.array = DP_POINT_DEFAULT_ARRAY,
                 .maximum.array = DP_POINT_DEFAULT_ARRAY,
             },
@@ -52,7 +52,7 @@ static const dp_point_def_t local_process_rows[] = {
         .type = DP_TYPE_U16,
         .data =
             {
-                .initial.u16 = CONFIG_IDU_SAMPLE_PERIOD_MS,
+                .default_value.u16 = CONFIG_IDU_SAMPLE_PERIOD_MS,
                 .minimum.u16 = 100,
                 .maximum.u16 = 1000,
             },
@@ -64,7 +64,8 @@ static const dp_point_def_t local_process_rows[] = {
         .type = DP_TYPE_WORDS,
         .data =
             {
-                .initial.array = (const uint16_t[]){0x4944, 0x552d, 0x7072, 0x6500, 0, 0, 0, 0},
+                .default_value.array =
+                    (const uint16_t[]){0x4944, 0x552d, 0x7072, 0x6500, 0, 0, 0, 0},
                 .minimum.array = DP_POINT_DEFAULT_ARRAY,
                 .maximum.array = DP_POINT_DEFAULT_ARRAY,
             },
@@ -76,7 +77,7 @@ static const dp_point_def_t local_process_rows[] = {
         .type = DP_TYPE_U16,
         .data =
             {
-                .initial.u16 = 1,
+                .default_value.u16 = 1,
                 .minimum.u16 = 1,
                 .maximum.u16 = 246,
             },
@@ -88,7 +89,7 @@ static const dp_point_def_t local_process_rows[] = {
         .type = DP_TYPE_U16,
         .data =
             {
-                .initial.u16 = 3,
+                .default_value.u16 = 3,
                 .minimum.u16 = DP_POINT_DEFAULT_VALUE,
                 .maximum.u16 = UINT16_MAX,
             },
@@ -100,7 +101,7 @@ static const dp_point_def_t local_process_rows[] = {
         .type = DP_TYPE_WORDS,
         .data =
             {
-                .initial.array =
+                .default_value.array =
                     (const uint16_t[]){0x5347, 0x2d46, 0x4143, 0x544f, 0x5259, 0, 0, 0, 0, 0},
                 .minimum.array = DP_POINT_DEFAULT_ARRAY,
                 .maximum.array = DP_POINT_DEFAULT_ARRAY,
@@ -113,7 +114,7 @@ static const dp_point_def_t local_process_rows[] = {
         .type = DP_TYPE_WORDS,
         .data =
             {
-                .initial.array = (const uint16_t[]){0x4944,
+                .default_value.array = (const uint16_t[]){0x4944,
                     0x552d,
                     0x7072,
                     0x655f,
@@ -139,7 +140,7 @@ static const dp_point_def_t local_process_rows[] = {
         .type = DP_TYPE_WORDS,
         .data =
             {
-                .initial.array = (const uint16_t[]){0x3031, 0x4152, 3, 0x0103},
+                .default_value.array = (const uint16_t[]){0x3031, 0x4152, 3, 0x0103},
                 .minimum.array = DP_POINT_DEFAULT_ARRAY,
                 .maximum.array = DP_POINT_DEFAULT_ARRAY,
             },
@@ -151,7 +152,7 @@ static const dp_point_def_t local_process_rows[] = {
         .type = DP_TYPE_U16,
         .data =
             {
-                .initial.u16 = DEVICE_TYPE,
+                .default_value.u16 = DEVICE_TYPE,
                 .minimum.u16 = DP_POINT_DEFAULT_VALUE,
                 .maximum.u16 = UINT16_MAX,
             },
@@ -163,7 +164,7 @@ static const dp_point_def_t local_process_rows[] = {
         .type = DP_TYPE_U32,
         .data =
             {
-                .initial.u32 = PROTOCOL_VERSION,
+                .default_value.u32 = PROTOCOL_VERSION,
                 .minimum.u32 = DP_POINT_DEFAULT_VALUE,
                 .maximum.u32 = UINT32_MAX,
             },
@@ -175,7 +176,7 @@ static const dp_point_def_t local_process_rows[] = {
         .type = DP_TYPE_U16,
         .data =
             {
-                .initial.u16 = 0x1204,
+                .default_value.u16 = 0x1204,
                 .minimum.u16 = DP_POINT_DEFAULT_VALUE,
                 .maximum.u16 = UINT16_MAX,
             },
@@ -187,7 +188,7 @@ static const dp_point_def_t local_process_rows[] = {
         .type = DP_TYPE_U16,
         .data =
             {
-                .initial.u16 = IS_ENABLED(CONFIG_IDU_TEST_FIXTURES),
+                .default_value.u16 = IS_ENABLED(CONFIG_IDU_TEST_FIXTURES),
                 .minimum.u16 = DP_POINT_DEFAULT_VALUE,
                 .maximum.u16 = UINT16_MAX,
             },
@@ -199,7 +200,7 @@ static const dp_point_def_t local_process_rows[] = {
         .type = DP_TYPE_U16,
         .data =
             {
-                .initial.u16 = 1,
+                .default_value.u16 = 1,
                 .minimum.u16 = 1,
                 .maximum.u16 = 16,
             },
@@ -211,7 +212,7 @@ static const dp_point_def_t local_process_rows[] = {
         .type = DP_TYPE_U16,
         .data =
             {
-                .initial.u16 = DP_POINT_DEFAULT_VALUE,
+                .default_value.u16 = DP_POINT_DEFAULT_VALUE,
                 .minimum.u16 = DP_POINT_DEFAULT_VALUE,
                 .maximum.u16 = DP_POINT_DEFAULT_VALUE,
             },
@@ -223,7 +224,7 @@ static const dp_point_def_t local_process_rows[] = {
         .type = DP_TYPE_U16,
         .data =
             {
-                .initial.u16 = DP_POINT_DEFAULT_VALUE,
+                .default_value.u16 = DP_POINT_DEFAULT_VALUE,
                 .minimum.u16 = DP_POINT_DEFAULT_VALUE,
                 .maximum.u16 = DP_POINT_DEFAULT_VALUE,
             },
@@ -235,7 +236,7 @@ static const dp_point_def_t local_process_rows[] = {
         .type = DP_TYPE_U16,
         .data =
             {
-                .initial.u16 = DP_POINT_DEFAULT_VALUE,
+                .default_value.u16 = DP_POINT_DEFAULT_VALUE,
                 .minimum.u16 = DP_POINT_DEFAULT_VALUE,
                 .maximum.u16 = DP_POINT_DEFAULT_VALUE,
             },
@@ -247,7 +248,7 @@ static const dp_point_def_t local_process_rows[] = {
         .type = DP_TYPE_U16,
         .data =
             {
-                .initial.u16 = DP_POINT_DEFAULT_VALUE,
+                .default_value.u16 = DP_POINT_DEFAULT_VALUE,
                 .minimum.u16 = DP_POINT_DEFAULT_VALUE,
                 .maximum.u16 = DP_POINT_DEFAULT_VALUE,
             },
@@ -259,7 +260,7 @@ static const dp_point_def_t local_process_rows[] = {
         .type = DP_TYPE_U16,
         .data =
             {
-                .initial.u16 = DP_POINT_DEFAULT_VALUE,
+                .default_value.u16 = DP_POINT_DEFAULT_VALUE,
                 .minimum.u16 = DP_POINT_DEFAULT_VALUE,
                 .maximum.u16 = DP_POINT_DEFAULT_VALUE,
             },
@@ -271,7 +272,7 @@ static const dp_point_def_t local_process_rows[] = {
         .type = DP_TYPE_U16,
         .data =
             {
-                .initial.u16 = DP_POINT_DEFAULT_VALUE,
+                .default_value.u16 = DP_POINT_DEFAULT_VALUE,
                 .minimum.u16 = DP_POINT_DEFAULT_VALUE,
                 .maximum.u16 = DP_POINT_DEFAULT_VALUE,
             },
@@ -283,7 +284,7 @@ static const dp_point_def_t local_process_rows[] = {
         .type = DP_TYPE_U16,
         .data =
             {
-                .initial.u16 = DP_POINT_DEFAULT_VALUE,
+                .default_value.u16 = DP_POINT_DEFAULT_VALUE,
                 .minimum.u16 = DP_POINT_DEFAULT_VALUE,
                 .maximum.u16 = DP_POINT_DEFAULT_VALUE,
             },
@@ -295,7 +296,7 @@ static const dp_point_def_t local_process_rows[] = {
         .type = DP_TYPE_U16,
         .data =
             {
-                .initial.u16 = DP_POINT_DEFAULT_VALUE,
+                .default_value.u16 = DP_POINT_DEFAULT_VALUE,
                 .minimum.u16 = DP_POINT_DEFAULT_VALUE,
                 .maximum.u16 = DP_POINT_DEFAULT_VALUE,
             },
@@ -307,7 +308,7 @@ static const dp_point_def_t local_process_rows[] = {
         .type = DP_TYPE_U16,
         .data =
             {
-                .initial.u16 = DP_POINT_DEFAULT_VALUE,
+                .default_value.u16 = DP_POINT_DEFAULT_VALUE,
                 .minimum.u16 = DP_POINT_DEFAULT_VALUE,
                 .maximum.u16 = DP_POINT_DEFAULT_VALUE,
             },

@@ -29,9 +29,9 @@
 - `SIGNAL_DI`、`SIGNAL_CURRENT_1..8`：本地点，无标志。
 - `SIGNAL_SAMPLE_PERIOD`、`SIGNAL_LABEL`、`SIGNAL_SAVED_ADDRESS`：
   `FLAG_PERSISTENCE`，初值写入 `dp-params`。
-- `SIGNAL_RESTORE_LOCAL/REMOTE`：恢复默认命令点，`write = points_parameter_command`。
+- `SIGNAL_RESTORE_LOCAL/REMOTE`：恢复默认命令点，`write_callback = points_parameter_command`。
 - `SIGNAL_PARAMETER_STATUS`：`FLAG_READ_CALLBACK`，
-  `read = points_parameter_status`。
+  `read_callback = points_parameter_status`。
 - 设备型号、协议版本、标签等：`FLAG_CONSTANT`，初始化即为只读有效值。
 
 `FLAG_RANGE_CHECK` 使用行内的最小值/最大值；未开启时使用类型范围。

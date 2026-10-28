@@ -44,9 +44,9 @@ typedef struct {
     uint8_t width;
     uint8_t size_bytes;
     uint8_t flags;
-    dp_write_fn_t write;
-    dp_read_fn_t read;
-    dp_value_t initial;
+    dp_write_callback_t write_callback;
+    dp_read_callback_t read_callback;
+    dp_value_t default_value;
     int64_t minimum;
     int64_t maximum;
 } dp_point_cfg_t;

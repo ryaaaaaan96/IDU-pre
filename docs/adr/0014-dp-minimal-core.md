@@ -96,3 +96,12 @@ signal_id/size/flags/type/write/read。读回调只生成 dp_value_t，模块记
 
 参数共享设备点数据，删除第二份参数点缓存。参数 NVS 编码、哈希键和版本不变；
 UNIX 时间不持久化。分配预算、结果及验证见内存管理和 .scratch/dp-private-registry/。
+
+## 2026-10-28：明确业务回调名称
+
+点定义和内部配置的 write/read 字段改为 write_callback/read_callback，类型改为
+dp_write_callback_t/dp_read_callback_t。明确它们是业务回调，与 DP 自身的读写接口区分；
+函数参数、返回值、执行顺序及保存行为不变。
+
+点表字面值及内部解析配置中的 initial 同时改为 default_value，明确它是产品默认值，
+不仅用于启动初始化，也用于恢复默认；只改名称，不改变数值或存储格式。

@@ -20,7 +20,7 @@ static const dp_point_def_t points[] = {
     {.signal_id = 1, .size = 2, .type = DP_TYPE_U16},
     {.signal_id = 2, .size = 2, .type = DP_TYPE_U16,
      .flags = FLAG_PERSISTENCE | FLAG_RANGE_CHECK,
-     .data = {.initial.u16 = 500, .minimum.u16 = 100, .maximum.u16 = 1000}},
+     .data = {.default_value.u16 = 500, .minimum.u16 = 100, .maximum.u16 = 1000}},
 };
 static const dp_table_t table = {
     .points = points,
@@ -55,7 +55,7 @@ flowchart TD
 
 | 类型 | 内容 |
 | --- | --- |
-| `dp_point_def_t` | signal_id、size、flags、type、write、read、data |
+| `dp_point_def_t` | signal_id、size、flags、type、write_callback、read_callback、data |
 | `dp_table_t` | points、point_count；无设备 ID、链表或运行数据 |
 | `dp_key_t` | device_id、signal_id |
 | `dp_value_t` | 联合体：bytes、words、u8、u16、s16、u32、s32、f32 |
@@ -67,12 +67,12 @@ flowchart TD
 浮点点表支持。有效类型为 U8/U16/S16/U32/S32、STRING/BYTES/WORDS。
 
 所有读写在线程同步执行，ISR 返回 `-EWOULDBLOCK`。写长度必须匹配；读容量必须
-足够，成功返回传入容量。普通点更新值；常量返回 `-EACCES`；命令点仅调用 write，
-不保存触发值。read 只输出 dp_value_t，成功时 DP 保存生成快照及时间。
+足够，成功返回传入容量。普通点更新值；常量返回 `-EACCES`；命令点仅调用 `write_callback`，
+不保存触发值。`read_callback` 只输出 `dp_value_t`，成功时 DP 保存生成快照及时间。
 
 标志保留 `FLAG_CONSTANT`、`FLAG_PERSISTENCE`、`FLAG_RANGE_CHECK`、
 `FLAG_READ_CALLBACK`、`FLAG_NO_RESTORE`。常量不支持写回调，参数不支持读写回调。
-未启用范围检查时按类型范围校验。`data.initial/minimum/maximum` 为字面值联合体，
+未启用范围检查时按类型范围校验。`data.default_value/minimum/maximum` 为字面值联合体，
 初值大于 4 字节时使用 `.array` 常驻只读指针，NULL 表示全零。
 
 ## 更新时间

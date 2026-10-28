@@ -69,31 +69,31 @@ static const dp_point_def_t rows[] = {
         .size = 4,
         .type = DP_TYPE_U32,
         .flags = FLAG_CONSTANT,
-        .data.initial.u32 = 0x12345678},
+        .data.default_value.u32 = 0x12345678},
     {.signal_id = SIG_PARAM,
         .size = 2,
         .type = DP_TYPE_U16,
         .flags = FLAG_PERSISTENCE | FLAG_RANGE_CHECK,
-        .data = {.initial.u16 = 500, .minimum.u16 = 100, .maximum.u16 = 1000}},
-    {.signal_id = SIG_CMD, .size = 2, .type = DP_TYPE_U16, .write = command},
+        .data = {.default_value.u16 = 500, .minimum.u16 = 100, .maximum.u16 = 1000}},
+    {.signal_id = SIG_CMD, .size = 2, .type = DP_TYPE_U16, .write_callback = command},
     {.signal_id = SIG_STATUS,
         .size = 8,
         .type = DP_TYPE_WORDS,
         .flags = FLAG_READ_CALLBACK,
-        .read = status},
+        .read_callback = status},
 };
 static const dp_point_def_t alt_rows[] = {
-    {.signal_id = SIG_LOCAL, .size = 2, .type = DP_TYPE_U16, .data.initial.u16 = 0x1111},
+    {.signal_id = SIG_LOCAL, .size = 2, .type = DP_TYPE_U16, .data.default_value.u16 = 0x1111},
     {.signal_id = SIG_PARAM,
         .size = 2,
         .type = DP_TYPE_U16,
         .flags = FLAG_PERSISTENCE | FLAG_RANGE_CHECK,
-        .data = {.initial.u16 = 600, .minimum.u16 = 100, .maximum.u16 = 1000}},
+        .data = {.default_value.u16 = 600, .minimum.u16 = 100, .maximum.u16 = 1000}},
 };
 static const dp_table_t local_table = {.points = rows, .point_count = ARRAY_SIZE(rows)};
 static const dp_table_t alt_table = {.points = alt_rows, .point_count = ARRAY_SIZE(alt_rows)};
 static const dp_point_def_t array_rows[] = {
-    {.signal_id = 77, .size = 3, .type = DP_TYPE_BYTES, .data.initial.bytes = {1, 2, 3}},
+    {.signal_id = 77, .size = 3, .type = DP_TYPE_BYTES, .data.default_value.bytes = {1, 2, 3}},
 };
 static const dp_table_t array_table = {.points = array_rows, .point_count = ARRAY_SIZE(array_rows)};
 

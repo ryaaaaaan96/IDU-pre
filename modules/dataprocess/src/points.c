@@ -78,8 +78,8 @@ int dp_describe_point(uint16_t dev, const dp_point_def_t *row, dp_point_cfg_t *p
         .size_bytes = row->size,
         .width = (row->size + 1) / 2,
         .flags = row->flags,
-        .write = row->write,
-        .read = row->read,
+        .write_callback = row->write_callback,
+        .read_callback = row->read_callback,
     };
     switch (row->type) {
     case DP_TYPE_U8:
@@ -134,7 +134,7 @@ int dp_describe_point(uint16_t dev, const dp_point_def_t *row, dp_point_cfg_t *p
         return -ENOTSUP;
     }
     if (row->flags & FLAG_CONSTANT) {
-        if ((row->flags & FLAG_PERSISTENCE) || row->write) {
+        if ((row->flags & FLAG_PERSISTENCE) || row->write_callback) {
             return -EINVAL;
         }
         p->source = DP_SOURCE_CONSTANT;
@@ -143,10 +143,10 @@ int dp_describe_point(uint16_t dev, const dp_point_def_t *row, dp_point_cfg_t *p
     } else {
         p->source = DP_SOURCE_LOCAL;
     }
-    if (p->source == DP_SOURCE_PARAMETER && (row->write || row->read)) {
+    if (p->source == DP_SOURCE_PARAMETER && (row->write_callback || row->read_callback)) {
         return -EINVAL;
     }
-    if ((row->flags & FLAG_READ_CALLBACK) && !row->read) {
+    if ((row->flags & FLAG_READ_CALLBACK) && !row->read_callback) {
         return -EINVAL;
     }
     if (row->flags & FLAG_RANGE_CHECK) {
@@ -181,11 +181,12 @@ int dp_describe_point(uint16_t dev, const dp_point_def_t *row, dp_point_cfg_t *p
             break;
         }
     }
-    const uint8_t *bytes = row->size > 4 ? row->data.initial.array : row->data.initial.bytes;
+    const uint8_t *bytes =
+        row->size > 4 ? row->data.default_value.array : row->data.default_value.bytes;
     if (bytes) {
-        unpack(&p->initial, bytes, row->size);
+        unpack(&p->default_value, bytes, row->size);
     }
-    return dp_check_value(p, &p->initial);
+    return dp_check_value(p, &p->default_value);
 }
 
 dp_registered_table_t *dp_tables(void)
@@ -262,7 +263,7 @@ int dp_register_table(uint16_t device_id, const dp_table_t *table)
     for (size_t i = 0; i < table->point_count; ++i) {
         dp_point_cfg_t point;
         dp_describe_point(device_id, &table->points[i], &point);
-        entry->data[i].value = point.initial;
+        entry->data[i].value = point.default_value;
     }
     /* 校验、分配和初始化全部完成后才发布。 */
     entry->next = tables;
@@ -273,9 +274,9 @@ int dp_register_table(uint16_t device_id, const dp_table_t *table)
 
 static int read_point(const dp_point_cfg_t *point, dp_point_data_t *stored, dp_point_data_t *state)
 {
-    if (point->read) {
+    if (point->read_callback) {
         *state = (dp_point_data_t){0};
-        int err = point->read(point->key, &state->value);
+        int err = point->read_callback(point->key, &state->value);
         if (!err) {
             state->updated_at_s = dp_timestamp_s();
             k_mutex_lock(&store_lock, K_FOREVER);
@@ -320,8 +321,8 @@ int dp_set_para(uint16_t dev_id, uint16_t sig_id, uint8_t size, const uint8_t *b
     if (err) {
         return err;
     }
-    if (p.write) {
-        return p.write(key, &value);
+    if (p.write_callback) {
+        return p.write_callback(key, &value);
     }
     if (p.source == DP_SOURCE_PARAMETER) {
         return dp_params_write(key, &value);
