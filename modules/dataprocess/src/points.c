@@ -123,18 +123,12 @@ static int validate_point(uint16_t device_id, const dp_point_config_t *point)
     default:
         return -ENOTSUP;
     }
-    if ((point->flags & DP_POINT_FLAG_PERSISTENT) &&
-        (point->write_callback || point->read_callback)) {
-        return -EINVAL;
-    }
     if ((point->flags & DP_POINT_FLAG_SKIP_RESTORE) && !(point->flags & DP_POINT_FLAG_PERSISTENT)) {
         LOG_WRN("Device %u key %u: skip restore ignored for nonpersistent point",
             device_id,
             point->signal_key);
     }
-    value_t initial;
-    dp_initial_value(point, &initial);
-    return dp_check_value(point, &initial);
+    return 0;
 }
 
 dp_registered_table_t *dp_tables(void)
@@ -219,9 +213,19 @@ int dp_register_table(uint16_t device_id, const dp_table_t *table)
     size_t params = 0;
     for (size_t i = 0; i < table->point_count; ++i) {
         const dp_point_config_t *point = &table->points[i];
-        if (validate_point(device_id, point)) {
+        int err = validate_point(device_id, point);
+        if (err) {
             return -EINVAL;
         }
+
+        value_t initial;
+        dp_initial_value(point, &initial);
+
+        err = dp_check_value(point, &initial);
+        if (err) {
+            return -EINVAL;
+        }
+
         if (point->flags & DP_POINT_FLAG_PERSISTENT) {
             ++params;
         }
@@ -256,42 +260,57 @@ int dp_register_table(uint16_t device_id, const dp_table_t *table)
     return 0;
 }
 
+/* 回调只操作副本；最终校验及存储成功后才更新点数据。 */
+static int save_value(uint16_t device_id,
+    const dp_point_config_t *point,
+    dp_point_data_t *stored,
+    const value_t *value)
+{
+    int err = dp_check_value(point, value);
+    if (err) {
+        return err;
+    }
+    if (point->flags & DP_POINT_FLAG_PERSISTENT) {
+        return dp_params_write(device_id, point->signal_key, value);
+    }
+    k_mutex_lock(&store_lock, K_FOREVER);
+    stored->value = *value;
+    stored->updated_at_s = dp_timestamp_s();
+    k_mutex_unlock(&store_lock);
+    return 0;
+}
+
 static int read_point(uint16_t device_id,
     const dp_point_config_t *point,
     dp_point_data_t *stored,
     dp_point_data_t *state,
     size_t signal_index)
 {
-    if (point->read_callback) {
+    if (point->flags & DP_POINT_FLAG_PERSISTENT) {
+        int err = dp_params_read(device_id, point->signal_key, state);
+        if (err) {
+            return err;
+        }
+    } else {
         k_mutex_lock(&store_lock, K_FOREVER);
         *state = *stored;
         k_mutex_unlock(&store_lock);
-        const dp_callback_context_t context = {
-            .device_id = device_id,
-            .signal_key = point->signal_key,
-            .signal_index = signal_index,
-            .is_write = false,
-            .value = &state->value,
-        };
-        int err = point->read_callback(&context);
-        if (!err) {
-            err = dp_check_value(point, &state->value);
-        }
-        if (!err) {
-            state->updated_at_s = dp_timestamp_s();
-            k_mutex_lock(&store_lock, K_FOREVER);
-            *stored = *state;
-            k_mutex_unlock(&store_lock);
-        }
+    }
+    if (!point->read_callback) {
+        return 0;
+    }
+    const dp_callback_context_t context = {
+        .device_id = device_id,
+        .signal_key = point->signal_key,
+        .signal_index = signal_index,
+        .is_write = false,
+        .value = &state->value,
+    };
+    int err = point->read_callback(&context);
+    if (err) {
         return err;
     }
-    if (point->flags & DP_POINT_FLAG_PERSISTENT) {
-        return dp_params_read(device_id, point->signal_key, state);
-    }
-    k_mutex_lock(&store_lock, K_FOREVER);
-    *state = *stored;
-    k_mutex_unlock(&store_lock);
-    return 0;
+    return save_value(device_id, point, stored, &state->value);
 }
 
 int dp_set_para(uint16_t device_id, uint16_t signal_key, uint8_t size, const uint8_t *bytes)
@@ -314,10 +333,6 @@ int dp_set_para(uint16_t device_id, uint16_t signal_key, uint8_t size, const uin
     }
     value_t value;
     unpack(&value, bytes, size);
-    err = dp_check_value(p, &value);
-    if (err) {
-        return err;
-    }
     if (p->write_callback) {
         const dp_callback_context_t context = {
             .device_id = device_id,
@@ -326,16 +341,12 @@ int dp_set_para(uint16_t device_id, uint16_t signal_key, uint8_t size, const uin
             .is_write = true,
             .value = &value,
         };
-        return p->write_callback(&context);
+        err = p->write_callback(&context);
+        if (err) {
+            return err;
+        }
     }
-    if (p->flags & DP_POINT_FLAG_PERSISTENT) {
-        return dp_params_write(device_id, signal_key, &value);
-    }
-    k_mutex_lock(&store_lock, K_FOREVER);
-    stored->value = value;
-    stored->updated_at_s = dp_timestamp_s();
-    k_mutex_unlock(&store_lock);
-    return 0;
+    return save_value(device_id, p, stored, &value);
 }
 
 int dp_get_para(uint16_t device_id, uint16_t signal_key, uint8_t capacity, uint8_t *bytes)

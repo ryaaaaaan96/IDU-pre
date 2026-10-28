@@ -37,7 +37,14 @@ int points_parameter_command(const dp_callback_context_t *context)
     default:
         return -ENOENT;
     }
-    return context->value->words[0] == expected ? action(argument) : -EINVAL;
+    if (context->value->words[0] != expected) {
+        return -EINVAL;
+    }
+    int err = action(argument);
+    if (!err) {
+        *context->value = (value_t){0};
+    }
+    return err;
 }
 
 int points_parameter_status(const dp_callback_context_t *context)

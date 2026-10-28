@@ -21,7 +21,8 @@ typedef enum {
     SIG_PARAM,
     SIG_CMD,
     SIG_STATUS,
-    SIG_BOUNDED
+    SIG_BOUNDED,
+    SIG_SKIP_RESTORE
 } test_signal_t;
 
 static bool fail_allocation, fail_read;
@@ -85,6 +86,22 @@ static int status(const dp_callback_context_t *context)
     return 0;
 }
 
+static bool fail_parameter_callback;
+static uint16_t parameter_write_value;
+static uint16_t parameter_read_value;
+
+static int parameter_callback(const dp_callback_context_t *context)
+{
+    zassert_equal(context->device_id, DEV);
+    zassert_equal(context->signal_key, SIG_PARAM);
+    zassert_equal(context->signal_index, 2);
+    uint16_t replacement = context->is_write ? parameter_write_value : parameter_read_value;
+    if (replacement) {
+        context->value->u16 = replacement;
+    }
+    return fail_parameter_callback ? -EIO : 0;
+}
+
 static const dp_point_config_t rows[] = {
     {.signal_key = SIG_LOCAL, .size = 2, .type = VALUE_TYPE_U16},
     {.signal_key = SIG_CONST,
@@ -96,6 +113,8 @@ static const dp_point_config_t rows[] = {
         .size = 2,
         .type = VALUE_TYPE_U16,
         .flags = DP_POINT_FLAG_PERSISTENT | DP_POINT_FLAG_CHECK_RANGE,
+        .write_callback = parameter_callback,
+        .read_callback = parameter_callback,
         .data = {.initial.u16 = 500, .minimum.u16 = 100, .maximum.u16 = 1000}},
     {.signal_key = SIG_CMD, .size = 2, .type = VALUE_TYPE_U16, .write_callback = command},
     {.signal_key = SIG_STATUS,
@@ -117,6 +136,11 @@ static const dp_point_config_t alt_rows[] = {
         .type = VALUE_TYPE_U16,
         .flags = DP_POINT_FLAG_PERSISTENT | DP_POINT_FLAG_CHECK_RANGE,
         .data = {.initial.u16 = 600, .minimum.u16 = 100, .maximum.u16 = 1000}},
+    {.signal_key = SIG_SKIP_RESTORE,
+        .size = 2,
+        .type = VALUE_TYPE_U16,
+        .flags = DP_POINT_FLAG_PERSISTENT | DP_POINT_FLAG_SKIP_RESTORE,
+        .data.initial.u16 = 77},
 };
 static const dp_table_t local_table = {.points = rows, .point_count = ARRAY_SIZE(rows)};
 static const dp_table_t alt_table = {.points = alt_rows, .point_count = ARRAY_SIZE(alt_rows)};
@@ -326,11 +350,13 @@ ZTEST(dp_core, test_core)
     if (phase && !strcmp(phase, "verify")) {
         read_u16(DEV, SIG_PARAM, 700);
         read_u16(DEV_ALT, SIG_PARAM, 800);
-        zassert_equal(data(DEV, SIG_PARAM)->updated_at_s, 0);
+        read_u16(DEV_ALT, SIG_SKIP_RESTORE, 88);
+        zassert_true(data(DEV, SIG_PARAM)->updated_at_s >= epoch);
         zassert_ok(dp_params_restore(DEV));
         read_u16(DEV, SIG_PARAM, 500);
         read_u16(DEV_ALT, SIG_PARAM, 800);
         zassert_ok(dp_params_restore(DEV_ALT));
+        read_u16(DEV_ALT, SIG_SKIP_RESTORE, 88);
         read_u16(DEV_ALT, SIG_PARAM, 600);
         return;
     }
@@ -356,7 +382,7 @@ ZTEST(dp_core, test_core)
     read_u16(DEV, SIG_LOCAL, 0x1234);
 
     read_u16(DEV, SIG_PARAM, 500);
-    zassert_equal(data(DEV, SIG_PARAM)->updated_at_s, 0);
+    zassert_true(data(DEV, SIG_PARAM)->updated_at_s >= epoch);
     write_u16(DEV, SIG_PARAM, 700, 0);
     read_u16(DEV, SIG_PARAM, 700);
     zassert_true(data(DEV, SIG_PARAM)->updated_at_s >= epoch);
@@ -371,20 +397,56 @@ ZTEST(dp_core, test_core)
     zassert_equal(data(DEV, SIG_CONST)->value.u32, 1);
     zassert_true(data(DEV, SIG_CONST)->updated_at_s >= epoch);
 
+    /* 回调先执行，可修正输入；只有最终合法值才提交 RAM/NVS。 */
+    parameter_write_value = 750;
+    write_u16(DEV, SIG_PARAM, 2000, 0);
+    parameter_write_value = 0;
+    read_u16(DEV, SIG_PARAM, 750);
+    parameter_read_value = 760;
+    read_u16(DEV, SIG_PARAM, 760);
+    parameter_read_value = 0;
+    read_u16(DEV, SIG_PARAM, 760);
+    dp_param_status_t sequence_before, sequence_after;
+    dp_params_get_status(&sequence_before);
+    read_u16(DEV, SIG_PARAM, 760);
+    dp_params_get_status(&sequence_after);
+    zassert_equal(sequence_before.sequence, sequence_after.sequence);
+    const dp_point_data_t callback_before = *data(DEV, SIG_PARAM);
+    parameter_write_value = 2000;
+    write_u16(DEV, SIG_PARAM, 700, -ERANGE);
+    parameter_write_value = 0;
+    parameter_read_value = 2000;
+    uint8_t callback_output[] = {0xaa, 0xbb};
+    zassert_equal(dp_get_para(DEV, SIG_PARAM, sizeof(callback_output), callback_output), -ERANGE);
+    zassert_equal(callback_output[0], 0xaa);
+    zassert_equal(callback_output[1], 0xbb);
+    parameter_read_value = 0;
+    fail_parameter_callback = true;
+    write_u16(DEV, SIG_PARAM, 700, -EIO);
+    zassert_equal(dp_get_para(DEV, SIG_PARAM, sizeof(callback_output), callback_output), -EIO);
+    fail_parameter_callback = false;
+    zassert_equal(data(DEV, SIG_PARAM)->value.u16, callback_before.value.u16);
+    zassert_equal(data(DEV, SIG_PARAM)->updated_at_s, callback_before.updated_at_s);
+
     read_u16(DEV_ALT, SIG_PARAM, 600);
+    read_u16(DEV_ALT, SIG_SKIP_RESTORE, 77);
+    write_u16(DEV_ALT, SIG_SKIP_RESTORE, 88, 0);
     write_u16(DEV_ALT, SIG_PARAM, 800, 0);
     zassert_ok(dp_params_restore(DEV));
     read_u16(DEV, SIG_PARAM, 500);
     read_u16(DEV_ALT, SIG_PARAM, 800);
     zassert_ok(dp_params_restore(DEV_ALT));
+    read_u16(DEV_ALT, SIG_SKIP_RESTORE, 88);
     read_u16(DEV_ALT, SIG_PARAM, 600);
-    write_u16(DEV, SIG_PARAM, 700, 0);
+    parameter_read_value = 700;
+    read_u16(DEV, SIG_PARAM, 700);
+    parameter_read_value = 0;
     write_u16(DEV_ALT, SIG_PARAM, 800, 0);
 
     write_u16(DEV, SIG_CMD, 0x1234, -EINVAL);
     write_u16(DEV, SIG_CMD, 0xa55a, 0);
-    read_u16(DEV, SIG_CMD, 0);
-    zassert_equal(data(DEV, SIG_CMD)->updated_at_s, 0);
+    read_u16(DEV, SIG_CMD, 123);
+    zassert_true(data(DEV, SIG_CMD)->updated_at_s >= epoch);
     uint8_t state[8];
     zassert_equal(dp_get_para(DEV, SIG_STATUS, sizeof(state), state), sizeof(state));
     zassert_true(state[0] & DP_PARAM_STORAGE_READY);
@@ -423,7 +485,16 @@ ZTEST(dp_core, test_core)
         const struct flash_simulator_cb failure = {.write_byte = fail_flash_write};
         const struct flash_simulator_cb normal = {0};
         flash_simulator_set_callbacks(flash, &failure);
-        write_u16(DEV, SIG_PARAM, 900, -EIO);
+        if (getenv("IDU_DP_READ_SAVE_FAILURE")) {
+            parameter_read_value = 900;
+            uint8_t output[] = {0xaa, 0xbb};
+            zassert_equal(dp_get_para(DEV, SIG_PARAM, sizeof(output), output), -EIO);
+            zassert_equal(output[0], 0xaa);
+            zassert_equal(output[1], 0xbb);
+            parameter_read_value = 0;
+        } else {
+            write_u16(DEV, SIG_PARAM, 900, -EIO);
+        }
         flash_simulator_set_callbacks(flash, &normal);
         flash_area_close(area);
         zassert_equal(data(DEV, SIG_PARAM)->value.u16, before.value.u16);
