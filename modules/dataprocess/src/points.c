@@ -21,6 +21,8 @@ static K_MUTEX_DEFINE(store_lock);
 static int64_t number(value_type_t type, const value_t *value)
 {
     switch (type) {
+    case VALUE_TYPE_U8:
+        return value->u8;
     case VALUE_TYPE_S16:
         return value->s16;
     case VALUE_TYPE_S32:
@@ -82,15 +84,14 @@ void dp_initial_value(const dp_point_config_t *point, value_t *value)
 }
 
 /* 登记时校验一次；运行期间配置常驻只读，不再解析或复制配置行。 */
-static int validate_point(const dp_point_config_t *point)
+static int validate_point(uint16_t device_id, const dp_point_config_t *point)
 {
     if (!point->signal_key || !point->size || point->size > DP_POINT_WORDS * 2) {
         return -EINVAL;
     }
     switch (point->type) {
     case VALUE_TYPE_U8:
-        if (point->size != 1 ||
-            ((point->flags & DP_POINT_FLAG_CHECK_RANGE) && point->data.maximum.u16 > UINT8_MAX)) {
+        if (point->size != 1) {
             return -EINVAL;
         }
         break;
@@ -114,7 +115,9 @@ static int validate_point(const dp_point_config_t *point)
     case VALUE_TYPE_STRING:
     case VALUE_TYPE_BYTES:
         if (point->flags & DP_POINT_FLAG_CHECK_RANGE) {
-            return -ENOTSUP;
+            LOG_WRN("Device %u key %u: range check ignored for nonnumeric point",
+                device_id,
+                point->signal_key);
         }
         break;
     default:
@@ -127,6 +130,11 @@ static int validate_point(const dp_point_config_t *point)
     if ((point->flags & DP_POINT_FLAG_PERSISTENT) &&
         (point->write_callback || point->read_callback)) {
         return -EINVAL;
+    }
+    if ((point->flags & DP_POINT_FLAG_SKIP_RESTORE) && !(point->flags & DP_POINT_FLAG_PERSISTENT)) {
+        LOG_WRN("Device %u key %u: skip restore ignored for nonpersistent point",
+            device_id,
+            point->signal_key);
     }
     value_t initial;
     dp_initial_value(point, &initial);
@@ -215,7 +223,7 @@ int dp_register_table(uint16_t device_id, const dp_table_t *table)
     size_t params = 0;
     for (size_t i = 0; i < table->point_count; ++i) {
         const dp_point_config_t *point = &table->points[i];
-        if (validate_point(point)) {
+        if (validate_point(device_id, point)) {
             return -EINVAL;
         }
         if (point->flags & DP_POINT_FLAG_PERSISTENT) {

@@ -197,6 +197,64 @@ ZTEST(dp_core, test_core)
     zassert_equal(dp_register_table(34, &duplicate_table), -EEXIST);
     zassert_is_null(data(34, duplicate_rows[0].signal_key));
 
+    /* 可忽略的选项只警告；危险配置仍拒绝登记。 */
+    static const dp_point_config_t warning_rows[] = {
+        {.signal_key = 201,
+            .size = 2,
+            .type = VALUE_TYPE_WORDS,
+            .flags = DP_POINT_FLAG_CHECK_RANGE},
+        {.signal_key = 202,
+            .size = 3,
+            .type = VALUE_TYPE_BYTES,
+            .flags = DP_POINT_FLAG_CHECK_RANGE},
+        {.signal_key = 203,
+            .size = 3,
+            .type = VALUE_TYPE_STRING,
+            .flags = DP_POINT_FLAG_CHECK_RANGE},
+        {.signal_key = 204, .size = 2, .type = VALUE_TYPE_U16, .flags = DP_POINT_FLAG_SKIP_RESTORE},
+        {.signal_key = 205,
+            .size = 2,
+            .type = VALUE_TYPE_U16,
+            .data = {.minimum.u16 = 100, .maximum.u16 = 1}},
+    };
+    const dp_table_t warning_table = {
+        .points = warning_rows,
+        .point_count = ARRAY_SIZE(warning_rows),
+    };
+    zassert_ok(dp_register_table(35, &warning_table));
+    write_u16(35, 201, 0xffff, 0);
+    read_u16(35, 201, 0xffff);
+    const uint8_t warning_bytes[] = {9, 8, 7};
+    for (uint16_t key = 202; key <= 203; ++key) {
+        uint8_t result[3];
+        zassert_ok(dp_set_para(35, key, sizeof(warning_bytes), warning_bytes));
+        zassert_equal(dp_get_para(35, key, sizeof(result), result), sizeof(result));
+        zassert_mem_equal(result, warning_bytes, sizeof(result));
+    }
+    write_u16(35, 204, 99, 0);
+    read_u16(35, 204, 99);
+    write_u16(35, 205, 0xffff, 0);
+    const dp_point_config_t invalid_rows[] = {
+        {.signal_key = 1, .size = 2, .type = VALUE_TYPE_U8},
+        {.signal_key = 1, .size = 3, .type = VALUE_TYPE_WORDS},
+        {.signal_key = 1, .size = 0, .type = VALUE_TYPE_U16},
+        {.signal_key = 1,
+            .size = 2,
+            .type = VALUE_TYPE_U16,
+            .flags = DP_POINT_FLAG_CHECK_RANGE,
+            .data = {.initial.u16 = 5, .minimum.u16 = 10, .maximum.u16 = 1}},
+        {.signal_key = 1,
+            .size = 2,
+            .type = VALUE_TYPE_U16,
+            .flags = DP_POINT_FLAG_CHECK_RANGE,
+            .data = {.initial.u16 = 11, .minimum.u16 = 0, .maximum.u16 = 10}},
+    };
+    for (size_t i = 0; i < ARRAY_SIZE(invalid_rows); ++i) {
+        const dp_table_t invalid_table = {.points = &invalid_rows[i], .point_count = 1};
+        zassert_equal(dp_register_table(36, &invalid_table), -EINVAL);
+        zassert_is_null(data(36, 1));
+    }
+
     /* 配置直接引用后仍按各自的数值类型检查范围及加载数组初值。 */
     static const uint8_t typed_initial[] = {1, 2, 3, 4, 5, 6};
     static const dp_point_config_t typed_rows[] = {
