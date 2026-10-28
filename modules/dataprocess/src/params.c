@@ -49,8 +49,6 @@ typedef struct {
 
 static dp_param_buffers_t *buffers;
 
-static int ensure_mounted(void);
-
 /* NVS 编码固定，独立于公共 value_type_t 的枚举顺序。 */
 static dp_storage_type_t storage_type(const dp_point_config_t *point)
 {
@@ -107,41 +105,9 @@ static void commit_cache(uint32_t sequence, const bool *selected)
         defs[i].data->value = buffers->staged[i];
         defs[i].data->updated_at_s = selected ? dp_timestamp_s() : 0;
     }
+    k_mutex_lock(&status_lock, K_FOREVER);
     status.sequence = sequence;
-}
-
-/* 调用方已挂载 NVS 并恢复提交镜像；只在缺少记录时使用配置初值。 */
-static int dp_load_value(uint16_t device_id,
-    const dp_point_config_t *point,
-    bool history_present,
-    value_t *value,
-    bool *restored,
-    bool *recovered)
-{
-    *restored = false;
-    *value = point->data.initial;
-    if (!(point->flags & DP_POINT_FLAG_PERSISTENT) || !history_present) {
-        return dp_check_value(point, value);
-    }
-
-    dp_stored_value_t history;
-    int err = dp_store_read(&fs, device_id, point->signal_key, &history, recovered);
-    if (err == -ENOENT) {
-        return dp_check_value(point, value);
-    }
-    if (err) {
-        return err;
-    }
-    if (history.type != storage_type(point) || history.width != storage_width(point)) {
-        return -EPROTO;
-    }
-    *value = (value_t){0};
-    memcpy(value->words, history.words, history.width * sizeof(history.words[0]));
-    err = dp_check_value(point, value);
-    if (!err) {
-        *restored = true;
-    }
-    return err;
+    k_mutex_unlock(&status_lock);
 }
 
 static size_t encode_changes(uint8_t *buf, uint32_t sequence)
@@ -236,11 +202,12 @@ int dp_params_write(uint16_t device_id, uint16_t signal_key, const value_t *valu
     if (!value) {
         return -EINVAL;
     }
-    int err = ensure_mounted();
-    if (err) {
-        return err;
-    }
     k_mutex_lock(&params_lock, K_FOREVER);
+    if (!(status.flags & DP_PARAM_STORAGE_READY)) {
+        k_mutex_unlock(&params_lock);
+        return ready ? -EROFS : -EACCES;
+    }
+    int err;
     int index = index_of(device_id, signal_key);
     if (index < 0) {
         k_mutex_unlock(&params_lock);
@@ -259,15 +226,16 @@ int dp_params_read(uint16_t device_id, uint16_t signal_key, dp_point_data_t *sta
     if (!state) {
         return -EINVAL;
     }
-    int err = ensure_mounted();
-    if (err) {
-        return err;
+    k_mutex_lock(&params_lock, K_FOREVER);
+    if (!(status.flags & DP_PARAM_STORAGE_READY)) {
+        k_mutex_unlock(&params_lock);
+        return ready ? -EROFS : -EACCES;
     }
     int index = index_of(device_id, signal_key);
     if (index < 0) {
+        k_mutex_unlock(&params_lock);
         return index;
     }
-    k_mutex_lock(&params_lock, K_FOREVER);
     *state = *defs[index].data;
     k_mutex_unlock(&params_lock);
     return 0;
@@ -275,11 +243,12 @@ int dp_params_read(uint16_t device_id, uint16_t signal_key, dp_point_data_t *sta
 
 int dp_params_restore(uint16_t dev_id)
 {
-    int err = ensure_mounted();
-    if (err) {
-        return err;
-    }
     k_mutex_lock(&params_lock, K_FOREVER);
+    if (!(status.flags & DP_PARAM_STORAGE_READY)) {
+        k_mutex_unlock(&params_lock);
+        return ready ? -EROFS : -EACCES;
+    }
+    int err;
     bool selected[CONFIG_DP_PARAMS_MAX_COUNT] = {0};
     bool found = false;
     for (size_t i = 0; i < param_count; ++i) {
@@ -301,7 +270,6 @@ void dp_params_get_status(dp_param_status_t *out)
     if (!out) {
         return;
     }
-    (void)ensure_mounted();
     k_mutex_lock(&status_lock, K_FOREVER);
     *out = status;
     k_mutex_unlock(&status_lock);
@@ -312,7 +280,7 @@ static bool incompatible_format(int err)
     return err == -EPROTO || err == -EMSGSIZE || err == -EEXIST;
 }
 
-static int load_locked(bool *incompatible)
+static int mount_store(bool *incompatible)
 {
     *incompatible = false;
     set_status(0, 0);
@@ -361,100 +329,131 @@ static int load_locked(bool *incompatible)
         }
     }
 
-    bool need_save = !present;
-    for (size_t i = 0; i < param_count; ++i) {
-        err = dp_load_value(defs[i].device_id,
-            defs[i].row,
-            present,
-            &buffers->durable_stage[i],
-            &stored[i],
-            &recovered);
-        if (err) {
-            *incompatible = incompatible_format(err);
-            return err;
-        }
-        need_save |= !stored[i];
-    }
-    memcpy(buffers->staged, buffers->durable_stage, sizeof(buffers->staged));
-    memcpy(buffers->durable, buffers->durable_stage, sizeof(buffers->durable));
-    commit_cache(sequence, NULL);
-    if (need_save) {
-        err = save_parameters(sequence);
-        if (err) {
-            return err;
-        }
-    }
+    status.sequence = sequence;
     set_status(0, DP_PARAM_STORAGE_READY | (recovered ? DP_PARAM_HISTORY_RECOVERED : 0));
     return 0;
 }
 
-static int mount_locked(void)
+int dp_init(void)
 {
-    bool incompatible;
-    int err = load_locked(&incompatible);
-    if (!incompatible || !fs.ready) {
+    if (k_is_in_isr()) {
+        return -EWOULDBLOCK;
+    }
+    k_mutex_lock(&params_lock, K_FOREVER);
+    if (ready) {
+        int err = (status.flags & DP_PARAM_STORAGE_READY) ? 0 : -EROFS;
+        k_mutex_unlock(&params_lock);
         return err;
     }
-    LOG_WRN("Parameter format incompatible (%d): clearing partition %u", err, partition_id);
-    err = nvs_clear(&fs);
-    if (!err) {
-        err = load_locked(&incompatible);
-    }
-    if (!err) {
-        set_status(0, status.flags | DP_PARAM_STORAGE_RESET);
-    }
-    return err;
-}
-
-bool dp_params_mounted(void)
-{
-    return ready;
-}
-
-/* 调用方持有 params_lock；首次访问时完成缓存分配、参数枚举和 NVS 挂载。 */
-static int mount_once(void)
-{
-    if (ready) {
-        return (status.flags & DP_PARAM_STORAGE_READY) ? 0 : -EROFS;
-    }
-    /* 尚未登记任何点表时不锁存，允许登记后再次访问。 */
-    if (!dp_tables()) {
-        return -ENODEV;
-    }
-    ready = true;
-    buffers = k_malloc(sizeof(*buffers));
+    buffers = k_calloc(1, sizeof(*buffers));
     if (!buffers) {
-        set_status(-ENOMEM, 0);
+        k_mutex_unlock(&params_lock);
         return -ENOMEM;
     }
-    memset(buffers, 0, sizeof(*buffers));
-    for (dp_registered_table_t *table = dp_tables(); table; table = table->next) {
-        for (size_t i = 0; i < table->point_count; ++i) {
-            const dp_point_config_t *row = &table->points[i];
-            if (!(row->flags & DP_POINT_FLAG_PERSISTENT)) {
-                continue;
-            }
-            defs[param_count].device_id = table->device_id;
-            defs[param_count].data = &table->data[i];
-            defs[param_count++].row = row;
+    bool incompatible;
+    int err = mount_store(&incompatible);
+    if (incompatible && fs.ready) {
+        LOG_WRN("Parameter format incompatible (%d): clearing partition %u", err, partition_id);
+        err = nvs_clear(&fs);
+        if (!err) {
+            err = mount_store(&incompatible);
+        }
+        if (!err) {
+            set_status(0, status.flags | DP_PARAM_STORAGE_RESET);
         }
     }
-    if (!param_count) {
-        set_status(0, DP_PARAM_STORAGE_READY);
-        return 0;
-    }
-    int err = mount_locked();
     if (err) {
-        LOG_ERR("Parameter storage initialization failed (%d)", err);
         set_status(err, 0);
+        k_free(buffers);
+        buffers = NULL;
+    } else {
+        ready = true;
     }
+    k_mutex_unlock(&params_lock);
     return err;
 }
 
-static int ensure_mounted(void)
+/* 启动线程串行登记；节点发布前加载本表，缺失记录一次提交。 */
+int dp_params_register(dp_registered_table_t *table)
 {
     k_mutex_lock(&params_lock, K_FOREVER);
-    int err = mount_once();
+    if (!(status.flags & DP_PARAM_STORAGE_READY)) {
+        k_mutex_unlock(&params_lock);
+        return ready ? -EROFS : -EACCES;
+    }
+    size_t first = param_count;
+    bool need_save = false, recovered = false;
+    int err = 0;
+    for (size_t i = 0; i < table->point_count; ++i) {
+        const dp_point_config_t *point = &table->points[i];
+        err = dp_validate_point(table->device_id, point);
+        if (err) {
+            err = -EINVAL;
+            break;
+        }
+        value_t initial = point->data.initial;
+        err = dp_check_value(point, &initial);
+        if (err) {
+            err = -EINVAL;
+            break;
+        }
+        table->data[i].value = initial;
+        if (!(point->flags & DP_POINT_FLAG_PERSISTENT)) {
+            continue;
+        }
+        if (param_count == CONFIG_DP_PARAMS_MAX_COUNT) {
+            err = -ENOSPC;
+            break;
+        }
+        value_t value = initial;
+        dp_stored_value_t history;
+        err = dp_store_read(&fs, table->device_id, point->signal_key, &history, &recovered);
+        bool found = !err;
+        if (err == -ENOENT) {
+            err = 0;
+        } else if (!err) {
+            if (history.type != storage_type(point) || history.width != storage_width(point)) {
+                err = -EPROTO;
+                break;
+            }
+            value = (value_t){0};
+            memcpy(value.words, history.words, history.width * sizeof(history.words[0]));
+        }
+        if (err) {
+            break;
+        }
+        err = dp_check_value(point, &value);
+        if (err) {
+            break;
+        }
+        defs[param_count].device_id = table->device_id;
+        defs[param_count].row = point;
+        defs[param_count].data = &table->data[i];
+        table->data[i].value = value;
+        buffers->staged[param_count] = value;
+        buffers->durable_stage[param_count] = value;
+        buffers->durable[param_count] = value;
+        stored[param_count++] = found;
+        need_save |= !found;
+    }
+    if (!err && need_save) {
+        err = save_parameters(status.sequence + 1);
+        if (err) {
+            /* 提交可能已部分落盘，冻结后续写入，重启时恢复提交日志。 */
+            set_status(err, status.flags & ~DP_PARAM_STORAGE_READY);
+        } else {
+            k_mutex_lock(&status_lock, K_FOREVER);
+            ++status.sequence;
+            k_mutex_unlock(&status_lock);
+        }
+    }
+    if (err) {
+        memset(&defs[first], 0, (param_count - first) * sizeof(defs[0]));
+        param_count = first;
+    }
+    if (recovered) {
+        set_status(status.error, status.flags | DP_PARAM_HISTORY_RECOVERED);
+    }
     k_mutex_unlock(&params_lock);
     return err;
 }

@@ -187,6 +187,75 @@ ZTEST(dp_core, test_core)
     const dp_table_t empty = {0};
     zassert_equal(dp_register_table(DEV, &empty), -EINVAL);
 
+    zassert_equal(dp_register_table(DEV, &local_table), -EACCES);
+    zassert_is_null(data(DEV, SIG_LOCAL));
+    dp_param_status_t initial_status;
+    dp_params_get_status(&initial_status);
+    zassert_false(initial_status.flags & DP_PARAM_STORAGE_READY);
+    fail_allocation = true;
+    zassert_equal(dp_init(), -ENOMEM);
+    fail_allocation = false;
+    zassert_ok(dp_init());
+    zassert_ok(dp_init());
+    dp_params_get_status(&initial_status);
+    zassert_true(initial_status.flags & DP_PARAM_STORAGE_READY);
+
+    if (getenv("IDU_DP_REGISTRATION_FAILURE")) {
+        static const dp_point_config_t failed_rows[] = {
+            {.signal_key = 910,
+                .size = 2,
+                .type = VALUE_TYPE_U16,
+                .flags = DP_POINT_FLAG_PERSISTENT,
+                .data.initial.u16 = 11},
+            {.signal_key = 911,
+                .size = 2,
+                .type = VALUE_TYPE_U16,
+                .flags = DP_POINT_FLAG_PERSISTENT,
+                .data.initial.u16 = 22},
+        };
+        const dp_table_t failed_table = {
+            .points = failed_rows, .point_count = ARRAY_SIZE(failed_rows)};
+        const struct flash_area *area;
+        zassert_ok(flash_area_open(DT_FIXED_PARTITION_ID(DT_ALIAS(dp_params)), &area));
+        const struct device *flash = flash_area_get_device(area);
+        const struct flash_simulator_cb failure = {.write_byte = fail_flash_write};
+        const struct flash_simulator_cb normal = {0};
+        flash_simulator_set_callbacks(flash, &failure);
+        zassert_equal(dp_register_table(38, &failed_table), -EIO);
+        flash_simulator_set_callbacks(flash, &normal);
+        flash_area_close(area);
+        zassert_is_null(data(38, 910));
+        zassert_is_null(data(38, 911));
+        dp_params_get_status(&initial_status);
+        zassert_false(initial_status.flags & DP_PARAM_STORAGE_READY);
+        zassert_equal(initial_status.storage_error, -EIO);
+        return;
+    }
+    if (phase && !strcmp(phase, "incompatible")) {
+        static const dp_point_config_t mismatch_rows[] = {
+            {.signal_key = 999,
+                .size = 2,
+                .type = VALUE_TYPE_U16,
+                .flags = DP_POINT_FLAG_PERSISTENT,
+                .data.initial.u16 = 42},
+            {.signal_key = SIG_SKIP_RESTORE,
+                .size = 4,
+                .type = VALUE_TYPE_U32,
+                .flags = DP_POINT_FLAG_PERSISTENT},
+        };
+        const dp_table_t mismatch_table = {
+            .points = mismatch_rows, .point_count = ARRAY_SIZE(mismatch_rows)};
+        zassert_equal(dp_register_table(DEV_ALT, &mismatch_table), -EPROTO);
+        zassert_is_null(data(DEV_ALT, 999));
+        zassert_is_null(data(DEV_ALT, SIG_SKIP_RESTORE));
+        zassert_ok(dp_register_table(DEV, &local_table));
+        zassert_ok(dp_register_table(DEV_ALT, &alt_table));
+        zassert_equal(data(DEV, SIG_PARAM)->value.u16, 700);
+        zassert_equal(data(DEV_ALT, SIG_PARAM)->value.u16, 800);
+        zassert_equal(data(DEV_ALT, SIG_SKIP_RESTORE)->value.u16, 88);
+        return;
+    }
+
     fail_allocation = true;
     zassert_equal(dp_register_table(DEV, &local_table), -ENOMEM);
     zassert_is_null(data(DEV, SIG_LOCAL));
@@ -194,6 +263,14 @@ ZTEST(dp_core, test_core)
     zassert_ok(dp_register_table(DEV, &local_table));
     zassert_equal(dp_register_table(DEV, &alt_table), -EEXIST);
     zassert_ok(dp_register_table(DEV_ALT, &alt_table));
+    if (phase && !strcmp(phase, "verify")) {
+        zassert_equal(data(DEV, SIG_PARAM)->value.u16, 700);
+        zassert_equal(data(DEV_ALT, SIG_PARAM)->value.u16, 800);
+        zassert_equal(data(DEV_ALT, SIG_SKIP_RESTORE)->value.u16, 88);
+    } else {
+        zassert_equal(data(DEV, SIG_PARAM)->value.u16, 500);
+        zassert_equal(data(DEV_ALT, SIG_PARAM)->value.u16, 600);
+    }
     zassert_equal(dp_register_table(DEV_ALT, &alt_table), -EEXIST);
 
     if (getenv("IDU_DP_ADD_PARAMETER")) {
@@ -484,12 +561,22 @@ ZTEST(dp_core, test_core)
     zassert_equal(data(DEV, SIG_BOUNDED)->updated_at_s, bounded_before.updated_at_s);
     invalid_read = false;
 
-    const dp_point_config_t late_row = {.signal_key = SIG_PARAM,
+    static const dp_point_config_t over_budget_rows[] = {
+        {.signal_key = 920, .size = 2, .type = VALUE_TYPE_U16, .flags = DP_POINT_FLAG_PERSISTENT},
+        {.signal_key = 921, .size = 2, .type = VALUE_TYPE_U16, .flags = DP_POINT_FLAG_PERSISTENT},
+    };
+    const dp_table_t over_budget_table = {
+        .points = over_budget_rows, .point_count = ARRAY_SIZE(over_budget_rows)};
+    zassert_equal(dp_register_table(39, &over_budget_table), -ENOSPC);
+    zassert_is_null(data(39, 920));
+
+    static const dp_point_config_t late_row = {.signal_key = SIG_PARAM,
         .size = 2,
         .type = VALUE_TYPE_U16,
         .flags = DP_POINT_FLAG_PERSISTENT};
     const dp_table_t late_table = {.points = &late_row, .point_count = 1};
-    zassert_equal(dp_register_table(9, &late_table), -EBUSY);
+    zassert_ok(dp_register_table(9, &late_table));
+    read_u16(9, SIG_PARAM, 0);
     if (!phase) {
         /* Flash 提交失败不得覆盖共用缓存和更新时间。 */
         const dp_point_data_t before = *data(DEV, SIG_PARAM);

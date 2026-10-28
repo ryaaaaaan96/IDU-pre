@@ -14,14 +14,18 @@ mkdir -p "$test_dir"
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/dp_core -d "$test_dir/dp_core"
 timeout 30s "$test_dir/dp_core/zephyr/zephyr.exe" -flash_in_ram
+env IDU_DP_REGISTRATION_FAILURE=1 timeout 30s "$test_dir/dp_core/zephyr/zephyr.exe" -flash_in_ram
+env IDU_DP_READ_SAVE_FAILURE=1 timeout 30s "$test_dir/dp_core/zephyr/zephyr.exe" -flash_in_ram
 
 # 同一份模拟 Flash 跨进程验证参数持久化与恢复默认。
 flash_test_file="$(mktemp "$workspace_dir/$test_dir/dp-core-flash.XXXXXX")"
 trap 'rm -f -- "$flash_test_file"' EXIT
-for phase in main verify; do
+for phase in main incompatible; do
     env IDU_DP_PHASE="$phase" timeout 30s "$test_dir/dp_core/zephyr/zephyr.exe" \
         -flash="$flash_test_file"
 done
+env IDU_DP_PHASE=verify IDU_DP_ADD_PARAMETER=1 \
+    timeout 30s "$test_dir/dp_core/zephyr/zephyr.exe" -flash="$flash_test_file"
 
 # 产品模型与本地 process 装配。
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \

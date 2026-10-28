@@ -15,7 +15,6 @@ LOG_MODULE_REGISTER(dp, LOG_LEVEL_INF);
 
 /* 应用只提供只读点表，设备目录与点数据均由模块私有持有。 */
 static dp_registered_table_t *tables;
-static size_t param_points;
 static K_MUTEX_DEFINE(store_lock);
 
 static int64_t number(value_type_t type, const value_t *value)
@@ -75,7 +74,7 @@ static void pack(uint8_t *bytes, const value_t *value, size_t size)
 }
 
 /* 登记时校验一次；运行期间配置常驻只读，不再解析或复制配置行。 */
-static int validate_point(uint16_t device_id, const dp_point_config_t *point)
+int dp_validate_point(uint16_t device_id, const dp_point_config_t *point)
 {
     if (!point->signal_key || !point->size || point->size > DP_POINT_WORDS * 2) {
         return -EINVAL;
@@ -201,32 +200,6 @@ int dp_register_table(uint16_t device_id, const dp_table_t *table)
         return -EOVERFLOW;
     }
 
-    size_t params = 0;
-    for (size_t i = 0; i < table->point_count; ++i) {
-        const dp_point_config_t *point = &table->points[i];
-        int err = validate_point(device_id, point);
-        if (err) {
-            return -EINVAL;
-        }
-
-        value_t initial = point->data.initial;
-
-        err = dp_check_value(point, &initial);
-        if (err) {
-            return -EINVAL;
-        }
-
-        if (point->flags & DP_POINT_FLAG_PERSISTENT) {
-            ++params;
-        }
-    }
-    if (params > CONFIG_DP_PARAMS_MAX_COUNT - param_points) {
-        return -ENOSPC;
-    }
-    if (params && dp_params_mounted()) {
-        return -EBUSY;
-    }
-
     int err = check_unique_keys(table);
     if (err) {
         return err;
@@ -240,13 +213,14 @@ int dp_register_table(uint16_t device_id, const dp_table_t *table)
     entry->device_id = device_id;
     entry->points = table->points;
     entry->point_count = table->point_count;
-    for (size_t i = 0; i < table->point_count; ++i) {
-        entry->data[i].value = table->points[i].data.initial;
+    err = dp_params_register(entry);
+    if (err) {
+        k_free(entry);
+        return err;
     }
-    /* 校验、分配和初始化全部完成后才发布。 */
+    /* 校验、加载及缺失参数提交全部完成后才发布。 */
     entry->next = tables;
     tables = entry;
-    param_points += params;
     return 0;
 }
 

@@ -19,7 +19,7 @@
 - 通用模块只保留 [modules/README.md](modules/README.md) 列出的最小集合。`modules/collect`、`modules/transmit`、`modules/vport` 已删除；不要恢复其头文件、Kconfig 或应用装配。
 - `modules/dataprocess` 是最小原子核心，接口为 `dp_*`：模型登记、单点同步写读、本机 NVS 参数。不要恢复异步样本队列、业务线程、定时器、参考表目录、`data_process.h` 字节适配层或 collect/transmit 描述符。
 - 点表行使用 `dp_point_config_t`：`DP_POINT_FLAG_PERSISTENT`、`DP_POINT_FLAG_CHECK_RANGE`、`DP_POINT_FLAG_SKIP_RESTORE`；命令点用 `write_callback`，状态点用 `read_callback`。新增字段须同时更新 [DP 模块](modules/dataprocess/README.md) 和应用点表说明。
-- DP 三个主接口为 `dp_register_table(device_id, table)`、`dp_set_para()`、`dp_get_para()`；启动线程完成登记再读写。表描述只含 points/count，可临时；行数组及引用初值须常驻只读。链表和设备点数据由模块一次分配、内部维护；同表可登记给多个设备。点值为 `value_t` 联合体，运行数据仅含值及 uint32_t UNIX 秒时间（未知为 0）。启用 DP 必须提供设备树 `dp-params` 别名并指向启用的固定分区。参数维护仅保留恢复默认和状态查询，NVS 键及格式保持兼容。
+- 先调用 dp_init() 挂载存储；三个点表接口为 `dp_register_table(device_id, table)`、`dp_set_para()`、`dp_get_para()`；启动线程逐表登记加载参数，再开始业务读写。表描述只含 points/count，可临时；行数组及引用初值须常驻只读。链表和设备点数据由模块一次分配、内部维护；同表可登记给多个设备。点值为 `value_t` 联合体，运行数据仅含值及 uint32_t UNIX 秒时间（未知为 0）。启用 DP 必须提供设备树 `dp-params` 别名并指向启用的固定分区。参数维护仅保留恢复默认和状态查询，NVS 键及格式保持兼容。
 - 参数写入在调用线程同步提交 NVS，没有去抖、意图日志或下游读回。`parameter_store.c` 的 NVS 记录/提交镜像格式保持兼容；不要因改点表而改变键或格式。
 - `app/main.c` 启动状态、硬件和可选 IAP 后调用 `protocol_init()`，保留采样周期和休眠，终止后主线程留驻并每 5 秒查询打印最近故障。`acquisition` 只按硬件 spec 与 device_id/signal_key 映射读取 DI 位图和 ADC，并用 `dp_set_para()` 同步写点。
 - `app/process/points.c` 只保留 `points_sample_period_ms()`、`points_parameter_command()` 和 `points_parameter_status()`。读写回调后校验并按配置保存；恢复命令在成功后将回调值清零。

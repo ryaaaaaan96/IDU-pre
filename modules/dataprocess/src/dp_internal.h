@@ -32,7 +32,6 @@ typedef enum {
 } dp_storage_type_t;
 
 int dp_params_read(uint16_t device_id, uint16_t signal_key, dp_point_data_t *state);
-bool dp_params_mounted(void);
 int dp_params_write(uint16_t device_id, uint16_t signal_key, const value_t *value);
 
 /* 私有设备目录；节点与点数据一次分配，只在模块内访问。 */
@@ -45,6 +44,8 @@ typedef struct dp_registered_table {
 } dp_registered_table_t;
 
 dp_registered_table_t *dp_tables(void);
+int dp_params_register(dp_registered_table_t *table);
+int dp_validate_point(uint16_t device_id, const dp_point_config_t *point);
 int dp_check_value(const dp_point_config_t *point, const value_t *value);
 
 #endif
