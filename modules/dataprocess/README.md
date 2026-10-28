@@ -72,7 +72,7 @@ flowchart TD
 `DP_POINT_FLAG_SKIP_RESTORE`。持久参数支持读写回调。读回调仅由非空指针启用。
 未启用范围检查时按类型范围校验。`data.initial/minimum/maximum` 与运行值统一使用公共 `value_t`，定义于 `<common/value.h>`，
 容量由 `CONFIG_COMMON_VALUE_WORDS` 配置；
-初值大于 4 字节时使用 `.array` 常驻只读指针，NULL 表示全零。
+初值统一使用内嵌成员（如 `.u16`、`.words`、`.bytes`），不使用 `.array` 外部指针。
 
 ## 更新时间
 
@@ -136,7 +136,7 @@ signal_index 直接取查找命中的注册表行下标，从零开始；不额�
 DP 只保留 dp_point_config_t 配置行的只读指针，不接管其所有权。
 应用须保证行数组及引用初值常驻到重启，禁止修改或释放，建议使用 static const。
 表描述 dp_table_t 本身仍可临时存在。登记时校验配置；运行时直接读取原配置，
-不生成第二份解析配置。初值只在登记、参数挂载和恢复默认时展开。
+不生成第二份解析配置。dp_set_initial_value() 直接复制配置联合体，用于登记、参数挂载和恢复默认，不读取 Flash。
 NVS 类型编码仅在参数层转换，记录格式及键保持不变。
 
 回调上下文使用 `bool is_write` 区分方向：true 为写，false 为读，无额外枚举。
@@ -164,3 +164,5 @@ DP 不控制写权限，原常量配置改为普通非持久点，可写且重�
 
 SKIP_RESTORE 仅影响显式 dp_params_restore()，不会跳过上电 NVS 恢复；
 这类点上电仍读取已保存值，无历史记录时才使用初值。
+
+上电持久参数仍优先恢复 NVS 历史值；没有记录时使用配置初值。

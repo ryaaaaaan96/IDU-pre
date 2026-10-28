@@ -45,7 +45,8 @@ typedef struct dp_registered_table {
 } dp_registered_table_t;
 
 dp_registered_table_t *dp_tables(void);
-void dp_initial_value(const dp_point_config_t *point, value_t *value);
+/** @brief 设置配置初值；用于上电初始化及恢复默认，不读取 Flash。 */
+void dp_set_initial_value(const dp_point_config_t *point, value_t *value);
 int dp_check_value(const dp_point_config_t *point, const value_t *value);
 
 #endif

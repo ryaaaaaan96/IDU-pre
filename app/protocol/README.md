@@ -35,8 +35,7 @@
 - 设备型号、协议版本等：普通非持久点，可通过 DP 修改，重启恢复初值；写权限由调用方控制。
 
 `DP_POINT_FLAG_CHECK_RANGE` 使用行内的最小值/最大值；未开启时使用类型范围。
-`DP_POINT_FLAG_SKIP_RESTORE` 排除在恢复默认之外。数组初值必须是静态 `const` 数据或
-`NULL`（表示全零）。
+`DP_POINT_FLAG_SKIP_RESTORE` 排除在恢复默认之外。数组初值直接填写 `.initial.words` 或 `.initial.bytes` 内嵌成员。
 
 ## 回调
 

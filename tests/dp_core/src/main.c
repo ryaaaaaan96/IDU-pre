@@ -280,7 +280,6 @@ ZTEST(dp_core, test_core)
     }
 
     /* 配置直接引用后仍按各自的数值类型检查范围及加载数组初值。 */
-    static const uint8_t typed_initial[] = {1, 2, 3, 4, 5, 6};
     static const dp_point_config_t typed_rows[] = {
         {.signal_key = 101,
             .size = 1,
@@ -307,7 +306,7 @@ ZTEST(dp_core, test_core)
         {.signal_key = 105,
             .size = 6,
             .type = VALUE_TYPE_BYTES,
-            .data.initial.array = typed_initial},
+            .data.initial.bytes = {1, 2, 3, 4, 5, 6}},
     };
     const dp_table_t typed_table = {.points = typed_rows, .point_count = ARRAY_SIZE(typed_rows)};
     zassert_ok(dp_register_table(33, &typed_table));

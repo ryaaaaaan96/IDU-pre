@@ -41,7 +41,7 @@ static const dp_point_config_t local_process_rows[PROCESS_SIGNAL_COUNT] = {
         .read_callback = points_parameter_status,
         .data =
             {
-                .initial.array = DP_POINT_DEFAULT_ARRAY,
+                .initial.words = {0},
                 .minimum.array = DP_POINT_DEFAULT_ARRAY,
                 .maximum.array = DP_POINT_DEFAULT_ARRAY,
             },
@@ -65,7 +65,7 @@ static const dp_point_config_t local_process_rows[PROCESS_SIGNAL_COUNT] = {
         .type = VALUE_TYPE_WORDS,
         .data =
             {
-                .initial.array = (const uint16_t[]){0x4944, 0x552d, 0x7072, 0x6500, 0, 0, 0, 0},
+                .initial.words = {0x4944, 0x552d, 0x7072, 0x6500, 0, 0, 0, 0},
                 .minimum.array = DP_POINT_DEFAULT_ARRAY,
                 .maximum.array = DP_POINT_DEFAULT_ARRAY,
             },
@@ -101,8 +101,7 @@ static const dp_point_config_t local_process_rows[PROCESS_SIGNAL_COUNT] = {
         .type = VALUE_TYPE_WORDS,
         .data =
             {
-                .initial.array =
-                    (const uint16_t[]){0x5347, 0x2d46, 0x4143, 0x544f, 0x5259, 0, 0, 0, 0, 0},
+                .initial.words = {0x5347, 0x2d46, 0x4143, 0x544f, 0x5259, 0, 0, 0, 0, 0},
                 .minimum.array = DP_POINT_DEFAULT_ARRAY,
                 .maximum.array = DP_POINT_DEFAULT_ARRAY,
             },
@@ -114,7 +113,7 @@ static const dp_point_config_t local_process_rows[PROCESS_SIGNAL_COUNT] = {
         .type = VALUE_TYPE_WORDS,
         .data =
             {
-                .initial.array = (const uint16_t[]){0x4944,
+                .initial.words = {0x4944,
                     0x552d,
                     0x7072,
                     0x655f,
@@ -140,7 +139,7 @@ static const dp_point_config_t local_process_rows[PROCESS_SIGNAL_COUNT] = {
         .type = VALUE_TYPE_WORDS,
         .data =
             {
-                .initial.array = (const uint16_t[]){0x3031, 0x4152, 3, 0x0103},
+                .initial.words = {0x3031, 0x4152, 3, 0x0103},
                 .minimum.array = DP_POINT_DEFAULT_ARRAY,
                 .maximum.array = DP_POINT_DEFAULT_ARRAY,
             },

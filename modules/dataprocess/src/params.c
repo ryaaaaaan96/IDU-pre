@@ -266,7 +266,7 @@ int dp_params_restore(uint16_t dev_id)
         if (defs[i].device_id != dev_id || (p->flags & DP_POINT_FLAG_SKIP_RESTORE)) {
             continue;
         }
-        dp_initial_value(p, &buffers->staged[i]);
+        dp_set_initial_value(p, &buffers->staged[i]);
         selected[i] = true;
         found = true;
     }
@@ -324,8 +324,8 @@ static int load_locked(bool *incompatible)
 
     for (size_t i = 0; i < param_count; ++i) {
         const dp_point_config_t *p = defs[i].row;
-        dp_initial_value(p, &buffers->durable_stage[i]);
-        dp_initial_value(p, &buffers->staged[i]);
+        dp_set_initial_value(p, &buffers->durable_stage[i]);
+        dp_set_initial_value(p, &buffers->staged[i]);
     }
     uint32_t sequence = 0;
     bool recovered = false, present = false, converted = false;
@@ -454,8 +454,8 @@ static int mount_once(void)
     }
     for (size_t i = 0; i < param_count; ++i) {
         const dp_point_config_t *p = defs[i].row;
-        dp_initial_value(p, &buffers->staged[i]);
-        dp_initial_value(p, &buffers->durable_stage[i]);
+        dp_set_initial_value(p, &buffers->staged[i]);
+        dp_set_initial_value(p, &buffers->durable_stage[i]);
     }
     if (!param_count) {
         set_status(0, DP_PARAM_STORAGE_READY);
