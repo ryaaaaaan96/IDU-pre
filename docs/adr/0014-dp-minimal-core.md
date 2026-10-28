@@ -48,3 +48,16 @@
 
 见 [验证记录](../../.scratch/dp-minimal-core/validation.md) 和
 [测试说明](../docs/testing.md)。
+
+## 2026-10-28：收敛点表接口
+
+替代上述模型登记及并行读接口：使用 `dp_register(params_area)` 一次登记分区，
+`dp_register_table(table)` 逐张登记点表；读写统一为 `dp_set_para()` / `dp_get_para()`。
+`struct dp_model_cfg` 改为 `struct dp_table`。删除兼容头 model.h、公共 dp_read、
+dp_stop/dp_stopped 及 DP 故障停止状态。status 锁存整机阶段，主循环停止业务；
+DP 不参与整机故障策略。
+
+保留参数恢复默认和状态查询；删除无实际刷新/重试行为的 flush/recover 及空的取消复位。
+IAP 直接查询存储是否就绪。同步写已经落盘，无需第二次 flush。
+删除原刷新/恢复事务命令点（31092、31093），访问时返回点不存在，不复用这些 ID。
+NVS 记录类型编码、逻辑键和镜像格式不变。

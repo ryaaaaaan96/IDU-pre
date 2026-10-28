@@ -224,14 +224,6 @@ void dp_params_get_status(struct dp_param_status *out)
     k_mutex_unlock(&status_lock);
 }
 
-int dp_params_recover(void) { return ensure_mounted() == 0 ? 0 : -EROFS; }
-
-int dp_params_flush(void) { return ensure_mounted() == 0 ? 0 : -EROFS; }
-
-int dp_params_prepare_reboot(void) { return dp_params_flush(); }
-
-void dp_params_cancel_reboot(void) {}
-
 static bool incompatible_format(int err)
 {
     return err == -EPROTO || err == -EMSGSIZE || err == -EEXIST;
@@ -346,6 +338,8 @@ int dp_params_configure(uint8_t area_id)
     return partition_id == area_id ? 0 : -EINVAL;
 }
 
+bool dp_params_configured(void) { return configured; }
+
 bool dp_params_mounted(void) { return ready; }
 
 /* 调用方持有 params_lock；首次访问时完成缓存分配、参数枚举和 NVS 挂载。 */
@@ -357,10 +351,6 @@ static int mount_once(void)
     /* 尚未登记任何模型时不锁存，允许登记后再次访问。 */
     if (!configured) { return -ENODEV; }
     ready = true;
-    if (partition_id == DP_NO_PARAMS) {
-        set_status(-ENODEV, 0);
-        return -ENODEV;
-    }
     buffers = k_malloc(sizeof(*buffers));
     if (!buffers) {
         set_status(-ENOMEM, 0);

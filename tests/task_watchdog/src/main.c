@@ -7,17 +7,11 @@
 
 static atomic_t edges, feed_configures;
 static atomic_t last_edge_ms;
-static atomic_t dp_stop_calls, last_stop_in_isr;
 static atomic_t queue_blocked;
 static bool expect_check_fault, expect_direct_reset;
 static uint32_t expected_reset_delay_ms;
 static int64_t reset_requested_ms;
 static void block_queue(void);
-void dp_stop(void)
-{
-    atomic_inc(&dp_stop_calls);
-    atomic_set(&last_stop_in_isr, k_is_in_isr());
-}
 static struct gpio_driver_data gpio_data;
 static const struct gpio_driver_config gpio_config = {.port_pin_mask = UINT32_MAX};
 static int configure(const struct device *dev, gpio_pin_t pin, gpio_flags_t flags)
@@ -65,7 +59,7 @@ FUNC_NORETURN void __wrap_sys_reboot(int type)
              (k_is_in_isr() ? -EWOULDBLOCK : -ECANCELED);
     } else {
         ok = ok && k_is_in_isr() && !watchdog_fault_get(&fault) &&
-             atomic_get(&dp_stop_calls) > 0 && fault.error == -ETIMEDOUT;
+             status_phase_get() == STATUS_FAULT_LOCKED && fault.error == -ETIMEDOUT;
         if (expect_check_fault) {
             ok = ok && fault.reason == WATCHDOG_FAULT_CHECK && !fault.task.name;
         } else {
@@ -408,7 +402,6 @@ ZTEST(task_watchdog, test_check_expiry_with_blocked_workqueue_stops_and_reboots)
     } else {
         zassert_equal(watchdog_fault_get(&fault), -ENOENT);
     }
-    zassert_equal(atomic_get(&dp_stop_calls), 0);
     expect_check_fault = true;
     k_sem_give(&queue_release);
     k_sleep(K_MSEC(100));
@@ -466,7 +459,6 @@ ZTEST(task_watchdog, test_explicit_hold_after_expiry_keeps_feed_without_clearing
     k_sem_give(&queue_release);
     k_sleep(K_MSEC(40));
     zassert_equal(status_phase_get(), STATUS_FAULT_LOCKED);
-    zassert_equal(atomic_get(&dp_stop_calls), 1);
     struct watchdog_fault latest;
     zassert_ok(watchdog_fault_get(&latest));
     zassert_str_equal(latest.description, "Explicit diagnostic hold");
@@ -607,8 +599,6 @@ ZTEST(task_watchdog, test_interrupt_hold_closes_gate_and_keeps_feed_with_blocked
     k_sleep(K_MSEC(150));
     zassert_equal(atomic_get(&hold_result), -EIO);
     zassert_equal(status_phase_get(), STATUS_FAULT_LOCKED);
-    zassert_equal(atomic_get(&dp_stop_calls), 1);
-    zassert_equal(atomic_get(&last_stop_in_isr), 1);
     zassert_equal(atomic_get(&edges) > before, IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL));
     zassert_equal(watchdog_task_feed(&first), -ECANCELED);
     struct watchdog_fault fault;

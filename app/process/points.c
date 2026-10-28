@@ -8,24 +8,11 @@
 
 uint16_t points_sample_period_ms(void)
 {
-    struct dp_point_state state;
-
-    if (dp_params_read((struct dp_key){DEVICE_LOCAL, SIGNAL_SAMPLE_PERIOD}, &state)) {
+    uint8_t bytes[2];
+    if (dp_get_para(DEVICE_LOCAL, SIGNAL_SAMPLE_PERIOD, sizeof(bytes), bytes) < 0) {
         return CONFIG_IDU_SAMPLE_PERIOD_MS;
     }
-    return state.value.words[0];
-}
-
-static int flush_parameters(uint16_t unused)
-{
-    ARG_UNUSED(unused);
-    return dp_params_flush();
-}
-
-static int recover_parameters(uint16_t unused)
-{
-    ARG_UNUSED(unused);
-    return dp_params_recover();
+    return bytes[0] | ((uint16_t)bytes[1] << 8);
 }
 
 int points_parameter_command(struct dp_key key, const struct dp_value *value)
@@ -39,10 +26,6 @@ int points_parameter_command(struct dp_key key, const struct dp_value *value)
         expected = 0xa55a; action = dp_params_restore; argument = DEVICE_LOCAL; break;
     case SIGNAL_RESTORE_REMOTE:
         expected = 0xa55a; action = dp_params_restore; argument = DEVICE_REMOTE_IO; break;
-    case SIGNAL_FLUSH_PARAMETERS:
-        expected = 1; action = flush_parameters; break;
-    case SIGNAL_RECOVER_PARAMETERS:
-        expected = 1; action = recover_parameters; break;
     default:
         return -ENOENT;
     }

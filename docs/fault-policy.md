@@ -1,8 +1,7 @@
 # 本地故障策略与诊断
 
-> 当前 process 独立运行阶段：status 故障回调直接调用 `dp_stop()` 和可选 `iap_stop()`，
-> 不经过 `protocol_stop()`。主循环不再查询 `protocol_error()`；采样错误由调用点直接上报 watchdog。
-> 下文涉及 CO/TR 关闭的内容是保留通信方案，当前产品暂不启用。
+> status 锁存 `STATUS_FAULT_LOCKED`，主循环据此停止业务并保留诊断轮询。
+> 可选 IAP 通过 `iap_stop()` 停止；DP 只负责数据，不维护整机停止状态。
 
 产品约定：watchdog → status 仅接收本次启动不可恢复的终止故障，调用方选择 HOLD（等待人工重启）或 RESET（自动重启）。
 故障原因消失不解除锁存，不提供现场业务恢复；可恢复异常由业务模块自行处理，不进入该通道。重启不保证排除实际故障原因。

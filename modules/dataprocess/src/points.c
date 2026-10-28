@@ -5,7 +5,6 @@
 #include <string.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
-#include <zephyr/sys/atomic.h>
 
 LOG_MODULE_REGISTER(dp, LOG_LEVEL_INF);
 
@@ -17,21 +16,19 @@ struct stored_point {
     uint16_t quality;
 };
 
-/* 每个模型独立申请点值块。 */
-struct model_slot {
-    const struct dp_model_cfg *cfg;
-    uint16_t *values;
+/* 每张点表独立申请点值块。 */
+struct table_slot {
+    const struct dp_table *cfg;
     size_t first;
 };
 
-static struct model_slot slots[CONFIG_DP_MODELS_MAX];
-static size_t model_count;
+static struct table_slot slots[CONFIG_DP_MODELS_MAX];
+static size_t table_count;
 static size_t point_count;
 static size_t value_words;
 static size_t param_points;
 static struct stored_point states[CONFIG_DP_POINTS_MAX_POINTS];
 static uint32_t generation;
-static atomic_t stopped;
 static K_MUTEX_DEFINE(store_lock);
 
 static int64_t number(const struct dp_point_cfg *p, const struct dp_value *v)
@@ -152,8 +149,8 @@ static int row_view(uint16_t dev, const DM_SIG_CFG_S *row, struct dp_point_cfg *
 const struct dp_point_cfg *dp_config_point(size_t index, struct dp_point_cfg *scratch)
 {
     if (!scratch) { return NULL; }
-    for (size_t i = 0; i < model_count; ++i) {
-        const struct model_slot *slot = &slots[i];
+    for (size_t i = 0; i < table_count; ++i) {
+        const struct table_slot *slot = &slots[i];
         if (index < slot->first + slot->cfg->point_count) {
             return row_view(slot->cfg->device_id,
                             &slot->cfg->points[index - slot->first], scratch) ?
@@ -166,8 +163,8 @@ const struct dp_point_cfg *dp_config_point(size_t index, struct dp_point_cfg *sc
 int dp_config_index(struct dp_key key)
 {
     if (!key.dev_id || !key.sig_id) { return -EINVAL; }
-    for (size_t i = 0; i < model_count; ++i) {
-        const struct dp_model_cfg *cfg = slots[i].cfg;
+    for (size_t i = 0; i < table_count; ++i) {
+        const struct dp_table *cfg = slots[i].cfg;
         if (cfg->device_id != key.dev_id) { continue; }
         for (size_t n = 0; n < cfg->point_count; ++n) {
             if (cfg->points[n].sig_id == key.sig_id) { return slots[i].first + n; }
@@ -179,32 +176,39 @@ int dp_config_index(struct dp_key key)
 
 size_t dp_point_count(void) { return point_count; }
 
-int dp_register_model(const struct dp_model_cfg *model, uint8_t params_area)
+int dp_register(uint8_t params_area)
 {
-    if (dp_stopped()) { return -ECANCELED; }
     if (k_is_in_isr()) { return -EWOULDBLOCK; }
-    if (!model || !model->device_id || !model->points || !model->point_count) {
+    if (dp_params_configured()) { return -EALREADY; }
+    return dp_params_configure(params_area);
+}
+
+int dp_register_table(const struct dp_table *table)
+{
+    if (k_is_in_isr()) { return -EWOULDBLOCK; }
+    if (!dp_params_configured()) { return -ENODEV; }
+    if (!table || !table->device_id || !table->points || !table->point_count) {
         return -EINVAL;
     }
-    if (model_count == ARRAY_SIZE(slots)) { return -ENOSPC; }
-    if (model->point_count > CONFIG_DP_POINTS_MAX_POINTS - point_count) {
+    if (table_count == ARRAY_SIZE(slots)) { return -ENOSPC; }
+    if (table->point_count > CONFIG_DP_POINTS_MAX_POINTS - point_count) {
         return -EINVAL;
     }
-    for (size_t i = 0; i < model_count; ++i) {
-        if (slots[i].cfg->device_id == model->device_id) { return -EEXIST; }
+    for (size_t i = 0; i < table_count; ++i) {
+        if (slots[i].cfg->device_id == table->device_id) { return -EEXIST; }
     }
 
     size_t words = 0, params = 0;
-    for (size_t n = 0; n < model->point_count; ++n) {
+    for (size_t n = 0; n < table->point_count; ++n) {
         struct dp_point_cfg p;
-        if (row_view(model->device_id, &model->points[n], &p)) { return -EINVAL; }
+        if (row_view(table->device_id, &table->points[n], &p)) { return -EINVAL; }
         words += p.width;
         if (value_words + words > CONFIG_DP_POINTS_VALUE_WORDS) { return -ENOSPC; }
         if (p.source == DP_SOURCE_PARAMETER && ++params > CONFIG_DP_PARAMS_MAX_COUNT) {
             return -ENOSPC;
         }
         for (size_t m = 0; m < n; ++m) {
-            if (model->points[m].sig_id == model->points[n].sig_id) { return -EEXIST; }
+            if (table->points[m].sig_id == table->points[n].sig_id) { return -EEXIST; }
         }
     }
     if (param_points + params > CONFIG_DP_PARAMS_MAX_COUNT) { return -ENOSPC; }
@@ -212,17 +216,11 @@ int dp_register_model(const struct dp_model_cfg *model, uint8_t params_area)
 
     uint16_t *values = k_malloc(words * sizeof(*values));
     if (!values) { return -ENOMEM; }
-    int err = dp_params_configure(params_area);
-    if (err) {
-        k_free(values);
-        return err;
-    }
-
     const size_t first = point_count;
     size_t offset = 0;
-    for (size_t n = 0; n < model->point_count; ++n) {
+    for (size_t n = 0; n < table->point_count; ++n) {
         struct dp_point_cfg p;
-        if (row_view(model->device_id, &model->points[n], &p)) {
+        if (row_view(table->device_id, &table->points[n], &p)) {
             k_free(values);
             return -EINVAL;
         }
@@ -236,25 +234,20 @@ int dp_register_model(const struct dp_model_cfg *model, uint8_t params_area)
         memcpy(state->words, p.initial.words, p.width * 2);
         offset += p.width;
     }
-    slots[model_count].cfg = model;
-    slots[model_count].values = values;
-    slots[model_count].first = first;
-    ++model_count;
-    point_count += model->point_count;
+    slots[table_count].cfg = table;
+    slots[table_count].first = first;
+    ++table_count;
+    point_count += table->point_count;
     value_words += words;
     param_points += params;
     return 0;
 }
 
-int dp_read(struct dp_key key, struct dp_point_state *state)
+static int read_point(int index, const struct dp_point_cfg *point,
+                      struct dp_point_state *state)
 {
-    if (dp_stopped()) { return -ECANCELED; }
-    if (!state || k_is_in_isr()) { return -EINVAL; }
-    if (!model_count) { return -ENODEV; }
-    int index = dp_config_index(key);
-    if (index < 0) { return index; }
-    struct dp_point_cfg p;
-    if (!dp_config_point(index, &p)) { return -ENOENT; }
+    const struct dp_point_cfg p = *point;
+    const struct dp_key key = p.key;
     if (p.read) {
         *state = (struct dp_point_state){
             .quality = DP_QUALITY_GOOD,
@@ -276,9 +269,8 @@ int dp_read(struct dp_key key, struct dp_point_state *state)
     return 0;
 }
 
-int dp_set_sig_value(uint16_t dev_id, uint16_t sig_id, uint8_t size, uint8_t *bytes)
+int dp_set_para(uint16_t dev_id, uint16_t sig_id, uint8_t size, const uint8_t *bytes)
 {
-    if (dp_stopped()) { return -ECANCELED; }
     if (k_is_in_isr()) { return -EWOULDBLOCK; }
     if (!bytes) { return -EINVAL; }
     struct dp_key key = {dev_id, sig_id};
@@ -304,7 +296,7 @@ int dp_set_sig_value(uint16_t dev_id, uint16_t sig_id, uint8_t size, uint8_t *by
     return 0;
 }
 
-int dp_get_sig_value(uint16_t dev_id, uint16_t sig_id, uint8_t capacity, uint8_t *bytes)
+int dp_get_para(uint16_t dev_id, uint16_t sig_id, uint8_t capacity, uint8_t *bytes)
 {
     if (k_is_in_isr()) { return -EWOULDBLOCK; }
     if (!bytes) { return -EINVAL; }
@@ -315,11 +307,8 @@ int dp_get_sig_value(uint16_t dev_id, uint16_t sig_id, uint8_t capacity, uint8_t
     if (!dp_config_point(index, &p)) { return -ENOENT; }
     if (capacity < p.size_bytes) { return -EMSGSIZE; }
     struct dp_point_state state;
-    int err = dp_read(key, &state);
+    int err = read_point(index, &p, &state);
     if (err) { return err; }
     pack(bytes, &state.value, p.size_bytes);
     return capacity;
 }
-
-void dp_stop(void) { atomic_set(&stopped, 1); }
-bool dp_stopped(void) { return atomic_get(&stopped) != 0; }

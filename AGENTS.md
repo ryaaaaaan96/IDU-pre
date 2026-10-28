@@ -17,9 +17,9 @@
 - 通用模块只保留 [modules/README.md](modules/README.md) 列出的最小集合。`modules/collect`、`modules/transmit`、`modules/vport` 已删除；不要恢复其头文件、Kconfig 或应用装配。
 - `modules/dataprocess` 是最小原子核心，接口为 `dp_*`：模型登记、单点同步写读、本机 NVS 参数。不要恢复异步样本队列、业务线程、定时器、参考表目录、`data_process.h` 字节适配层或 collect/transmit 描述符。
 - 点表行使用 `DM_SIG_CFG_S`：`FLAG_CONSTANT`、`FLAG_PERSISTENCE`、`FLAG_RANGE_CHECK`、`FLAG_READ_CALLBACK`、`FLAG_NO_RESTORE`；命令点用 `handler`，状态点用 `read`。新增字段须同时更新 [DP 模块](modules/dataprocess/README.md) 和应用点表说明。
-- `dp_register_model(model, params_area)` 是唯一登记入口，业务层按处理表逐组调用；产品入口为 `app/protocol/process_runtime.c` 的 `product_models[]`。每组必须使用不同 `device_id`，点位/字数/参数预算跨组累计。参数区在首次访问参数接口时挂载，失败只降级为 RAM 默认值；登记错误返回 `-errno`。不要恢复 `dp_init()`、`dp_init_config()`、`dp_params_init()` 或 `dp_reference_init()` 等并行入口。
+- DP 四个主接口为 `dp_register(params_area)`、`dp_register_table(table)`、`dp_set_para()`、`dp_get_para()`；在启动线程先登记分区再逐张登记只读表，运行后不再登记。产品表入口为 `app/protocol/process_runtime.c` 的 `product_tables[]`。DP 不维护整机停运状态；参数维护仅保留恢复默认和状态查询，NVS 键及格式保持兼容。
 - 参数写入在调用线程同步提交 NVS，没有去抖、意图日志或下游读回。`parameter_store.c` 的 NVS 记录/提交镜像格式保持兼容；不要因改点表而改变键或格式。
-- `app/main.c` 启动状态、硬件和可选 IAP 后调用 `protocol_init()`，保留采样周期和休眠，终止后主线程留驻并每 5 秒查询打印最近故障。`acquisition` 只按硬件 spec 与 device_id/signal_id 映射读取 DI 位图和 ADC，并用 `dp_set_sig_value()` 同步写点。
+- `app/main.c` 启动状态、硬件和可选 IAP 后调用 `protocol_init()`，保留采样周期和休眠，终止后主线程留驻并每 5 秒查询打印最近故障。`acquisition` 只按硬件 spec 与 device_id/signal_id 映射读取 DI 位图和 ADC，并用 `dp_set_para()` 同步写点。
 - `app/process/points.c` 只保留 `points_sample_period_ms()`、`points_parameter_command()` 和 `points_parameter_status()`。命令点只在数值校验通过后执行动作，不保存触发值。
 - 状态与 LED 归 `app/status/`；看门狗实现在 `modules/watchdog`；IAP 归 `modules/iap`，调用方直接使用 `<iap/iap.h>`。
 - IAP 模块提供 `iap_route()`，但当前最小产品没有 TR/Modbus 路由，串口上传尚不可用；不要在文档或报告中宣称 IAPv3 上传已工作。重新启用必须新增最小路由适配层并单独验证。

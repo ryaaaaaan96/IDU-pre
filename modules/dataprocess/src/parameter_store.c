@@ -1,3 +1,4 @@
+#include "dp_internal.h"
 #include "parameter_store.h"
 #include <errno.h>
 #include <string.h>

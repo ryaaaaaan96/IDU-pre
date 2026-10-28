@@ -4,7 +4,7 @@
 | --- | --- |
 | IDU | 本仓库维护的产品方案：本地 DI/AI 采样、点值存储、本机参数持久化和 MCUboot 升级。 |
 | 产品点表 | `app/protocol/tables/process.c` 中的编译期只读 `DM_SIG_CFG_S` 行，描述测点身份、类型、初值、范围和回调。 |
-| 数据模型 | `struct dp_model_cfg`：设备 ID、点表指针和数量；每个处理表由 `dp_register_model()` 登记一次。 |
+| 数据模型 | `struct dp_table`：设备 ID、点表指针和数量；每个处理表由 `dp_register_table()` 登记一次。 |
 | 本地点 | 由本地采样写入的测点，例如 DI 和电流；初始化质量为未初始化，首次写入后为 GOOD。 |
 | 常量点 | `FLAG_CONSTANT` 行，初始化即有效，写入被拒绝。 |
 | 持久参数 | `FLAG_PERSISTENCE` 行，初值和后续写入保存在本机 `idu-settings` NVS 分区。 |

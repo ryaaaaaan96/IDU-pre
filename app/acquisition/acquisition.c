@@ -145,7 +145,7 @@ int acquisition_cycle(void)
         digital |= (uint16_t)((uint32_t)value << bit);
     }
     sys_put_le16(digital, bytes);
-    int err = dp_set_sig_value(digital_inputs.device_id, digital_inputs.signal_id,
+    int err = dp_set_para(digital_inputs.device_id, digital_inputs.signal_id,
                                sizeof(bytes), bytes);
     if (err) {
         return err;
@@ -176,7 +176,7 @@ int acquisition_cycle(void)
             value = UINT16_MAX;
         }
         sys_put_le16(value, bytes);
-        err = dp_set_sig_value(input->device_id, input->signal_id, sizeof(bytes), bytes);
+        err = dp_set_para(input->device_id, input->signal_id, sizeof(bytes), bytes);
         if (err) {
             return err;
         }

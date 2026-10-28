@@ -9,15 +9,13 @@
 
 #ifdef CONFIG_IAP_REBOOT_DP_PARAMS
 #include <dataprocess/params.h>
+#include <errno.h>
 static int prepare_reboot(void *user)
 {
     ARG_UNUSED(user);
-    return dp_params_prepare_reboot();
-}
-static void cancel_reboot(void *user)
-{
-    ARG_UNUSED(user);
-    dp_params_cancel_reboot();
+    struct dp_param_status status;
+    dp_params_get_status(&status);
+    return status.flags & DP_PARAM_STORAGE_READY ? 0 : -EROFS;
 }
 #endif
 
@@ -37,7 +35,6 @@ int iap_init(void)
         },
 #ifdef CONFIG_IAP_REBOOT_DP_PARAMS
         .prepare_reboot = prepare_reboot,
-        .cancel_reboot = cancel_reboot,
 #endif
     };
     return iap_init_config(&config);

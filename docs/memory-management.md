@@ -4,7 +4,7 @@ DP 最小核心只保留两处常驻动态分配：
 
 | 工作区 | 申请与释放 |
 | --- | --- |
-| 点值缓冲区 | `dp_register_model()` 每组按实际字数申请一块，服务生命周期内持有；失败返回 `-ENOMEM` |
+| 点值缓冲区 | `dp_register_table()` 每组按实际字数申请一块，服务生命周期内持有；失败返回 `-ENOMEM` |
 | 参数缓存与提交镜像 | 首次访问参数接口时一次申请；存储故障时仍保留缓存，允许继续读取默认值 |
 
 IAP 的位图、数据包、SGZ 与 Flash 写工作区由 `iap_init_config()` 一次申请，
@@ -27,8 +27,8 @@ IAP 的位图、数据包、SGZ 与 Flash 写工作区由 `iap_init_config()` �
 按容器位图约 4 KiB 及扇区位图 16 B。容器上限与板级暂存分区同为 512 KiB，
 改任一项须同步 `CONFIG_IAP_MAX_CONTAINER_SIZE`。
 
-`HEAP_MEM_POOL_ADD_SIZE_DATAPROCESS` 只需覆盖当前 26 点、63 words 的
-126 B 点值及分配器开销；`HEAP_MEM_POOL_ADD_SIZE_DP_PARAMS` 覆盖
+`HEAP_MEM_POOL_ADD_SIZE_DATAPROCESS` 只需覆盖当前 24 点、61 words 的
+122 B 点值及分配器开销；`HEAP_MEM_POOL_ADD_SIZE_DP_PARAMS` 覆盖
 `struct param_buffers` 约 3.3 KB。新增点表宽度或持久参数时须重新核算。
 
 `k_malloc()` 不等待，申请失败返回 `NULL`。DP 初始化失败返回 `-ENOMEM`；

@@ -1,6 +1,5 @@
 #include "status/inc/status.h"
 #include "status_led.h"
-#include <dataprocess/points.h>
 #include <watchdog/watchdog.h>
 #ifdef CONFIG_IDU_IAPV3
 #include <iap/iap.h>
@@ -76,15 +75,14 @@ static int status_watchdog_fault(const struct watchdog_fault *fault)
         status_runtime.phase = STATUS_FAULT_LOCKED;
     }
     k_spin_unlock(&status_runtime.lock, key);
-    /* 故障已由 watchdog 记录；CONTINUE 不解除已锁存状态或业务停止标志。 */
+    /* 故障已由 watchdog 记录；CONTINUE 不解除已锁存状态。 */
     if (fault->action == WATCHDOG_ACTION_CONTINUE) {
         LOG_ERR("%s: state %d error %d action %d", fault->description, current, fault->error,
                 fault->action);
         return 0;
     }
 
-    /* 关闭业务准入并提交日志；回调返回后由 watchdog 执行最终动作。 */
-    dp_stop();
+    /* 锁存业务阶段并提交日志；回调返回后由 watchdog 执行最终动作。 */
 #ifdef CONFIG_IDU_IAPV3
     iap_stop();
 #endif

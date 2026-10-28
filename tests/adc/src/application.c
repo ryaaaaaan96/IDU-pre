@@ -9,7 +9,7 @@
 static uint16_t di_value, current_values[SAMPLE_ANALOG_COUNT];
 static unsigned updates;
 static int set_error;
-int32_t dp_set_sig_value(uint16_t device, uint16_t signal, uint8_t size, uint8_t *bytes)
+int32_t dp_set_para(uint16_t device, uint16_t signal, uint8_t size, uint8_t *bytes)
 {
     zassert_equal(device, DEVICE_LOCAL);
     zassert_equal(size, 2);

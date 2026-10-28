@@ -19,12 +19,7 @@ struct dp_param_status {
     int storage_error;
 };
 
-int dp_params_read(struct dp_key key, struct dp_point_state *state);
 int dp_params_restore(uint16_t dev_id);
-int dp_params_recover(void);
-int dp_params_flush(void);
-int dp_params_prepare_reboot(void);
-void dp_params_cancel_reboot(void);
 void dp_params_get_status(struct dp_param_status *status);
 
 #endif
