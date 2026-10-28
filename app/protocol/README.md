@@ -10,13 +10,13 @@
 以后增加第二张处理表时，不需要改 DP：新表文件导出自己的 `struct dp_table`，
 在 `process_runtime.c` 声明 extern，并往 `product_tables[]` 追加一个指针。
 两组必须使用不同 `device_id`，点位、字数和参数预算跨组累计；
-示例见 [DP 模块](../../modules/dataprocess/README.md#四个主接口)。
+示例见 [DP 模块](../../modules/dataprocess/README.md#三个主接口)。
 
 ## 启动顺序
 
 1. `main.c` 初始化状态、输入和可选 IAP。
-2. `protocol_init()` 先调用 `dp_register(storage_id)`，再逐张调用
-   `dp_register_table(product_tables[i])`。
+2. `protocol_init()` 逐张调用 `dp_register_table(product_tables[i])`；
+   参数分区由 DP 通过设备树 `dp-params` 别名自动选择。
 3. DP 校验 24 行本地点表、申请 61 words 点值；首次访问参数时挂载 NVS。
 4. 主循环调用 `acquisition_cycle()`，通过 `dp_set_para()` 同步写本地测点。
 
@@ -29,7 +29,7 @@
 
 - `SIGNAL_DI`、`SIGNAL_CURRENT_1..8`：本地点，无标志。
 - `SIGNAL_SAMPLE_PERIOD`、`SIGNAL_LABEL`、`SIGNAL_SAVED_ADDRESS`：
-  `FLAG_PERSISTENCE`，初值写入 `idu-settings`。
+  `FLAG_PERSISTENCE`，初值写入 `dp-params`。
 - `SIGNAL_RESTORE_LOCAL/REMOTE`：恢复默认命令点，`handler = points_parameter_command`。
 - `SIGNAL_PARAMETER_STATUS`：`FLAG_READ_CALLBACK`，
   `read = points_parameter_status`。

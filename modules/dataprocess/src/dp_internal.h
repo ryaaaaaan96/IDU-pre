@@ -29,8 +29,6 @@ struct dp_point_cfg {
     int64_t maximum;
 };
 
-int dp_params_configure(uint8_t area_id);
-bool dp_params_configured(void);
 int dp_params_read(struct dp_key key, struct dp_point_state *state);
 bool dp_params_mounted(void);
 int dp_params_write(struct dp_key key, const struct dp_value *value);

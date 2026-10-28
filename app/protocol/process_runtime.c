@@ -1,7 +1,6 @@
 /* 当前产品只运行本地 process；通信模块不参与本构建。 */
 #include "inc/protocol.h"
 #include <dataprocess/points.h>
-#include <zephyr/storage/flash_map.h>
 #include <zephyr/sys/util.h>
 
 /* 与本地测点表同编译单元，声明只在使用方保留。 */
@@ -14,11 +13,6 @@ static const struct dp_table *const product_tables[] = {
 
 int protocol_init(void)
 {
-    const uint8_t storage_id = DT_FIXED_PARTITION_ID(DT_ALIAS(idu_settings));
-
-    int err = dp_register(storage_id);
-    if (err) { return err; }
-
     for (size_t i = 0; i < ARRAY_SIZE(product_tables); ++i) {
         int err = dp_register_table(product_tables[i]);
         if (err) { return err; }

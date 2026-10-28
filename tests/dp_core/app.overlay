@@ -1,5 +1,5 @@
 / {
     aliases {
-        idu-settings = &storage_partition;
+        dp-params = &storage_partition;
     };
 };

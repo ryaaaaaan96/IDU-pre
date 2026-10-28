@@ -38,7 +38,7 @@
     };
 
     aliases {
-        idu-settings = &idu_settings;
+        dp-params = &dp_params;
         led0 = &run_led;
         idu-forward = &modbus0;
         /* CO/TR 共用此 RS485 链路，用于单总线性能测试。 */
@@ -102,8 +102,8 @@
                     compatible = "fixed-partitions";
                     #address-cells = <1>;
                     #size-cells = <1>;
-                    idu_settings: partition@10000 {
-                        label = "idu-settings";
+                    dp_params: partition@10000 {
+                        label = "dp-params";
                         reg = <0x10000 0x4000>;
                     };
                     /* IAPv3 结果日志；偏移与既有设备保持一致，不参与参数清空。 */

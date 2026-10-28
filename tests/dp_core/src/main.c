@@ -4,7 +4,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <zephyr/kernel.h>
-#include <zephyr/storage/flash_map.h>
 #include <zephyr/ztest.h>
 
 enum { DEV = 7, DEV_ALT = 8 };
@@ -120,16 +119,12 @@ static void write_u16(uint16_t dev, uint16_t sig, uint16_t value, int expected)
 
 ZTEST(dp_core, test_core)
 {
-    const uint8_t area = DT_FIXED_PARTITION_ID(DT_ALIAS(idu_settings));
     const char *phase = getenv("IDU_DP_PHASE");
 
     static const struct dp_table duplicate = {
         .device_id = DEV, .points = alt_rows,
         .point_count = ARRAY_SIZE(alt_rows),
     };
-    zassert_equal(dp_register_table(&models[0]), -ENODEV);
-    zassert_ok(dp_register(area));
-    zassert_equal(dp_register(area), -EALREADY);
     zassert_equal(dp_register_table(NULL), -EINVAL);
     zassert_ok(dp_register_table(&models[0]));
     zassert_equal(dp_register_table(&duplicate), -EEXIST);

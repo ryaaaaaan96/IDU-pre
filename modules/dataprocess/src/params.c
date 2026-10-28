@@ -19,9 +19,18 @@ static size_t param_count;
 static uint16_t defs[CONFIG_DP_PARAMS_MAX_COUNT];
 static bool stored[CONFIG_DP_PARAMS_MAX_COUNT];
 static struct nvs_fs fs;
-static uint8_t partition_id;
+/* 应用必须提供固定分区别名；名称约定属于 DP 模块。 */
+#define PARAMS_NODE DT_ALIAS(dp_params)
+#if !DT_NODE_EXISTS(PARAMS_NODE)
+#error "dataprocess requires a dp-params devicetree alias for its parameter partition"
+#else
+BUILD_ASSERT(DT_NODE_HAS_STATUS(PARAMS_NODE, okay),
+             "dp-params partition must be enabled");
+BUILD_ASSERT(DT_NODE_HAS_COMPAT(DT_PARENT(PARAMS_NODE), fixed_partitions),
+             "dp-params must refer to a fixed partition");
+#endif
+static const uint8_t partition_id = DT_FIXED_PARTITION_ID(PARAMS_NODE);
 static struct dp_param_status status;
-static bool configured;
 static bool ready;
 static K_MUTEX_DEFINE(params_lock);
 static K_MUTEX_DEFINE(status_lock);
@@ -327,19 +336,6 @@ static int mount_locked(void)
     return err;
 }
 
-/* 由首次登记确定分区；后续登记必须一致。 */
-int dp_params_configure(uint8_t area_id)
-{
-    if (!configured) {
-        partition_id = area_id;
-        configured = true;
-        return 0;
-    }
-    return partition_id == area_id ? 0 : -EINVAL;
-}
-
-bool dp_params_configured(void) { return configured; }
-
 bool dp_params_mounted(void) { return ready; }
 
 /* 调用方持有 params_lock；首次访问时完成缓存分配、参数枚举和 NVS 挂载。 */
@@ -349,7 +345,7 @@ static int mount_once(void)
         return (status.flags & DP_PARAM_STORAGE_READY) ? 0 : -EROFS;
     }
     /* 尚未登记任何模型时不锁存，允许登记后再次访问。 */
-    if (!configured) { return -ENODEV; }
+    if (!dp_point_count()) { return -ENODEV; }
     ready = true;
     buffers = k_malloc(sizeof(*buffers));
     if (!buffers) {

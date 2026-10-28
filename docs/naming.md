@@ -27,7 +27,7 @@
 | --- | --- |
 | IAP 项目配置 / 显式配置 | `iap_init()` / `iap_init_config(config)` |
 | 看门狗实例 | `watchdog_init()` |
-| DP 模型、点值和参数 | `dp_register()` 后用 `dp_register_table()` 逐表登记 |
+| DP 模型、点值和参数 | `dp_register_table()` 逐表登记，参数分区由设备树绑定 |
 | 产品本地 process | `protocol_init()` |
 | 硬件输入 | `acquisition_inputs_init()` / `acquisition_cycle()` |
 | 看门狗、状态 | `watchdog_init()` / `status_init()` |

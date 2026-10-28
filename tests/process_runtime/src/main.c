@@ -26,7 +26,7 @@ ZTEST(process_runtime, test_local_process_without_communication)
     dp_params_get_status(&storage);
     zassert_true(storage.flags & DP_PARAM_STORAGE_READY);
 
-    zassert_equal(protocol_init(), -EALREADY);
+    zassert_equal(protocol_init(), -EEXIST);
 
 }
 

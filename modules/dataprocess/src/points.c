@@ -176,26 +176,18 @@ int dp_config_index(struct dp_key key)
 
 size_t dp_point_count(void) { return point_count; }
 
-int dp_register(uint8_t params_area)
-{
-    if (k_is_in_isr()) { return -EWOULDBLOCK; }
-    if (dp_params_configured()) { return -EALREADY; }
-    return dp_params_configure(params_area);
-}
-
 int dp_register_table(const struct dp_table *table)
 {
     if (k_is_in_isr()) { return -EWOULDBLOCK; }
-    if (!dp_params_configured()) { return -ENODEV; }
     if (!table || !table->device_id || !table->points || !table->point_count) {
-        return -EINVAL;
-    }
-    if (table_count == ARRAY_SIZE(slots)) { return -ENOSPC; }
-    if (table->point_count > CONFIG_DP_POINTS_MAX_POINTS - point_count) {
         return -EINVAL;
     }
     for (size_t i = 0; i < table_count; ++i) {
         if (slots[i].cfg->device_id == table->device_id) { return -EEXIST; }
+    }
+    if (table_count == ARRAY_SIZE(slots)) { return -ENOSPC; }
+    if (table->point_count > CONFIG_DP_POINTS_MAX_POINTS - point_count) {
+        return -EINVAL;
     }
 
     size_t words = 0, params = 0;

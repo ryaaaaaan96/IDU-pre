@@ -8,8 +8,8 @@ DP 负责登记点表、同步读写和本机 NVS 持久化。整机阶段、停
 
 ```mermaid
 flowchart TD
-    A[应用启动] --> B[dp_register：登记参数分区]
-    B --> C[dp_register_table：逐张校验点表并初始化 RAM]
+    A[应用启动] --> C[dp_register_table：逐张校验点表并初始化 RAM]
+    B[设备树 dp-params 固定分区别名] --> I
     D[应用采样或配置] --> E[dp_set_para]
     E --> F{点类型}
     F -->|普通点| G[更新 RAM]
@@ -19,20 +19,32 @@ flowchart TD
     K --> L[RAM / 参数缓存 / read 回调]
 ```
 
-## 四个主接口
+## 三个主接口
 
 统一包含 `<dataprocess/points.h>`：
 
 ```c
-int dp_register(uint8_t params_area);
 int dp_register_table(const struct dp_table *table);
 int dp_set_para(uint16_t dev_id, uint16_t sig_id, uint8_t size, const uint8_t *bytes);
 int dp_get_para(uint16_t dev_id, uint16_t sig_id, uint8_t capacity, uint8_t *bytes);
 ```
 
-`dp_register()` 在启动线程调用一次，只保存分区 ID；重复返回 `-EALREADY`。
-随后逐张登记表，全部完成后再开始业务读写；登记与业务读写不并发。
-未登记分区时登记表返回 `-ENODEV`。不需要额外 init、start、stop 或状态查询。
+启动线程逐张登记表，全部完成后再开始业务读写；登记与业务读写不并发。
+模块要求设备树提供 `dp-params` 别名，指向启用的 `fixed-partitions` 子分区；
+缺少别名或目标错误会编译失败，无须应用传入分区 ID。
+
+```dts
+/ {
+    aliases {
+        dp-params = &dp_params;
+    };
+};
+/* 位于 Flash 的 fixed-partitions 节点内；地址和大小由板级决定。 */
+dp_params: partition@10000 {
+    label = "dp-params";
+    reg = <0x10000 0x4000>;
+};
+```
 
 ```c
 static const DM_SIG_CFG_S rows[] = { /* 产品测点 */ };
@@ -44,8 +56,6 @@ const struct dp_table local_table = {
 
 int protocol_init(void)
 {
-    int err = dp_register(DT_FIXED_PARTITION_ID(DT_ALIAS(idu_settings)));
-    if (err) { return err; }
     return dp_register_table(&local_table);
 }
 ```
@@ -76,7 +86,7 @@ int protocol_init(void)
 
 `params.h` 只额外提供现有产品实际需要的两项：
 `dp_params_restore(device_id)` 恢复默认，`dp_params_get_status()` 查询存储状态。
-这些由产品命令点、状态点和 IAP 的复位准备调用；普通业务只使用四个主接口。
+这些由产品命令点、状态点和 IAP 的复位准备调用；普通业务只使用三个主接口。
 
 NVS 首次访问时挂载。读写按 `(dev_id, sig_id)` 保存，记录及提交镜像格式保持不变。
 写入失败返回错误，不覆盖已经确认的缓存。存储初始化失败由状态报告，应用读取
@@ -87,7 +97,7 @@ NVS 首次访问时挂载。读写按 `(dev_id, sig_id)` 保存，记录及提�
 
 | 文件 | 职责 |
 | --- | --- |
-| `points.c` | 四个主接口、点表校验、普通点值和回调 |
+| `points.c` | 三个主接口、点表校验、普通点值和回调 |
 | `params.c` | 参数缓存、恢复默认、延迟挂载与同步保存 |
 | `parameter_store.c` | NVS 记录、提交镜像及掉电恢复 |
 | `src/dp_internal.h`、`src/parameter_store.h` | 模块内部实现接口 |

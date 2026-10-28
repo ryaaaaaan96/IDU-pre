@@ -38,11 +38,8 @@ struct dp_table {
     size_t point_count;
 };
 
-/** @brief 启动时登记一次参数分区；不访问 Flash，重复调用返回 -EALREADY。 */
-int dp_register(uint8_t params_area);
-
 /**
- * @brief 启动时逐张登记只读点表；须先调用 dp_register()。
+ * @brief 启动时逐张登记只读点表；参数分区由设备树 dp-params 别名指定。
  * @note 描述及行数组须常驻；不同表 device_id 不同，预算跨表累计。
  * @note 登记在启动线程完成；运行后不再登记。参数挂载后禁止增加持久参数。
  */
