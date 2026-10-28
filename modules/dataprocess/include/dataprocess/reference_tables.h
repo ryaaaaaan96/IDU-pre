@@ -44,9 +44,11 @@ typedef struct dm_sig_data_s {
 #define DP_POINT_DEFAULT_ARRAY NULL
 
 typedef enum {
-    FLAG_PERSISTENCE = 1,
-    FLAG_READ_CALLBACK = 8,
-    FLAG_NO_RESTORE = 32, FLAG_RANGE_CHECK = 64, FLAG_CONSTANT = 128
+    FLAG_PERSISTENCE   = (1U << 0),
+    FLAG_READ_CALLBACK = (1U << 3),
+    FLAG_NO_RESTORE    = (1U << 5),
+    FLAG_RANGE_CHECK   = (1U << 6),
+    FLAG_CONSTANT      = (1U << 7),
 } SIG_FLAG_DEF;
 
 struct dp_key {
