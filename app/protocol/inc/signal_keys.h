@@ -1,21 +1,21 @@
 /**
  * @file
- * @brief 产品设备与信号标识。
+ * @brief 产品设备与信号键。
  */
-#ifndef SIGNAL_IDS_H
-#define SIGNAL_IDS_H
+#ifndef SIGNAL_KEYS_H
+#define SIGNAL_KEYS_H
 
 #define DEVICE_TYPE 0x2221
 #define PROTOCOL_VERSION 0x01000101U
 
 /**
- * @brief 逻辑设备与信号 ID；协议寄存器地址由采集表和转发表分别指定。
+ * @brief 逻辑设备与信号键；与 process 行索引和协议寄存器地址独立。
  */
 #define DEVICE_LOCAL 1
 #define DEVICE_REMOTE_IO 10
 
 /**
- * @brief 本地与南向设备共用这些信号 ID，通过设备 ID 区分测点。
+ * @brief 本地与南向设备共用这些信号键，通过设备 ID 区分测点。
  */
 #define SIGNAL_DI 8152
 #define SIGNAL_CURRENT_1 8163

@@ -56,10 +56,10 @@ static const dp_point_cfg_t *param(size_t index, dp_point_cfg_t *scratch)
     return dp_describe_point(defs[index].device_id, defs[index].row, scratch) ? NULL : scratch;
 }
 
-static int index_of(uint16_t device_id, uint16_t signal_id)
+static int index_of(uint16_t device_id, uint16_t signal_key)
 {
     for (size_t i = 0; i < param_count; ++i) {
-        if (defs[i].device_id == device_id && defs[i].row->signal_id == signal_id) {
+        if (defs[i].device_id == device_id && defs[i].row->signal_key == signal_key) {
             return i;
         }
     }
@@ -124,7 +124,7 @@ static size_t encode_changes(uint8_t *buf, uint32_t sequence)
             return 0;
         }
         sys_put_le16(p.device_id, buf + offset);
-        sys_put_le16(p.signal_id, buf + offset + 2);
+        sys_put_le16(p.signal_key, buf + offset + 2);
         buf[offset + 4] = p.type;
         buf[offset + 5] = p.width;
         offset += 6;
@@ -196,7 +196,7 @@ static int apply(const bool *selected)
     return 0;
 }
 
-int dp_params_write(uint16_t device_id, uint16_t signal_id, const value_t *value)
+int dp_params_write(uint16_t device_id, uint16_t signal_key, const value_t *value)
 {
     if (!value) {
         return -EINVAL;
@@ -206,7 +206,7 @@ int dp_params_write(uint16_t device_id, uint16_t signal_id, const value_t *value
         return err;
     }
     k_mutex_lock(&params_lock, K_FOREVER);
-    int index = index_of(device_id, signal_id);
+    int index = index_of(device_id, signal_key);
     if (index < 0) {
         k_mutex_unlock(&params_lock);
         return index;
@@ -224,7 +224,7 @@ int dp_params_write(uint16_t device_id, uint16_t signal_id, const value_t *value
     return err;
 }
 
-int dp_params_read(uint16_t device_id, uint16_t signal_id, dp_point_data_t *state)
+int dp_params_read(uint16_t device_id, uint16_t signal_key, dp_point_data_t *state)
 {
     if (!state) {
         return -EINVAL;
@@ -233,7 +233,7 @@ int dp_params_read(uint16_t device_id, uint16_t signal_id, dp_point_data_t *stat
     if (err) {
         return err;
     }
-    int index = index_of(device_id, signal_id);
+    int index = index_of(device_id, signal_key);
     if (index < 0) {
         return index;
     }
@@ -338,7 +338,7 @@ static int load_locked(bool *incompatible)
                 continue;
             }
             dp_stored_value_t value;
-            err = dp_store_read(&fs, p.device_id, p.signal_id, &value, &recovered);
+            err = dp_store_read(&fs, p.device_id, p.signal_key, &value, &recovered);
             if (err == -ENOENT) {
                 seed[i] = true;
                 continue;

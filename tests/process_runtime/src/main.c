@@ -1,5 +1,6 @@
 #include "protocol/inc/protocol.h"
-#include "protocol/inc/signal_ids.h"
+#include "protocol/inc/process_table.h"
+#include "protocol/inc/signal_keys.h"
 #include <dataprocess/points.h>
 #include <dataprocess/params.h>
 #include <errno.h>
@@ -8,6 +9,11 @@
 
 ZTEST(process_runtime, test_local_process_without_communication)
 {
+    zassert_equal(protocol_local_table.point_count, PROCESS_SIGNAL_COUNT);
+    zassert_equal(protocol_local_table.points[PROCESS_DI].signal_key, SIGNAL_DI);
+    zassert_equal(
+        protocol_local_table.points[PROCESS_SAMPLE_PERIOD].signal_key, SIGNAL_SAMPLE_PERIOD);
+    zassert_equal(protocol_local_table.points[PROCESS_CURRENT_8].signal_key, SIGNAL_CURRENT_8);
     zassert_ok(protocol_init());
 
     uint8_t value[] = {0xaa, 0x55};

@@ -3,7 +3,7 @@
 #include <zephyr/drivers/gpio/gpio_emul.h>
 #include <acquisition/acquisition.h>
 
-#include "protocol/inc/signal_ids.h"
+#include "protocol/inc/signal_keys.h"
 #include <zephyr/sys/byteorder.h>
 
 static uint16_t di_value, current_values[SAMPLE_ANALOG_COUNT];

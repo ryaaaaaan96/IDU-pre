@@ -120,3 +120,9 @@ dp_write_callback_t/dp_read_callback_t。明确它们是业务回调，与 DP �
 
 value_type_t 和 VALUE_TYPE_* 同时迁入 common。删除 dp_key_t，回调及内部函数
 直接传 device_id、signal_id；参数键编码保持不变。
+
+## 2026-10-28：区分 process 行索引与测点键
+
+DP 配置、接口及回调中的 signal_id 统一改为 signal_key，数值及 NVS 编码不变。
+process_signal_index_t 定义 process 行顺序，使用指定下标初始化点表。
+DP 不保存 process 索引；业务通过行配置取得稳定键，避免顺序变化影响参数恢复。

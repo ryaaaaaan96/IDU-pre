@@ -1,6 +1,6 @@
 /* 公共测点和参数命令回调；硬件输入映射归 acquisition。 */
 #include "process/points.h"
-#include "protocol/inc/signal_ids.h"
+#include "protocol/inc/signal_keys.h"
 #include <dataprocess/params.h>
 #include <errno.h>
 #include <zephyr/kernel.h>
@@ -15,7 +15,7 @@ uint16_t points_sample_period_ms(void)
     return bytes[0] | ((uint16_t)bytes[1] << 8);
 }
 
-int points_parameter_command(uint16_t device_id, uint16_t signal_id, const value_t *value)
+int points_parameter_command(uint16_t device_id, uint16_t signal_key, const value_t *value)
 {
     if (!value || device_id != DEVICE_LOCAL) {
         return -EINVAL;
@@ -23,7 +23,7 @@ int points_parameter_command(uint16_t device_id, uint16_t signal_id, const value
     uint16_t expected;
     int (*action)(uint16_t);
     uint16_t argument = 0;
-    switch (signal_id) {
+    switch (signal_key) {
     case SIGNAL_RESTORE_LOCAL:
         expected = 0xa55a;
         action = dp_params_restore;
@@ -40,9 +40,9 @@ int points_parameter_command(uint16_t device_id, uint16_t signal_id, const value
     return value->words[0] == expected ? action(argument) : -EINVAL;
 }
 
-int points_parameter_status(uint16_t device_id, uint16_t signal_id, value_t *value)
+int points_parameter_status(uint16_t device_id, uint16_t signal_key, value_t *value)
 {
-    if (!value || device_id != DEVICE_LOCAL || signal_id != SIGNAL_PARAMETER_STATUS) {
+    if (!value || device_id != DEVICE_LOCAL || signal_key != SIGNAL_PARAMETER_STATUS) {
         return -EINVAL;
     }
     dp_param_status_t status;

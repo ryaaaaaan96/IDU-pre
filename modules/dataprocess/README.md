@@ -11,14 +11,14 @@ DP 负责设备点表登记、同步点值读写和本机参数持久化。应�
 
 ```c
 int dp_register_table(uint16_t device_id, const dp_table_t *table);
-int dp_set_para(uint16_t device_id, uint16_t signal_id, uint8_t size, const uint8_t *bytes);
-int dp_get_para(uint16_t device_id, uint16_t signal_id, uint8_t capacity, uint8_t *bytes);
+int dp_set_para(uint16_t device_id, uint16_t signal_key, uint8_t size, const uint8_t *bytes);
+int dp_get_para(uint16_t device_id, uint16_t signal_key, uint8_t capacity, uint8_t *bytes);
 ```
 
 ```c
 static const dp_point_config_t points[] = {
-    {.signal_id = 1, .size = 2, .type = VALUE_TYPE_U16},
-    {.signal_id = 2, .size = 2, .type = VALUE_TYPE_U16,
+    {.signal_key = 1, .size = 2, .type = VALUE_TYPE_U16},
+    {.signal_key = 2, .size = 2, .type = VALUE_TYPE_U16,
      .flags = FLAG_PERSISTENCE | FLAG_RANGE_CHECK,
      .data = {.initial.u16 = 500, .minimum.u16 = 100, .maximum.u16 = 1000}},
 };
@@ -47,7 +47,7 @@ flowchart TD
     B --> C[校验并分配私有节点与点数据]
     C --> D[DP 私有链表]
     E[dp_set_para / dp_get_para] --> D
-    D --> F[device_id → 设备 → signal_id → 设备内点数据]
+    D --> F[device_id → 设备 → signal_key → 设备内点数据]
     F --> G[普通点 RAM / 命令回调 / 读回调 / 参数持久化]
 ```
 
@@ -55,7 +55,7 @@ flowchart TD
 
 | 类型 | 内容 |
 | --- | --- |
-| `dp_point_config_t` | signal_id、size、flags、type、write_callback、read_callback、data |
+| `dp_point_config_t` | signal_key、size、flags、type、write_callback、read_callback、data |
 | `dp_table_t` | points、point_count；无设备 ID、链表或运行数据 |
 | `value_t` | 联合体：bytes、words、u8、u16、s16、u32、s32、f32 |
 | `dp_point_data_t` | value、uint32_t updated_at_s |
@@ -106,7 +106,7 @@ dp_params: partition@10000 {
 ```
 
 NVS 首次参数访问时挂载。参数直接使用设备点数据作为缓存，没有第二份点状态。
-同步提交成功后才覆盖值；读写按 `(device_id, signal_id)` 保存，NVS 哈希键、存储
+同步提交成功后才覆盖值；读写按 `(device_id, signal_key)` 保存，NVS 哈希键、存储
 类型编码、版本及提交镜像格式保持不变。类型/宽度不兼容时按既有策略清空参数分区，
 I/O 错误停写；应用采样周期读取失败时回退到默认值。
 
@@ -124,5 +124,5 @@ I/O 错误停写；应用采样周期读取失败时回退到默认值。
 `HEAP_MEM_POOL_ADD_SIZE_DATAPROCESS` 与 `HEAP_MEM_POOL_ADD_SIZE_DP_PARAMS` 提供。
 细节见[内存管理](../../docs/memory-management.md)。
 
-读写回调直接接收 `uint16_t device_id, uint16_t signal_id`，不再使用键结构体。
+读写回调直接接收 `uint16_t device_id, uint16_t signal_key`，不再使用键结构体。
 点表行类型为 `dp_point_config_t`，与运行数据 `dp_point_data_t` 区分。

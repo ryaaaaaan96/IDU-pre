@@ -54,3 +54,11 @@
 原 `protocol.c`、`init.c`、`tasks.c`、`ports.c`、collect/transmit 点表和
 IAP 协议段已删除。IAP 模块仍保留 `iap_route()`，但当前构建没有调用者；
 重新接入通信需要新增一个最小的 Modbus/RAW 路由适配层。
+
+## process 索引与测点键
+
+`inc/process_table.h` 定义 `process_signal_index_t`，每个枚举对应一行配置。
+`tables/process.c` 使用 `[PROCESS_...]` 指定下标；`PROCESS_SIGNAL_COUNT` 表示行数。
+需要按行访问时，通过 `protocol_local_table.points[索引]` 取得配置的 `signal_key`，
+结合登记设备的 `device_id` 调用 DP。DP 仅感知稳定键，不感知 process 行顺序。
+调整枚举顺序不改变持久化键；所有配置行必须有对应的枚举指定初始化。

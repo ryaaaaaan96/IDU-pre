@@ -23,8 +23,8 @@ typedef struct {
     uint32_t updated_at_s; /**< UNIX 秒，UTC；未校时、默认值和历史恢复值为 0。 */
 } dp_point_data_t;
 
-typedef int (*dp_write_callback_t)(uint16_t device_id, uint16_t signal_id, const value_t *value);
-typedef int (*dp_read_callback_t)(uint16_t device_id, uint16_t signal_id, value_t *value);
+typedef int (*dp_write_callback_t)(uint16_t device_id, uint16_t signal_key, const value_t *value);
+typedef int (*dp_read_callback_t)(uint16_t device_id, uint16_t signal_key, value_t *value);
 
 typedef struct {
     value_t initial;
@@ -33,7 +33,7 @@ typedef struct {
 } dp_point_limits_t;
 
 typedef struct {
-    uint16_t signal_id;
+    uint16_t signal_key;
     uint8_t size;
     uint8_t flags;
     value_type_t type;
@@ -61,9 +61,9 @@ typedef struct {
 int dp_register_table(uint16_t device_id, const dp_table_t *table);
 
 /** @brief 同步写点；长度须匹配，常量拒写，命令仅执行回调，参数同步提交 NVS。 */
-int dp_set_para(uint16_t device_id, uint16_t signal_id, uint8_t size, const uint8_t *bytes);
+int dp_set_para(uint16_t device_id, uint16_t signal_key, uint8_t size, const uint8_t *bytes);
 
 /** @brief 同步读点，可执行读回调；成功返回传入容量，数据按低字节在前编码。 */
-int dp_get_para(uint16_t device_id, uint16_t signal_id, uint8_t capacity, uint8_t *bytes);
+int dp_get_para(uint16_t device_id, uint16_t signal_key, uint8_t capacity, uint8_t *bytes);
 
 #endif

@@ -1,13 +1,14 @@
 #include "protocol.h"
-#include "signal_ids.h"
+#include "process_table.h"
+#include "signal_keys.h"
 #include "process/points.h"
 #include <dataprocess/points.h>
 #include <zephyr/sys/util.h>
 
 /* 每行显式配置全部字段；默认值来自 DP，读回调通过 FLAG_READ_CALLBACK 启用。 */
-static const dp_point_config_t local_process_rows[] = {
-    {
-        .signal_id = SIGNAL_RESTORE_LOCAL,
+static const dp_point_config_t local_process_rows[PROCESS_SIGNAL_COUNT] = {
+    [PROCESS_RESTORE_LOCAL] = {
+        .signal_key = SIGNAL_RESTORE_LOCAL,
         .size = 2,
         .flags = DP_POINT_DEFAULT_FLAGS,
         .type = VALUE_TYPE_U16,
@@ -19,8 +20,8 @@ static const dp_point_config_t local_process_rows[] = {
                 .maximum.u16 = DP_POINT_DEFAULT_VALUE,
             },
     },
-    {
-        .signal_id = SIGNAL_RESTORE_REMOTE,
+    [PROCESS_RESTORE_REMOTE] = {
+        .signal_key = SIGNAL_RESTORE_REMOTE,
         .size = 2,
         .flags = DP_POINT_DEFAULT_FLAGS,
         .type = VALUE_TYPE_U16,
@@ -32,8 +33,8 @@ static const dp_point_config_t local_process_rows[] = {
                 .maximum.u16 = DP_POINT_DEFAULT_VALUE,
             },
     },
-    {
-        .signal_id = SIGNAL_PARAMETER_STATUS,
+    [PROCESS_PARAMETER_STATUS] = {
+        .signal_key = SIGNAL_PARAMETER_STATUS,
         .size = 8,
         .flags = FLAG_READ_CALLBACK,
         .type = VALUE_TYPE_WORDS,
@@ -45,8 +46,8 @@ static const dp_point_config_t local_process_rows[] = {
                 .maximum.array = DP_POINT_DEFAULT_ARRAY,
             },
     },
-    {
-        .signal_id = SIGNAL_SAMPLE_PERIOD,
+    [PROCESS_SAMPLE_PERIOD] = {
+        .signal_key = SIGNAL_SAMPLE_PERIOD,
         .size = 2,
         .flags = FLAG_PERSISTENCE | FLAG_RANGE_CHECK,
         .type = VALUE_TYPE_U16,
@@ -57,8 +58,8 @@ static const dp_point_config_t local_process_rows[] = {
                 .maximum.u16 = 1000,
             },
     },
-    {
-        .signal_id = SIGNAL_LABEL,
+    [PROCESS_LABEL] = {
+        .signal_key = SIGNAL_LABEL,
         .size = 16,
         .flags = FLAG_PERSISTENCE,
         .type = VALUE_TYPE_WORDS,
@@ -69,8 +70,8 @@ static const dp_point_config_t local_process_rows[] = {
                 .maximum.array = DP_POINT_DEFAULT_ARRAY,
             },
     },
-    {
-        .signal_id = SIGNAL_SAVED_ADDRESS,
+    [PROCESS_SAVED_ADDRESS] = {
+        .signal_key = SIGNAL_SAVED_ADDRESS,
         .size = 2,
         .flags = FLAG_PERSISTENCE | FLAG_RANGE_CHECK,
         .type = VALUE_TYPE_U16,
@@ -81,8 +82,8 @@ static const dp_point_config_t local_process_rows[] = {
                 .maximum.u16 = 246,
             },
     },
-    {
-        .signal_id = 2503,
+    [PROCESS_DEVICE_PROPERTIES] = {
+        .signal_key = 2503,
         .size = 2,
         .flags = FLAG_RANGE_CHECK | FLAG_CONSTANT,
         .type = VALUE_TYPE_U16,
@@ -93,8 +94,8 @@ static const dp_point_config_t local_process_rows[] = {
                 .maximum.u16 = UINT16_MAX,
             },
     },
-    {
-        .signal_id = 2504,
+    [PROCESS_MANUFACTURER] = {
+        .signal_key = 2504,
         .size = 20,
         .flags = FLAG_CONSTANT,
         .type = VALUE_TYPE_WORDS,
@@ -106,8 +107,8 @@ static const dp_point_config_t local_process_rows[] = {
                 .maximum.array = DP_POINT_DEFAULT_ARRAY,
             },
     },
-    {
-        .signal_id = 2581,
+    [PROCESS_FIRMWARE_VERSION] = {
+        .signal_key = 2581,
         .size = 30,
         .flags = FLAG_CONSTANT,
         .type = VALUE_TYPE_WORDS,
@@ -132,8 +133,8 @@ static const dp_point_config_t local_process_rows[] = {
                 .maximum.array = DP_POINT_DEFAULT_ARRAY,
             },
     },
-    {
-        .signal_id = 2568,
+    [PROCESS_HARDWARE_VERSION] = {
+        .signal_key = 2568,
         .size = 8,
         .flags = FLAG_CONSTANT,
         .type = VALUE_TYPE_WORDS,
@@ -144,8 +145,8 @@ static const dp_point_config_t local_process_rows[] = {
                 .maximum.array = DP_POINT_DEFAULT_ARRAY,
             },
     },
-    {
-        .signal_id = 8149,
+    [PROCESS_DEVICE_TYPE] = {
+        .signal_key = 8149,
         .size = 2,
         .flags = FLAG_RANGE_CHECK | FLAG_CONSTANT,
         .type = VALUE_TYPE_U16,
@@ -156,8 +157,8 @@ static const dp_point_config_t local_process_rows[] = {
                 .maximum.u16 = UINT16_MAX,
             },
     },
-    {
-        .signal_id = SIGNAL_PROTOCOL,
+    [PROCESS_PROTOCOL] = {
+        .signal_key = SIGNAL_PROTOCOL,
         .size = 4,
         .flags = FLAG_RANGE_CHECK | FLAG_CONSTANT,
         .type = VALUE_TYPE_U32,
@@ -168,8 +169,8 @@ static const dp_point_config_t local_process_rows[] = {
                 .maximum.u32 = UINT32_MAX,
             },
     },
-    {
-        .signal_id = 5486,
+    [PROCESS_PRODUCT_CODE] = {
+        .signal_key = 5486,
         .size = 2,
         .flags = FLAG_RANGE_CHECK | FLAG_CONSTANT,
         .type = VALUE_TYPE_U16,
@@ -180,8 +181,8 @@ static const dp_point_config_t local_process_rows[] = {
                 .maximum.u16 = UINT16_MAX,
             },
     },
-    {
-        .signal_id = SIGNAL_VIRTUAL_MODE,
+    [PROCESS_VIRTUAL_MODE] = {
+        .signal_key = SIGNAL_VIRTUAL_MODE,
         .size = 2,
         .flags = FLAG_RANGE_CHECK | FLAG_CONSTANT,
         .type = VALUE_TYPE_U16,
@@ -192,8 +193,8 @@ static const dp_point_config_t local_process_rows[] = {
                 .maximum.u16 = UINT16_MAX,
             },
     },
-    {
-        .signal_id = SIGNAL_ADDRESS,
+    [PROCESS_ADDRESS] = {
+        .signal_key = SIGNAL_ADDRESS,
         .size = 2,
         .flags = FLAG_RANGE_CHECK,
         .type = VALUE_TYPE_U16,
@@ -204,8 +205,8 @@ static const dp_point_config_t local_process_rows[] = {
                 .maximum.u16 = 16,
             },
     },
-    {
-        .signal_id = SIGNAL_DI,
+    [PROCESS_DI] = {
+        .signal_key = SIGNAL_DI,
         .size = 2,
         .flags = DP_POINT_DEFAULT_FLAGS,
         .type = VALUE_TYPE_U16,
@@ -216,8 +217,8 @@ static const dp_point_config_t local_process_rows[] = {
                 .maximum.u16 = DP_POINT_DEFAULT_VALUE,
             },
     },
-    {
-        .signal_id = SIGNAL_CURRENT_1,
+    [PROCESS_CURRENT_1] = {
+        .signal_key = SIGNAL_CURRENT_1,
         .size = 2,
         .flags = DP_POINT_DEFAULT_FLAGS,
         .type = VALUE_TYPE_U16,
@@ -228,8 +229,8 @@ static const dp_point_config_t local_process_rows[] = {
                 .maximum.u16 = DP_POINT_DEFAULT_VALUE,
             },
     },
-    {
-        .signal_id = SIGNAL_CURRENT_2,
+    [PROCESS_CURRENT_2] = {
+        .signal_key = SIGNAL_CURRENT_2,
         .size = 2,
         .flags = DP_POINT_DEFAULT_FLAGS,
         .type = VALUE_TYPE_U16,
@@ -240,8 +241,8 @@ static const dp_point_config_t local_process_rows[] = {
                 .maximum.u16 = DP_POINT_DEFAULT_VALUE,
             },
     },
-    {
-        .signal_id = SIGNAL_CURRENT_3,
+    [PROCESS_CURRENT_3] = {
+        .signal_key = SIGNAL_CURRENT_3,
         .size = 2,
         .flags = DP_POINT_DEFAULT_FLAGS,
         .type = VALUE_TYPE_U16,
@@ -252,8 +253,8 @@ static const dp_point_config_t local_process_rows[] = {
                 .maximum.u16 = DP_POINT_DEFAULT_VALUE,
             },
     },
-    {
-        .signal_id = SIGNAL_CURRENT_4,
+    [PROCESS_CURRENT_4] = {
+        .signal_key = SIGNAL_CURRENT_4,
         .size = 2,
         .flags = DP_POINT_DEFAULT_FLAGS,
         .type = VALUE_TYPE_U16,
@@ -264,8 +265,8 @@ static const dp_point_config_t local_process_rows[] = {
                 .maximum.u16 = DP_POINT_DEFAULT_VALUE,
             },
     },
-    {
-        .signal_id = SIGNAL_CURRENT_5,
+    [PROCESS_CURRENT_5] = {
+        .signal_key = SIGNAL_CURRENT_5,
         .size = 2,
         .flags = DP_POINT_DEFAULT_FLAGS,
         .type = VALUE_TYPE_U16,
@@ -276,8 +277,8 @@ static const dp_point_config_t local_process_rows[] = {
                 .maximum.u16 = DP_POINT_DEFAULT_VALUE,
             },
     },
-    {
-        .signal_id = SIGNAL_CURRENT_6,
+    [PROCESS_CURRENT_6] = {
+        .signal_key = SIGNAL_CURRENT_6,
         .size = 2,
         .flags = DP_POINT_DEFAULT_FLAGS,
         .type = VALUE_TYPE_U16,
@@ -288,8 +289,8 @@ static const dp_point_config_t local_process_rows[] = {
                 .maximum.u16 = DP_POINT_DEFAULT_VALUE,
             },
     },
-    {
-        .signal_id = SIGNAL_CURRENT_7,
+    [PROCESS_CURRENT_7] = {
+        .signal_key = SIGNAL_CURRENT_7,
         .size = 2,
         .flags = DP_POINT_DEFAULT_FLAGS,
         .type = VALUE_TYPE_U16,
@@ -300,8 +301,8 @@ static const dp_point_config_t local_process_rows[] = {
                 .maximum.u16 = DP_POINT_DEFAULT_VALUE,
             },
     },
-    {
-        .signal_id = SIGNAL_CURRENT_8,
+    [PROCESS_CURRENT_8] = {
+        .signal_key = SIGNAL_CURRENT_8,
         .size = 2,
         .flags = DP_POINT_DEFAULT_FLAGS,
         .type = VALUE_TYPE_U16,

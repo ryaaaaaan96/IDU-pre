@@ -28,7 +28,7 @@ int dp_store_open(struct nvs_fs *fs,
     bool *recovered);
 int dp_store_read(struct nvs_fs *fs,
     uint16_t device_id,
-    uint16_t signal_id,
+    uint16_t signal_key,
     dp_stored_value_t *value,
     bool *recovered);
 /* image 为自描述的键/类型/长度/值列表，仅存本次变化和新建的参数。

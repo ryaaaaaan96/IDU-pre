@@ -1,5 +1,5 @@
 #include "acquisition/acquisition.h"
-#include "protocol/inc/signal_ids.h"
+#include "protocol/inc/signal_keys.h"
 #include <dataprocess/points.h>
 #include <zephyr/drivers/adc.h>
 #include <zephyr/drivers/gpio.h>
@@ -12,49 +12,49 @@
 struct analog_point {
     struct adc_dt_spec spec;
     uint16_t device_id;
-    uint16_t signal_id;
+    uint16_t signal_key;
 };
 
 static const struct analog_point analog_inputs[] = {
     {
         .spec = ADC_DT_SPEC_GET_BY_NAME(IO_NODE, current_1),
         .device_id = DEVICE_LOCAL,
-        .signal_id = SIGNAL_CURRENT_1,
+        .signal_key = SIGNAL_CURRENT_1,
     },
     {
         .spec = ADC_DT_SPEC_GET_BY_NAME(IO_NODE, current_2),
         .device_id = DEVICE_LOCAL,
-        .signal_id = SIGNAL_CURRENT_2,
+        .signal_key = SIGNAL_CURRENT_2,
     },
     {
         .spec = ADC_DT_SPEC_GET_BY_NAME(IO_NODE, current_3),
         .device_id = DEVICE_LOCAL,
-        .signal_id = SIGNAL_CURRENT_3,
+        .signal_key = SIGNAL_CURRENT_3,
     },
     {
         .spec = ADC_DT_SPEC_GET_BY_NAME(IO_NODE, current_4),
         .device_id = DEVICE_LOCAL,
-        .signal_id = SIGNAL_CURRENT_4,
+        .signal_key = SIGNAL_CURRENT_4,
     },
     {
         .spec = ADC_DT_SPEC_GET_BY_NAME(IO_NODE, current_5),
         .device_id = DEVICE_LOCAL,
-        .signal_id = SIGNAL_CURRENT_5,
+        .signal_key = SIGNAL_CURRENT_5,
     },
     {
         .spec = ADC_DT_SPEC_GET_BY_NAME(IO_NODE, current_6),
         .device_id = DEVICE_LOCAL,
-        .signal_id = SIGNAL_CURRENT_6,
+        .signal_key = SIGNAL_CURRENT_6,
     },
     {
         .spec = ADC_DT_SPEC_GET_BY_NAME(IO_NODE, current_7),
         .device_id = DEVICE_LOCAL,
-        .signal_id = SIGNAL_CURRENT_7,
+        .signal_key = SIGNAL_CURRENT_7,
     },
     {
         .spec = ADC_DT_SPEC_GET_BY_NAME(IO_NODE, current_8),
         .device_id = DEVICE_LOCAL,
-        .signal_id = SIGNAL_CURRENT_8,
+        .signal_key = SIGNAL_CURRENT_8,
     },
 };
 
@@ -62,7 +62,7 @@ static const struct analog_point analog_inputs[] = {
 static const struct {
     struct gpio_dt_spec spec[SAMPLE_DI_COUNT];
     uint16_t device_id;
-    uint16_t signal_id;
+    uint16_t signal_key;
 } digital_inputs = {
     .spec =
         {
@@ -84,7 +84,7 @@ static const struct {
             GPIO_DT_SPEC_GET(IO_NODE, di16_gpios),
         },
     .device_id = DEVICE_LOCAL,
-    .signal_id = SIGNAL_DI,
+    .signal_key = SIGNAL_DI,
 };
 
 int acquisition_inputs_init(void)
@@ -146,7 +146,7 @@ int acquisition_cycle(void)
         digital |= (uint16_t)((uint32_t)value << bit);
     }
     sys_put_le16(digital, bytes);
-    int err = dp_set_para(digital_inputs.device_id, digital_inputs.signal_id, sizeof(bytes), bytes);
+    int err = dp_set_para(digital_inputs.device_id, digital_inputs.signal_key, sizeof(bytes), bytes);
     if (err) {
         return err;
     }
@@ -176,7 +176,7 @@ int acquisition_cycle(void)
             value = UINT16_MAX;
         }
         sys_put_le16(value, bytes);
-        err = dp_set_para(input->device_id, input->signal_id, sizeof(bytes), bytes);
+        err = dp_set_para(input->device_id, input->signal_key, sizeof(bytes), bytes);
         if (err) {
             return err;
         }

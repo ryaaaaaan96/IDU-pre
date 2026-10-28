@@ -14,3 +14,6 @@
 | 参数状态 | `dp_param_status_t`：存储就绪、历史恢复、格式重置、最近错误和序号。 |
 | IAPv3 | 可选的 IAPv3/SGZ 升级协议，由 `modules/iap` 提供；当前产品未接入路由。 |
 | 最小原子核心 | DP 只保留模型登记、单点同步读写和本机参数持久化，不包含采集/转发/异步执行。 |
+
+| signal_key | DP 测点的稳定标识，与 device_id 共同定位测点；持久化使用原有数值。 |
+| signal_index | process 点表的行顺序，从 0 开始，使用 process_signal_index_t 枚举标识；不参与 DP 存储键。 |

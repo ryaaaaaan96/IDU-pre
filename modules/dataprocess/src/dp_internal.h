@@ -39,7 +39,7 @@ typedef enum {
 
 typedef struct {
     uint16_t device_id;
-    uint16_t signal_id;
+    uint16_t signal_key;
     dp_source_t source;
     dp_storage_type_t type;
     uint8_t width;
@@ -52,9 +52,9 @@ typedef struct {
     int64_t maximum;
 } dp_point_cfg_t;
 
-int dp_params_read(uint16_t device_id, uint16_t signal_id, dp_point_data_t *state);
+int dp_params_read(uint16_t device_id, uint16_t signal_key, dp_point_data_t *state);
 bool dp_params_mounted(void);
-int dp_params_write(uint16_t device_id, uint16_t signal_id, const value_t *value);
+int dp_params_write(uint16_t device_id, uint16_t signal_key, const value_t *value);
 
 /* 私有设备目录；节点与点数据一次分配，只在模块内访问。 */
 typedef struct dp_registered_table {

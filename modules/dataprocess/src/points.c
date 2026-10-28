@@ -70,12 +70,12 @@ static void pack(uint8_t *bytes, const value_t *value, size_t size)
 
 int dp_describe_point(uint16_t dev, const dp_point_config_t *row, dp_point_cfg_t *p)
 {
-    if (!row || !row->signal_id || !row->size || row->size > DP_POINT_WORDS * 2) {
+    if (!row || !row->signal_key || !row->size || row->size > DP_POINT_WORDS * 2) {
         return -EINVAL;
     }
     *p = (dp_point_cfg_t){
         .device_id = dev,
-        .signal_id = row->signal_id,
+        .signal_key = row->signal_key,
         .size_bytes = row->size,
         .width = (row->size + 1) / 2,
         .flags = row->flags,
@@ -195,9 +195,9 @@ dp_registered_table_t *dp_tables(void)
 }
 
 static int find_point(
-    uint16_t device_id, uint16_t signal_id, dp_point_cfg_t *point, dp_point_data_t **state)
+    uint16_t device_id, uint16_t signal_key, dp_point_cfg_t *point, dp_point_data_t **state)
 {
-    if (!device_id || !signal_id) {
+    if (!device_id || !signal_key) {
         return -EINVAL;
     }
     for (dp_registered_table_t *table = tables; table; table = table->next) {
@@ -205,7 +205,7 @@ static int find_point(
             continue;
         }
         for (size_t i = 0; i < table->point_count; ++i) {
-            if (table->points[i].signal_id != signal_id) {
+            if (table->points[i].signal_key != signal_key) {
                 continue;
             }
             *state = &table->data[i];
@@ -241,7 +241,7 @@ int dp_register_table(uint16_t device_id, const dp_table_t *table)
             ++params;
         }
         for (size_t n = 0; n < i; ++n) {
-            if (table->points[n].signal_id == table->points[i].signal_id) {
+            if (table->points[n].signal_key == table->points[i].signal_key) {
                 return -EEXIST;
             }
         }
@@ -277,7 +277,7 @@ static int read_point(const dp_point_cfg_t *point, dp_point_data_t *stored, dp_p
 {
     if (point->read_callback) {
         *state = (dp_point_data_t){0};
-        int err = point->read_callback(point->device_id, point->signal_id, &state->value);
+        int err = point->read_callback(point->device_id, point->signal_key, &state->value);
         if (!err) {
             state->updated_at_s = dp_timestamp_s();
             k_mutex_lock(&store_lock, K_FOREVER);
@@ -287,7 +287,7 @@ static int read_point(const dp_point_cfg_t *point, dp_point_data_t *stored, dp_p
         return err;
     }
     if (point->source == DP_SOURCE_PARAMETER) {
-        return dp_params_read(point->device_id, point->signal_id, state);
+        return dp_params_read(point->device_id, point->signal_key, state);
     }
     k_mutex_lock(&store_lock, K_FOREVER);
     *state = *stored;
