@@ -11,6 +11,7 @@
 #define DP_POINT_WORDS VALUE_WORDS
 
 typedef enum {
+    DP_POINT_FLAG_SKIP_RESTORE = (1U << 5), /**< 显式恢复默认时跳过，不影响上电设置初值。 */
     DP_POINT_FLAG_CHECK_RANGE = (1U << 6), /**< 按配置上下限校验。 */
 } dp_point_flags_t;
 
@@ -71,5 +72,11 @@ int dp_set_para(uint16_t device_id, uint16_t signal_key, uint8_t size, const uin
 
 /** @brief 同步读点，可执行读回调；成功返回传入容量，数据按低字节在前编码。 */
 int dp_get_para(uint16_t device_id, uint16_t signal_key, uint8_t capacity, uint8_t *bytes);
+
+/**
+ * @brief 将指定设备的点值恢复为配置初值，跳过 SKIP_RESTORE 点，不调用业务回调。
+ * @note 仅更新 RAM，恢复点的时间随之更新；被跳过的点保留值及时间。
+ */
+int dp_restore_defaults(uint16_t device_id);
 
 #endif

@@ -32,7 +32,7 @@ static const dp_point_config_t rows[] = {
     {.signal_key = 300,
         .size = 2,
         .type = VALUE_TYPE_U16,
-        .flags = DP_POINT_FLAG_CHECK_RANGE,
+        .flags = DP_POINT_FLAG_CHECK_RANGE | DP_POINT_FLAG_SKIP_RESTORE,
         .write_callback = callback,
         .read_callback = callback,
         .data = {.initial.u16 = 50, .minimum.u16 = 1, .maximum.u16 = 100}},
@@ -220,6 +220,24 @@ ZTEST(dp_core, test_core)
         K_NO_WAIT);
     zassert_ok(k_thread_join(&writer_thread, K_SECONDS(10)));
     zassert_ok(k_thread_join(&reader_thread, K_SECONDS(10)));
+    write_u16(300, 80, 0);
+    const dp_point_data_t skipped_before = *data(7, 1);
+    const uint8_t other_device[] = {9, 8, 7};
+    zassert_ok(dp_set_para(8, 99, sizeof(other_device), other_device));
+    zassert_ok(dp_set_para(7, 1, 4, (uint8_t[]){1, 0, 0, 0}));
+    zassert_equal(dp_restore_defaults(0), -EINVAL);
+    zassert_equal(dp_restore_defaults(123), -ENOENT);
+    fail_callback = true;
+    zassert_ok(dp_restore_defaults(7));
+    fail_callback = false;
+    const uint8_t default_bytes[] = {1, 2, 3};
+    zassert_mem_equal(data(7, 0)->value.bytes, default_bytes, sizeof(default_bytes));
+    zassert_equal(data(7, 2)->value.u32, 0x12345678);
+    zassert_true(data(7, 2)->updated_at_s >= epoch);
+    zassert_equal(data(7, 1)->value.u16, skipped_before.value.u16);
+    zassert_equal(data(7, 1)->updated_at_s, skipped_before.updated_at_s);
+    zassert_mem_equal(data(8, 0)->value.bytes, other_device, sizeof(other_device));
+
     const struct timespec beyond = {.tv_sec = (int64_t)UINT32_MAX + 1};
     zassert_ok(sys_clock_settime(SYS_CLOCK_REALTIME, &beyond));
     write_u16(300, 80, 0);

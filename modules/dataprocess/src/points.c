@@ -327,3 +327,30 @@ int dp_get_para(uint16_t device_id, uint16_t signal_key, uint8_t capacity, uint8
     pack(bytes, &state.value, p->size);
     return capacity;
 }
+
+int dp_restore_defaults(uint16_t device_id)
+{
+    if (k_is_in_isr()) {
+        return -EWOULDBLOCK;
+    }
+    if (!device_id) {
+        return -EINVAL;
+    }
+    for (dp_registered_table_t *table = tables; table; table = table->next) {
+        if (table->device_id != device_id) {
+            continue;
+        }
+        uint32_t restored_at_s = dp_timestamp_s();
+        k_mutex_lock(&store_lock, K_FOREVER);
+        for (size_t i = 0; i < table->point_count; ++i) {
+            if (table->points[i].flags & DP_POINT_FLAG_SKIP_RESTORE) {
+                continue;
+            }
+            table->data[i].value = table->points[i].data.initial;
+            table->data[i].updated_at_s = restored_at_s;
+        }
+        k_mutex_unlock(&store_lock);
+        return 0;
+    }
+    return -ENOENT;
+}

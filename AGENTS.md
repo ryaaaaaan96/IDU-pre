@@ -18,8 +18,8 @@
 - `modules/gd32e505` 通过 Zephyr `soc_root` / `dts_root` 提供 E505 SoC、设备树时钟配置和 ADC0 驱动；本板保持 20 MHz bypass / 180 MHz；`modules/hardware.cmake` 供应用和 Sysbuild 共用。
 - 通用模块只保留 [modules/README.md](modules/README.md) 列出的最小集合。`modules/collect`、`modules/transmit`、`modules/vport` 已删除；不要恢复其头文件、Kconfig 或应用装配。
 - `modules/dataprocess` 是最小原子核心，接口为 `dp_*`：点表登记、单点同步 RAM 写读、回调和范围检查。不要恢复异步样本队列、业务线程、定时器、参考表目录、`data_process.h` 字节适配层或 collect/transmit 描述符。
-- 点表行使用 dp_point_config_t，仅保留 DP_POINT_FLAG_CHECK_RANGE；回调结果校验成功后保存 RAM。配置行数组常驻只读，初值为内嵌 value_t。
-- DP 仅保留 dp_register_table(device_id, table)、dp_set_para()、dp_get_para()；启动线程完成全部登记再并发读写。节点和点值由模块私有分配，重启恢复初值，不需要 dp_init、NVS 或设备树参数别名。
+- 点表行使用 dp_point_config_t，保留 DP_POINT_FLAG_CHECK_RANGE 和 DP_POINT_FLAG_SKIP_RESTORE；回调结果校验成功后保存 RAM。配置行数组常驻只读，初值为内嵌 value_t。
+- DP 提供 dp_register_table(device_id, table)、dp_set_para()、dp_get_para() 和 RAM 恢复默认 dp_restore_defaults()；启动线程完成全部登记再并发读写。节点和点值由模块私有分配，重启恢复初值，不需要 dp_init、NVS 或设备树参数别名。
 - 参数持久化、恢复默认命令、存储状态和 IAP 的 DP 保存门禁暂时移除。当前只有一把点值快照锁，回调在锁外执行；IAP 独立 NVS 日志保留。
 - `app/main.c` 启动状态、硬件和可选 IAP 后调用 `protocol_init()`，保留采样周期和休眠，终止后主线程留驻并每 5 秒查询打印最近故障。`acquisition` 只按硬件 spec 与 device_id/signal_key 映射读取 DI 位图和 ADC，并用 `dp_set_para()` 同步写点。
 - `app/process/points.c` 只保留 points_sample_period_ms()。

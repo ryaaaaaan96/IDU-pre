@@ -207,3 +207,9 @@ parameter_store.c 合并进 params.c，删除 parameter_store.h 和独立构建�
 登记直接设置初值，开始业务后使用一把快照锁；重启不恢复历史参数。
 移除 DP 保存门禁及相应 IAP 配置选项，IAP 升级日志独立使用 NVS，CRC 配置保持不变。
 原参数 Flash 分区和旧内容保留，不执行擦除或迁移。后续功能重新逐步增加。
+
+## 2026-10-28：保留 RAM 恢复默认
+
+按用户要求补回 DP_POINT_FLAG_SKIP_RESTORE 和 dp_restore_defaults(device_id)。
+仅恢复目标设备未跳过点的 RAM 值及时间，不执行回调；初始化仍使用全部配置初值。
+不恢复 Flash 持久化、初始化入口或产品命令点，继续共用唯一点值锁。
