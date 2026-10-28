@@ -8,6 +8,10 @@
 
 LOG_MODULE_REGISTER(dp, LOG_LEVEL_INF);
 
+/* 单次分配中不会使节点头及点数据总长度溢出的最大点数。 */
+#define DP_MAX_ALLOCATABLE_POINTS                                                                  \
+    ((SIZE_MAX - sizeof(dp_registered_table_t)) / sizeof(dp_point_data_t))
+
 /* 应用只提供只读点表，设备目录与点数据均由模块私有持有。 */
 static dp_registered_table_t *tables;
 static size_t param_points;
@@ -221,7 +225,7 @@ int dp_register_table(uint16_t device_id, const dp_table_t *table)
             return -EEXIST;
         }
     }
-    if (table->point_count > (SIZE_MAX - sizeof(dp_registered_table_t)) / sizeof(dp_point_data_t)) {
+    if (table->point_count > DP_MAX_ALLOCATABLE_POINTS) {
         return -EOVERFLOW;
     }
 
