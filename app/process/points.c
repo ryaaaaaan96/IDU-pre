@@ -15,15 +15,15 @@ uint16_t points_sample_period_ms(void)
     return bytes[0] | ((uint16_t)bytes[1] << 8);
 }
 
-int points_parameter_command(uint16_t device_id, uint16_t signal_key, const value_t *value)
+int points_parameter_command(const dp_callback_context_t *context)
 {
-    if (!value || device_id != DEVICE_LOCAL) {
+    if (!context || !context->value || context->device_id != DEVICE_LOCAL) {
         return -EINVAL;
     }
     uint16_t expected;
     int (*action)(uint16_t);
     uint16_t argument = 0;
-    switch (signal_key) {
+    switch (context->signal_key) {
     case SIGNAL_RESTORE_LOCAL:
         expected = 0xa55a;
         action = dp_params_restore;
@@ -37,19 +37,20 @@ int points_parameter_command(uint16_t device_id, uint16_t signal_key, const valu
     default:
         return -ENOENT;
     }
-    return value->words[0] == expected ? action(argument) : -EINVAL;
+    return context->value->words[0] == expected ? action(argument) : -EINVAL;
 }
 
-int points_parameter_status(uint16_t device_id, uint16_t signal_key, value_t *value)
+int points_parameter_status(const dp_callback_context_t *context)
 {
-    if (!value || device_id != DEVICE_LOCAL || signal_key != SIGNAL_PARAMETER_STATUS) {
+    if (!context || !context->value || context->device_id != DEVICE_LOCAL ||
+        context->signal_key != SIGNAL_PARAMETER_STATUS) {
         return -EINVAL;
     }
     dp_param_status_t status;
     dp_params_get_status(&status);
-    value->words[0] = status.flags;
-    value->words[1] = (uint16_t)(int16_t)status.error;
-    value->words[2] = status.sequence & 0xffff;
-    value->words[3] = status.sequence >> 16;
+    context->value->words[0] = status.flags;
+    context->value->words[1] = (uint16_t)(int16_t)status.error;
+    context->value->words[2] = status.sequence & 0xffff;
+    context->value->words[3] = status.sequence >> 16;
     return 0;
 }

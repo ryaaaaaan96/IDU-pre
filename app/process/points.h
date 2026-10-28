@@ -12,9 +12,9 @@
 uint16_t points_sample_period_ms(void);
 
 /** @brief 命令点写回调；参数动作只在数值校验通过后执行。 */
-int points_parameter_command(uint16_t device_id, uint16_t signal_key, const value_t *value);
+int points_parameter_command(const dp_callback_context_t *context);
 
 /** @brief 参数状态读回调。 */
-int points_parameter_status(uint16_t device_id, uint16_t signal_key, value_t *value);
+int points_parameter_status(const dp_callback_context_t *context);
 
 #endif

@@ -20,10 +20,12 @@ typedef enum {
     SIG_CONST,
     SIG_PARAM,
     SIG_CMD,
-    SIG_STATUS
+    SIG_STATUS,
+    SIG_BOUNDED
 } test_signal_t;
 
 static bool fail_allocation, fail_read;
+static bool invalid_read;
 void *__real_k_calloc(size_t count, size_t size);
 
 void *__wrap_k_calloc(size_t count, size_t size)
@@ -42,19 +44,35 @@ static int fail_flash_write(const struct device *dev, off_t offset, uint8_t valu
     return -EIO;
 }
 
-static int command(uint16_t device_id, uint16_t signal_key, const value_t *value)
+static int command(const dp_callback_context_t *context)
 {
-    ARG_UNUSED(device_id);
-    ARG_UNUSED(signal_key);
-    return value->u16 == 0xa55a ? 0 : -EINVAL;
+    zassert_equal(context->device_id, DEV);
+    zassert_equal(context->signal_key, SIG_CMD);
+    zassert_equal(context->signal_index, 3);
+    if (context->value->u16 != 0xa55a) {
+        return -EINVAL;
+    }
+    context->value->u16 = 123;
+    return 0;
 }
 
-static int status(uint16_t device_id, uint16_t signal_key, value_t *value)
+static int status(const dp_callback_context_t *context)
 {
-    ARG_UNUSED(device_id);
-    ARG_UNUSED(signal_key);
+    zassert_equal(context->device_id, DEV);
+    zassert_true(context->signal_key == SIG_STATUS || context->signal_key == SIG_BOUNDED);
+    zassert_equal(context->signal_index, context->signal_key == SIG_STATUS ? 4 : 5);
+    value_t *value = context->value;
     if (fail_read) {
+        value->words[0] = 0xffff;
         return -EIO;
+    }
+    if (invalid_read) {
+        value->u16 = 101;
+        return 0;
+    }
+    if (context->signal_key == SIG_BOUNDED) {
+        ++value->u16;
+        return 0;
     }
     dp_param_status_t status;
     dp_params_get_status(&status);
@@ -83,6 +101,12 @@ static const dp_point_config_t rows[] = {
         .type = VALUE_TYPE_WORDS,
         .flags = FLAG_READ_CALLBACK,
         .read_callback = status},
+    {.signal_key = SIG_BOUNDED,
+        .size = 2,
+        .type = VALUE_TYPE_U16,
+        .flags = FLAG_READ_CALLBACK | FLAG_RANGE_CHECK,
+        .read_callback = status,
+        .data = {.initial.u16 = 0, .minimum.u16 = 0, .maximum.u16 = 100}},
 };
 static const dp_point_config_t alt_rows[] = {
     {.signal_key = SIG_LOCAL, .size = 2, .type = VALUE_TYPE_U16, .data.initial.u16 = 0x1111},
@@ -243,6 +267,17 @@ ZTEST(dp_core, test_core)
     zassert_equal(dp_get_para(DEV, SIG_STATUS, sizeof(state), state), -EIO);
     zassert_equal(data(DEV, SIG_STATUS)->updated_at_s, read_update);
     fail_read = false;
+    read_u16(DEV, SIG_BOUNDED, 1);
+    read_u16(DEV, SIG_BOUNDED, 2);
+    invalid_read = true;
+    const dp_point_data_t bounded_before = *data(DEV, SIG_BOUNDED);
+    uint8_t unchanged[] = {0xaa, 0xbb};
+    zassert_equal(dp_get_para(DEV, SIG_BOUNDED, sizeof(unchanged), unchanged), -ERANGE);
+    zassert_equal(unchanged[0], 0xaa);
+    zassert_equal(unchanged[1], 0xbb);
+    zassert_equal(data(DEV, SIG_BOUNDED)->value.u16, bounded_before.value.u16);
+    zassert_equal(data(DEV, SIG_BOUNDED)->updated_at_s, bounded_before.updated_at_s);
+    invalid_read = false;
 
     const dp_point_config_t late_row = {
         .signal_key = SIG_PARAM, .size = 2, .type = VALUE_TYPE_U16, .flags = FLAG_PERSISTENCE};

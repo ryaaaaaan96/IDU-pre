@@ -67,7 +67,7 @@ flowchart TD
 
 所有读写在线程同步执行，ISR 返回 `-EWOULDBLOCK`。写长度必须匹配；读容量必须
 足够，成功返回传入容量。普通点更新值；常量返回 `-EACCES`；命令点仅调用 `write_callback`，
-不保存触发值。`read_callback` 只输出 `value_t`，成功时 DP 保存生成快照及时间。
+不保存触发值。`read_callback` 接收当前值的副本，可修改输出；成功且通过点值校验后，DP 保存快照及时间。
 
 标志保留 `FLAG_CONSTANT`、`FLAG_PERSISTENCE`、`FLAG_RANGE_CHECK`、
 `FLAG_READ_CALLBACK`、`FLAG_NO_RESTORE`。常量不支持写回调，参数不支持读写回调。
@@ -124,5 +124,10 @@ I/O 错误停写；应用采样周期读取失败时回退到默认值。
 `HEAP_MEM_POOL_ADD_SIZE_DATAPROCESS` 与 `HEAP_MEM_POOL_ADD_SIZE_DP_PARAMS` 提供。
 细节见[内存管理](../../docs/memory-management.md)。
 
-读写回调直接接收 `uint16_t device_id, uint16_t signal_key`，不再使用键结构体。
+读写回调共用 `dp_callback_t(const dp_callback_context_t *context)`。
+上下文包含 device_id、signal_key、signal_index 和可修改的 value 指针。
+signal_index 直接取查找命中的注册表行下标，从零开始；不额外存储索引或映射。
+身份字段只读，value 只在本次同步回调期间有效；禁止保存上下文及其指针。
+写回调接收本次输入副本，可修改以处理命令，但命令点仍不保存触发值，也不回写调用者字节。
+读回调失败或返回越界值时，不修改点值、更新时间和调用者输出。
 点表行类型为 `dp_point_config_t`，与运行数据 `dp_point_data_t` 区分。

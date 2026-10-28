@@ -45,8 +45,8 @@ typedef struct {
     uint8_t width;
     uint8_t size_bytes;
     uint8_t flags;
-    dp_write_callback_t write_callback;
-    dp_read_callback_t read_callback;
+    dp_callback_t write_callback;
+    dp_callback_t read_callback;
     value_t initial;
     int64_t minimum;
     int64_t maximum;

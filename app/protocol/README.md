@@ -62,3 +62,7 @@ IAP 协议段已删除。IAP 模块仍保留 `iap_route()`，但当前构建没�
 需要按行访问时，通过 `protocol_local_table.points[索引]` 取得配置的 `signal_key`，
 结合登记设备的 `device_id` 调用 DP。DP 仅感知稳定键，不感知 process 行顺序。
 调整枚举顺序不改变持久化键；所有配置行必须有对应的枚举指定初始化。
+
+读写回调统一接收 `const dp_callback_context_t *`，其中 signal_index 对应
+process_signal_index_t 的枚举行。DP 查找时直接提供下标，不增加映射表。
+回调可通过 value 指针修改本次值；命令点仍不缓存触发值，状态点校验成功后保存快照。

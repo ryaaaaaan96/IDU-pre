@@ -126,3 +126,10 @@ value_type_t 和 VALUE_TYPE_* 同时迁入 common。删除 dp_key_t，回调及�
 DP 配置、接口及回调中的 signal_id 统一改为 signal_key，数值及 NVS 编码不变。
 process_signal_index_t 定义 process 行顺序，使用指定下标初始化点表。
 DP 不保存 process 索引；业务通过行配置取得稳定键，避免顺序变化影响参数恢复。
+
+## 2026-10-28：统一回调上下文
+
+读写回调使用 dp_callback_t，接收只读 dp_callback_context_t：device_id、signal_key、
+signal_index、可修改的 value 指针。索引直接取注册表的查找下标，不增加配置或持久字段。
+读回调修改当前快照副本，成功且校验通过后更新点值；命令写回调可修改输入副本，
+但维持只执行命令、不缓存值的语义。上下文和指针只在同步回调期间有效。

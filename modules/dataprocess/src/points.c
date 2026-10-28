@@ -194,8 +194,11 @@ dp_registered_table_t *dp_tables(void)
     return tables;
 }
 
-static int find_point(
-    uint16_t device_id, uint16_t signal_key, dp_point_cfg_t *point, dp_point_data_t **state)
+static int find_point(uint16_t device_id,
+    uint16_t signal_key,
+    dp_point_cfg_t *point,
+    dp_point_data_t **state,
+    size_t *signal_index)
 {
     if (!device_id || !signal_key) {
         return -EINVAL;
@@ -208,6 +211,7 @@ static int find_point(
             if (table->points[i].signal_key != signal_key) {
                 continue;
             }
+            *signal_index = i;
             *state = &table->data[i];
             return dp_describe_point(device_id, &table->points[i], point);
         }
@@ -273,11 +277,25 @@ int dp_register_table(uint16_t device_id, const dp_table_t *table)
     return 0;
 }
 
-static int read_point(const dp_point_cfg_t *point, dp_point_data_t *stored, dp_point_data_t *state)
+static int read_point(const dp_point_cfg_t *point,
+    dp_point_data_t *stored,
+    dp_point_data_t *state,
+    size_t signal_index)
 {
     if (point->read_callback) {
-        *state = (dp_point_data_t){0};
-        int err = point->read_callback(point->device_id, point->signal_key, &state->value);
+        k_mutex_lock(&store_lock, K_FOREVER);
+        *state = *stored;
+        k_mutex_unlock(&store_lock);
+        const dp_callback_context_t context = {
+            .device_id = point->device_id,
+            .signal_key = point->signal_key,
+            .signal_index = signal_index,
+            .value = &state->value,
+        };
+        int err = point->read_callback(&context);
+        if (!err) {
+            err = dp_check_value(point, &state->value);
+        }
         if (!err) {
             state->updated_at_s = dp_timestamp_s();
             k_mutex_lock(&store_lock, K_FOREVER);
@@ -295,7 +313,7 @@ static int read_point(const dp_point_cfg_t *point, dp_point_data_t *stored, dp_p
     return 0;
 }
 
-int dp_set_para(uint16_t dev_id, uint16_t sig_id, uint8_t size, const uint8_t *bytes)
+int dp_set_para(uint16_t device_id, uint16_t signal_key, uint8_t size, const uint8_t *bytes)
 {
     if (k_is_in_isr()) {
         return -EWOULDBLOCK;
@@ -305,7 +323,8 @@ int dp_set_para(uint16_t dev_id, uint16_t sig_id, uint8_t size, const uint8_t *b
     }
     dp_point_cfg_t p;
     dp_point_data_t *stored;
-    int err = find_point(dev_id, sig_id, &p, &stored);
+    size_t signal_index;
+    int err = find_point(device_id, signal_key, &p, &stored, &signal_index);
     if (err) {
         return err;
     }
@@ -322,10 +341,16 @@ int dp_set_para(uint16_t dev_id, uint16_t sig_id, uint8_t size, const uint8_t *b
         return err;
     }
     if (p.write_callback) {
-        return p.write_callback(dev_id, sig_id, &value);
+        const dp_callback_context_t context = {
+            .device_id = device_id,
+            .signal_key = signal_key,
+            .signal_index = signal_index,
+            .value = &value,
+        };
+        return p.write_callback(&context);
     }
     if (p.source == DP_SOURCE_PARAMETER) {
-        return dp_params_write(dev_id, sig_id, &value);
+        return dp_params_write(device_id, signal_key, &value);
     }
     k_mutex_lock(&store_lock, K_FOREVER);
     stored->value = value;
@@ -334,7 +359,7 @@ int dp_set_para(uint16_t dev_id, uint16_t sig_id, uint8_t size, const uint8_t *b
     return 0;
 }
 
-int dp_get_para(uint16_t dev_id, uint16_t sig_id, uint8_t capacity, uint8_t *bytes)
+int dp_get_para(uint16_t device_id, uint16_t signal_key, uint8_t capacity, uint8_t *bytes)
 {
     if (k_is_in_isr()) {
         return -EWOULDBLOCK;
@@ -344,7 +369,8 @@ int dp_get_para(uint16_t dev_id, uint16_t sig_id, uint8_t capacity, uint8_t *byt
     }
     dp_point_cfg_t p;
     dp_point_data_t *stored;
-    int err = find_point(dev_id, sig_id, &p, &stored);
+    size_t signal_index;
+    int err = find_point(device_id, signal_key, &p, &stored, &signal_index);
     if (err) {
         return err;
     }
@@ -352,7 +378,7 @@ int dp_get_para(uint16_t dev_id, uint16_t sig_id, uint8_t capacity, uint8_t *byt
         return -EMSGSIZE;
     }
     dp_point_data_t state;
-    err = read_point(&p, stored, &state);
+    err = read_point(&p, stored, &state, signal_index);
     if (err) {
         return err;
     }

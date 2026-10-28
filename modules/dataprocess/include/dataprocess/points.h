@@ -23,8 +23,16 @@ typedef struct {
     uint32_t updated_at_s; /**< UNIX 秒，UTC；未校时、默认值和历史恢复值为 0。 */
 } dp_point_data_t;
 
-typedef int (*dp_write_callback_t)(uint16_t device_id, uint16_t signal_key, const value_t *value);
-typedef int (*dp_read_callback_t)(uint16_t device_id, uint16_t signal_key, value_t *value);
+/** @brief 同步回调上下文；身份只读，value 可修改，所有指针仅在回调期间有效。 */
+typedef struct {
+    uint16_t device_id;
+    uint16_t signal_key;
+    size_t signal_index; /**< 注册表内从零开始的行下标，对应应用的 process 枚举。 */
+    value_t *value;
+} dp_callback_context_t;
+
+/** @brief 返回 0 表示成功，负值表示失败；不得保存上下文或 value 指针。 */
+typedef int (*dp_callback_t)(const dp_callback_context_t *context);
 
 typedef struct {
     value_t initial;
@@ -37,8 +45,8 @@ typedef struct {
     uint8_t size;
     uint8_t flags;
     value_type_t type;
-    dp_write_callback_t write_callback;
-    dp_read_callback_t read_callback;
+    dp_callback_t write_callback;
+    dp_callback_t read_callback;
     dp_point_limits_t data;
 } dp_point_config_t;
 
