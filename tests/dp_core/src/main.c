@@ -90,7 +90,7 @@ static const dp_point_config_t rows[] = {
     {.signal_key = SIG_CONST,
         .size = 4,
         .type = VALUE_TYPE_U32,
-        .flags = DP_POINT_FLAG_READ_ONLY,
+        .flags = DP_POINT_DEFAULT_FLAGS,
         .data.initial.u32 = 0x12345678},
     {.signal_key = SIG_PARAM,
         .size = 2,
@@ -322,6 +322,7 @@ ZTEST(dp_core, test_core)
     const uint32_t epoch = 1761600000U;
     const struct timespec now = {.tv_sec = epoch};
     zassert_ok(sys_clock_settime(SYS_CLOCK_REALTIME, &now));
+    zassert_equal(data(DEV, SIG_CONST)->value.u32, 0x12345678);
     if (phase && !strcmp(phase, "verify")) {
         read_u16(DEV, SIG_PARAM, 700);
         read_u16(DEV_ALT, SIG_PARAM, 800);
@@ -363,7 +364,12 @@ ZTEST(dp_core, test_core)
     write_u16(DEV, SIG_PARAM, 2000, -ERANGE);
     read_u16(DEV, SIG_PARAM, 700);
     zassert_equal(data(DEV, SIG_PARAM)->updated_at_s, parameter_update);
-    zassert_equal(dp_set_para(DEV, SIG_CONST, 4, (uint8_t[]){1, 0, 0, 0}), -EACCES);
+    zassert_ok(dp_set_para(DEV, SIG_CONST, 4, (uint8_t[]){1, 0, 0, 0}));
+    zassert_equal(dp_get_para(DEV, SIG_CONST, sizeof(constant), constant), sizeof(constant));
+    const uint8_t modified_constant[] = {1, 0, 0, 0};
+    zassert_mem_equal(constant, modified_constant, sizeof(constant));
+    zassert_equal(data(DEV, SIG_CONST)->value.u32, 1);
+    zassert_true(data(DEV, SIG_CONST)->updated_at_s >= epoch);
 
     read_u16(DEV_ALT, SIG_PARAM, 600);
     write_u16(DEV_ALT, SIG_PARAM, 800, 0);

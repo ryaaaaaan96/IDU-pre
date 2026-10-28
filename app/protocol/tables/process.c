@@ -85,7 +85,7 @@ static const dp_point_config_t local_process_rows[PROCESS_SIGNAL_COUNT] = {
     [PROCESS_DEVICE_PROPERTIES] = {
         .signal_key = 2503,
         .size = 2,
-        .flags = DP_POINT_FLAG_CHECK_RANGE | DP_POINT_FLAG_READ_ONLY,
+        .flags = DP_POINT_FLAG_CHECK_RANGE,
         .type = VALUE_TYPE_U16,
         .data =
             {
@@ -97,7 +97,7 @@ static const dp_point_config_t local_process_rows[PROCESS_SIGNAL_COUNT] = {
     [PROCESS_MANUFACTURER] = {
         .signal_key = 2504,
         .size = 20,
-        .flags = DP_POINT_FLAG_READ_ONLY,
+        .flags = DP_POINT_DEFAULT_FLAGS,
         .type = VALUE_TYPE_WORDS,
         .data =
             {
@@ -110,7 +110,7 @@ static const dp_point_config_t local_process_rows[PROCESS_SIGNAL_COUNT] = {
     [PROCESS_FIRMWARE_VERSION] = {
         .signal_key = 2581,
         .size = 30,
-        .flags = DP_POINT_FLAG_READ_ONLY,
+        .flags = DP_POINT_DEFAULT_FLAGS,
         .type = VALUE_TYPE_WORDS,
         .data =
             {
@@ -136,7 +136,7 @@ static const dp_point_config_t local_process_rows[PROCESS_SIGNAL_COUNT] = {
     [PROCESS_HARDWARE_VERSION] = {
         .signal_key = 2568,
         .size = 8,
-        .flags = DP_POINT_FLAG_READ_ONLY,
+        .flags = DP_POINT_DEFAULT_FLAGS,
         .type = VALUE_TYPE_WORDS,
         .data =
             {
@@ -148,7 +148,7 @@ static const dp_point_config_t local_process_rows[PROCESS_SIGNAL_COUNT] = {
     [PROCESS_DEVICE_TYPE] = {
         .signal_key = 8149,
         .size = 2,
-        .flags = DP_POINT_FLAG_CHECK_RANGE | DP_POINT_FLAG_READ_ONLY,
+        .flags = DP_POINT_FLAG_CHECK_RANGE,
         .type = VALUE_TYPE_U16,
         .data =
             {
@@ -160,7 +160,7 @@ static const dp_point_config_t local_process_rows[PROCESS_SIGNAL_COUNT] = {
     [PROCESS_PROTOCOL] = {
         .signal_key = SIGNAL_PROTOCOL,
         .size = 4,
-        .flags = DP_POINT_FLAG_CHECK_RANGE | DP_POINT_FLAG_READ_ONLY,
+        .flags = DP_POINT_FLAG_CHECK_RANGE,
         .type = VALUE_TYPE_U32,
         .data =
             {
@@ -172,7 +172,7 @@ static const dp_point_config_t local_process_rows[PROCESS_SIGNAL_COUNT] = {
     [PROCESS_PRODUCT_CODE] = {
         .signal_key = 5486,
         .size = 2,
-        .flags = DP_POINT_FLAG_CHECK_RANGE | DP_POINT_FLAG_READ_ONLY,
+        .flags = DP_POINT_FLAG_CHECK_RANGE,
         .type = VALUE_TYPE_U16,
         .data =
             {
@@ -184,7 +184,7 @@ static const dp_point_config_t local_process_rows[PROCESS_SIGNAL_COUNT] = {
     [PROCESS_VIRTUAL_MODE] = {
         .signal_key = SIGNAL_VIRTUAL_MODE,
         .size = 2,
-        .flags = DP_POINT_FLAG_CHECK_RANGE | DP_POINT_FLAG_READ_ONLY,
+        .flags = DP_POINT_FLAG_CHECK_RANGE,
         .type = VALUE_TYPE_U16,
         .data =
             {

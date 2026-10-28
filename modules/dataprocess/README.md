@@ -66,11 +66,11 @@ flowchart TD
 浮点点表支持。有效类型为 U8/U16/S16/U32/S32、STRING/BYTES/WORDS。
 
 所有读写在线程同步执行，ISR 返回 `-EWOULDBLOCK`。写长度必须匹配；读容量必须
-足够，成功返回传入容量。普通点更新值；常量返回 `-EACCES`；命令点仅调用 `write_callback`，
+足够，成功返回传入容量。普通点更新值；命令点仅调用 `write_callback`，
 不保存触发值。`read_callback` 接收当前值的副本，可修改输出；成功且通过点值校验后，DP 保存快照及时间。
 
-标志保留 `DP_POINT_FLAG_READ_ONLY`、`DP_POINT_FLAG_PERSISTENT`、`DP_POINT_FLAG_CHECK_RANGE`、
-`DP_POINT_FLAG_SKIP_RESTORE`。只读点不支持写回调，参数不支持读写回调。读回调仅由非空指针启用。
+标志保留 `DP_POINT_FLAG_PERSISTENT`、`DP_POINT_FLAG_CHECK_RANGE`、
+`DP_POINT_FLAG_SKIP_RESTORE`。参数不支持读写回调。读回调仅由非空指针启用。
 未启用范围检查时按类型范围校验。`data.initial/minimum/maximum` 与运行值统一使用公共 `value_t`，定义于 `<common/value.h>`，
 容量由 `CONFIG_COMMON_VALUE_WORDS` 配置；
 初值大于 4 字节时使用 `.array` 常驻只读指针，NULL 表示全零。
@@ -82,7 +82,7 @@ DP 使用 Zephyr `SYS_CLOCK_REALTIME`，墙钟偏移为零视为未校时；不�
 当前产品没有 RTC/NTP 授时，时间默认保持 0。未来由应用通过
 `sys_clock_settime(SYS_CLOCK_REALTIME, &timespec)` 校时，不需要新增 DP 校时接口。
 
-- 默认值、常量、从 NVS 启动恢复的历史值：时间为 0。
+- 默认值、从 NVS 启动恢复的历史值：时间为 0。
 - 普通点写入、参数成功保存/接受同值写入、恢复默认：记录当前秒。
 - 读回调成功：记录快照生成时间；普通读取不改变时间。
 - 失败：原值和时间不变；命令点不保存触发值或更新时间。
@@ -142,7 +142,7 @@ NVS 类型编码仅在参数层转换，记录格式及键保持不变。
 
 回调上下文使用 `bool is_write` 区分方向：true 为写，false 为读，无额外枚举。
 点标志类型为 dp_point_flags_t；PERSISTENT 表示持久化，SKIP_RESTORE 表示跳过恢复默认，
-CHECK_RANGE 表示检查范围，READ_ONLY 表示拒绝外部写入；其位值保持不变。
+CHECK_RANGE 表示检查范围；保留标志的位值不变。
 登记时复制 key、排序并检查相邻重复，临时内存为点数乘以 sizeof(uint16_t)，随后释放；
 原点表顺序不变。排序使用 C 库 qsort，性能取决于库实现，不承诺最坏情况复杂度。
 
@@ -150,3 +150,6 @@ CHECK_RANGE 表示检查范围，READ_ONLY 表示拒绝外部写入；其位值�
 带 device_id/signal_key 的警告并忽略；不修改原配置。未启用范围检查时，上下限静默忽略。
 类型长度不匹配、零长度、超容量、奇数 WORDS、非法类型、重复键、初值越界或启用的
 数值范围颠倒仍拒绝登记。U8 上下限按 u8 读取，不检查联合体中无关的高字节。
+
+DP 不控制写权限，原常量配置改为普通非持久点，可写且重启恢复初值。
+调用方负责限制协议或业务写入；此变更不改变持久参数的键及编码。

@@ -123,10 +123,6 @@ static int validate_point(uint16_t device_id, const dp_point_config_t *point)
     default:
         return -ENOTSUP;
     }
-    if ((point->flags & DP_POINT_FLAG_READ_ONLY) &&
-        ((point->flags & DP_POINT_FLAG_PERSISTENT) || point->write_callback)) {
-        return -EINVAL;
-    }
     if ((point->flags & DP_POINT_FLAG_PERSISTENT) &&
         (point->write_callback || point->read_callback)) {
         return -EINVAL;
@@ -315,9 +311,6 @@ int dp_set_para(uint16_t device_id, uint16_t signal_key, uint8_t size, const uin
     }
     if (size != p->size) {
         return -EMSGSIZE;
-    }
-    if (p->flags & DP_POINT_FLAG_READ_ONLY) {
-        return -EACCES;
     }
     value_t value;
     unpack(&value, bytes, size);

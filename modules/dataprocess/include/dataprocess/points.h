@@ -14,7 +14,6 @@ typedef enum {
     DP_POINT_FLAG_PERSISTENT = (1U << 0), /**< 参数同步持久化。 */
     DP_POINT_FLAG_SKIP_RESTORE = (1U << 5), /**< 恢复默认时跳过。 */
     DP_POINT_FLAG_CHECK_RANGE = (1U << 6), /**< 按配置上下限校验。 */
-    DP_POINT_FLAG_READ_ONLY = (1U << 7), /**< 拒绝外部写入。 */
 } dp_point_flags_t;
 
 typedef struct {
@@ -68,7 +67,7 @@ typedef struct {
  */
 int dp_register_table(uint16_t device_id, const dp_table_t *table);
 
-/** @brief 同步写点；长度须匹配，常量拒写，命令仅执行回调，参数同步提交 NVS。 */
+/** @brief 同步写点；长度须匹配，命令仅执行回调，参数同步提交 NVS。 */
 int dp_set_para(uint16_t device_id, uint16_t signal_key, uint8_t size, const uint8_t *bytes);
 
 /** @brief 同步读点，可执行读回调；成功返回传入容量，数据按低字节在前编码。 */

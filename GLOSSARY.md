@@ -6,7 +6,7 @@
 | 产品点表 | `app/protocol/tables/process.c` 中的编译期只读 `dp_point_config_t` 行，描述测点身份、类型、初值、范围和回调。 |
 | 数据模型 | `dp_table_t`：只读点表指针及数量；登记时提供 device_id，同一表可复用到多个设备。 |
 | 本地点 | 由本地采样写入的测点，例如 DI 和电流；登记填默认值，成功写入后更新点值和时间。 |
-| 常量点 | `DP_POINT_FLAG_READ_ONLY` 行，登记填默认值，写入被拒绝。 |
+| 产品信息点 | 型号、版本等普通非持久点，登记填初值，可通过 DP 写入，重启恢复初值；写权限由调用方控制。 |
 | 持久参数 | `DP_POINT_FLAG_PERSISTENT` 行，初值和后续写入保存在本机 `idu-settings` NVS 分区。 |
 | 命令点 | 设置 `write_callback` 的行，只执行恢复默认等动作，不保存触发值。 |
 | 状态点 | 设置 非空 `read_callback` 的行，每次读取生成快照。 |
