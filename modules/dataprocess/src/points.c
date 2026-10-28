@@ -11,14 +11,16 @@ LOG_MODULE_REGISTER(dp, LOG_LEVEL_INF);
 #define DP_MAX_ALLOCATABLE_POINTS                                                                  \
     ((SIZE_MAX - sizeof(dp_registered_table_t)) / sizeof(dp_point_data_t))
 
-/* 应用只提供只读点表，设备目录与点数据均由模块私有持有。 */
-static dp_registered_table_t *tables;
-static K_MUTEX_DEFINE(store_lock);
-
 /* 保留成员自身的有符号性，switch 选择成员后直接比较配置上下限。 */
 #define DP_OUTSIDE_RANGE(point, value, member)                                                     \
     ((value)->member < (point)->data.minimum.member ||                                             \
         (value)->member > (point)->data.maximum.member)
+
+/* 应用只提供只读点表，设备目录与点数据均由模块私有持有。 */
+static dp_registered_table_t *tables;
+static K_MUTEX_DEFINE(store_lock);
+
+/* ==================== 内部实现 ==================== */
 
 static int check_value(const dp_point_config_t *point, const value_t *value)
 {
@@ -180,6 +182,22 @@ static int check_unique_keys(const dp_table_t *table)
     return err;
 }
 
+/* 回调只操作副本；最终校验及存储成功后才更新点数据。 */
+static int save_value(const dp_point_config_t *point, dp_point_data_t *stored, const value_t *value)
+{
+    int err = check_value(point, value);
+    if (err) {
+        return err;
+    }
+    k_mutex_lock(&store_lock, K_FOREVER);
+    stored->value = *value;
+    stored->updated_at_s = dp_timestamp_s();
+    k_mutex_unlock(&store_lock);
+    return 0;
+}
+
+/* ==================== 对外接口 ==================== */
+
 int dp_register_table(uint16_t device_id, const dp_table_t *table)
 {
     if (k_is_in_isr()) { return -EWOULDBLOCK; }
@@ -223,20 +241,6 @@ int dp_register_table(uint16_t device_id, const dp_table_t *table)
     /* 整表校验及初值设置成功后才发布。 */
     entry->next = tables;
     tables = entry;
-    return 0;
-}
-
-/* 回调只操作副本；最终校验及存储成功后才更新点数据。 */
-static int save_value(const dp_point_config_t *point, dp_point_data_t *stored, const value_t *value)
-{
-    int err = check_value(point, value);
-    if (err) {
-        return err;
-    }
-    k_mutex_lock(&store_lock, K_FOREVER);
-    stored->value = *value;
-    stored->updated_at_s = dp_timestamp_s();
-    k_mutex_unlock(&store_lock);
     return 0;
 }
 
