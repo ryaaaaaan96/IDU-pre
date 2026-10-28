@@ -1,6 +1,6 @@
 /** @file @brief 点表登记、同步点值读写。 */
-#ifndef DP_POINTS_H
-#define DP_POINTS_H
+#ifndef DATAPROCESS_H
+#define DATAPROCESS_H
 
 #include <common/value.h>
 

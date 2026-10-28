@@ -2,7 +2,7 @@
 #ifndef PROCESS_TABLE_H
 #define PROCESS_TABLE_H
 
-#include <dataprocess/points.h>
+#include <dataprocess/dataprocess.h>
 
 typedef enum {
     PROCESS_SAMPLE_PERIOD,

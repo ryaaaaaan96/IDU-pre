@@ -1,4 +1,4 @@
-#include <dataprocess/points.h>
+#include <dataprocess/dataprocess.h>
 #include "dp_internal.h"
 #include <errno.h>
 #include <string.h>

@@ -2,7 +2,7 @@
 #include "process_table.h"
 #include "signal_keys.h"
 #include "process/points.h"
-#include <dataprocess/points.h>
+#include <dataprocess/dataprocess.h>
 #include <zephyr/sys/util.h>
 
 /* 每行显式配置全部字段；默认值来自 DP，非空 read_callback 启用读回调。 */

@@ -1,7 +1,7 @@
 #include "protocol/inc/protocol.h"
 #include "protocol/inc/process_table.h"
 #include "protocol/inc/signal_keys.h"
-#include <dataprocess/points.h>
+#include <dataprocess/dataprocess.h>
 #include <errno.h>
 #include <string.h>
 #include <zephyr/ztest.h>

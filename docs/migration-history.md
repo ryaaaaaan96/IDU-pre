@@ -306,7 +306,7 @@ Modbus 寄存器。这里复用它的配置思想，采集口按用户要求使�
 
 以下旧接口见 `platform/inc/data_process.h`，配置例子见
 `app/cfg/equip/table/process.c`。当前入口是
-`modules/dataprocess/include/dataprocess/points.h`、`params.h` 及对应实现。
+`modules/dataprocess/include/dataprocess/dataprocess.h`、`params.h` 及对应实现。
 
 | 项目 | 旧方案及证据 | 当前 Zephyr 状态 / 缺口 |
 | --- | --- | --- |
@@ -428,7 +428,7 @@ Modbus 寄存器。这里复用它的配置思想，采集口按用户要求使�
 - DP 上下文及接口（`AIDC_CODE/CODE/platform/inc/data_process.h:133`）、采集接口（`AIDC_CODE/CODE/platform/inc/collect_lib.h:64`）、转发接口（`AIDC_CODE/CODE/platform/inc/transmit_lib.h:66`）、平台回调（`AIDC_CODE/CODE/platform/inc/platform_callback.h:37`）。
 - AIDC 处理表（`AIDC_CODE/CODE/app/cfg/equip/table/process.c:16`）、范围与恢复默认（`AIDC_CODE/CODE/app/cfg/equip/range/signal_range.c:209`）、Keil 工程（`AIDC_CODE/CODE/product/APP_H745.uvprojx:1638`）。
 - MV-IO 真实收包分发（`io-interface-board/code/APP/Project/Protocol/Modbus.c:111`）、保持寄存器表（`io-interface-board/code/APP/Project/Protocol/ModbusCallBackFun.c:155`）、保存地址读写（`io-interface-board/code/APP/Project/Protocol/ModbusCallBackFun.c:968`）、旧参数恢复（`io-interface-board/code/APP/Project/APP/MainTask.c:174`）。
-- [当前点表契约](../modules/dataprocess/include/dataprocess/points.h)、[当前参数契约](../modules/dataprocess/include/dataprocess/params.h)、[当前引擎容量](../modules/dataprocess/Kconfig)。
+- [当前点表契约](../modules/dataprocess/include/dataprocess/dataprocess.h)、[当前参数契约](../modules/dataprocess/include/dataprocess/params.h)、[当前引擎容量](../modules/dataprocess/Kconfig)。
 
 ## 早期 SMP / IAP 容量记录
 

@@ -1,6 +1,6 @@
 #include "acquisition/acquisition.h"
 #include "protocol/inc/signal_keys.h"
-#include <dataprocess/points.h>
+#include <dataprocess/dataprocess.h>
 #include <zephyr/drivers/adc.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/sys/byteorder.h>

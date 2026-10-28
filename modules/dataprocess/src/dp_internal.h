@@ -5,7 +5,7 @@
 #ifndef DP_INTERNAL_H
 #define DP_INTERNAL_H
 
-#include <dataprocess/points.h>
+#include <dataprocess/dataprocess.h>
 #include <time.h>
 #include <zephyr/sys/clock.h>
 
