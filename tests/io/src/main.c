@@ -18,30 +18,46 @@ static struct watchdog_fault reported;
 
 static int configure(const struct device *dev, gpio_pin_t pin, gpio_flags_t flags)
 {
-    ARG_UNUSED(dev); ARG_UNUSED(pin);
+    ARG_UNUSED(dev);
+    ARG_UNUSED(pin);
     atomic_inc(&configurations);
-    if (atomic_get(&configure_error)) { return atomic_get(&configure_error); }
+    if (atomic_get(&configure_error)) {
+        return atomic_get(&configure_error);
+    }
     output_flags = flags;
     return 0;
 }
+
 static int toggle(const struct device *dev, gpio_port_pins_t pins)
 {
-    ARG_UNUSED(dev); ARG_UNUSED(pins);
+    ARG_UNUSED(dev);
+    ARG_UNUSED(pins);
     if (atomic_get(&query_during_toggle)) {
         struct watchdog_fault fault;
         zassert_true(k_is_in_isr());
         zassert_equal(watchdog_fault_get(&fault), -ENOENT);
         atomic_inc(&toggle_queries);
     }
-    if (atomic_get(&toggle_error)) { return atomic_get(&toggle_error); }
+    if (atomic_get(&toggle_error)) {
+        return atomic_get(&toggle_error);
+    }
     atomic_inc(&toggles);
     return 0;
 }
+
 static DEVICE_API(gpio, test_gpio_api) = {
-    .pin_configure = configure, .port_toggle_bits = toggle,
+    .pin_configure = configure,
+    .port_toggle_bits = toggle,
 };
-DEVICE_DT_DEFINE(DT_NODELABEL(gpio0), NULL, NULL, &gpio_data, &gpio_config,
-                 POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE, &test_gpio_api);
+DEVICE_DT_DEFINE(DT_NODELABEL(gpio0),
+    NULL,
+    NULL,
+    &gpio_data,
+    &gpio_config,
+    POST_KERNEL,
+    CONFIG_KERNEL_INIT_PRIORITY_DEVICE,
+    &test_gpio_api);
+
 static int notify(const struct watchdog_fault *fault)
 {
     /* 本夹具只观察回调快照，不改变动作；动作由上报方或 watchdog 内部决定。 */
@@ -191,7 +207,8 @@ ZTEST(io_modules, test_report_reset_notifies_before_watchdog_resets)
     expect_reset = true;
     expected_reset_delay_ms = 70;
     reset_requested_ms = k_uptime_get();
-    zassert_equal(watchdog_report_fault(-EIO, "Reset through watchdog", WATCHDOG_ACTION_RESET, 70), -EIO);
+    zassert_equal(
+        watchdog_report_fault(-EIO, "Reset through watchdog", WATCHDOG_ACTION_RESET, 70), -EIO);
     zassert_equal(reported.reset_delay_ms, 70);
     zassert_equal(atomic_get(&notifications), 1);
     zassert_false(callback_in_isr);
@@ -224,14 +241,17 @@ ZTEST(io_modules, test_non_reset_actions_ignore_delay)
     zassert_true(atomic_get(&toggles) > before);
     zassert_equal(atomic_get(&notifications), 2);
 }
+
 K_SEM_DEFINE(queue_entered, 0, 1);
 K_SEM_DEFINE(queue_release, 0, 1);
+
 static void block_queue(struct k_work *work)
 {
     ARG_UNUSED(work);
     k_sem_give(&queue_entered);
     k_sem_take(&queue_release, K_FOREVER);
 }
+
 static K_WORK_DEFINE(queue_blocker, block_queue);
 
 /* 查询不消费通知；HOLD 抑制旧检查故障，新的 GPIO 故障仍可触发复位。 */

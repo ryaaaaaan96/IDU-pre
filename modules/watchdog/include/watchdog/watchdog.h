@@ -9,7 +9,7 @@
 #define WATCHDOG_TASK_FAULT UINT32_C(4)
 
 struct watchdog_task_config {
-    const char *name; /**< 常驻任务名称。 */
+    const char *name;    /**< 常驻任务名称。 */
     uint32_t timeout_ms; /**< 允许的最大心跳间隔。 */
 };
 
@@ -33,15 +33,15 @@ struct watchdog_task {
  */
 typedef enum {
     WATCHDOG_ACTION_CONTINUE = 0, /**< 现有诊断兼容行为；不用于新的产品终止故障。 */
-    WATCHDOG_ACTION_HOLD = 1, /**< 停止业务并保留现场，等待人工重启。 */
-    WATCHDOG_ACTION_RESET = 2, /**< 停止业务并请求自动重启。 */
+    WATCHDOG_ACTION_HOLD = 1,     /**< 停止业务并保留现场，等待人工重启。 */
+    WATCHDOG_ACTION_RESET = 2,    /**< 停止业务并请求自动重启。 */
 } watchdog_action_t;
 
 typedef enum {
-    WATCHDOG_FAULT_TASK, /**< 已登记任务超时。 */
-    WATCHDOG_FAULT_CHECK, /**< 检查结果或首次检查宽限过期。 */
+    WATCHDOG_FAULT_TASK,      /**< 已登记任务超时。 */
+    WATCHDOG_FAULT_CHECK,     /**< 检查结果或首次检查宽限过期。 */
     WATCHDOG_FAULT_FEED_GPIO, /**< 外部看门狗喂狗 GPIO 初始化或电平翻转失败。 */
-    WATCHDOG_FAULT_REPORTED, /**< 其他模块主动上报，附带描述和动作。 */
+    WATCHDOG_FAULT_REPORTED,  /**< 其他模块主动上报，附带描述和动作。 */
 } watchdog_fault_reason_t;
 
 /** @brief 统一故障快照；非任务故障的 task.name 为空。 */
@@ -50,20 +50,20 @@ struct watchdog_fault {
     int error;
     int64_t occurred_ms;
     watchdog_action_t action; /**< 上报请求或 watchdog 默认动作，回调只读。 */
-    uint32_t reset_delay_ms; /**< 仅 RESET 时有效，0 立即复位；回调只读。 */
-    const char *description; /**< 常驻英文描述，主动上报由调用方保证字符串常驻。 */
+    uint32_t reset_delay_ms;  /**< 仅 RESET 时有效，0 立即复位；回调只读。 */
+    const char *description;  /**< 常驻英文描述，主动上报由调用方保证字符串常驻。 */
     struct watchdog_task_snapshot task;
 };
 
 /** @brief 故障快照仅在回调期间有效，调用时不持有模块锁；回调只读，动作由上报方或 watchdog 决定。
  * @note 监控故障在系统 workqueue 通知；主动上报在调用者上下文同步通知，可能来自 ISR。
  * @note 回调须非阻塞、ISR 安全；不得递归调用 watchdog_report_fault。
-*/
+ */
 typedef int (*watchdog_fault_cb_t)(const struct watchdog_fault *snapshot);
 
 typedef enum {
     WATCHDOG_STOP_MONITOR, /**< 关闭检查，保留硬件喂狗，用于应用显式留驻。 */
-    WATCHDOG_STOP_ALL, /**< 同时停止检查和硬件喂狗。 */
+    WATCHDOG_STOP_ALL,     /**< 同时停止检查和硬件喂狗。 */
 } watchdog_stop_mode_t;
 
 /**
@@ -79,16 +79,16 @@ int watchdog_init(watchdog_fault_cb_t notify);
  * @note 通知前更新最近故障；不改写监控锁存；回调只读，动作由本次调用决定。
  * @note description 必须非空且常驻；故障阶段与处理策略由接收者判断。
  * @param reset_delay_ms 毫秒；仅动作为 RESET 时使用，其他动作忽略。0 立即复位。
- * @note 重复复位请求只允许提前期限；需要 CONFIG_REBOOT，延时使用相对超时，不依赖 CONFIG_TIMEOUT_64BIT。
+ * @note 重复复位请求只允许提前期限；需要 CONFIG_REBOOT，延时使用相对超时，不依赖
+ * CONFIG_TIMEOUT_64BIT。
  * @note 延时上限为 60 秒，更长的请求按 60 秒提前复位。
  * @retval 0 回调处理成功。
  * @retval -EINVAL 参数无效。
  * @retval -EACCES 尚未绑定回调。
  * @return 返回回调处理结果；立即复位通常不返回，延时复位安排后返回。
  */
-int watchdog_report_fault(int error,
-                          const char *description, watchdog_action_t action,
-                          uint32_t reset_delay_ms);
+int watchdog_report_fault(
+    int error, const char *description, watchdog_action_t action, uint32_t reset_delay_ms);
 /** @brief 非阻塞停止，可在 ISR 调用；不能重新启用任务监控。 */
 void watchdog_stop(watchdog_stop_mode_t mode);
 /** @brief 在线程中登记任务，配置值复制，名称与上下文保持常驻。 */

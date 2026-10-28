@@ -10,14 +10,27 @@
 #include <zephyr/storage/flash_map.h>
 #include <zephyr/ztest.h>
 
-typedef enum { DEV = 7, DEV_ALT = 8 } test_device_t;
-typedef enum { SIG_LOCAL = 1, SIG_CONST, SIG_PARAM, SIG_CMD, SIG_STATUS } test_signal_t;
+typedef enum {
+    DEV = 7,
+    DEV_ALT = 8
+} test_device_t;
+
+typedef enum {
+    SIG_LOCAL = 1,
+    SIG_CONST,
+    SIG_PARAM,
+    SIG_CMD,
+    SIG_STATUS
+} test_signal_t;
 
 static bool fail_allocation, fail_read;
 void *__real_k_calloc(size_t count, size_t size);
+
 void *__wrap_k_calloc(size_t count, size_t size)
 {
-    if (fail_allocation) { return NULL; }
+    if (fail_allocation) {
+        return NULL;
+    }
     return __real_k_calloc(count, size);
 }
 
@@ -38,7 +51,9 @@ static int command(dp_key_t key, const dp_value_t *value)
 static int status(dp_key_t key, dp_value_t *value)
 {
     ARG_UNUSED(key);
-    if (fail_read) { return -EIO; }
+    if (fail_read) {
+        return -EIO;
+    }
     dp_param_status_t status;
     dp_params_get_status(&status);
     value->words[0] = status.flags;
@@ -50,20 +65,30 @@ static int status(dp_key_t key, dp_value_t *value)
 
 static const dp_point_def_t rows[] = {
     {.signal_id = SIG_LOCAL, .size = 2, .type = DP_TYPE_U16},
-    {.signal_id = SIG_CONST, .size = 4, .type = DP_TYPE_U32, .flags = FLAG_CONSTANT,
-     .data.initial.u32 = 0x12345678},
-    {.signal_id = SIG_PARAM, .size = 2, .type = DP_TYPE_U16,
-     .flags = FLAG_PERSISTENCE | FLAG_RANGE_CHECK,
-     .data = {.initial.u16 = 500, .minimum.u16 = 100, .maximum.u16 = 1000}},
+    {.signal_id = SIG_CONST,
+        .size = 4,
+        .type = DP_TYPE_U32,
+        .flags = FLAG_CONSTANT,
+        .data.initial.u32 = 0x12345678},
+    {.signal_id = SIG_PARAM,
+        .size = 2,
+        .type = DP_TYPE_U16,
+        .flags = FLAG_PERSISTENCE | FLAG_RANGE_CHECK,
+        .data = {.initial.u16 = 500, .minimum.u16 = 100, .maximum.u16 = 1000}},
     {.signal_id = SIG_CMD, .size = 2, .type = DP_TYPE_U16, .write = command},
-    {.signal_id = SIG_STATUS, .size = 8, .type = DP_TYPE_WORDS,
-     .flags = FLAG_READ_CALLBACK, .read = status},
+    {.signal_id = SIG_STATUS,
+        .size = 8,
+        .type = DP_TYPE_WORDS,
+        .flags = FLAG_READ_CALLBACK,
+        .read = status},
 };
 static const dp_point_def_t alt_rows[] = {
     {.signal_id = SIG_LOCAL, .size = 2, .type = DP_TYPE_U16, .data.initial.u16 = 0x1111},
-    {.signal_id = SIG_PARAM, .size = 2, .type = DP_TYPE_U16,
-     .flags = FLAG_PERSISTENCE | FLAG_RANGE_CHECK,
-     .data = {.initial.u16 = 600, .minimum.u16 = 100, .maximum.u16 = 1000}},
+    {.signal_id = SIG_PARAM,
+        .size = 2,
+        .type = DP_TYPE_U16,
+        .flags = FLAG_PERSISTENCE | FLAG_RANGE_CHECK,
+        .data = {.initial.u16 = 600, .minimum.u16 = 100, .maximum.u16 = 1000}},
 };
 static const dp_table_t local_table = {.points = rows, .point_count = ARRAY_SIZE(rows)};
 static const dp_table_t alt_table = {.points = alt_rows, .point_count = ARRAY_SIZE(alt_rows)};
@@ -75,9 +100,13 @@ static const dp_table_t array_table = {.points = array_rows, .point_count = ARRA
 static const dp_point_data_t *data(uint16_t device, uint16_t signal)
 {
     for (const dp_registered_table_t *table = dp_tables(); table; table = table->next) {
-        if (table->device_id != device) { continue; }
+        if (table->device_id != device) {
+            continue;
+        }
         for (size_t i = 0; i < table->point_count; ++i) {
-            if (table->points[i].signal_id == signal) { return &table->data[i]; }
+            if (table->points[i].signal_id == signal) {
+                return &table->data[i];
+            }
         }
     }
     return NULL;
@@ -213,8 +242,8 @@ ZTEST(dp_core, test_core)
     zassert_equal(data(DEV, SIG_STATUS)->updated_at_s, read_update);
     fail_read = false;
 
-    const dp_point_def_t late_row = {.signal_id = SIG_PARAM, .size = 2,
-                                    .type = DP_TYPE_U16, .flags = FLAG_PERSISTENCE};
+    const dp_point_def_t late_row = {
+        .signal_id = SIG_PARAM, .size = 2, .type = DP_TYPE_U16, .flags = FLAG_PERSISTENCE};
     const dp_table_t late_table = {.points = &late_row, .point_count = 1};
     zassert_equal(dp_register_table(9, &late_table), -EBUSY);
     if (!phase) {

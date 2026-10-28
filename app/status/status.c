@@ -77,8 +77,11 @@ static int status_watchdog_fault(const struct watchdog_fault *fault)
     k_spin_unlock(&status_runtime.lock, key);
     /* 故障已由 watchdog 记录；CONTINUE 不解除已锁存状态。 */
     if (fault->action == WATCHDOG_ACTION_CONTINUE) {
-        LOG_ERR("%s: state %d error %d action %d", fault->description, current, fault->error,
-                fault->action);
+        LOG_ERR("%s: state %d error %d action %d",
+            fault->description,
+            current,
+            fault->error,
+            fault->action);
         return 0;
     }
 
@@ -86,8 +89,11 @@ static int status_watchdog_fault(const struct watchdog_fault *fault)
 #ifdef CONFIG_IDU_IAPV3
     iap_stop();
 #endif
-    LOG_ERR("%s: state %d error %d action %d", fault->description, current, fault->error,
-            fault->action);
+    LOG_ERR("%s: state %d error %d action %d",
+        fault->description,
+        current,
+        fault->error,
+        fault->action);
 
     /* 等待复位或留驻期间，提交故障图案刷新。 */
     status_led_sync();
@@ -108,11 +114,13 @@ int status_init(void)
 
     int err = watchdog_init(status_watchdog_fault);
     if (err) {
-        return watchdog_report_fault(err, "Watchdog initialization failed", WATCHDOG_ACTION_HOLD, 0);
+        return watchdog_report_fault(
+            err, "Watchdog initialization failed", WATCHDOG_ACTION_HOLD, 0);
     }
     err = status_led_init(STATUS_LED_STARTING);
     if (err) {
-        return watchdog_report_fault(err, "Indicator initialization failed", WATCHDOG_ACTION_HOLD, 0);
+        return watchdog_report_fault(
+            err, "Indicator initialization failed", WATCHDOG_ACTION_HOLD, 0);
     }
     status_led_sync();
     return 0;

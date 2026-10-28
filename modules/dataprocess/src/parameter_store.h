@@ -20,10 +20,13 @@ typedef struct {
 } dp_stored_value_t;
 
 /* 调用方串行化。先完成有效提交日志，再读取参数；格式错误交由调用方重新初始化分区。 */
-int dp_store_open(struct nvs_fs *fs, uint8_t *scratch, size_t capacity,
-                  uint32_t *sequence, bool *present, bool *recovered);
-int dp_store_read(struct nvs_fs *fs, dp_key_t key,
-                  dp_stored_value_t *value, bool *recovered);
+int dp_store_open(struct nvs_fs *fs,
+    uint8_t *scratch,
+    size_t capacity,
+    uint32_t *sequence,
+    bool *present,
+    bool *recovered);
+int dp_store_read(struct nvs_fs *fs, dp_key_t key, dp_stored_value_t *value, bool *recovered);
 /* image 为自描述的键/类型/长度/值列表，仅存本次变化和新建的参数。
  * 提交日志成功后即决定整组新值；写参数中断时下次打开幂等完成，不发送硬件操作。
  */

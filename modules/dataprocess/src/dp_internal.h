@@ -14,9 +14,8 @@ static inline uint32_t dp_timestamp_s(void)
 {
     struct timespec offset, now;
     sys_clock_getrtoffset(&offset);
-    if ((!offset.tv_sec && !offset.tv_nsec) ||
-        sys_clock_gettime(SYS_CLOCK_REALTIME, &now) || now.tv_sec <= 0 ||
-        (uint64_t)now.tv_sec > UINT32_MAX) {
+    if ((!offset.tv_sec && !offset.tv_nsec) || sys_clock_gettime(SYS_CLOCK_REALTIME, &now) ||
+        now.tv_sec <= 0 || (uint64_t)now.tv_sec > UINT32_MAX) {
         return 0;
     }
     return (uint32_t)now.tv_sec;
@@ -24,7 +23,12 @@ static inline uint32_t dp_timestamp_s(void)
 
 /* 编码属于 NVS 格式，不能随公共类型枚举重排。 */
 typedef enum {
-    DP_U16 = 0, DP_S16 = 1, DP_U32 = 2, DP_S32 = 3, DP_WORDS = 4, DP_U8 = 5,
+    DP_U16 = 0,
+    DP_S16 = 1,
+    DP_U32 = 2,
+    DP_S32 = 3,
+    DP_WORDS = 4,
+    DP_U8 = 5,
 } dp_storage_type_t;
 
 typedef enum {
@@ -50,6 +54,7 @@ typedef struct {
 int dp_params_read(dp_key_t key, dp_point_data_t *state);
 bool dp_params_mounted(void);
 int dp_params_write(dp_key_t key, const dp_value_t *value);
+
 /* 私有设备目录；节点与点数据一次分配，只在模块内访问。 */
 typedef struct dp_registered_table {
     uint16_t device_id;

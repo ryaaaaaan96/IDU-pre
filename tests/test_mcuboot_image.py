@@ -1,4 +1,5 @@
 """校验当前 MCUboot 导出布局和构建选择。"""
+
 import importlib.util
 import struct
 import tempfile
@@ -9,7 +10,8 @@ from unittest.mock import patch
 from intelhex import IntelHex
 
 SPEC = importlib.util.spec_from_file_location(
-    "build_mcuboot", Path(__file__).resolve().parents[1] / "tools/build_mcuboot.py")
+    "build_mcuboot", Path(__file__).resolve().parents[1] / "tools/build_mcuboot.py"
+)
 builder = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(builder)
 
@@ -55,8 +57,7 @@ class ImageExport(unittest.TestCase):
             self.export()
 
     def test_invalid_stack_and_header_are_rejected(self):
-        for offset, value, message in ((0x200, 0x20020004, "stack"),
-                                       (0, 0, "header")):
+        for offset, value, message in ((0x200, 0x20020004, "stack"), (0, 0, "header")):
             with self.subTest(offset=offset):
                 blob = bytearray(self.blob)
                 struct.pack_into("<I", blob, offset, value)
@@ -73,18 +74,21 @@ class ImageExport(unittest.TestCase):
 
     def test_slot_trailer_space_is_reserved(self):
         (self.app / "IDU-pre.signed.bin").write_bytes(
-            self.blob + bytes(builder.SLOT_SIZE - len(self.blob)))
+            self.blob + bytes(builder.SLOT_SIZE - len(self.blob))
+        )
         with self.assertRaisesRegex(ValueError, "slot payload"):
             self.export()
 
     def test_default_iap_and_explicit_alternatives(self):
         key = self.root / "key.pem"
         key.touch()
-        for flags, suffix, iap in (([], "-iapv3", True),
-                                   (["--no-upload"], "", False)):
-            with self.subTest(flags=flags), patch.object(builder, "run") as run, \
-                    patch.object(builder, "export") as export, \
-                    patch("sys.argv", ["build_mcuboot", "--key", str(key), *flags]):
+        for flags, suffix, iap in (([], "-iapv3", True), (["--no-upload"], "", False)):
+            with (
+                self.subTest(flags=flags),
+                patch.object(builder, "run") as run,
+                patch.object(builder, "export") as export,
+                patch("sys.argv", ["build_mcuboot", "--key", str(key), *flags]),
+            ):
                 builder.main()
                 self.assertIn("--sysbuild", run.call_args.args)
                 self.assertEqual(export.call_args.args[0].name, "mcuboot" + suffix)

@@ -11,13 +11,28 @@ bool mb_support_accept_request(struct modbus_context *ctx);
 bool mb_support_suppress_broadcast(struct modbus_context *ctx);
 void mb_support_complete_request(struct modbus_context *ctx, bool reply);
 #else
-static inline int mb_support_submit_work(struct k_work *work) { return k_work_submit(work); }
+static inline int mb_support_submit_work(struct k_work *work)
+{
+    return k_work_submit(work);
+}
+
 static inline bool mb_support_write_request(struct modbus_context *ctx, bool *reply)
-{ return false; }
+{
+    return false;
+}
+
 static inline bool mb_support_accept_request(struct modbus_context *ctx)
-{ return !ctx->rx_adu.unit_id || ctx->rx_adu.unit_id == ctx->unit_id; }
+{
+    return !ctx->rx_adu.unit_id || ctx->rx_adu.unit_id == ctx->unit_id;
+}
+
 static inline bool mb_support_suppress_broadcast(struct modbus_context *ctx)
-{ return !ctx->rx_adu.unit_id; }
-static inline void mb_support_complete_request(struct modbus_context *ctx, bool reply) {}
+{
+    return !ctx->rx_adu.unit_id;
+}
+
+static inline void mb_support_complete_request(struct modbus_context *ctx, bool reply)
+{
+}
 #endif
 #endif

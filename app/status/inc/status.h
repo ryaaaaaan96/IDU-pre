@@ -15,10 +15,10 @@
 /** @brief 整机初始化、运行和终止故障状态。 */
 typedef enum {
     STATUS_UNCONFIGURED, /**< 尚未初始化。 */
-    STATUS_STARTING, /**< 正在初始化本地服务。 */
-    STATUS_RUN, /**< 初始化完成，可以开始采样周期。 */
+    STATUS_STARTING,     /**< 正在初始化本地服务。 */
+    STATUS_RUN,          /**< 初始化完成，可以开始采样周期。 */
     STATUS_FAULT_LOCKED, /**< 已锁存终止故障，业务不可恢复。 */
-    STATUS_PHASE_COUNT, /**< 阶段数量；用于内部显示表等定长数组。 */
+    STATUS_PHASE_COUNT,  /**< 阶段数量；用于内部显示表等定长数组。 */
 } status_phase_t;
 
 /**

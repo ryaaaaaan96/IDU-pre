@@ -64,24 +64,25 @@ static const struct {
     uint16_t device_id;
     uint16_t signal_id;
 } digital_inputs = {
-    .spec = {
-        GPIO_DT_SPEC_GET(IO_NODE, di1_gpios),
-        GPIO_DT_SPEC_GET(IO_NODE, di2_gpios),
-        GPIO_DT_SPEC_GET(IO_NODE, di3_gpios),
-        GPIO_DT_SPEC_GET(IO_NODE, di4_gpios),
-        GPIO_DT_SPEC_GET(IO_NODE, di5_gpios),
-        GPIO_DT_SPEC_GET(IO_NODE, di6_gpios),
-        GPIO_DT_SPEC_GET(IO_NODE, di7_gpios),
-        GPIO_DT_SPEC_GET(IO_NODE, di8_gpios),
-        GPIO_DT_SPEC_GET(IO_NODE, di9_gpios),
-        GPIO_DT_SPEC_GET(IO_NODE, di10_gpios),
-        GPIO_DT_SPEC_GET(IO_NODE, di11_gpios),
-        GPIO_DT_SPEC_GET(IO_NODE, di12_gpios),
-        GPIO_DT_SPEC_GET(IO_NODE, di13_gpios),
-        GPIO_DT_SPEC_GET(IO_NODE, di14_gpios),
-        GPIO_DT_SPEC_GET(IO_NODE, di15_gpios),
-        GPIO_DT_SPEC_GET(IO_NODE, di16_gpios),
-    },
+    .spec =
+        {
+            GPIO_DT_SPEC_GET(IO_NODE, di1_gpios),
+            GPIO_DT_SPEC_GET(IO_NODE, di2_gpios),
+            GPIO_DT_SPEC_GET(IO_NODE, di3_gpios),
+            GPIO_DT_SPEC_GET(IO_NODE, di4_gpios),
+            GPIO_DT_SPEC_GET(IO_NODE, di5_gpios),
+            GPIO_DT_SPEC_GET(IO_NODE, di6_gpios),
+            GPIO_DT_SPEC_GET(IO_NODE, di7_gpios),
+            GPIO_DT_SPEC_GET(IO_NODE, di8_gpios),
+            GPIO_DT_SPEC_GET(IO_NODE, di9_gpios),
+            GPIO_DT_SPEC_GET(IO_NODE, di10_gpios),
+            GPIO_DT_SPEC_GET(IO_NODE, di11_gpios),
+            GPIO_DT_SPEC_GET(IO_NODE, di12_gpios),
+            GPIO_DT_SPEC_GET(IO_NODE, di13_gpios),
+            GPIO_DT_SPEC_GET(IO_NODE, di14_gpios),
+            GPIO_DT_SPEC_GET(IO_NODE, di15_gpios),
+            GPIO_DT_SPEC_GET(IO_NODE, di16_gpios),
+        },
     .device_id = DEVICE_LOCAL,
     .signal_id = SIGNAL_DI,
 };
@@ -140,13 +141,12 @@ int acquisition_cycle(void)
         if (value < 0) {
             return value;
         }
-        size_t bit = DT_ENUM_IDX(IO_NODE, di_bit_order) == 0
-                   ? i : ARRAY_SIZE(digital_inputs.spec) - 1 - i;
+        size_t bit =
+            DT_ENUM_IDX(IO_NODE, di_bit_order) == 0 ? i : ARRAY_SIZE(digital_inputs.spec) - 1 - i;
         digital |= (uint16_t)((uint32_t)value << bit);
     }
     sys_put_le16(digital, bytes);
-    int err = dp_set_para(digital_inputs.device_id, digital_inputs.signal_id,
-                               sizeof(bytes), bytes);
+    int err = dp_set_para(digital_inputs.device_id, digital_inputs.signal_id, sizeof(bytes), bytes);
     if (err) {
         return err;
     }

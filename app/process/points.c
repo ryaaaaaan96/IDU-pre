@@ -17,15 +17,23 @@ uint16_t points_sample_period_ms(void)
 
 int points_parameter_command(dp_key_t key, const dp_value_t *value)
 {
-    if (!value || key.device_id != DEVICE_LOCAL) { return -EINVAL; }
+    if (!value || key.device_id != DEVICE_LOCAL) {
+        return -EINVAL;
+    }
     uint16_t expected;
     int (*action)(uint16_t);
     uint16_t argument = 0;
     switch (key.signal_id) {
     case SIGNAL_RESTORE_LOCAL:
-        expected = 0xa55a; action = dp_params_restore; argument = DEVICE_LOCAL; break;
+        expected = 0xa55a;
+        action = dp_params_restore;
+        argument = DEVICE_LOCAL;
+        break;
     case SIGNAL_RESTORE_REMOTE:
-        expected = 0xa55a; action = dp_params_restore; argument = DEVICE_REMOTE_IO; break;
+        expected = 0xa55a;
+        action = dp_params_restore;
+        argument = DEVICE_REMOTE_IO;
+        break;
     default:
         return -ENOENT;
     }
@@ -34,8 +42,9 @@ int points_parameter_command(dp_key_t key, const dp_value_t *value)
 
 int points_parameter_status(dp_key_t key, dp_value_t *value)
 {
-    if (!value || key.device_id != DEVICE_LOCAL ||
-        key.signal_id != SIGNAL_PARAMETER_STATUS) { return -EINVAL; }
+    if (!value || key.device_id != DEVICE_LOCAL || key.signal_id != SIGNAL_PARAMETER_STATUS) {
+        return -EINVAL;
+    }
     dp_param_status_t status;
     dp_params_get_status(&status);
     value->words[0] = status.flags;

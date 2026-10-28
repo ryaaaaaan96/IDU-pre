@@ -18,22 +18,31 @@ static int64_t number(const dp_point_cfg_t *p, const dp_value_t *v)
     uint32_t u = v->words[0] | ((uint32_t)v->words[1] << 16);
 
     switch (p->type) {
-    case DP_S16: return (int16_t)v->words[0];
-    case DP_S32: return (int32_t)u;
-    case DP_U32: return u;
-    default: return v->words[0];
+    case DP_S16:
+        return (int16_t)v->words[0];
+    case DP_S32:
+        return (int32_t)u;
+    case DP_U32:
+        return u;
+    default:
+        return v->words[0];
     }
 }
 
 int dp_check_value(const dp_point_cfg_t *p, const dp_value_t *v)
 {
-    if (!p || !v) { return -EINVAL; }
-    if (p->type == DP_U8 && (v->words[0] > UINT8_MAX ||
-        (p->size_bytes == 1 && (v->words[0] & 0xff00U)))) { return -ERANGE; }
+    if (!p || !v) {
+        return -EINVAL;
+    }
+    if (p->type == DP_U8 &&
+        (v->words[0] > UINT8_MAX || (p->size_bytes == 1 && (v->words[0] & 0xff00U)))) {
+        return -ERANGE;
+    }
     if (p->type == DP_WORDS) {
         if ((p->size_bytes & 1U) &&
-            (p->size_bytes / 2 >= DP_POINT_WORDS ||
-             (v->words[p->size_bytes / 2] & 0xff00U))) { return -ERANGE; }
+            (p->size_bytes / 2 >= DP_POINT_WORDS || (v->words[p->size_bytes / 2] & 0xff00U))) {
+            return -ERANGE;
+        }
         return 0;
     }
     int64_t n = number(p, v);
@@ -57,8 +66,9 @@ static void pack(uint8_t *bytes, const dp_value_t *value, size_t size)
 
 int dp_describe_point(uint16_t dev, const dp_point_def_t *row, dp_point_cfg_t *p)
 {
-    if (!row || !row->signal_id || !row->size ||
-        row->size > DP_POINT_WORDS * 2) { return -EINVAL; }
+    if (!row || !row->signal_id || !row->size || row->size > DP_POINT_WORDS * 2) {
+        return -EINVAL;
+    }
     *p = (dp_point_cfg_t){
         .key = {dev, row->signal_id},
         .size_bytes = row->size,
@@ -69,32 +79,60 @@ int dp_describe_point(uint16_t dev, const dp_point_def_t *row, dp_point_cfg_t *p
     };
     switch (row->type) {
     case DP_TYPE_U8:
-        if (row->size != 1) { return -EINVAL; }
-        p->type = DP_U8; p->minimum = 0; p->maximum = UINT8_MAX; break;
+        if (row->size != 1) {
+            return -EINVAL;
+        }
+        p->type = DP_U8;
+        p->minimum = 0;
+        p->maximum = UINT8_MAX;
+        break;
     case DP_TYPE_U16:
-        if (row->size != 2) { return -EINVAL; }
-        p->type = DP_U16; p->minimum = 0; p->maximum = UINT16_MAX; break;
+        if (row->size != 2) {
+            return -EINVAL;
+        }
+        p->type = DP_U16;
+        p->minimum = 0;
+        p->maximum = UINT16_MAX;
+        break;
     case DP_TYPE_S16:
-        if (row->size != 2) { return -EINVAL; }
-        p->type = DP_S16; p->minimum = INT16_MIN; p->maximum = INT16_MAX; break;
+        if (row->size != 2) {
+            return -EINVAL;
+        }
+        p->type = DP_S16;
+        p->minimum = INT16_MIN;
+        p->maximum = INT16_MAX;
+        break;
     case DP_TYPE_U32:
-        if (row->size != 4) { return -EINVAL; }
-        p->type = DP_U32; p->minimum = 0; p->maximum = UINT32_MAX; break;
+        if (row->size != 4) {
+            return -EINVAL;
+        }
+        p->type = DP_U32;
+        p->minimum = 0;
+        p->maximum = UINT32_MAX;
+        break;
     case DP_TYPE_S32:
-        if (row->size != 4) { return -EINVAL; }
-        p->type = DP_S32; p->minimum = INT32_MIN; p->maximum = INT32_MAX; break;
+        if (row->size != 4) {
+            return -EINVAL;
+        }
+        p->type = DP_S32;
+        p->minimum = INT32_MIN;
+        p->maximum = INT32_MAX;
+        break;
     case DP_TYPE_STRING:
     case DP_TYPE_BYTES:
     case DP_TYPE_WORDS:
         if (row->type == DP_TYPE_WORDS && (row->size & 1U)) {
             return -EINVAL;
         }
-        p->type = DP_WORDS; break;
+        p->type = DP_WORDS;
+        break;
     default:
         return -ENOTSUP;
     }
     if (row->flags & FLAG_CONSTANT) {
-        if ((row->flags & FLAG_PERSISTENCE) || row->write) { return -EINVAL; }
+        if ((row->flags & FLAG_PERSISTENCE) || row->write) {
+            return -EINVAL;
+        }
         p->source = DP_SOURCE_CONSTANT;
     } else if (row->flags & FLAG_PERSISTENCE) {
         p->source = DP_SOURCE_PARAMETER;
@@ -104,40 +142,66 @@ int dp_describe_point(uint16_t dev, const dp_point_def_t *row, dp_point_cfg_t *p
     if (p->source == DP_SOURCE_PARAMETER && (row->write || row->read)) {
         return -EINVAL;
     }
-    if ((row->flags & FLAG_READ_CALLBACK) && !row->read) { return -EINVAL; }
+    if ((row->flags & FLAG_READ_CALLBACK) && !row->read) {
+        return -EINVAL;
+    }
     if (row->flags & FLAG_RANGE_CHECK) {
-        if (p->type == DP_WORDS) { return -ENOTSUP; }
+        if (p->type == DP_WORDS) {
+            return -ENOTSUP;
+        }
         switch (p->type) {
-        case DP_U8: p->minimum = row->data.minimum.u16;
-                    p->maximum = row->data.maximum.u16;
-                    if (p->maximum > UINT8_MAX) { return -ERANGE; } break;
-        case DP_U16: p->minimum = row->data.minimum.u16;
-                     p->maximum = row->data.maximum.u16; break;
-        case DP_S16: p->minimum = row->data.minimum.s16;
-                     p->maximum = row->data.maximum.s16; break;
-        case DP_U32: p->minimum = row->data.minimum.u32;
-                     p->maximum = row->data.maximum.u32; break;
-        case DP_S32: p->minimum = row->data.minimum.s32;
-                     p->maximum = row->data.maximum.s32; break;
-        default: break;
+        case DP_U8:
+            p->minimum = row->data.minimum.u16;
+            p->maximum = row->data.maximum.u16;
+            if (p->maximum > UINT8_MAX) {
+                return -ERANGE;
+            }
+            break;
+        case DP_U16:
+            p->minimum = row->data.minimum.u16;
+            p->maximum = row->data.maximum.u16;
+            break;
+        case DP_S16:
+            p->minimum = row->data.minimum.s16;
+            p->maximum = row->data.maximum.s16;
+            break;
+        case DP_U32:
+            p->minimum = row->data.minimum.u32;
+            p->maximum = row->data.maximum.u32;
+            break;
+        case DP_S32:
+            p->minimum = row->data.minimum.s32;
+            p->maximum = row->data.maximum.s32;
+            break;
+        default:
+            break;
         }
     }
-    const uint8_t *bytes = row->size > 4 ? row->data.initial.array :
-                                                row->data.initial.bytes;
-    if (bytes) { unpack(&p->initial, bytes, row->size); }
+    const uint8_t *bytes = row->size > 4 ? row->data.initial.array : row->data.initial.bytes;
+    if (bytes) {
+        unpack(&p->initial, bytes, row->size);
+    }
     return dp_check_value(p, &p->initial);
 }
 
-dp_registered_table_t *dp_tables(void) { return tables; }
-
-static int find_point(dp_key_t key, dp_point_cfg_t *point,
-                      dp_point_data_t **state)
+dp_registered_table_t *dp_tables(void)
 {
-    if (!key.device_id || !key.signal_id) { return -EINVAL; }
+    return tables;
+}
+
+static int find_point(dp_key_t key, dp_point_cfg_t *point, dp_point_data_t **state)
+{
+    if (!key.device_id || !key.signal_id) {
+        return -EINVAL;
+    }
     for (dp_registered_table_t *table = tables; table; table = table->next) {
-        if (table->device_id != key.device_id) { continue; }
+        if (table->device_id != key.device_id) {
+            continue;
+        }
         for (size_t i = 0; i < table->point_count; ++i) {
-            if (table->points[i].signal_id != key.signal_id) { continue; }
+            if (table->points[i].signal_id != key.signal_id) {
+                continue;
+            }
             *state = &table->data[i];
             return dp_describe_point(key.device_id, &table->points[i], point);
         }
@@ -149,28 +213,45 @@ static int find_point(dp_key_t key, dp_point_cfg_t *point,
 int dp_register_table(uint16_t device_id, const dp_table_t *table)
 {
     if (k_is_in_isr()) { return -EWOULDBLOCK; }
-    if (!device_id || !table || !table->points || !table->point_count) { return -EINVAL; }
-    for (const dp_registered_table_t *item = tables; item; item = item->next) {
-        if (item->device_id == device_id) { return -EEXIST; }
+    if (!device_id || !table || !table->points || !table->point_count) {
+        return -EINVAL;
     }
-    if (table->point_count > (SIZE_MAX - sizeof(dp_registered_table_t)) /
-                             sizeof(dp_point_data_t)) { return -EOVERFLOW; }
+    for (const dp_registered_table_t *item = tables; item; item = item->next) {
+        if (item->device_id == device_id) {
+            return -EEXIST;
+        }
+    }
+    if (table->point_count > (SIZE_MAX - sizeof(dp_registered_table_t)) / sizeof(dp_point_data_t)) {
+        return -EOVERFLOW;
+    }
 
     size_t params = 0;
     for (size_t i = 0; i < table->point_count; ++i) {
         dp_point_cfg_t point;
-        if (dp_describe_point(device_id, &table->points[i], &point)) { return -EINVAL; }
-        if (point.source == DP_SOURCE_PARAMETER) { ++params; }
+        if (dp_describe_point(device_id, &table->points[i], &point)) {
+            return -EINVAL;
+        }
+        if (point.source == DP_SOURCE_PARAMETER) {
+            ++params;
+        }
         for (size_t n = 0; n < i; ++n) {
-            if (table->points[n].signal_id == table->points[i].signal_id) { return -EEXIST; }
+            if (table->points[n].signal_id == table->points[i].signal_id) {
+                return -EEXIST;
+            }
         }
     }
-    if (params > CONFIG_DP_PARAMS_MAX_COUNT - param_points) { return -ENOSPC; }
-    if (params && dp_params_mounted()) { return -EBUSY; }
+    if (params > CONFIG_DP_PARAMS_MAX_COUNT - param_points) {
+        return -ENOSPC;
+    }
+    if (params && dp_params_mounted()) {
+        return -EBUSY;
+    }
 
-    dp_registered_table_t *entry = k_calloc(1, sizeof(*entry) +
-                                             table->point_count * sizeof(entry->data[0]));
-    if (!entry) { return -ENOMEM; }
+    dp_registered_table_t *entry =
+        k_calloc(1, sizeof(*entry) + table->point_count * sizeof(entry->data[0]));
+    if (!entry) {
+        return -ENOMEM;
+    }
     entry->device_id = device_id;
     entry->points = table->points;
     entry->point_count = table->point_count;
@@ -186,8 +267,7 @@ int dp_register_table(uint16_t device_id, const dp_table_t *table)
     return 0;
 }
 
-static int read_point(const dp_point_cfg_t *point,
-                      dp_point_data_t *stored, dp_point_data_t *state)
+static int read_point(const dp_point_cfg_t *point, dp_point_data_t *stored, dp_point_data_t *state)
 {
     if (point->read) {
         *state = (dp_point_data_t){0};
@@ -200,7 +280,9 @@ static int read_point(const dp_point_cfg_t *point,
         }
         return err;
     }
-    if (point->source == DP_SOURCE_PARAMETER) { return dp_params_read(point->key, state); }
+    if (point->source == DP_SOURCE_PARAMETER) {
+        return dp_params_read(point->key, state);
+    }
     k_mutex_lock(&store_lock, K_FOREVER);
     *state = *stored;
     k_mutex_unlock(&store_lock);
@@ -209,21 +291,37 @@ static int read_point(const dp_point_cfg_t *point,
 
 int dp_set_para(uint16_t dev_id, uint16_t sig_id, uint8_t size, const uint8_t *bytes)
 {
-    if (k_is_in_isr()) { return -EWOULDBLOCK; }
-    if (!bytes) { return -EINVAL; }
+    if (k_is_in_isr()) {
+        return -EWOULDBLOCK;
+    }
+    if (!bytes) {
+        return -EINVAL;
+    }
     dp_key_t key = {dev_id, sig_id};
     dp_point_cfg_t p;
     dp_point_data_t *stored;
     int err = find_point(key, &p, &stored);
-    if (err) { return err; }
-    if (size != p.size_bytes) { return -EMSGSIZE; }
-    if (p.source == DP_SOURCE_CONSTANT) { return -EACCES; }
+    if (err) {
+        return err;
+    }
+    if (size != p.size_bytes) {
+        return -EMSGSIZE;
+    }
+    if (p.source == DP_SOURCE_CONSTANT) {
+        return -EACCES;
+    }
     dp_value_t value;
     unpack(&value, bytes, size);
     err = dp_check_value(&p, &value);
-    if (err) { return err; }
-    if (p.write) { return p.write(key, &value); }
-    if (p.source == DP_SOURCE_PARAMETER) { return dp_params_write(key, &value); }
+    if (err) {
+        return err;
+    }
+    if (p.write) {
+        return p.write(key, &value);
+    }
+    if (p.source == DP_SOURCE_PARAMETER) {
+        return dp_params_write(key, &value);
+    }
     k_mutex_lock(&store_lock, K_FOREVER);
     stored->value = value;
     stored->updated_at_s = dp_timestamp_s();
@@ -233,17 +331,27 @@ int dp_set_para(uint16_t dev_id, uint16_t sig_id, uint8_t size, const uint8_t *b
 
 int dp_get_para(uint16_t dev_id, uint16_t sig_id, uint8_t capacity, uint8_t *bytes)
 {
-    if (k_is_in_isr()) { return -EWOULDBLOCK; }
-    if (!bytes) { return -EINVAL; }
+    if (k_is_in_isr()) {
+        return -EWOULDBLOCK;
+    }
+    if (!bytes) {
+        return -EINVAL;
+    }
     dp_key_t key = {dev_id, sig_id};
     dp_point_cfg_t p;
     dp_point_data_t *stored;
     int err = find_point(key, &p, &stored);
-    if (err) { return err; }
-    if (capacity < p.size_bytes) { return -EMSGSIZE; }
+    if (err) {
+        return err;
+    }
+    if (capacity < p.size_bytes) {
+        return -EMSGSIZE;
+    }
     dp_point_data_t state;
     err = read_point(&p, stored, &state);
-    if (err) { return err; }
+    if (err) {
+        return err;
+    }
     pack(bytes, &state.value, p.size_bytes);
     return capacity;
 }

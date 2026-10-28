@@ -37,7 +37,8 @@ void adc_external_trigger_config(uint32_t reg, uint32_t group, uint32_t enable);
 void adc_enable(uint32_t reg);
 void adc_disable(uint32_t reg);
 void adc_resolution_config(uint32_t reg, uint32_t resolution);
-void adc_regular_channel_config(uint32_t reg, uint32_t rank, uint32_t channel, uint32_t sample_time);
+void adc_regular_channel_config(
+    uint32_t reg, uint32_t rank, uint32_t channel, uint32_t sample_time);
 void adc_flag_clear(uint32_t reg, uint32_t flag);
 void adc_software_trigger_enable(uint32_t reg, uint32_t group);
 int adc_flag_get(uint32_t reg, uint32_t flag);

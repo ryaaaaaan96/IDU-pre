@@ -3,6 +3,7 @@
 请在 tools/build_mcuboot.py 后运行，
 不访问设备或硬件传输。
 """
+
 from pathlib import Path
 import struct
 import subprocess
@@ -16,8 +17,11 @@ IMGTOOL = ROOT / "bootloader/mcuboot/scripts/imgtool.py"
 
 
 def verified(image, key):
-    result = subprocess.run([sys.executable, str(IMGTOOL), "verify", "-k", str(key),
-                             str(image)], capture_output=True, text=True)
+    result = subprocess.run(
+        [sys.executable, str(IMGTOOL), "verify", "-k", str(key), str(image)],
+        capture_output=True,
+        text=True,
+    )
     return result.returncode == 0
 
 
@@ -58,7 +62,7 @@ def check(folder):
             damaged[offset] ^= 0x40
             altered.write_bytes(damaged)
             assert not verified(altered, key), f"corrupt image accepted at offset {offset}"
-        altered.write_bytes(blob[:header_size + 16])
+        altered.write_bytes(blob[: header_size + 16])
         assert not verified(altered, key), "truncated image accepted"
     # 构建器生成的开发密钥不能是 MCUboot 的
     # 公开示例密钥；还须验证使用此错误密钥时签名校验失败。

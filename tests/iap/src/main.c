@@ -18,12 +18,15 @@ static const MB_TABLE_SEG_T upgrade_segments[] = {
     {.reg_addr = 20049, .end_addr = 20104, .func = iap_route},
     {.reg_addr = 31996, .end_addr = 31997, .func = iap_route},
 };
-static const DEV_TABLE_S upgrade_device = {.dev_id = 1, .ptl_tbl_cfg = {
-    [2] = {.proto_type = PRO_ADDR_SLAVE, .sig_num = ARRAY_SIZE(upgrade_segments),
-           .pst_table = upgrade_segments},
-}};
+static const DEV_TABLE_S upgrade_device = {.dev_id = 1,
+    .ptl_tbl_cfg = {
+        [2] = {.proto_type = PRO_ADDR_SLAVE,
+            .sig_num = ARRAY_SIZE(upgrade_segments),
+            .pst_table = upgrade_segments},
+    }};
 static const struct tr_register_service upgrade_service = {
-    .device = &upgrade_device, .route_broadcast = true,
+    .device = &upgrade_device,
+    .route_broadcast = true,
 };
 #endif
 
@@ -49,101 +52,168 @@ static int hook_context;
 static K_SEM_DEFINE(rebooted, 0, 1);
 static const struct flash_area *stage, *slot, *primary;
 static const char *phase;
-bool __wrap_boot_is_img_confirmed(void) { return confirmed; }
+
+bool __wrap_boot_is_img_confirmed(void)
+{
+    return confirmed;
+}
+
 int __real_boot_request_upgrade(int permanent);
+
 int __wrap_boot_request_upgrade(int permanent)
 {
-    zassert_equal(permanent, BOOT_UPGRADE_TEST); ++pending_calls;
-    if (stop_on_commit) { iap_stop(); k_sem_give(&stop_observed); }
+    zassert_equal(permanent, BOOT_UPGRADE_TEST);
+    ++pending_calls;
+    if (stop_on_commit) {
+        iap_stop();
+        k_sem_give(&stop_observed);
+    }
     return pending_error ? pending_error : __real_boot_request_upgrade(permanent);
 }
+
 FUNC_NORETURN void __wrap_sys_reboot(int type)
 {
-    ARG_UNUSED(type); k_sem_give(&rebooted);
-    for (;;) { k_sleep(K_FOREVER); }
+    ARG_UNUSED(type);
+    k_sem_give(&rebooted);
+    for (;;) {
+        k_sleep(K_FOREVER);
+    }
 }
+
 static int prepare_reboot(void *user)
 {
     zassert_equal(user, &hook_context);
-    if (!freeze_error) { frozen = true; }
-    if (stop_on_prepare) { iap_stop(); k_sem_give(&stop_observed); }
+    if (!freeze_error) {
+        frozen = true;
+    }
+    if (stop_on_prepare) {
+        iap_stop();
+        k_sem_give(&stop_observed);
+    }
     return freeze_error;
 }
+
 static void cancel_reboot(void *user)
 {
-    zassert_equal(user, &hook_context); frozen = false;
-    if (stop_on_prepare) { k_sem_give(&stop_cancelled); }
+    zassert_equal(user, &hook_context);
+    frozen = false;
+    if (stop_on_prepare) {
+        k_sem_give(&stop_cancelled);
+    }
 }
+
 static int inject_write(const struct device *dev, off_t off, uint8_t byte)
-{ ARG_UNUSED(dev); ARG_UNUSED(off); return fail_writes ? -EIO : byte; }
+{
+    ARG_UNUSED(dev);
+    ARG_UNUSED(off);
+    return fail_writes ? -EIO : byte;
+}
 static const struct flash_simulator_cb flash_cb = {.write_byte = inject_write};
 
 static int command(uint16_t reg, uint16_t value)
 {
     rx = (struct modbus_adu){.unit_id = 1, .fc = 6, .length = 4};
-    sys_put_be16(reg, rx.data); sys_put_be16(value, rx.data + 2);
+    sys_put_be16(reg, rx.data);
+    sys_put_be16(value, rx.data + 2);
     return dispatch(2, &rx, &tx);
 }
+
 static int read_regs(uint16_t reg, uint16_t count)
 {
     rx = (struct modbus_adu){.unit_id = 1, .fc = 3, .length = 4};
-    sys_put_be16(reg, rx.data); sys_put_be16(count, rx.data + 2);
+    sys_put_be16(reg, rx.data);
+    sys_put_be16(count, rx.data + 2);
     return dispatch(2, &rx, &tx);
 }
+
 static uint16_t word(uint16_t reg)
-{ zassert_ok(read_regs(reg, 1)); return sys_get_be16(tx.data + 1); }
+{
+    zassert_ok(read_regs(reg, 1));
+    return sys_get_be16(tx.data + 1);
+}
+
 static uint8_t state(void)
-{ zassert_ok(read_regs(20063, 8)); return tx.data[16]; }
+{
+    zassert_ok(read_regs(20063, 8));
+    return tx.data[16];
+}
+
 static uint8_t cause(void)
-{ zassert_ok(read_regs(20071, 8)); return tx.data[1]; }
+{
+    zassert_ok(read_regs(20071, 8));
+    return tx.data[1];
+}
+
 static void wait_state(int expected)
 {
     for (int i = 0; i < 2000; ++i) {
-        if (state() == expected) { k_sleep(K_MSEC(5)); return; }
+        if (state() == expected) {
+            k_sleep(K_MSEC(5));
+            return;
+        }
         k_sleep(K_MSEC(1));
     }
     zassert_equal(state(), expected, "cause=%u", cause());
 }
+
 static void login(void)
 {
     for (int i = 0; i < 100; ++i) {
-        if (!command(20083, 0xaa)) { k_sleep(K_MSEC(10)); return; }
+        if (!command(20083, 0xaa)) {
+            k_sleep(K_MSEC(10));
+            return;
+        }
         k_sleep(K_MSEC(1));
     }
     zassert_unreachable("login rejected");
 }
+
 static void configure(void)
 {
     zassert_ok(command(20088, 1024));
     zassert_ok(command(20089, DIV_ROUND_UP(sizeof(fixture_sgz), 1024)));
 }
+
 static int send_blob(unsigned number, bool broadcast, bool corrupt, const uint8_t *blob)
 {
     size_t every = word(20088);
     /* test_a 专门验证格式错误的零大小元数据。 */
-    if (!every) { every = 1024; }
+    if (!every) {
+        every = 1024;
+    }
     size_t offset = (number - 1u) * every;
     size_t length = MIN(every, sizeof(fixture_sgz) - offset);
     rx = (struct modbus_adu){.unit_id = broadcast ? 0 : 1, .fc = 16, .length = 13 + length};
-    sys_put_be16(20090, rx.data); sys_put_be16(4 + length / 2, rx.data + 2);
+    sys_put_be16(20090, rx.data);
+    sys_put_be16(4 + length / 2, rx.data + 2);
     rx.data[4] = (uint8_t)(8 + length);
-    sys_put_be16(number, rx.data + 5); sys_put_be16(offset, rx.data + 7);
+    sys_put_be16(number, rx.data + 5);
+    sys_put_be16(offset, rx.data + 7);
     sys_put_be16(offset >> 16, rx.data + 9);
     sys_put_be16(offset + length == sizeof(fixture_sgz) ? length : 0, rx.data + 11);
     memcpy(rx.data + 13, blob + offset, length);
-    if (corrupt) { rx.data[13 + length - 1] ^= 1; }
+    if (corrupt) {
+        rx.data[13 + length - 1] ^= 1;
+    }
     return dispatch(2, &rx, &tx);
 }
+
 static int packet_send(unsigned number, bool broadcast, bool corrupt)
-{ return send_blob(number, broadcast, corrupt, fixture_sgz); }
+{
+    return send_blob(number, broadcast, corrupt, fixture_sgz);
+}
+
 static void full_receive(void)
 {
-    login(); configure();
+    login();
+    configure();
     for (unsigned i = 1; i <= DIV_ROUND_UP(sizeof(fixture_sgz), 1024); ++i) {
         zassert_ok(packet_send(i, false, false));
-        k_sleep(K_MSEC(10)); zassert_equal(state(), 2);
+        k_sleep(K_MSEC(10));
+        zassert_equal(state(), 2);
     }
 }
+
 static void *setup(void)
 {
 #if defined(CONFIG_TR_REGISTER_SERVICE)
@@ -168,20 +238,23 @@ static void *setup(void)
         .staging_area_id = stage->fa_id,
         .journal_area_id = DT_FIXED_PARTITION_ID(DT_NODELABEL(iap_journal)),
         .aes_key = iap_aes_key,
-        .image = {0x6e000, 0x08010000, 0x20000000, 0x20020000,
-                  iap_public_key, iap_key_hash},
-        .prepare_reboot = prepare_reboot, .cancel_reboot = cancel_reboot,
+        .image = {0x6e000, 0x08010000, 0x20000000, 0x20020000, iap_public_key, iap_key_hash},
+        .prepare_reboot = prepare_reboot,
+        .cancel_reboot = cancel_reboot,
         .user = &hook_context,
     };
     zassert_equal(iap_init_config(NULL), -EINVAL);
     struct iap_config bad = config;
     bad.cancel_reboot = NULL;
     zassert_equal(iap_init_config(&bad), -EINVAL);
-    bad = config; bad.journal_area_id = bad.staging_area_id;
+    bad = config;
+    bad.journal_area_id = bad.staging_area_id;
     zassert_equal(iap_init_config(&bad), -EINVAL);
-    bad = config; bad.staging_area_id = 255;
+    bad = config;
+    bad.staging_area_id = 255;
     zassert_true(iap_init_config(&bad) < 0);
-    bad = config; bad.image.max_size = slot->fa_size + 1;
+    bad = config;
+    bad.image.max_size = slot->fa_size + 1;
     zassert_equal(iap_init_config(&bad), -EINVAL);
     zassert_false(iap_ready());
 #ifdef CONFIG_IAP_CONFIGURED
@@ -198,7 +271,9 @@ static void *setup(void)
 
 ZTEST(iap, test_a_metadata_and_validation)
 {
-    if (phase) { ztest_test_skip(); }
+    if (phase) {
+        ztest_test_skip();
+    }
     zassert_equal(iap_route(-1, &rx, &tx), -EINVAL);
     zassert_equal(iap_route(0, NULL, &tx), -EINVAL);
     zassert_equal(iap_route(0, &rx, NULL), -EINVAL);
@@ -213,86 +288,142 @@ ZTEST(iap, test_a_metadata_and_validation)
     zassert_equal(command(20003, 1), IAP_ROUTE_SILENT);
     zassert_equal(read_regs(31000, 1), -ENOENT);
     zassert_ok(read_regs(20049, 2));
-    zassert_equal(sys_get_be16(tx.data + 1), 0); zassert_equal(sys_get_be16(tx.data + 3), 0x0300);
-    confirmed = false; zassert_equal(command(20083, 0xaa), IAP_ROUTE_SILENT); confirmed = true;
-    login(); configure();
+    zassert_equal(sys_get_be16(tx.data + 1), 0);
+    zassert_equal(sys_get_be16(tx.data + 3), 0x0300);
+    confirmed = false;
+    zassert_equal(command(20083, 0xaa), IAP_ROUTE_SILENT);
+    confirmed = true;
+    login();
+    configure();
     zassert_equal(command(20088, 0), 0); /* 允许元数据不完整，但不接收任何分包。 */
     zassert_equal(packet_send(1, false, false), IAP_ROUTE_SILENT);
     configure();
-    zassert_equal(command(20088, 1025), IAP_ROUTE_SILENT); zassert_equal(word(20088), 1024);
+    zassert_equal(command(20088, 1025), IAP_ROUTE_SILENT);
+    zassert_equal(word(20088), 1024);
     zassert_equal(command(20089, 0xffff), IAP_ROUTE_SILENT);
     zassert_equal(command(20090, 99), IAP_ROUTE_SILENT);
     zassert_equal(command(20091, 1), IAP_ROUTE_SILENT); /* 不完整的 u32。 */
     zassert_equal(command(20083, 0xa1), IAP_ROUTE_SILENT);
-    zassert_ok(read_regs(20099, 4)); zassert_equal(sys_get_be16(tx.data + 1), 1);
+    zassert_ok(read_regs(20099, 4));
+    zassert_equal(sys_get_be16(tx.data + 1), 1);
     zassert_equal(sys_get_be16(tx.data + 7), 1024);
-    rx.unit_id = 247; zassert_equal(dispatch(2, &rx, &tx), IAP_ROUTE_SILENT);
-    rx.unit_id = 1; zassert_equal(dispatch(3, &rx, &tx), IAP_ROUTE_SILENT);
-    rx.unit_id = 0; rx.fc = 4; zassert_ok(dispatch(2, &rx, &tx));
+    rx.unit_id = 247;
+    zassert_equal(dispatch(2, &rx, &tx), IAP_ROUTE_SILENT);
+    rx.unit_id = 1;
+    zassert_equal(dispatch(3, &rx, &tx), IAP_ROUTE_SILENT);
+    rx.unit_id = 0;
+    rx.fc = 4;
+    zassert_ok(dispatch(2, &rx, &tx));
     /* 合并登录、保留空洞和分包参数，使用非标准字节计数。 */
     rx = (struct modbus_adu){.unit_id = 1, .fc = 16, .length = 19};
-    sys_put_be16(20083, rx.data); sys_put_be16(7, rx.data + 2); rx.data[4] = 0;
-    sys_put_be16(0xaa, rx.data + 5); sys_put_be16(1024, rx.data + 15);
+    sys_put_be16(20083, rx.data);
+    sys_put_be16(7, rx.data + 2);
+    rx.data[4] = 0;
+    sys_put_be16(0xaa, rx.data + 5);
+    sys_put_be16(1024, rx.data + 15);
     sys_put_be16(DIV_ROUND_UP(sizeof(fixture_sgz), 1024), rx.data + 17);
-    zassert_ok(dispatch(2, &rx, &tx)); k_sleep(K_MSEC(10));
-    zassert_equal(word(20088), 1024); zassert_equal(state(), 1);
-    zassert_ok(read_regs(20063, 8)); zassert_equal(tx.data[1], 0);
+    zassert_ok(dispatch(2, &rx, &tx));
+    k_sleep(K_MSEC(10));
+    zassert_equal(word(20088), 1024);
+    zassert_equal(state(), 1);
+    zassert_ok(read_regs(20063, 8));
+    zassert_equal(tx.data[1], 0);
 }
 
 ZTEST(iap, test_b_out_of_order_duplicates_and_broadcast)
 {
-    if (phase) { ztest_test_skip(); }
-    login(); configure();
+    if (phase) {
+        ztest_test_skip();
+    }
+    login();
+    configure();
     unsigned last = DIV_ROUND_UP(sizeof(fixture_sgz), 1024);
-    zassert_equal(packet_send(last, true, false), IAP_ROUTE_SILENT); k_sleep(K_MSEC(10));
-    zassert_equal(word(20103), last - 1); zassert_equal(word(20099), 1);
-    zassert_ok(packet_send(last, false, false)); k_sleep(K_MSEC(10));
+    zassert_equal(packet_send(last, true, false), IAP_ROUTE_SILENT);
+    k_sleep(K_MSEC(10));
     zassert_equal(word(20103), last - 1);
-    zassert_ok(packet_send(1, false, false)); k_sleep(K_MSEC(10));
+    zassert_equal(word(20099), 1);
+    zassert_ok(packet_send(last, false, false));
+    k_sleep(K_MSEC(10));
+    zassert_equal(word(20103), last - 1);
+    zassert_ok(packet_send(1, false, false));
+    k_sleep(K_MSEC(10));
     zassert_equal(word(20099), 2);
     zassert_equal(command(20088, 512), IAP_ROUTE_SILENT);
-    zassert_ok(packet_send(1, false, true)); wait_state(6); zassert_equal(cause(), 3);
+    zassert_ok(packet_send(1, false, true));
+    wait_state(6);
+    zassert_equal(cause(), 3);
 }
 
 ZTEST(iap, test_b_combined_login_and_packet)
 {
-    if (phase) { ztest_test_skip(); }
+    if (phase) {
+        ztest_test_skip();
+    }
     rx = (struct modbus_adu){.unit_id = 1, .fc = 16, .length = 1051};
-    sys_put_be16(20083, rx.data); sys_put_be16(523, rx.data + 2); rx.data[4] = 22;
-    sys_put_be16(0xaa, rx.data + 5); sys_put_be16(1024, rx.data + 15);
+    sys_put_be16(20083, rx.data);
+    sys_put_be16(523, rx.data + 2);
+    rx.data[4] = 22;
+    sys_put_be16(0xaa, rx.data + 5);
+    sys_put_be16(1024, rx.data + 15);
     sys_put_be16(DIV_ROUND_UP(sizeof(fixture_sgz), 1024), rx.data + 17);
-    sys_put_be16(1, rx.data + 19); sys_put_be16(1024, rx.data + 25);
+    sys_put_be16(1, rx.data + 19);
+    sys_put_be16(1024, rx.data + 25);
     memcpy(rx.data + 27, fixture_sgz, 1024);
-    zassert_ok(dispatch(2, &rx, &tx)); k_sleep(K_MSEC(10));
-    zassert_equal(state(), 2); zassert_equal(word(20099), 2);
-    zassert_ok(command(20083, 0x55)); k_sleep(K_MSEC(10)); zassert_equal(state(), 0);
+    zassert_ok(dispatch(2, &rx, &tx));
+    k_sleep(K_MSEC(10));
+    zassert_equal(state(), 2);
+    zassert_equal(word(20099), 2);
+    zassert_ok(command(20083, 0x55));
+    k_sleep(K_MSEC(10));
+    zassert_equal(state(), 0);
 }
 
 ZTEST(iap, test_c_flash_failure_and_timeout)
 {
-    if (phase) { ztest_test_skip(); }
-    login(); configure(); fail_writes = 1;
-    zassert_ok(packet_send(1, false, false)); wait_state(6); fail_writes = 0;
-    zassert_equal(cause(), 4); zassert_equal(word(20103), DIV_ROUND_UP(sizeof(fixture_sgz), 1024));
-    login(); k_sleep(K_MSEC(481000)); wait_state(6); zassert_equal(cause(), 6);
+    if (phase) {
+        ztest_test_skip();
+    }
+    login();
+    configure();
+    fail_writes = 1;
+    zassert_ok(packet_send(1, false, false));
+    wait_state(6);
+    fail_writes = 0;
+    zassert_equal(cause(), 4);
+    zassert_equal(word(20103), DIV_ROUND_UP(sizeof(fixture_sgz), 1024));
+    login();
+    k_sleep(K_MSEC(481000));
+    wait_state(6);
+    zassert_equal(cause(), 6);
 }
 
 ZTEST(iap, test_c_sector_crossing_and_atomic_frame_rejection)
 {
-    if (phase) { ztest_test_skip(); }
-    login(); zassert_ok(command(20088, 240));
+    if (phase) {
+        ztest_test_skip();
+    }
+    login();
+    zassert_ok(command(20088, 240));
     zassert_ok(command(20089, DIV_ROUND_UP(sizeof(fixture_sgz), 240)));
-    zassert_ok(packet_send(18, false, false)); k_sleep(K_MSEC(10));
-    zassert_ok(packet_send(17, false, false)); k_sleep(K_MSEC(10));
-    zassert_ok(packet_send(18, false, false)); k_sleep(K_MSEC(10));
+    zassert_ok(packet_send(18, false, false));
+    k_sleep(K_MSEC(10));
+    zassert_ok(packet_send(17, false, false));
+    k_sleep(K_MSEC(10));
+    zassert_ok(packet_send(18, false, false));
+    k_sleep(K_MSEC(10));
     zassert_equal(state(), 2); /* 第 17 包不得擦除第 18 包所在扇区。 */
     zassert_equal(word(20103), DIV_ROUND_UP(sizeof(fixture_sgz), 240) - 2);
     rx = (struct modbus_adu){.unit_id = 1, .fc = 16, .length = 13};
-    sys_put_be16(20090, rx.data); sys_put_be16(4, rx.data + 2); rx.data[4] = 8;
-    sys_put_be16(1, rx.data + 5); sys_put_be16(240, rx.data + 11);
+    sys_put_be16(20090, rx.data);
+    sys_put_be16(4, rx.data + 2);
+    rx.data[4] = 8;
+    sys_put_be16(1, rx.data + 5);
+    sys_put_be16(240, rx.data + 11);
     /* 元数据可像旧协议一样分开写入。 */
     zassert_equal(dispatch(2, &rx, &tx), 0); /* 只写元数据也有效。 */
-    rx.length = 15; sys_put_be16(5, rx.data + 2); rx.data[4] = 10;
+    rx.length = 15;
+    sys_put_be16(5, rx.data + 2);
+    rx.data[4] = 10;
     sys_put_be16(2, rx.data + 5); /* 声明 240 字节，实际只有 2 字节。 */
     zassert_equal(dispatch(2, &rx, &tx), IAP_ROUTE_SILENT);
     zassert_equal(word(20090), 1);
@@ -300,50 +431,88 @@ ZTEST(iap, test_c_sector_crossing_and_atomic_frame_rejection)
 
 ZTEST(iap, test_d_save_and_boot_request_failures)
 {
-    if (phase) { ztest_test_skip(); }
+    if (phase) {
+        ztest_test_skip();
+    }
 #ifndef CONFIG_IAP_CONFIGURED
-    freeze_error = -EBUSY; full_receive();
-    zassert_equal(word(20103), 0); wait_state(6); zassert_equal(pending_calls, 0); zassert_false(frozen);
+    freeze_error = -EBUSY;
+    full_receive();
+    zassert_equal(word(20103), 0);
+    wait_state(6);
+    zassert_equal(pending_calls, 0);
+    zassert_false(frozen);
 #endif
 #ifndef CONFIG_IAP_CONFIGURED
-    freeze_error = -EROFS; full_receive();
-    zassert_equal(word(20103), 0); wait_state(6); zassert_equal(pending_calls, 0);
-    zassert_false(frozen); zassert_equal(k_sem_take(&rebooted, K_NO_WAIT), -EBUSY);
+    freeze_error = -EROFS;
+    full_receive();
+    zassert_equal(word(20103), 0);
+    wait_state(6);
+    zassert_equal(pending_calls, 0);
+    zassert_false(frozen);
+    zassert_equal(k_sem_take(&rebooted, K_NO_WAIT), -EBUSY);
 #endif
-    freeze_error = 0; pending_error = -EIO; full_receive();
-    zassert_equal(word(20103), 0); wait_state(6); zassert_equal(pending_calls, 1); zassert_false(frozen);
+    freeze_error = 0;
+    pending_error = -EIO;
+    full_receive();
+    zassert_equal(word(20103), 0);
+    wait_state(6);
+    zassert_equal(pending_calls, 1);
+    zassert_false(frozen);
     pending_error = 0;
 }
 
 ZTEST(iap, test_reboot_journal)
 {
-    if (!phase) { ztest_test_skip(); }
-    if (!strcmp(phase, "receive")) { login(); configure(); zassert_ok(packet_send(1, false, false)); k_sleep(K_MSEC(10)); }
-    else if (!strcmp(phase, "recover") || !strcmp(phase, "rollback")) { wait_state(6); }
-    else if (!strcmp(phase, "confirmed") || !strcmp(phase, "confirmed_again")) { wait_state(5); }
-    else if (!strcmp(phase, "pending")) {
-        full_receive(); zassert_equal(word(20103), 0); zassert_ok(k_sem_take(&rebooted, K_SECONDS(3)));
-    } else { zassert_unreachable("unknown phase"); }
+    if (!phase) {
+        ztest_test_skip();
+    }
+    if (!strcmp(phase, "receive")) {
+        login();
+        configure();
+        zassert_ok(packet_send(1, false, false));
+        k_sleep(K_MSEC(10));
+    } else if (!strcmp(phase, "recover") || !strcmp(phase, "rollback")) {
+        wait_state(6);
+    } else if (!strcmp(phase, "confirmed") || !strcmp(phase, "confirmed_again")) {
+        wait_state(5);
+    } else if (!strcmp(phase, "pending")) {
+        full_receive();
+        zassert_equal(word(20103), 0);
+        zassert_ok(k_sem_take(&rebooted, K_SECONDS(3)));
+    } else {
+        zassert_unreachable("unknown phase");
+    }
 }
 
 ZTEST(iap, test_e_valid_sgz_with_invalid_signature)
 {
-    if (phase) { ztest_test_skip(); }
-    login(); configure();
-    for (unsigned i = 1; i <= DIV_ROUND_UP(sizeof(fixture_sgz), 1024); ++i) {
-        zassert_ok(send_blob(i, false, false, fixture_bad_signature_sgz)); k_sleep(K_MSEC(10));
+    if (phase) {
+        ztest_test_skip();
     }
-    zassert_equal(word(20103), 0); wait_state(6); zassert_equal(cause(), 10);
-    zassert_equal(pending_calls, 1); zassert_false(frozen);
+    login();
+    configure();
+    for (unsigned i = 1; i <= DIV_ROUND_UP(sizeof(fixture_sgz), 1024); ++i) {
+        zassert_ok(send_blob(i, false, false, fixture_bad_signature_sgz));
+        k_sleep(K_MSEC(10));
+    }
+    zassert_equal(word(20103), 0);
+    wait_state(6);
+    zassert_equal(cause(), 10);
+    zassert_equal(pending_calls, 1);
+    zassert_false(frozen);
 }
 
 ZTEST(iap, test_z_signed_image_staged_and_test_boot)
 {
-    if (phase) { ztest_test_skip(); }
-    full_receive(); zassert_equal(pending_calls, 1);
+    if (phase) {
+        ztest_test_skip();
+    }
+    full_receive();
+    zassert_equal(pending_calls, 1);
     zassert_equal(word(20103), 0);
     zassert_ok(k_sem_take(&rebooted, K_SECONDS(3)));
-    zassert_equal(state(), 7); zassert_equal(pending_calls, 2);
+    zassert_equal(state(), 7);
+    zassert_equal(pending_calls, 2);
     zassert_equal(frozen, !IS_ENABLED(CONFIG_IAP_CONFIGURED));
     zassert_equal(mcuboot_swap_type(), BOOT_SWAP_TYPE_TEST);
     uint8_t data[128];
@@ -354,13 +523,18 @@ ZTEST(iap, test_z_signed_image_staged_and_test_boot)
     }
     /* 运行镜像和旧配置空洞均未被写入。 */
     zassert_ok(flash_area_read(primary, 0, data, sizeof(data)));
-    for (size_t i = 0; i < sizeof(data); ++i) { zassert_equal(data[i], 0xff); }
+    for (size_t i = 0; i < sizeof(data); ++i) {
+        zassert_equal(data[i], 0xff);
+    }
     zassert_equal(command(20083, 0xaa), IAP_ROUTE_SILENT);
 }
+
 ZTEST(iap, test_terminal_stop_at_upgrade_commit)
 {
     const char *mode = getenv("IDU_IAP_STOP");
-    if (!mode || IS_ENABLED(CONFIG_IAP_CONFIGURED)) { ztest_test_skip(); }
+    if (!mode || IS_ENABLED(CONFIG_IAP_CONFIGURED)) {
+        ztest_test_skip();
+    }
     stop_on_prepare = !strcmp(mode, "before");
     stop_on_commit = !strcmp(mode, "during");
     zassert_true(stop_on_prepare || stop_on_commit);
@@ -382,4 +556,5 @@ ZTEST(iap, test_terminal_stop_at_upgrade_commit)
     zassert_equal(read_regs(20103, 1), IAP_ROUTE_SILENT);
     iap_stop();
 }
+
 ZTEST_SUITE(iap, NULL, setup, NULL, NULL, NULL);

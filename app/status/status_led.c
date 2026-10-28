@@ -63,13 +63,17 @@ static void update(struct k_work *work)
     int err = 0;
     if (step->on != output_on) {
         err = gpio_pin_set_dt(&run_led, step->on);
-        if (!err) { output_on = step->on; }
+        if (!err) {
+            output_on = step->on;
+        }
     }
     if (err) {
         /* 故障图案本身失败时不递归上报，保留原故障。 */
         if (state != STATUS_LED_FAULT) {
-            (void)watchdog_report_fault(err, "Indicator output failed",
-                state == STATUS_LED_STARTING ? WATCHDOG_ACTION_HOLD : WATCHDOG_ACTION_RESET, 200);
+            (void)watchdog_report_fault(err,
+                "Indicator output failed",
+                state == STATUS_LED_STARTING ? WATCHDOG_ACTION_HOLD : WATCHDOG_ACTION_RESET,
+                200);
         }
     } else if (step->duration_ms) {
         step_index = (step_index + 1) % pattern->count;
@@ -86,13 +90,21 @@ static void update(struct k_work *work)
 
 int status_led_init(status_led_state_t state)
 {
-    if ((unsigned int)state >= ARRAY_SIZE(patterns)) { return -EINVAL; }
-    if (atomic_get(&ready)) { return -EALREADY; }
-    if (!gpio_is_ready_dt(&run_led)) { return -ENODEV; }
+    if ((unsigned int)state >= ARRAY_SIZE(patterns)) {
+        return -EINVAL;
+    }
+    if (atomic_get(&ready)) {
+        return -EALREADY;
+    }
+    if (!gpio_is_ready_dt(&run_led)) {
+        return -ENODEV;
+    }
     const status_led_step_t *first = &patterns[state].steps[0];
-    int err = gpio_pin_configure_dt(&run_led,
-        first->on ? GPIO_OUTPUT_ACTIVE : GPIO_OUTPUT_INACTIVE);
-    if (err) { return err; }
+    int err =
+        gpio_pin_configure_dt(&run_led, first->on ? GPIO_OUTPUT_ACTIVE : GPIO_OUTPUT_INACTIVE);
+    if (err) {
+        return err;
+    }
     active_state = state;
     step_index = first->duration_ms ? 1 % patterns[state].count : 0;
     output_on = first->on;
@@ -106,7 +118,9 @@ int status_led_init(status_led_state_t state)
 
 void status_led_set(status_led_state_t state)
 {
-    if ((unsigned int)state >= ARRAY_SIZE(patterns) || !atomic_get(&ready)) { return; }
+    if ((unsigned int)state >= ARRAY_SIZE(patterns) || !atomic_get(&ready)) {
+        return;
+    }
     if (atomic_set(&requested_state, state) != state) {
         k_work_reschedule(&status_led, K_NO_WAIT);
     }

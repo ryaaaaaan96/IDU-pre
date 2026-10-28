@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """生成 MCUboot 公钥验签材料和旧版传输密钥。"""
+
 import hashlib
 from pathlib import Path
 import sys
@@ -16,8 +17,12 @@ def public_material(path):
         key = serialization.load_pem_private_key(data, password=None).public_key()
     if not isinstance(key, ec.EllipticCurvePublicKey) or not isinstance(key.curve, ec.SECP256R1):
         raise ValueError("IAP requires the same ECDSA P-256 key as MCUboot")
-    raw = key.public_bytes(serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint)[1:]
-    der = key.public_bytes(serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)
+    raw = key.public_bytes(
+        serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint
+    )[1:]
+    der = key.public_bytes(
+        serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo
+    )
     return raw, hashlib.sha256(der).digest()
 
 
@@ -28,8 +33,11 @@ def main():
     aes = bytes.fromhex(sys.argv[3])
     lines = ["/* Generated verification/transport material; no signing private key. */"]
     for name, data in (("iap_public_key", raw), ("iap_key_hash", digest), ("iap_aes_key", aes)):
-        lines.append(f"static const uint8_t {name}[{len(data)}] = {{" +
-                     ",".join(f"0x{x:02x}" for x in data) + "};")
+        lines.append(
+            f"static const uint8_t {name}[{len(data)}] = {{"
+            + ",".join(f"0x{x:02x}" for x in data)
+            + "};"
+        )
     Path(sys.argv[2]).write_text("\n".join(lines) + "\n")
 
 

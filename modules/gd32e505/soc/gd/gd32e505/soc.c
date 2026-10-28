@@ -20,11 +20,11 @@ BUILD_ASSERT(DT_NUM_INST_STATUS_OKAY(gd_gd32e505_pll) == 1);
 BUILD_ASSERT(HXTAL_HZ == HXTAL_VALUE, "HAL oscillator must match the PLL source");
 BUILD_ASSERT(HXTAL_HZ >= 4000000 && HXTAL_HZ <= 32000000);
 BUILD_ASSERT(HXTAL_HZ % PLL_PREDIV == 0);
-BUILD_ASSERT(HXTAL_HZ / PLL_PREDIV >= 2000000 &&
-             HXTAL_HZ / PLL_PREDIV <= 16000000, "PLL input must be 2..16 MHz");
+BUILD_ASSERT(HXTAL_HZ / PLL_PREDIV >= 2000000 && HXTAL_HZ / PLL_PREDIV <= 16000000,
+    "PLL input must be 2..16 MHz");
 BUILD_ASSERT(PLL_MUL >= 2 && PLL_MUL <= 63);
-BUILD_ASSERT(HXTAL_HZ / PLL_PREDIV * PLL_MUL == CPU_HZ,
-             "CPU frequency must match HXTAL / prediv * mul");
+BUILD_ASSERT(
+    HXTAL_HZ / PLL_PREDIV * PLL_MUL == CPU_HZ, "CPU frequency must match HXTAL / prediv * mul");
 BUILD_ASSERT(CPU_HZ >= 16000000 && CPU_HZ <= 180000000);
 BUILD_ASSERT(CPU_HZ / APB1_DIV <= 90000000, "APB1 exceeds 90 MHz");
 BUILD_ASSERT(CPU_HZ / APB2_DIV <= 180000000, "APB2 exceeds 180 MHz");
@@ -64,8 +64,7 @@ void soc_early_init_hook(void)
     wait_ready(&RCU_CTL, RCU_CTL_HXTALSTB, RCU_CTL_HXTALSTB);
 
     rcu_pllpresel_config(RCU_PLLPRESRC_HXTAL);
-    rcu_predv0_config(RCU_PREDV0SRC_HXTAL_IRC48M,
-                     UTIL_CAT(RCU_PREDV0_DIV, PLL_PREDIV));
+    rcu_predv0_config(RCU_PREDV0SRC_HXTAL_IRC48M, UTIL_CAT(RCU_PREDV0_DIV, PLL_PREDIV));
     rcu_pll_config(RCU_PLLSRC_HXTAL_IRC48M, UTIL_CAT(RCU_PLL_MUL, PLL_MUL));
     rcu_osci_on(RCU_PLL_CK);
     wait_ready(&RCU_CTL, RCU_CTL_PLLSTB, RCU_CTL_PLLSTB);

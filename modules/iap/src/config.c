@@ -10,6 +10,7 @@
 #ifdef CONFIG_IAP_REBOOT_DP_PARAMS
 #include <dataprocess/params.h>
 #include <errno.h>
+
 static int prepare_reboot(void *user)
 {
     ARG_UNUSED(user);
@@ -25,14 +26,15 @@ int iap_init(void)
         .staging_area_id = DT_FIXED_PARTITION_ID(STAGING),
         .journal_area_id = DT_FIXED_PARTITION_ID(JOURNAL),
         .aes_key = iap_aes_key,
-        .image = {
-            .max_size = CONFIG_IAP_IMAGE_MAX_SIZE,
-            .load_address = DT_FIXED_PARTITION_ADDR(PRIMARY),
-            .sram_start = DT_REG_ADDR(RAM),
-            .sram_end = DT_REG_ADDR(RAM) + DT_REG_SIZE(RAM),
-            .public_key = iap_public_key,
-            .key_hash = iap_key_hash,
-        },
+        .image =
+            {
+                .max_size = CONFIG_IAP_IMAGE_MAX_SIZE,
+                .load_address = DT_FIXED_PARTITION_ADDR(PRIMARY),
+                .sram_start = DT_REG_ADDR(RAM),
+                .sram_end = DT_REG_ADDR(RAM) + DT_REG_SIZE(RAM),
+                .public_key = iap_public_key,
+                .key_hash = iap_key_hash,
+            },
 #ifdef CONFIG_IAP_REBOOT_DP_PARAMS
         .prepare_reboot = prepare_reboot,
 #endif

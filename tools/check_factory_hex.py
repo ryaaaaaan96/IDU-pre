@@ -1,6 +1,7 @@
 """全片烧录前检查工厂 HEX 结构和 IDU Flash 布局。
 此处只检查布局，密码学认证由构建和导出流程的验签完成。
 """
+
 import argparse
 from pathlib import Path
 import struct
@@ -50,21 +51,30 @@ def check(path):
     if magic != 0x96F3B83D or header != 0x200 or flags or not 0 < image_size <= 0x6DE00:
         raise ValueError("invalid MCUboot application header/layout")
     read(0x08010000 + header, image_size)
-    for address, start, end in ((0x08000000, 0x08000000, 0x08010000),
-                                (0x08010200, 0x08010200, 0x08010200 + image_size)):
+    for address, start, end in (
+        (0x08000000, 0x08000000, 0x08010000),
+        (0x08010200, 0x08010200, 0x08010200 + image_size),
+    ):
         stack, reset = struct.unpack("<II", read(address, 8))
         entry = reset & ~1
-        if (not 0x20000000 < stack <= 0x20020000 or stack % 8 or
-                not reset & 1 or not start <= entry < end):
+        if (
+            not 0x20000000 < stack <= 0x20020000
+            or stack % 8
+            or not reset & 1
+            or not start <= entry < end
+        ):
             raise ValueError(f"invalid boot/application vectors at {address:#x}")
 
 
 def main():
-    parser = argparse.ArgumentParser(description=(
-        'Check factory HEX structure and IDU flash layout before full-chip programming.\n'
-        '\n'
-        'This checks layout, not cryptographic authenticity; build/export verifies signatures.\n'
-    ))
+    parser = argparse.ArgumentParser(
+        description=(
+            "Check factory HEX structure and IDU flash layout before full-chip programming.\n"
+            "\n"
+            "This checks layout, not cryptographic authenticity; "
+            "build/export verifies signatures.\n"
+        )
+    )
     parser.add_argument("hex", type=Path)
     args = parser.parse_args()
     try:

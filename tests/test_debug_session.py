@@ -2,6 +2,7 @@
 需要已构建的应用 ELF 及其 SDK GDB，
 也可指定 IDU_GDB；不使用探针。
 """
+
 import os
 from pathlib import Path
 import re
@@ -44,31 +45,41 @@ class RemoteTarget:
             parts = packet.split(b":")
             offset, size = (int(n, 16) for n in parts[-1].split(b","))
             if parts[1] == b"features":
-                regs = "".join(f'<reg name="{name}" bitsize="32" regnum="{i}"/>'
-                               for i, name in enumerate(
-                                   [*(f"r{i}" for i in range(13)), "sp", "lr", "pc"]))
-                data = ('<?xml version="1.0"?><!DOCTYPE target SYSTEM "gdb-target.dtd">'
-                        '<target><architecture>arm</architecture>'
-                        '<feature name="org.gnu.gdb.arm.m-profile">' + regs +
-                        '<reg name="xpsr" bitsize="32" regnum="25"/></feature></target>').encode()
+                regs = "".join(
+                    f'<reg name="{name}" bitsize="32" regnum="{i}"/>'
+                    for i, name in enumerate([*(f"r{i}" for i in range(13)), "sp", "lr", "pc"])
+                )
+                data = (
+                    '<?xml version="1.0"?><!DOCTYPE target SYSTEM "gdb-target.dtd">'
+                    "<target><architecture>arm</architecture>"
+                    '<feature name="org.gnu.gdb.arm.m-profile">'
+                    + regs
+                    + '<reg name="xpsr" bitsize="32" regnum="25"/></feature></target>'
+                ).encode()
             else:
-                data = (b'<memory-map><memory type="flash" start="0x08000000" '
-                        b'length="0x80000"><property name="blocksize">0x2000</property>'
-                        b'</memory><memory type="ram" start="0xe0000000" '
-                        b'length="0x100000"/></memory-map>')
-            return (b"l" if offset + size >= len(data) else b"m") + data[offset:offset + size]
+                data = (
+                    b'<memory-map><memory type="flash" start="0x08000000" '
+                    b'length="0x80000"><property name="blocksize">0x2000</property>'
+                    b'</memory><memory type="ram" start="0xe0000000" '
+                    b'length="0x100000"/></memory-map>'
+                )
+            return (b"l" if offset + size >= len(data) else b"m") + data[offset : offset + size]
         if packet == b"?":
             return b"S05"
         if packet == b"g":
             return struct.pack("<17I", *self.registers()).hex().encode()
         if packet.startswith(b"p"):
             index = int(packet[1:], 16)
-            value = self.registers()[16 if index == 25 else index] if index <= 16 or index == 25 else 0
+            value = (
+                self.registers()[16 if index == 25 else index] if index <= 16 or index == 25 else 0
+            )
             return struct.pack("<I", value).hex().encode()
         if packet.startswith(b"m"):
             address, size = (int(n, 16) for n in packet[1:].split(b","))
             if address == 0xE000ED00:
-                return b"E01" if self.cpuid is None else struct.pack("<I", self.cpuid).hex().encode()
+                return (
+                    b"E01" if self.cpuid is None else struct.pack("<I", self.cpuid).hex().encode()
+                )
             return b"00" * size
         if packet.startswith(b"qRcmd,"):
             command = bytes.fromhex(packet.split(b",")[1].decode()).decode()
@@ -136,8 +147,14 @@ class DebugSessionTests(unittest.TestCase):
     def setUpClass(cls):
         cls.elf = BUILD / "zephyr/IDU-pre.elf"
         cache = BUILD / "CMakeCache.txt"
-        match = re.search(r"^CMAKE_GDB:[^=]*=(.+)$", cache.read_text(), re.M) if cache.exists() else None
-        cls.gdb = os.environ.get("IDU_GDB") or (match.group(1) if match else shutil.which("arm-zephyr-eabi-gdb"))
+        match = (
+            re.search(r"^CMAKE_GDB:[^=]*=(.+)$", cache.read_text(), re.M)
+            if cache.exists()
+            else None
+        )
+        cls.gdb = os.environ.get("IDU_GDB") or (
+            match.group(1) if match else shutil.which("arm-zephyr-eabi-gdb")
+        )
         if not cls.elf.is_file() or not cls.gdb or not Path(cls.gdb).is_file():
             raise unittest.SkipTest("Build the Arm application first; SDK GDB and ELF are required")
 
@@ -148,8 +165,17 @@ class DebugSessionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=directory) as temporary:
             image = Path(temporary) / "fixture.hex"
             image.write_text(":020000040801F1\n:0400000001020304F2\n:00000001FF\n")
-            command = [str(APP / "scripts/debug.sh"), "--host", "127.0.0.1",
-                       "--port", str(target.port), "--elf", str(self.elf), "--gdb", self.gdb]
+            command = [
+                str(APP / "scripts/debug.sh"),
+                "--host",
+                "127.0.0.1",
+                "--port",
+                str(target.port),
+                "--elf",
+                str(self.elf),
+                "--gdb",
+                self.gdb,
+            ]
             command += ["--attach"] if attach else ["--hex", str(image)]
             command += ["--", "-batch"]
             if inspect:

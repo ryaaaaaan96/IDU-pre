@@ -33,10 +33,14 @@ struct gd32_adc_data {
 /* 整数时钟周期遵循 GD32 驱动向上取整的约定。 */
 static const uint16_t acquisition_ticks[] = {2, 8, 14, 29, 42, 56, 72, 240};
 static const uint8_t sample_times[] = {
-    ADC_SAMPLETIME_1POINT5, ADC_SAMPLETIME_7POINT5,
-    ADC_SAMPLETIME_13POINT5, ADC_SAMPLETIME_28POINT5,
-    ADC_SAMPLETIME_41POINT5, ADC_SAMPLETIME_55POINT5,
-    ADC_SAMPLETIME_71POINT5, ADC_SAMPLETIME_239POINT5,
+    ADC_SAMPLETIME_1POINT5,
+    ADC_SAMPLETIME_7POINT5,
+    ADC_SAMPLETIME_13POINT5,
+    ADC_SAMPLETIME_28POINT5,
+    ADC_SAMPLETIME_41POINT5,
+    ADC_SAMPLETIME_55POINT5,
+    ADC_SAMPLETIME_71POINT5,
+    ADC_SAMPLETIME_239POINT5,
 };
 
 static int gd32_adc_wait_clear(uint32_t reg, uint32_t mask)
@@ -80,16 +84,15 @@ static int gd32_adc_prepare(const struct device *dev)
     adc_special_function_config(cfg->reg, ADC_SCAN_MODE, DISABLE);
     adc_data_alignment_config(cfg->reg, ADC_DATAALIGN_RIGHT);
     adc_channel_length_config(cfg->reg, ADC_REGULAR_CHANNEL, 1);
-    adc_external_trigger_source_config(cfg->reg, ADC_REGULAR_CHANNEL,
-                                       ADC0_1_2_EXTTRIG_REGULAR_NONE);
+    adc_external_trigger_source_config(
+        cfg->reg, ADC_REGULAR_CHANNEL, ADC0_1_2_EXTTRIG_REGULAR_NONE);
     adc_external_trigger_config(cfg->reg, ADC_REGULAR_CHANNEL, ENABLE);
     adc_enable(cfg->reg);
     k_busy_wait(10);
     return gd32_adc_calibrate(dev);
 }
 
-static int gd32_adc_channel_setup(const struct device *dev,
-                                 const struct adc_channel_cfg *channel)
+static int gd32_adc_channel_setup(const struct device *dev, const struct adc_channel_cfg *channel)
 {
     struct gd32_adc_data *data = dev->data;
     unsigned int index = 0;
@@ -147,11 +150,20 @@ static int gd32_adc_read(const struct device *dev, const struct adc_sequence *se
         return -ENOMEM;
     }
     switch (seq->resolution) {
-    case 12: resolution = ADC_RESOLUTION_12B; break;
-    case 10: resolution = ADC_RESOLUTION_10B; break;
-    case 8: resolution = ADC_RESOLUTION_8B; break;
-    case 6: resolution = ADC_RESOLUTION_6B; break;
-    default: return -EINVAL;
+    case 12:
+        resolution = ADC_RESOLUTION_12B;
+        break;
+    case 10:
+        resolution = ADC_RESOLUTION_10B;
+        break;
+    case 8:
+        resolution = ADC_RESOLUTION_8B;
+        break;
+    case 6:
+        resolution = ADC_RESOLUTION_6B;
+        break;
+    default:
+        return -EINVAL;
     }
 
     k_mutex_lock(&data->lock, K_FOREVER);
@@ -191,8 +203,8 @@ out:
 }
 
 #ifdef CONFIG_ADC_ASYNC
-static int gd32_adc_read_async(const struct device *dev, const struct adc_sequence *seq,
-                               struct k_poll_signal *signal)
+static int gd32_adc_read_async(
+    const struct device *dev, const struct adc_sequence *seq, struct k_poll_signal *signal)
 {
     ARG_UNUSED(dev);
     ARG_UNUSED(seq);
@@ -220,15 +232,14 @@ static int gd32_adc_init(const struct device *dev)
     if (!device_is_ready(cfg->clock) || !device_is_ready(cfg->reset.dev)) {
         return -ENODEV;
     }
-    err = clock_control_get_rate(cfg->clock, (clock_control_subsys_t)&cfg->clock_id,
-                                &bus_hz);
+    err = clock_control_get_rate(cfg->clock, (clock_control_subsys_t)&cfg->clock_id, &bus_hz);
     if (err) {
         return err;
     }
     uint32_t max_hz = cfg->vdda_mv < 2400 ? 14000000U : 35000000U;
 
-    if (cfg->vdda_mv < 1710 || cfg->vdda_mv > 3630 ||
-        bus_hz < 100000U * cfg->divisor || bus_hz > max_hz * cfg->divisor) {
+    if (cfg->vdda_mv < 1710 || cfg->vdda_mv > 3630 || bus_hz < 100000U * cfg->divisor ||
+        bus_hz > max_hz * cfg->divisor) {
         return -EINVAL;
     }
     err = pinctrl_apply_state(cfg->pins, PINCTRL_STATE_DEFAULT);
@@ -256,22 +267,27 @@ static int gd32_adc_init(const struct device *dev)
 /* ADC 模式和预分频器共用，不得隐式宣称支持多个实例。 */
 BUILD_ASSERT(DT_NUM_INST_STATUS_OKAY(DT_DRV_COMPAT) <= 1);
 
-#define GD32_ADC_DEFINE(n)                                                        \
-    BUILD_ASSERT(DT_INST_REG_ADDR(n) == ADC0, "Only ADC0 is supported");            \
-    PINCTRL_DT_INST_DEFINE(n);                                                    \
-    static struct gd32_adc_data gd32_adc_data_##n;                                \
-    static const struct gd32_adc_config gd32_adc_config_##n = {                   \
-        .reg = DT_INST_REG_ADDR(n),                                              \
-        .clock = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR(n)),                            \
-        .clock_id = DT_INST_CLOCKS_CELL(n, id),                                   \
-        .reset = RESET_DT_SPEC_INST_GET(n),                                      \
-        .pins = PINCTRL_DT_INST_DEV_CONFIG_GET(n),                                \
-        .prescaler = UTIL_CAT(RCU_CKADC_CKAPB2_DIV, DT_INST_PROP(n, clock_prescaler)), \
-        .divisor = DT_INST_PROP(n, clock_prescaler),                              \
-        .vdda_mv = DT_INST_PROP(n, vdda_millivolts),                               \
-    };                                                                          \
-    DEVICE_DT_INST_DEFINE(n, gd32_adc_init, NULL, &gd32_adc_data_##n,               \
-                          &gd32_adc_config_##n, POST_KERNEL,                    \
-                          CONFIG_ADC_INIT_PRIORITY, &gd32_adc_api);
+#define GD32_ADC_DEFINE(n)                                                                         \
+    BUILD_ASSERT(DT_INST_REG_ADDR(n) == ADC0, "Only ADC0 is supported");                           \
+    PINCTRL_DT_INST_DEFINE(n);                                                                     \
+    static struct gd32_adc_data gd32_adc_data_##n;                                                 \
+    static const struct gd32_adc_config gd32_adc_config_##n = {                                    \
+        .reg = DT_INST_REG_ADDR(n),                                                                \
+        .clock = DEVICE_DT_GET(DT_INST_CLOCKS_CTLR(n)),                                            \
+        .clock_id = DT_INST_CLOCKS_CELL(n, id),                                                    \
+        .reset = RESET_DT_SPEC_INST_GET(n),                                                        \
+        .pins = PINCTRL_DT_INST_DEV_CONFIG_GET(n),                                                 \
+        .prescaler = UTIL_CAT(RCU_CKADC_CKAPB2_DIV, DT_INST_PROP(n, clock_prescaler)),             \
+        .divisor = DT_INST_PROP(n, clock_prescaler),                                               \
+        .vdda_mv = DT_INST_PROP(n, vdda_millivolts),                                               \
+    };                                                                                             \
+    DEVICE_DT_INST_DEFINE(n,                                                                       \
+        gd32_adc_init,                                                                             \
+        NULL,                                                                                      \
+        &gd32_adc_data_##n,                                                                        \
+        &gd32_adc_config_##n,                                                                      \
+        POST_KERNEL,                                                                               \
+        CONFIG_ADC_INIT_PRIORITY,                                                                  \
+        &gd32_adc_api);
 
 DT_INST_FOREACH_STATUS_OKAY(GD32_ADC_DEFINE)

@@ -27,32 +27,54 @@ HEADERS = (
 PREFIXES = ("dp_", "co_", "tr_", "pltcb_")
 TARGETS = {
     "platform_callback.o": (
-        "pltcb_reg_cfg_get_dev_tbl", "pltcb_cfg_get_dev_tbl",
-        "pltcb_reg_para_range_def_cb", "pltcb_para_get_range_def",
+        "pltcb_reg_cfg_get_dev_tbl",
+        "pltcb_cfg_get_dev_tbl",
+        "pltcb_reg_para_range_def_cb",
+        "pltcb_para_get_range_def",
     ),
     "data_process.o": (
-        "dp_init", "dp_dev_add", "dp_dev_del", "dp_get_sig_value",
-        "dp_set_sig_value", "dp_fast_para_get",
-        "dp_fast_para_set", "dp_set_para_value_flag",
-        "dp_set_para_only_dm", "dp_set_para_only_dm_no_store",
-        "dp_load_def_data", "dp_para_value_reg", "dp_set_init", "dp_plat_ver_init",
+        "dp_init",
+        "dp_dev_add",
+        "dp_dev_del",
+        "dp_get_sig_value",
+        "dp_set_sig_value",
+        "dp_fast_para_get",
+        "dp_fast_para_set",
+        "dp_set_para_value_flag",
+        "dp_set_para_only_dm",
+        "dp_set_para_only_dm_no_store",
+        "dp_load_def_data",
+        "dp_para_value_reg",
+        "dp_set_init",
+        "dp_plat_ver_init",
     ),
     "dp_mgr.o": ("dp_mutex_lock", "dp_mutex_unlock", "dp_dm_get_value"),
     "dp_para_set.o": (
-        "dp_set_para_proc", "dp_fast_get_para_proc", "dp_sig_func_done", "dp_para_set",
-        "dp_dev_init_pro", "dp_init_func",
+        "dp_set_para_proc",
+        "dp_fast_get_para_proc",
+        "dp_sig_func_done",
+        "dp_para_set",
+        "dp_dev_init_pro",
+        "dp_init_func",
     ),
     "co_mgr.o": (
-        "co_set_port_mode", "co_set_port_mode_proc", "co_get_port_mode",
-        "co_init_func_reg", "co_dev_init", "co_clean_set_queue",
-        "co_dp_fast_set", "co_put_passthough_queue",
+        "co_set_port_mode",
+        "co_set_port_mode_proc",
+        "co_get_port_mode",
+        "co_init_func_reg",
+        "co_dev_init",
+        "co_clean_set_queue",
+        "co_dp_fast_set",
+        "co_put_passthough_queue",
     ),
     "co_cfg.o": ("co_set_scan_pkg_flag", "co_mb_create_scan_cfg"),
     "co_modbus.o": ("co_anlysis_mb_pkg", "co_anlysis_mb_pkg_proc", "co_set_value_trans_cb_reg"),
     "co_port_mgr.o": ("co_porc_scan_list",),
     "mb_slave_comm.o": ("tr_set_port_mode", "tr_get_port_mode", "tr_reg_table_func"),
     "mb_slave_work.o": (
-        "tr_reg_pkt_filter_func", "tr_pkt_filter_config", "tr_mb_port_work_control",
+        "tr_reg_pkt_filter_func",
+        "tr_pkt_filter_config",
+        "tr_mb_port_work_control",
         "tr_port_conn_status_config",
     ),
 }
@@ -74,10 +96,13 @@ SOURCE_ANCHORS = {
         r"co_init|tr_init)\s*\(",
     ),
     "app/cfg/equip/dev_cfg.c": (r"\b(CAST_DEV_TABLE_DEF|g_arm_seg_table_t)\b",),
-    "app/timer/timefunction.c": (r"\b(g_timer_callback|timing|cfg_get_timer_reg|cfg_get_timer_func_num)\b",),
+    "app/timer/timefunction.c": (
+        r"\b(g_timer_callback|timing|cfg_get_timer_reg|cfg_get_timer_func_num)\b",
+    ),
     "app/port_filter/filter.c": (r"MPP_RET_(?:OK|DISCONTINUE|AES|ERR)",),
     "app/plc/tr_plc_func.c": (
-        r"\btr_reg_table_func\b", r"MPP_RET_(?:OK|DISCONTINUE|CONTINUE|ERR)",
+        r"\btr_reg_table_func\b",
+        r"MPP_RET_(?:OK|DISCONTINUE|CONTINUE|ERR)",
     ),
     "app/timer/FAN.C": (r"\bdp_set_sig_value\b",),
     "app/process/dsp/dsp_mgr.c": (r"\bdp_set_sig_value\b",),
@@ -88,7 +113,9 @@ def run(argv, *, binary=False):
     result = subprocess.run(argv, check=False, capture_output=True)
     if result.returncode:
         message = result.stderr.decode("utf-8", errors="replace").strip()
-        raise RuntimeError(f"Command failed ({result.returncode}): {' '.join(map(str, argv))}\n{message}")
+        raise RuntimeError(
+            f"Command failed ({result.returncode}): {' '.join(map(str, argv))}\n{message}"
+        )
     return result.stdout if binary else result.stdout.decode("utf-8", errors="replace")
 
 
@@ -103,32 +130,39 @@ def discover_tools(prefix):
                 candidates.append(found.removesuffix("objdump"))
         sdk = os.environ.get("ZEPHYR_SDK_INSTALL_DIR")
         if sdk:
-            candidates.extend(str(Path(sdk) / part / "bin/arm-zephyr-eabi-")
-                              for part in ("arm-zephyr-eabi", "gnu/arm-zephyr-eabi"))
+            candidates.extend(
+                str(Path(sdk) / part / "bin/arm-zephyr-eabi-")
+                for part in ("arm-zephyr-eabi", "gnu/arm-zephyr-eabi")
+            )
         for base in (Path.home() / "Tools/toolchain", Path.home(), Path("/opt")):
             for pattern in (
                 "zephyr-sdk-*/gnu/arm-zephyr-eabi/bin/arm-zephyr-eabi-objdump",
                 "zephyr-sdk-*/arm-zephyr-eabi/bin/arm-zephyr-eabi-objdump",
                 "arm-gnu-toolchain-*/bin/arm-none-eabi-objdump",
             ):
-                candidates.extend(str(path).removesuffix("objdump")
-                                  for path in sorted(base.glob(pattern), reverse=True))
+                candidates.extend(
+                    str(path).removesuffix("objdump")
+                    for path in sorted(base.glob(pattern), reverse=True)
+                )
     for candidate in dict.fromkeys(candidates):
         paths = {name: shutil.which(candidate + name) for name in ("nm", "objdump", "ar")}
         if not all(paths.values()):
             continue
-        versions = {name: run([path, "--version"]).splitlines()[0]
-                    for name, path in paths.items()}
-        if (all("GNU" in version for version in versions.values())
-                and "elf32-littlearm" in run([paths["objdump"], "-i"])):
+        versions = {name: run([path, "--version"]).splitlines()[0] for name, path in paths.items()}
+        if all("GNU" in version for version in versions.values()) and "elf32-littlearm" in run(
+            [paths["objdump"], "-i"]
+        ):
             return paths, versions
-    raise RuntimeError("GNU Arm nm/objdump/ar not found; pass --toolchain-prefix /path/bin/arm-none-eabi-")
+    raise RuntimeError(
+        "GNU Arm nm/objdump/ar not found; pass --toolchain-prefix /path/bin/arm-none-eabi-"
+    )
 
 
 def strip_comments(text):
     # 保留偏移与行号，供源码引用使用。
-    return re.sub(r"/\*.*?\*/|//[^\n]*", lambda match: re.sub(r"[^\n]", " ", match[0]),
-                  text, flags=re.S)
+    return re.sub(
+        r"/\*.*?\*/|//[^\n]*", lambda match: re.sub(r"[^\n]", " ", match[0]), text, flags=re.S
+    )
 
 
 def header_inventory(source):
@@ -136,23 +170,32 @@ def header_inventory(source):
     sources = []
     pattern = re.compile(
         r"^[ \t]*(?:extern[ \t]+)?[\w* \t]+?\b"
-        r"((?:dp|co|tr|pltcb)_[A-Za-z0-9_]+)[ \t]*\(([^;{}]*)\)[ \t]*;", re.M)
+        r"((?:dp|co|tr|pltcb)_[A-Za-z0-9_]+)[ \t]*\(([^;{}]*)\)[ \t]*;",
+        re.M,
+    )
     for relative in HEADERS:
         raw = (source / relative).read_bytes()
         text = raw.decode("utf-8")
-        sources.append({"path": relative, "sha256": hashlib.sha256(raw).hexdigest(), "size": len(raw)})
+        sources.append(
+            {"path": relative, "sha256": hashlib.sha256(raw).hexdigest(), "size": len(raw)}
+        )
         for match in pattern.finditer(strip_comments(text)):
-            declarations.append({
-                "name": match[1], "header": relative,
-                "line": text.count("\n", 0, match.start()) + 1,
-                "prototype": " ".join(match[0].split()),
-            })
+            declarations.append(
+                {
+                    "name": match[1],
+                    "header": relative,
+                    "line": text.count("\n", 0, match.start()) + 1,
+                    "prototype": " ".join(match[0].split()),
+                }
+            )
     return declarations, sources
 
 
 def parse_symbols(text):
     symbols = []
-    pattern = re.compile(r"^.+\[(.+)\]: (\S+) ([A-Za-z?])(?:\s+([0-9a-fA-F]+))?(?:\s+([0-9a-fA-F]+))?\s*$")
+    pattern = re.compile(
+        r"^.+\[(.+)\]: (\S+) ([A-Za-z?])(?:\s+([0-9a-fA-F]+))?(?:\s+([0-9a-fA-F]+))?\s*$"
+    )
     for line in text.splitlines():
         match = pattern.match(line)
         if not match:
@@ -160,9 +203,15 @@ def parse_symbols(text):
                 raise RuntimeError(f"Unrecognized GNU nm record: {line}")
             continue
         member, name, kind, value, size = match.groups()
-        symbols.append({"member": member, "name": name, "type": kind,
-                        "value": int(value, 16) if value else None,
-                        "size": int(size, 16) if size else None})
+        symbols.append(
+            {
+                "member": member,
+                "name": name,
+                "type": kind,
+                "value": int(value, 16) if value else None,
+                "size": int(size, 16) if size else None,
+            }
+        )
     return symbols
 
 
@@ -196,9 +245,16 @@ def references(text, member):
         match = re.match(r"\s*([0-9a-fA-F]+):\s+(R_ARM_\w+)\s+(.+)", line)
         if match and function:
             address, relocation, target = match.groups()
-            result.append({"member": member, "section": section, "function": function,
-                           "offset": f"0x{int(address, 16) - origin:x}",
-                           "relocation": relocation, "target": target.strip()})
+            result.append(
+                {
+                    "member": member,
+                    "section": section,
+                    "function": function,
+                    "offset": f"0x{int(address, 16) - origin:x}",
+                    "relocation": relocation,
+                    "target": target.strip(),
+                }
+            )
     return result
 
 
@@ -225,7 +281,9 @@ def write_output(output, relative, text):
 def analyze(source, output, prefix):
     source, output = source.resolve(), output.resolve()
     if output.is_relative_to(source) or output.is_relative_to(APP_ROOT):
-        raise ValueError("--output must be a build directory outside both source/application repositories")
+        raise ValueError(
+            "--output must be a build directory outside both source/application repositories"
+        )
     archive = source / "platform/libs/plateform.lib"
     raw_archive = archive.read_bytes()
     if not raw_archive.startswith(b"!<arch>\n"):
@@ -234,12 +292,15 @@ def analyze(source, output, prefix):
     members_text = run([tools["ar"], "t", str(archive)])
     members = members_text.splitlines()
     if len(members) != len(set(members)):
-        raise ValueError("Duplicate archive member names: ar p cannot identify members unambiguously")
+        raise ValueError(
+            "Duplicate archive member names: ar p cannot identify members unambiguously"
+        )
     symbols_text = run([tools["nm"], "-A", "--format=posix", str(archive)])
     symbols = parse_symbols(symbols_text)
     declarations, header_sources = header_inventory(source)
-    exports = [item for item in symbols if item["type"] in ("T", "W")
-               and item["name"].startswith(PREFIXES)]
+    exports = [
+        item for item in symbols if item["type"] in ("T", "W") and item["name"].startswith(PREFIXES)
+    ]
     export_names = {item["name"] for item in exports}
     for declaration in declarations:
         declaration["exported"] = declaration["name"] in export_names
@@ -269,13 +330,22 @@ def analyze(source, output, prefix):
             write_output(output, filename, selected)
             write_output(output, f"evidence/{member}.sections.txt", sections)
             all_references.extend(references(selected, member))
-            evidence.append({"member": member, "sha256": hashlib.sha256(contents).hexdigest(),
-                             "size": len(contents), "file": filename, "functions": found,
-                             "missing_functions": sorted(set(functions) - set(found)),
-                             "debug_sections": debug_sections,
-                             "has_source_dwarf": ".debug_info" in debug_sections or ".debug_line" in debug_sections})
+            evidence.append(
+                {
+                    "member": member,
+                    "sha256": hashlib.sha256(contents).hexdigest(),
+                    "size": len(contents),
+                    "file": filename,
+                    "functions": found,
+                    "missing_functions": sorted(set(functions) - set(found)),
+                    "debug_sections": debug_sections,
+                    "has_source_dwarf": ".debug_info" in debug_sections
+                    or ".debug_line" in debug_sections,
+                }
+            )
     counts = {
-        "members": len(members), "symbol_records": len(symbols),
+        "members": len(members),
+        "symbol_records": len(symbols),
         "defined_global_functions": sum(item["type"] in ("T", "W") for item in symbols),
         "undefined_references": sum(item["type"] in ("U", "w", "v") for item in symbols),
         "scoped_exported_functions": len(exports),
@@ -287,29 +357,50 @@ def analyze(source, output, prefix):
     report = {
         "schema_version": 1,
         "source": str(source),
-        "archive": {"path": str(archive), "size": len(raw_archive),
-                    "sha256": hashlib.sha256(raw_archive).hexdigest()},
+        "archive": {
+            "path": str(archive),
+            "size": len(raw_archive),
+            "sha256": hashlib.sha256(raw_archive).hexdigest(),
+        },
         "tools": {name: {"path": path, "version": versions[name]} for name, path in tools.items()},
-        "scope": {"prefixes": list(PREFIXES), "headers": list(HEADERS),
-                  "excluded": ["ARC API implementation/wrappers", "other protocol subsystems", "full decompilation"],
-                  "notes": ["Counts cover archive symbol records, not unique callable public APIs.",
-                            "Header inventory is lexical, not a C preprocessor/type checker.",
-                            "ARC relocation targets remain visible as original implementation evidence.",
-                            "Offsets are relative to the named object function, not final firmware addresses."]},
-        "counts": counts, "header_sources": header_sources,
-        "public_api": declarations, "exported_functions": exports,
-        "selected_evidence": evidence, "relocations": all_references,
+        "scope": {
+            "prefixes": list(PREFIXES),
+            "headers": list(HEADERS),
+            "excluded": [
+                "ARC API implementation/wrappers",
+                "other protocol subsystems",
+                "full decompilation",
+            ],
+            "notes": [
+                "Counts cover archive symbol records, not unique callable public APIs.",
+                "Header inventory is lexical, not a C preprocessor/type checker.",
+                "ARC relocation targets remain visible as original implementation evidence.",
+                "Offsets are relative to the named object function, not final firmware addresses.",
+            ],
+        },
+        "counts": counts,
+        "header_sources": header_sources,
+        "public_api": declarations,
+        "exported_functions": exports,
+        "selected_evidence": evidence,
+        "relocations": all_references,
         "source_references": source_references(source),
     }
     write_output(output, "audit.json", json.dumps(report, ensure_ascii=False, indent=2) + "\n")
     write_output(output, "members.txt", members_text)
     write_output(output, "symbols.txt", symbols_text)
-    lines = ["Reference platform audit", f"Archive: {archive}",
-             f"SHA256: {report['archive']['sha256']}", f"Bytes: {len(raw_archive)}",
-             f"Counts: {json.dumps(counts, sort_keys=True)}", "",
-             "Scope: dp_/co_/tr_/pltcb_ in the four listed public headers; ARC wrappers excluded.",
-             "Evidence is selected disassembly with relocations, not reconstructed source.", "",
-             "Public declarations (source line; archive export present):"]
+    lines = [
+        "Reference platform audit",
+        f"Archive: {archive}",
+        f"SHA256: {report['archive']['sha256']}",
+        f"Bytes: {len(raw_archive)}",
+        f"Counts: {json.dumps(counts, sort_keys=True)}",
+        "",
+        "Scope: dp_/co_/tr_/pltcb_ in the four listed public headers; ARC wrappers excluded.",
+        "Evidence is selected disassembly with relocations, not reconstructed source.",
+        "",
+        "Public declarations (source line; archive export present):",
+    ]
     for item in declarations:
         lines.append(f"{item['header']}:{item['line']} [{item['exported']}] {item['prototype']}")
     lines.extend(("", "Selected object evidence:"))
@@ -318,23 +409,34 @@ def analyze(source, output, prefix):
     lines.extend(("", "Call/jump relocations (ignore unresolved BL display labels):"))
     for item in all_references:
         if "CALL" in item["relocation"] or "JUMP" in item["relocation"]:
-            lines.append(f"{item['member']}:{item['function']}+{item['offset']} {item['relocation']} {item['target']}")
+            lines.append(
+                f"{item['member']}:{item['function']}+{item['offset']} "
+                f"{item['relocation']} {item['target']}"
+            )
     write_output(output, "audit.txt", "\n".join(lines) + "\n")
     return report
 
 
 def main():
-    parser = argparse.ArgumentParser(description=(
-        'Audit the supplied platform archive without modifying or linking it.\n'
-        '\n'
-        'Only declarations and selected disassembly are inventoried, not decompiled C.\n'
-        'All output belongs in an explicit build directory outside the application and\n'
-        'reference repositories. ARC symbols are excluded from the public API inventory;\n'
-        'ARC relocations in selected functions remain evidence of the original backend.\n'
-    ))
-    parser.add_argument("--source", required=True, type=Path, help="Reference CODE directory (read only)")
-    parser.add_argument("--output", required=True, type=Path, help="Dedicated build output directory")
-    parser.add_argument("--toolchain-prefix", help="GNU Arm prefix, e.g. /opt/toolchain/bin/arm-none-eabi-")
+    parser = argparse.ArgumentParser(
+        description=(
+            "Audit the supplied platform archive without modifying or linking it.\n"
+            "\n"
+            "Only declarations and selected disassembly are inventoried, not decompiled C.\n"
+            "All output belongs in an explicit build directory outside the application and\n"
+            "reference repositories. ARC symbols are excluded from the public API inventory;\n"
+            "ARC relocations in selected functions remain evidence of the original backend.\n"
+        )
+    )
+    parser.add_argument(
+        "--source", required=True, type=Path, help="Reference CODE directory (read only)"
+    )
+    parser.add_argument(
+        "--output", required=True, type=Path, help="Dedicated build output directory"
+    )
+    parser.add_argument(
+        "--toolchain-prefix", help="GNU Arm prefix, e.g. /opt/toolchain/bin/arm-none-eabi-"
+    )
     args = parser.parse_args()
     try:
         report = analyze(args.source, args.output, args.toolchain_prefix)

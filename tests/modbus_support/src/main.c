@@ -59,7 +59,9 @@ ZTEST(modbus_support, test_full_capacity_and_exception_frame)
 {
     struct modbus_adu adu = {.unit_id = 2, .fc = 65};
     adu.length = sizeof(adu.data);
-    for (size_t i = 0; i < adu.length; ++i) { adu.data[i] = i; }
+    for (size_t i = 0; i < adu.length; ++i) {
+        adu.data[i] = i;
+    }
     uint8_t wire[CONFIG_MODBUS_BUFFER_SIZE];
     size_t size;
     zassert_ok(mb_rtu_encode(&adu, wire, sizeof(wire), &size));
@@ -68,7 +70,9 @@ ZTEST(modbus_support, test_full_capacity_and_exception_frame)
     memset(&adu, 0, sizeof(adu));
     zassert_ok(mb_rtu_decode(wire, size, &adu));
     zassert_equal(adu.length, sizeof(adu.data));
-    for (size_t i = 0; i < adu.length; ++i) { zassert_equal(adu.data[i], (uint8_t)i); }
+    for (size_t i = 0; i < adu.length; ++i) {
+        zassert_equal(adu.data[i], (uint8_t)i);
+    }
 
     adu.fc = 0x84;
     adu.length = 1;

@@ -9,13 +9,17 @@
 static uint16_t di_value, current_values[SAMPLE_ANALOG_COUNT];
 static unsigned updates;
 static int set_error;
+
 int32_t dp_set_para(uint16_t device, uint16_t signal, uint8_t size, uint8_t *bytes)
 {
     zassert_equal(device, DEVICE_LOCAL);
     zassert_equal(size, 2);
-    if (set_error) { return set_error; }
-    if (signal == SIGNAL_DI) { di_value = sys_get_le16(bytes); }
-    else {
+    if (set_error) {
+        return set_error;
+    }
+    if (signal == SIGNAL_DI) {
+        di_value = sys_get_le16(bytes);
+    } else {
         zassert_true(signal >= SIGNAL_CURRENT_1 && signal < SIGNAL_CURRENT_1 + SAMPLE_ANALOG_COUNT);
         current_values[signal - SIGNAL_CURRENT_1] = sys_get_le16(bytes);
     }
@@ -27,14 +31,18 @@ static const struct device *const emul = DEVICE_DT_GET(DT_NODELABEL(adc0));
 static unsigned int samples[16];
 static int fail_channel;
 static int injected_raw;
-static int sample_value(const struct device *dev, unsigned int channel,
-                        void *context, uint32_t *result)
+
+static int sample_value(
+    const struct device *dev, unsigned int channel, void *context, uint32_t *result)
 {
-    if ((int)channel == fail_channel) { return -EIO; }
+    if ((int)channel == fail_channel) {
+        return -EIO;
+    }
     *result = injected_raw >= 0 ? injected_raw : channel * 100 + samples[channel];
     ++samples[channel];
     return 0;
 }
+
 static void before(void *fixture)
 {
     memset(samples, 0, sizeof(samples));
@@ -49,6 +57,7 @@ static void before(void *fixture)
     }
     zassert_ok(acquisition_inputs_init());
 }
+
 ZTEST(adc_application, test_original_order_and_ten_sample_integer_average)
 {
     const uint8_t order[] = {13, 0, 1, 2, 3, 4, 11, 12};
@@ -61,6 +70,7 @@ ZTEST(adc_application, test_original_order_and_ten_sample_integer_average)
     }
     zassert_equal(samples[5], 0);
 }
+
 ZTEST(adc_application, test_sampling_error_is_propagated_and_retry_works)
 {
     fail_channel = 2;
@@ -76,8 +86,8 @@ ZTEST(adc_application, test_digital_inputs_preserve_bit_order)
 {
     const struct device *gpio = DEVICE_DT_GET(DT_NODELABEL(gpio0));
     /* 低电平有效的 DI1/DI16 合成为位图。 */
-    zassert_ok(gpio_emul_input_set_masked(gpio, BIT_MASK(17) & ~BIT(0),
-        BIT_MASK(17) & ~(BIT(0) | BIT(1) | BIT(16))));
+    zassert_ok(gpio_emul_input_set_masked(
+        gpio, BIT_MASK(17) & ~BIT(0), BIT_MASK(17) & ~(BIT(0) | BIT(1) | BIT(16))));
     zassert_ok(acquisition_cycle());
     zassert_equal(di_value, 0x8001);
 }
@@ -98,8 +108,11 @@ ZTEST(adc_application, test_point_write_failure_stops_before_adc_reads)
     set_error = -ENOMEM;
     zassert_equal(acquisition_cycle(), -ENOMEM);
     zassert_equal(updates, 0);
-    for (size_t i = 0; i < ARRAY_SIZE(samples); ++i) { zassert_equal(samples[i], 0); }
+    for (size_t i = 0; i < ARRAY_SIZE(samples); ++i) {
+        zassert_equal(samples[i], 0);
+    }
 }
+
 ZTEST(adc_application, test_current_conversion_zero_midpoint_and_saturation)
 {
     const uint16_t raw[] = {0, 1, 2048, 3904, 3905, 4095};
@@ -112,4 +125,5 @@ ZTEST(adc_application, test_current_conversion_zero_midpoint_and_saturation)
         }
     }
 }
+
 ZTEST_SUITE(adc_application, NULL, NULL, before, NULL, NULL);

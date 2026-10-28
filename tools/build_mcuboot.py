@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """构建并导出 IDU-pre MCUboot 配置，不烧录硬件。"""
+
 import argparse
 import hashlib
 import json
@@ -45,7 +46,7 @@ def export(build, key, destination, iapv3=False, version="IDU-pre"):
     # 为交换尾部和状态预留一个完整的最大擦除扇区。
     if header + size > len(blob) or len(blob) > SLOT_SIZE - 8192:
         raise ValueError("signed image exceeds the configured slot payload")
-    app_vectors = check_vectors(blob[:header + size], SLOT_START, header)
+    app_vectors = check_vectors(blob[: header + size], SLOT_START, header)
     boot_blob = (bootdir / "zephyr.bin").read_bytes()
     if len(boot_blob) > SLOT_START - 0x08000000:
         raise ValueError("MCUboot exceeds boot partition")
@@ -56,8 +57,7 @@ def export(build, key, destination, iapv3=False, version="IDU-pre"):
     app_hex = IntelHex()
     app_hex.frombytes(blob, offset=SLOT_START)
     boot_hex = IntelHex(str(bootdir / "zephyr.hex"))
-    for hex_data, raw, base in ((app_hex, blob, SLOT_START),
-                               (boot_hex, boot_blob, 0x08000000)):
+    for hex_data, raw, base in ((app_hex, blob, SLOT_START), (boot_hex, boot_blob, 0x08000000)):
         addresses = set(hex_data.addresses())
         if hex_data.minaddr() != base or hex_data.maxaddr() != base + len(raw) - 1:
             raise ValueError("HEX and BIN extents differ")
@@ -80,22 +80,48 @@ def export(build, key, destination, iapv3=False, version="IDU-pre"):
         shutil.copyfile(source, destination / name)
     app_hex.write_hex_file(str(destination / "IDU-pre.hex"))
     merged.write_hex_file(str(destination / "IDU-pre-factory.hex"))
-    run(sys.executable, IMGTOOL, "getpub", "-k", key, "-e", "pem", "-o",
-        destination / "IDU-pre-public.pem")
+    run(
+        sys.executable,
+        IMGTOOL,
+        "getpub",
+        "-k",
+        key,
+        "-e",
+        "pem",
+        "-o",
+        destination / "IDU-pre-public.pem",
+    )
     if iapv3:
-        run(sys.executable, APP / "tools/pack_sgz.py", "--bin", binary,
-            "--key", key, "--output", destination / "IDU-pre-update.sgz", "--version", version,
-            "--config", appdir / ".config")
+        run(
+            sys.executable,
+            APP / "tools/pack_sgz.py",
+            "--bin",
+            binary,
+            "--key",
+            key,
+            "--output",
+            destination / "IDU-pre-update.sgz",
+            "--version",
+            version,
+            "--config",
+            appdir / ".config",
+        )
     report = {
-        "bootloader": "MCUboot", "mode": "swap-scratch",
-        "signature_verified": True, "hardware_verified": False,
+        "bootloader": "MCUboot",
+        "mode": "swap-scratch",
+        "signature_verified": True,
+        "hardware_verified": False,
         "iap_sgz_supported": iapv3,
-        "boot_bytes": len(boot_blob), "signed_app_bytes": len(blob),
-        "slot_start": hex(SLOT_START), "slot_bytes": SLOT_SIZE,
-        "boot_vectors": boot_vectors, "app_vectors": app_vectors,
+        "boot_bytes": len(boot_blob),
+        "signed_app_bytes": len(blob),
+        "slot_start": hex(SLOT_START),
+        "slot_bytes": SLOT_SIZE,
+        "boot_vectors": boot_vectors,
+        "app_vectors": app_vectors,
         "files_sha256": {
             p.name: hashlib.sha256(p.read_bytes()).hexdigest()
-            for p in sorted(destination.iterdir()) if p.suffix in (".hex", ".bin", ".pem", ".sgz")
+            for p in sorted(destination.iterdir())
+            if p.suffix in (".hex", ".bin", ".pem", ".sgz")
         },
     }
     (destination / "IDU-pre-validation.json").write_text(json.dumps(report, indent=2) + "\n")
@@ -103,18 +129,30 @@ def export(build, key, destination, iapv3=False, version="IDU-pre"):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=(
-        "Build and export IDU-pre's MCUboot profile; never programs hardware."
-    ))
+    parser = argparse.ArgumentParser(
+        description=("Build and export IDU-pre's MCUboot profile; never programs hardware.")
+    )
     parser.add_argument("--key", type=Path, help="Existing ECDSA P-256 private signing key")
     parser.add_argument("--version", default="0.1.0+0")
-    parser.add_argument("--extra-conf", type=Path, action="append", default=[],
-                        help="Append an application .conf (repeatable)")
-    parser.add_argument("--extra-overlay", type=Path, action="append", default=[],
-                        help="Append an application devicetree overlay (repeatable)")
+    parser.add_argument(
+        "--extra-conf",
+        type=Path,
+        action="append",
+        default=[],
+        help="Append an application .conf (repeatable)",
+    )
+    parser.add_argument(
+        "--extra-overlay",
+        type=Path,
+        action="append",
+        default=[],
+        help="Append an application devicetree overlay (repeatable)",
+    )
     parser.add_argument("--pristine", choices=("auto", "always"), default="auto")
     upload = parser.add_mutually_exclusive_group()
-    upload.add_argument("--iapv3", action="store_true", help="IAPv3 RS485 AES/SGZ transport (default)")
+    upload.add_argument(
+        "--iapv3", action="store_true", help="IAPv3 RS485 AES/SGZ transport (default)"
+    )
     upload.add_argument("--no-upload", action="store_true", help="Build without an upload receiver")
     args = parser.parse_args()
     args.iapv3 = not args.no_upload
@@ -138,11 +176,23 @@ def main():
         conf.append(APP / "conf/iapv3.conf")
     conf.extend(path.expanduser().resolve() for path in args.extra_conf)
     overlays.extend(path.expanduser().resolve() for path in args.extra_overlay)
-    command = ["west", "build", "-p", args.pristine, "--sysbuild", "-b", "idu_pre", APP,
-               "-d", build, "--", f"-DSB_CONFIG_BOOT_SIGNATURE_KEY_FILE={json.dumps(str(key))}",
-               f"-DIDU-pre_EXTRA_CONF_FILE={';'.join(map(str, conf))}",
-               f"-DIDU-pre_EXTRA_DTC_OVERLAY_FILE={';'.join(map(str, overlays))}",
-               f"-DIDU-pre_CONFIG_MCUBOOT_IMGTOOL_SIGN_VERSION={json.dumps(args.version)}"]
+    command = [
+        "west",
+        "build",
+        "-p",
+        args.pristine,
+        "--sysbuild",
+        "-b",
+        "idu_pre",
+        APP,
+        "-d",
+        build,
+        "--",
+        f"-DSB_CONFIG_BOOT_SIGNATURE_KEY_FILE={json.dumps(str(key))}",
+        f"-DIDU-pre_EXTRA_CONF_FILE={';'.join(map(str, conf))}",
+        f"-DIDU-pre_EXTRA_DTC_OVERLAY_FILE={';'.join(map(str, overlays))}",
+        f"-DIDU-pre_CONFIG_MCUBOOT_IMGTOOL_SIGN_VERSION={json.dumps(args.version)}",
+    ]
     run(*command)
     export(build, key, WORKSPACE / f"build/hex/IDU-pre-mcuboot{suffix}", args.iapv3, args.version)
 

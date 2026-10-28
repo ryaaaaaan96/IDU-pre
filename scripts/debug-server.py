@@ -35,41 +35,52 @@ def find_jlink():
     program_files = os.environ.get("ProgramFiles")
     if program_files:
         candidates = [
-            path for path in (Path(program_files) / "SEGGER").glob("JLink*")
+            path
+            for path in (Path(program_files) / "SEGGER").glob("JLink*")
             if (path / "JLinkGDBServerCL.exe").is_file()
         ]
         if candidates:
-            return max(candidates, key=lambda path: (
-                tuple(int(part) for part in re.findall(r"\d+", path.name)), path.name
-            ))
+            return max(
+                candidates,
+                key=lambda path: (
+                    tuple(int(part) for part in re.findall(r"\d+", path.name)),
+                    path.name,
+                ),
+            )
     return None
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description=(
-            'Start Windows J-Link GDB Server with Zephyr thread awareness.'
-        ),
+        description=("Start Windows J-Link GDB Server with Zephyr thread awareness."),
         epilog="Default: remote access for NAT WSL; no firewall changes. "
-               "Device names are not substituted; use --device if your J-Link "
-               "installation needs a confirmed generic mapping. See docs/wsl-jlink.md.",
+        "Device names are not substituted; use --device if your J-Link "
+        "installation needs a confirmed generic mapping. See docs/wsl-jlink.md.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--device", default=DEFAULT_DEVICE, help="J-Link debug profile (target: GD32E505VET6)")
+    parser.add_argument(
+        "--device", default=DEFAULT_DEVICE, help="J-Link debug profile (target: GD32E505VET6)"
+    )
     parser.add_argument("--jlink-dir", type=Path, help="Installation directory (auto-detected)")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="GDB TCP port")
     parser.add_argument("--speed", type=int, default=DEFAULT_SPEED_KHZ, help="SWD clock in kHz")
     parser.add_argument("--serial", help="Select a specific USB J-Link")
     parser.add_argument("--localhost-only", action="store_true", help="For mirrored WSL")
-    parser.add_argument("--no-rtos", action="store_true", help="Debug the core without the Zephyr thread plugin")
-    parser.add_argument("--dry-run", action="store_true", help="Print command without accessing the probe")
+    parser.add_argument(
+        "--no-rtos", action="store_true", help="Debug the core without the Zephyr thread plugin"
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Print command without accessing the probe"
+    )
     args = parser.parse_args()
     if not 1 <= args.port <= 65535:
         parser.error("--port must be between 1 and 65535")
     if not 1 <= args.speed <= 50000:
         parser.error("--speed must be between 1 and 50000 kHz")
     if sys.platform != "win32" and not args.dry_run:
-        parser.error("Run this script with Windows Python (py), not WSL Python; WSL supports --dry-run only")
+        parser.error(
+            "Run this script with Windows Python (py), not WSL Python; WSL supports --dry-run only"
+        )
     device = args.device.strip()
     if not device:
         parser.error("Device name must not be empty")
@@ -79,15 +90,27 @@ def main():
         parser.error("J-Link installation not found; supply --jlink-dir")
     server = directory / "JLinkGDBServerCL.exe"
     plugin = directory / "GDBServer" / "RTOSPlugin_Zephyr.dll"
-    for required in ([server] if args.no_rtos else [server, plugin]):
+    for required in [server] if args.no_rtos else [server, plugin]:
         if not required.is_file():
             parser.error(f"Required file not found: {required}")
 
     command = [
-        str(server), "-device", device, "-if", "SWD", "-endian", "little",
-        "-speed", str(args.speed), "-port", str(args.port),
-        "-LocalhostOnly", "1" if args.localhost_only else "0",
-        "-noir", "-noreset", "-halt",
+        str(server),
+        "-device",
+        device,
+        "-if",
+        "SWD",
+        "-endian",
+        "little",
+        "-speed",
+        str(args.speed),
+        "-port",
+        str(args.port),
+        "-LocalhostOnly",
+        "1" if args.localhost_only else "0",
+        "-noir",
+        "-noreset",
+        "-halt",
     ]
     if not args.no_rtos:
         command.extend(["-rtos", str(plugin)])

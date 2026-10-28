@@ -14,15 +14,35 @@ static int64_t reset_requested_ms;
 static void block_queue(void);
 static struct gpio_driver_data gpio_data;
 static const struct gpio_driver_config gpio_config = {.port_pin_mask = UINT32_MAX};
+
 static int configure(const struct device *dev, gpio_pin_t pin, gpio_flags_t flags)
-{ ARG_UNUSED(dev); ARG_UNUSED(flags); if (pin == 21) {
-    atomic_inc(&feed_configures);
-    if (IS_ENABLED(CONFIG_TEST_WATCHDOG_INIT_FAILURE)) { return -EIO; }
-} return 0; }
+{
+    ARG_UNUSED(dev);
+    ARG_UNUSED(flags);
+    if (pin == 21) {
+        atomic_inc(&feed_configures);
+        if (IS_ENABLED(CONFIG_TEST_WATCHDOG_INIT_FAILURE)) {
+            return -EIO;
+        }
+    }
+    return 0;
+}
+
 static int set(const struct device *dev, gpio_port_pins_t mask, gpio_port_value_t value)
-{ ARG_UNUSED(dev); ARG_UNUSED(mask); ARG_UNUSED(value); return 0; }
+{
+    ARG_UNUSED(dev);
+    ARG_UNUSED(mask);
+    ARG_UNUSED(value);
+    return 0;
+}
+
 static int set_bits(const struct device *dev, gpio_port_pins_t pins)
-{ ARG_UNUSED(dev); ARG_UNUSED(pins); return 0; }
+{
+    ARG_UNUSED(dev);
+    ARG_UNUSED(pins);
+    return 0;
+}
+
 static int toggle(const struct device *dev, gpio_port_pins_t pins)
 {
     ARG_UNUSED(dev);
@@ -32,12 +52,22 @@ static int toggle(const struct device *dev, gpio_port_pins_t pins)
     }
     return 0;
 }
+
 static DEVICE_API(gpio, gpio_api) = {
-    .pin_configure = configure, .port_set_masked_raw = set, .port_toggle_bits = toggle,
-    .port_set_bits_raw = set_bits, .port_clear_bits_raw = set_bits,
+    .pin_configure = configure,
+    .port_set_masked_raw = set,
+    .port_toggle_bits = toggle,
+    .port_set_bits_raw = set_bits,
+    .port_clear_bits_raw = set_bits,
 };
-DEVICE_DT_DEFINE(DT_NODELABEL(gpio0), NULL, NULL, &gpio_data, &gpio_config,
-                 POST_KERNEL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE, &gpio_api);
+DEVICE_DT_DEFINE(DT_NODELABEL(gpio0),
+    NULL,
+    NULL,
+    &gpio_data,
+    &gpio_config,
+    POST_KERNEL,
+    CONFIG_KERNEL_INIT_PRIORITY_DEVICE,
+    &gpio_api);
 static struct watchdog_task first, second, extra;
 static struct watchdog_task *expected;
 
@@ -47,7 +77,9 @@ FUNC_NORETURN void __wrap_sys_reboot(int type)
     struct watchdog_task_snapshot task;
     const struct watchdog_task_config config = {.name = "late", .timeout_ms = 100};
     atomic_val_t before = atomic_get(&edges);
-    if (!k_is_in_isr()) { k_sleep(K_MSEC(30)); }
+    if (!k_is_in_isr()) {
+        k_sleep(K_MSEC(30));
+    }
     bool ok = type == SYS_REBOOT_COLD && atomic_get(&edges) == before;
     if (expect_direct_reset) {
         if (expected_reset_delay_ms) {
@@ -55,8 +87,7 @@ FUNC_NORETURN void __wrap_sys_reboot(int type)
             ok = ok && k_is_in_isr() && elapsed >= expected_reset_delay_ms &&
                  elapsed < expected_reset_delay_ms + 30;
         }
-        ok = ok && watchdog_task_feed(&first) ==
-             (k_is_in_isr() ? -EWOULDBLOCK : -ECANCELED);
+        ok = ok && watchdog_task_feed(&first) == (k_is_in_isr() ? -EWOULDBLOCK : -ECANCELED);
     } else {
         ok = ok && k_is_in_isr() && !watchdog_fault_get(&fault) &&
              status_phase_get() == STATUS_FAULT_LOCKED && fault.error == -ETIMEDOUT;
@@ -64,8 +95,8 @@ FUNC_NORETURN void __wrap_sys_reboot(int type)
             ok = ok && fault.reason == WATCHDOG_FAULT_CHECK && !fault.task.name;
         } else {
             ok = ok && expected && !watchdog_task_get(expected, &task) &&
-                 fault.reason == WATCHDOG_FAULT_TASK &&
-                 !strcmp(fault.task.name, "silent") && (task.flags & WATCHDOG_TASK_FAULT) &&
+                 fault.reason == WATCHDOG_FAULT_TASK && !strcmp(fault.task.name, "silent") &&
+                 (task.flags & WATCHDOG_TASK_FAULT) &&
                  watchdog_task_feed(expected) == -EWOULDBLOCK &&
                  watchdog_task_sleep_forever(expected) == -EWOULDBLOCK;
         }
@@ -76,6 +107,7 @@ FUNC_NORETURN void __wrap_sys_reboot(int type)
     nsi_exit(ok ? 0 : 1);
     CODE_UNREACHABLE;
 }
+
 static void *setup(void)
 {
     const struct watchdog_task_config config = {.name = "early", .timeout_ms = 100};
@@ -86,7 +118,9 @@ static void *setup(void)
     zassert_equal(atomic_get(&edges), 0);
     struct watchdog_fault fault;
     zassert_equal(watchdog_fault_get(&fault), -ENOENT);
-    if (IS_ENABLED(CONFIG_TEST_WATCHDOG_BLOCK_FIRST_CHECK)) { block_queue(); }
+    if (IS_ENABLED(CONFIG_TEST_WATCHDOG_BLOCK_FIRST_CHECK)) {
+        block_queue();
+    }
     if (IS_ENABLED(CONFIG_TEST_WATCHDOG_INIT_FAILURE)) {
         zassert_equal(status_init(), -EIO);
         zassert_ok(watchdog_fault_get(&fault));
@@ -96,9 +130,12 @@ static void *setup(void)
     zassert_ok(status_init());
     zassert_equal(atomic_get(&feed_configures), IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL));
     zassert_equal(watchdog_fault_get(&fault), -ENOENT);
-    if (!IS_ENABLED(CONFIG_TEST_WATCHDOG_BLOCK_FIRST_CHECK)) { status_set_phase(STATUS_RUN); }
+    if (!IS_ENABLED(CONFIG_TEST_WATCHDOG_BLOCK_FIRST_CHECK)) {
+        status_set_phase(STATUS_RUN);
+    }
     return NULL;
 }
+
 ZTEST(task_watchdog, test_registration_and_independent_heartbeats)
 {
     const struct watchdog_task_config config = {.name = "sample", .timeout_ms = 100};
@@ -114,6 +151,7 @@ ZTEST(task_watchdog, test_registration_and_independent_heartbeats)
     zassert_true(snapshot.last_feed_ms >= 200);
     zassert_equal(atomic_get(&edges) > 0, IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL));
 }
+
 ZTEST(task_watchdog, test_one_missing_heartbeat_stops_and_reboots)
 {
     const struct watchdog_task_config silent = {.name = "silent", .timeout_ms = 100};
@@ -129,6 +167,7 @@ ZTEST(task_watchdog, test_one_missing_heartbeat_stops_and_reboots)
     k_sleep(K_MSEC(500));
     zassert_unreachable("Missing heartbeat did not reboot");
 }
+
 ZTEST(task_watchdog, test_zero_registered_continues_past_legacy_timeout)
 {
     k_sleep(K_MSEC(1700));
@@ -140,6 +179,7 @@ ZTEST(task_watchdog, test_zero_registered_continues_past_legacy_timeout)
     status_set_phase(STATUS_RUN);
     zassert_equal(status_phase_get(), STATUS_RUN);
 }
+
 ZTEST(task_watchdog, test_registration_validation_without_fixed_capacity)
 {
     struct watchdog_task_config config = {.name = "first", .timeout_ms = 2000};
@@ -155,14 +195,16 @@ ZTEST(task_watchdog, test_registration_validation_without_fixed_capacity)
     zassert_equal(watchdog_task_register(&extra, &config), -EINVAL);
     config.name = "";
     zassert_equal(watchdog_task_register(&extra, &config), -EINVAL);
-    config.name = "first"; config.timeout_ms = 0;
+    config.name = "first";
+    config.timeout_ms = 0;
     zassert_equal(watchdog_task_register(&extra, &config), -EINVAL);
     config.timeout_ms = 2000;
     zassert_ok(watchdog_task_register(&first, &config));
     struct watchdog_task_snapshot before, after;
     zassert_ok(watchdog_task_get(&first, &before));
     k_sleep(K_MSEC(20));
-    config.name = "changed"; config.timeout_ms = 100;
+    config.name = "changed";
+    config.timeout_ms = 100;
     zassert_equal(watchdog_task_register(&first, &config), -EALREADY);
     zassert_ok(watchdog_task_get(&first, &after));
     zassert_str_equal(after.name, "first");
@@ -182,6 +224,7 @@ ZTEST(task_watchdog, test_registration_validation_without_fixed_capacity)
     zassert_equal(watchdog_task_get(NULL, &after), -EINVAL);
     zassert_equal(watchdog_fault_get(NULL), -EINVAL);
 }
+
 ZTEST(task_watchdog, test_explicit_hold_keeps_feed_without_task_fault)
 {
     const struct watchdog_task_config config = {.name = "first", .timeout_ms = 2000};
@@ -197,6 +240,7 @@ ZTEST(task_watchdog, test_explicit_hold_keeps_feed_without_task_fault)
     zassert_equal(fault.reason, WATCHDOG_FAULT_REPORTED);
     zassert_equal(fault.action, WATCHDOG_ACTION_HOLD);
 }
+
 ZTEST(task_watchdog, test_permanent_sleep_and_explicit_reregistration)
 {
     struct watchdog_task_config config = {.name = "sample", .timeout_ms = 100};
@@ -214,7 +258,8 @@ ZTEST(task_watchdog, test_permanent_sleep_and_explicit_reregistration)
     atomic_val_t edges_before = atomic_get(&edges);
     k_sleep(K_MSEC(250));
     zassert_equal(atomic_get(&edges) > edges_before, IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL));
-    config.name = "resumed"; config.timeout_ms = 200;
+    config.name = "resumed";
+    config.timeout_ms = 200;
     zassert_ok(watchdog_task_register(&first, &config));
     zassert_ok(watchdog_task_get(&first, &resumed));
     zassert_str_equal(resumed.name, "resumed");
@@ -225,15 +270,18 @@ ZTEST(task_watchdog, test_permanent_sleep_and_explicit_reregistration)
     zassert_ok(watchdog_task_feed(&first));
     zassert_ok(watchdog_task_sleep_forever(&first));
 }
+
 ZTEST(task_watchdog, test_invalid_resume_preserves_sleep_and_other_tasks)
 {
     struct watchdog_task_config config = {.name = "sleeping", .timeout_ms = 100};
     zassert_ok(watchdog_task_register(&first, &config));
     zassert_ok(watchdog_task_sleep_forever(&first));
-    config.name = "peer"; config.timeout_ms = 1000;
+    config.name = "peer";
+    config.timeout_ms = 1000;
     zassert_ok(watchdog_task_register(&second, &config));
     zassert_ok(watchdog_task_register(&extra, &config));
-    config.name = "resume"; config.timeout_ms = 0;
+    config.name = "resume";
+    config.timeout_ms = 0;
     zassert_equal(watchdog_task_register(&first, &config), -EINVAL);
     struct watchdog_task_snapshot state;
     zassert_ok(watchdog_task_get(&first, &state));
@@ -254,6 +302,7 @@ ZTEST(task_watchdog, test_invalid_resume_preserves_sleep_and_other_tasks)
     k_sleep(K_MSEC(1100));
     zassert_equal(atomic_get(&edges) > before, IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL));
 }
+
 ZTEST(task_watchdog, test_resumed_deadline_stops_and_reboots)
 {
     struct watchdog_task_config config = {.name = "old", .timeout_ms = 1000};
@@ -261,19 +310,22 @@ ZTEST(task_watchdog, test_resumed_deadline_stops_and_reboots)
     zassert_ok(watchdog_task_sleep_forever(&first));
     config.name = "peer";
     zassert_ok(watchdog_task_register(&second, &config));
-    config.name = "silent"; config.timeout_ms = 100;
+    config.name = "silent";
+    config.timeout_ms = 100;
     zassert_ok(watchdog_task_register(&first, &config));
     expected = &first;
     k_sleep(K_MSEC(300));
     k_sleep(K_MSEC(500));
     zassert_unreachable("Resumed task did not time out");
 }
+
 ZTEST(task_watchdog, test_sleep_does_not_protect_peer_stops_and_reboots)
 {
     struct watchdog_task_config config = {.name = "sleeping", .timeout_ms = 100};
     zassert_ok(watchdog_task_register(&second, &config));
     zassert_ok(watchdog_task_sleep_forever(&second));
-    config.name = "silent"; config.timeout_ms = 150;
+    config.name = "silent";
+    config.timeout_ms = 150;
     zassert_ok(watchdog_task_register(&first, &config));
     expected = &first;
     k_sleep(K_MSEC(300));
@@ -285,7 +337,8 @@ ZTEST(task_watchdog, test_feeding_earliest_preserves_peer_deadline_stops_and_reb
 {
     struct watchdog_task_config config = {.name = "fed", .timeout_ms = 80};
     zassert_ok(watchdog_task_register(&first, &config));
-    config.name = "silent"; config.timeout_ms = 120;
+    config.name = "silent";
+    config.timeout_ms = 120;
     zassert_ok(watchdog_task_register(&second, &config));
     expected = &second;
     k_sleep(K_MSEC(60));
@@ -299,7 +352,8 @@ ZTEST(task_watchdog, test_sleeping_earliest_preserves_peer_deadline_stops_and_re
 {
     struct watchdog_task_config config = {.name = "sleeping", .timeout_ms = 80};
     zassert_ok(watchdog_task_register(&first, &config));
-    config.name = "silent"; config.timeout_ms = 120;
+    config.name = "silent";
+    config.timeout_ms = 120;
     zassert_ok(watchdog_task_register(&second, &config));
     expected = &second;
     zassert_ok(watchdog_task_sleep_forever(&first));
@@ -315,12 +369,16 @@ ZTEST(task_watchdog, test_sleeping_earliest_preserves_peer_deadline_stops_and_re
 static struct k_thread worker;
 K_THREAD_STACK_DEFINE(worker_stack, 2048);
 K_SEM_DEFINE(worker_done, 0, 1);
+
 static void change_registration(void *a, void *b, void *c)
 {
-    ARG_UNUSED(a); ARG_UNUSED(b); ARG_UNUSED(c);
+    ARG_UNUSED(a);
+    ARG_UNUSED(b);
+    ARG_UNUSED(c);
     for (int i = 0; i < 40; ++i) {
         const struct watchdog_task_config config = {
-            .name = i % 2 ? "slow" : "fast", .timeout_ms = i % 2 ? 600 : 300,
+            .name = i % 2 ? "slow" : "fast",
+            .timeout_ms = i % 2 ? 600 : 300,
         };
         zassert_ok(watchdog_task_sleep_forever(&first));
         zassert_ok(watchdog_task_register(&first, &config));
@@ -330,12 +388,21 @@ static void change_registration(void *a, void *b, void *c)
     zassert_ok(watchdog_task_sleep_forever(&first));
     k_sem_give(&worker_done);
 }
+
 ZTEST(task_watchdog, test_concurrent_snapshots_are_consistent)
 {
     const struct watchdog_task_config config = {.name = "fast", .timeout_ms = 300};
     zassert_ok(watchdog_task_register(&first, &config));
-    k_thread_create(&worker, worker_stack, K_THREAD_STACK_SIZEOF(worker_stack),
-                    change_registration, NULL, NULL, NULL, 5, 0, K_NO_WAIT);
+    k_thread_create(&worker,
+        worker_stack,
+        K_THREAD_STACK_SIZEOF(worker_stack),
+        change_registration,
+        NULL,
+        NULL,
+        NULL,
+        5,
+        0,
+        K_NO_WAIT);
     int64_t deadline = k_uptime_get() + 1500;
     unsigned snapshots = 0;
     while (k_sem_take(&worker_done, K_NO_WAIT)) {
@@ -343,7 +410,8 @@ ZTEST(task_watchdog, test_concurrent_snapshots_are_consistent)
         zassert_ok(watchdog_task_get(&first, &state));
         zassert_true((!strcmp(state.name, "fast") && state.timeout_ms == 300) ||
                      (!strcmp(state.name, "slow") && state.timeout_ms == 600));
-        zassert_true(state.flags == WATCHDOG_TASK_ACTIVE || state.flags == WATCHDOG_TASK_SLEEP_FOREVER);
+        zassert_true(
+            state.flags == WATCHDOG_TASK_ACTIVE || state.flags == WATCHDOG_TASK_SLEEP_FOREVER);
         zassert_true(k_uptime_get() < deadline);
         ++snapshots;
         k_sleep(K_MSEC(1));
@@ -351,6 +419,7 @@ ZTEST(task_watchdog, test_concurrent_snapshots_are_consistent)
     zassert_ok(k_thread_join(&worker, K_MSEC(100)));
     zassert_true(snapshots > 0);
 }
+
 ZTEST(task_watchdog, test_configuration_switches)
 {
     zassert_equal(watchdog_init(NULL), -EINVAL);
@@ -365,6 +434,7 @@ ZTEST(task_watchdog, test_configuration_switches)
 /* 系统工作队列被阻塞时，定时检查、关键门控和复位仍须独立执行。 */
 K_SEM_DEFINE(queue_entered, 0, 1);
 K_SEM_DEFINE(queue_release, 0, 1);
+
 static void block_system_queue(struct k_work *work)
 {
     ARG_UNUSED(work);
@@ -373,6 +443,7 @@ static void block_system_queue(struct k_work *work)
     (void)k_sem_take(&queue_release, K_FOREVER);
     atomic_set(&queue_blocked, 0);
 }
+
 static K_WORK_DEFINE(queue_blocker, block_system_queue);
 
 static void block_queue(void)
@@ -483,10 +554,14 @@ ZTEST(task_watchdog, test_delayed_reset_keeps_feed_with_blocked_queue_stops_and_
     expected_reset_delay_ms = 120;
     reset_requested_ms = k_uptime_get();
     atomic_val_t before = atomic_get(&edges);
-    (void)watchdog_report_fault(-EIO, "Requested reset", WATCHDOG_ACTION_RESET, expected_reset_delay_ms);
+    (void)watchdog_report_fault(
+        -EIO, "Requested reset", WATCHDOG_ACTION_RESET, expected_reset_delay_ms);
     k_sleep(K_MSEC(40));
     zassert_equal(atomic_get(&edges) > before, IS_ENABLED(CONFIG_WATCHDOG_EXTERNAL));
-    (void)watchdog_report_fault(-EIO, "Requested reset", WATCHDOG_ACTION_RESET, 5000); /* 重复请求不得推迟第一次安排的期限。 */
+    (void)watchdog_report_fault(-EIO,
+        "Requested reset",
+        WATCHDOG_ACTION_RESET,
+        5000); /* 重复请求不得推迟第一次安排的期限。 */
     k_sleep(K_MSEC(200));
     zassert_unreachable("Delayed reset depended on the blocked workqueue");
 }
@@ -495,8 +570,10 @@ static void delayed_reset_in_isr(struct k_timer *timer)
 {
     ARG_UNUSED(timer);
     reset_requested_ms = k_uptime_get();
-    (void)watchdog_report_fault(-EIO, "Requested reset", WATCHDOG_ACTION_RESET, expected_reset_delay_ms);
+    (void)watchdog_report_fault(
+        -EIO, "Requested reset", WATCHDOG_ACTION_RESET, expected_reset_delay_ms);
 }
+
 static K_TIMER_DEFINE(request_reset_timer, delayed_reset_in_isr, NULL);
 
 ZTEST(task_watchdog, test_interrupt_delayed_reset_stops_and_reboots)
@@ -544,7 +621,8 @@ ZTEST(task_watchdog, test_shorter_reset_request_advances_deadline_stops_and_rebo
     k_sleep(K_MSEC(20));
     expected_reset_delay_ms = 80;
     reset_requested_ms = k_uptime_get();
-    (void)watchdog_report_fault(-EIO, "Requested reset", WATCHDOG_ACTION_RESET, expected_reset_delay_ms);
+    (void)watchdog_report_fault(
+        -EIO, "Requested reset", WATCHDOG_ACTION_RESET, expected_reset_delay_ms);
     k_sleep(K_MSEC(200));
     zassert_unreachable("Earlier reset request did not advance the deadline");
 }
@@ -581,12 +659,14 @@ ZTEST(task_watchdog, test_startup_grace_expires_before_first_check)
 #endif
 
 static atomic_t hold_result;
+
 static void report_hold(struct k_timer *timer)
 {
     ARG_UNUSED(timer);
-    atomic_set(&hold_result, watchdog_report_fault(-EIO,
-               "Injected interrupt hold", WATCHDOG_ACTION_HOLD, 0));
+    atomic_set(&hold_result,
+        watchdog_report_fault(-EIO, "Injected interrupt hold", WATCHDOG_ACTION_HOLD, 0));
 }
+
 static K_TIMER_DEFINE(hold_timer, report_hold, NULL);
 
 ZTEST(task_watchdog, test_interrupt_hold_closes_gate_and_keeps_feed_with_blocked_workqueue)

@@ -6,20 +6,28 @@
 
 int mb_rtu_validate(const uint8_t *frame, size_t size)
 {
-    if (!frame) { return -EINVAL; }
+    if (!frame) {
+        return -EINVAL;
+    }
     if (size < 4 || size - 4 > sizeof(((struct modbus_adu *)0)->data)) {
         return -EMSGSIZE;
     }
     uint16_t crc = sys_get_le16(frame + size - 2);
-    if (crc16_ansi(frame, size - 2) != crc) { return -EBADMSG; }
+    if (crc16_ansi(frame, size - 2) != crc) {
+        return -EBADMSG;
+    }
     return 0;
 }
 
 int mb_rtu_decode(const uint8_t *frame, size_t size, struct modbus_adu *adu)
 {
-    if (!adu) { return -EINVAL; }
+    if (!adu) {
+        return -EINVAL;
+    }
     int err = mb_rtu_validate(frame, size);
-    if (err) { return err; }
+    if (err) {
+        return err;
+    }
 
     memset(adu, 0, sizeof(*adu));
     adu->unit_id = frame[0];
@@ -30,10 +38,11 @@ int mb_rtu_decode(const uint8_t *frame, size_t size, struct modbus_adu *adu)
     return 0;
 }
 
-int mb_rtu_encode(const struct modbus_adu *adu, uint8_t *frame,
-                  size_t capacity, size_t *size)
+int mb_rtu_encode(const struct modbus_adu *adu, uint8_t *frame, size_t capacity, size_t *size)
 {
-    if (!adu || !frame || !size) { return -EINVAL; }
+    if (!adu || !frame || !size) {
+        return -EINVAL;
+    }
     if (adu->length > sizeof(adu->data) || capacity < adu->length + 4U) {
         return -EMSGSIZE;
     }

@@ -9,16 +9,22 @@
 #define DP_POINT_WORDS CONFIG_DP_POINT_WORDS
 
 typedef enum {
-    DP_TYPE_U8, DP_TYPE_U16, DP_TYPE_S16, DP_TYPE_U32, DP_TYPE_S32,
-    DP_TYPE_STRING, DP_TYPE_BYTES, DP_TYPE_WORDS,
+    DP_TYPE_U8,
+    DP_TYPE_U16,
+    DP_TYPE_S16,
+    DP_TYPE_U32,
+    DP_TYPE_S32,
+    DP_TYPE_STRING,
+    DP_TYPE_BYTES,
+    DP_TYPE_WORDS,
 } dp_value_type_t;
 
 typedef enum {
-    FLAG_PERSISTENCE   = (1U << 0),
+    FLAG_PERSISTENCE = (1U << 0),
     FLAG_READ_CALLBACK = (1U << 3),
-    FLAG_NO_RESTORE    = (1U << 5),
-    FLAG_RANGE_CHECK   = (1U << 6),
-    FLAG_CONSTANT      = (1U << 7),
+    FLAG_NO_RESTORE = (1U << 5),
+    FLAG_RANGE_CHECK = (1U << 6),
+    FLAG_CONSTANT = (1U << 7),
 } dp_flags_t;
 
 /** @brief 联合体只提供访问视图，实际类型及有效长度由点表确定。 */
