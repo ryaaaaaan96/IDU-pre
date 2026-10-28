@@ -15,6 +15,31 @@ void *__wrap_k_calloc(size_t count, size_t size)
     return fail_allocation ? NULL : __real_k_calloc(count, size);
 }
 
+static int map_allocations_left = -1;
+static size_t active_map_allocations;
+void *__real_k_realloc(void *ptr, size_t size);
+
+void *__wrap_k_realloc(void *ptr, size_t size)
+{
+    if (!size) {
+        if (ptr) {
+            --active_map_allocations;
+        }
+        return __real_k_realloc(ptr, size);
+    }
+    if (!map_allocations_left) {
+        return NULL;
+    }
+    if (map_allocations_left > 0) {
+        --map_allocations_left;
+    }
+    void *result = __real_k_realloc(ptr, size);
+    if (result && !ptr) {
+        ++active_map_allocations;
+    }
+    return result;
+}
+
 static int callback(const dp_callback_context_t *context)
 {
     zassert_equal(context->device_id, 7);
@@ -122,11 +147,19 @@ ZTEST(dp_core, test_core)
     zassert_equal(dp_register_table(7, NULL), -EINVAL);
     const dp_table_t too_large = {.points = rows, .point_count = SIZE_MAX};
     zassert_equal(dp_register_table(7, &too_large), -EOVERFLOW);
+    for (int allowed = 0; allowed < 2; ++allowed) {
+        map_allocations_left = allowed;
+        zassert_equal(dp_register_table(7, &table), -ENOMEM);
+        zassert_is_null(data(7, 0));
+        zassert_equal(active_map_allocations, 0);
+    }
+    map_allocations_left = -1;
     fail_allocation = true;
     zassert_equal(dp_register_table(7, &table), -ENOMEM);
     zassert_is_null(data(7, 0));
     fail_allocation = false;
     zassert_ok(dp_register_table(7, &table));
+    zassert_equal(active_map_allocations, 0);
     zassert_equal(dp_register_table(7, &table), -EEXIST);
     zassert_ok(dp_register_table(8, &table));
     zassert_equal(data(7, 1)->value.u16, 50);
@@ -141,7 +174,10 @@ ZTEST(dp_core, test_core)
     duplicates[511].signal_key = duplicates[0].signal_key;
     const dp_table_t duplicate_table = {
         .points = duplicates, .point_count = ARRAY_SIZE(duplicates)};
-    zassert_equal(dp_register_table(9, &duplicate_table), -EEXIST);
+    for (size_t attempt = 0; attempt < 3; ++attempt) {
+        zassert_equal(dp_register_table(9, &duplicate_table), -EEXIST);
+        zassert_equal(active_map_allocations, 0);
+    }
     zassert_is_null(data(9, 0));
     const dp_point_config_t invalid[] = {
         {.signal_key = 1, .size = 2, .type = VALUE_TYPE_U8},

@@ -20,7 +20,8 @@ int dp_get_para(uint16_t device_id, uint16_t signal_key,
 登记先检查入参、大小和重复键，分配私有节点及全部点数据，再逐点校验并复制配置初值。
 整表成功才发布，失败释放内存、不保留半张表；失败后可重试。
 设备 ID 与同表内 key 须非零、唯一；不同设备可共用一份只读点表，值相互独立。
-重复键使用临时 uint16_t 数组排序检查，原表顺序保持不变。
+重复键使用 Zephyr OA/LP hashmap 作为临时 key 集合，原表顺序保持不变。
+每次检查完成（含错误路径）清空全部桶，分配来自系统堆 k_realloc，不使用 libc malloc。
 
 配置行使用 dp_point_config_t，初值及上下限为公共 value_t，统一内嵌 u16/words/bytes 等成员。
 不得将 initial.array 用作外部初值引用；行数组须 static const 或具有同等常驻只读生命周期。
@@ -69,3 +70,8 @@ DP_POINT_FLAG_SKIP_RESTORE 控制显式恢复默认时跳过该点，不影响�
 
 零值配置使用 C 静态初始化规则，不再提供 DEFAULT_VALUE/FLAGS/CALLBACK/ARRAY 宏。
 点表不填写未启用的上下限；容量直接检查公共 value_t 内嵌 bytes 成员长度。
+
+登记 hash 集合平均插入 O(1)，整体平均 O(n)；桶使用 uint64_t key/value，
+内存明显大于原 uint16_t 副本。扩容时新旧桶同时存在，需按峰值调整系统堆。
+512 行测试显式增加测试堆，产品当前 21 点仍使用原 2048 B DP 堆预算。
+静态描述符只用于启动串行登记，桶在结束后释放，不参与运行期查找。

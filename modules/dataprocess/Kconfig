@@ -1,6 +1,9 @@
 menuconfig DATAPROCESS
     bool "Point tables and synchronous RAM values"
     select KERNEL_MEM_POOL
+    select SYS_HASH_MAP
+    select SYS_HASH_MAP_OA_LP
+    select SYS_HASH_FUNC32
 
 if DATAPROCESS
 
@@ -11,5 +14,7 @@ config HEAP_MEM_POOL_ADD_SIZE_DATAPROCESS
     help
       Each device registration allocates one private node with its point data.
       Include the node, point_count times sizeof(dp_point_data_t), and heap overhead.
+      Registration uses a temporary hashmap for duplicate keys. Include its
+      bucket allocation and resize peak in addition to previously registered data.
 
 endif

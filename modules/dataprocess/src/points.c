@@ -1,9 +1,9 @@
 #include <dataprocess/dataprocess.h>
 #include "dp_internal.h"
 #include <errno.h>
-#include <stdlib.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/sys/hash_map.h>
 
 LOG_MODULE_REGISTER(dp, LOG_LEVEL_INF);
 
@@ -19,6 +19,11 @@ LOG_MODULE_REGISTER(dp, LOG_LEVEL_INF);
 /* 应用只提供只读点表，设备目录与点数据均由模块私有持有。 */
 static dp_registered_table_t *tables;
 static K_MUTEX_DEFINE(store_lock);
+/* 启动登记串行执行；检查结束后释放全部桶，不保留运行期查找索引。 */
+SYS_HASHMAP_OA_LP_DEFINE_STATIC_ADVANCED(registration_keys,
+    sys_hash32,
+    k_realloc,
+    SYS_HASHMAP_CONFIG(SIZE_MAX, SYS_HASHMAP_DEFAULT_LOAD_FACTOR));
 
 /* ==================== 内部实现 ==================== */
 
@@ -150,35 +155,18 @@ static int find_point(uint16_t device_id,
     return -ENOENT;
 }
 
-static int compare_keys(const void *left, const void *right)
-{
-    uint16_t a = *(const uint16_t *)left;
-    uint16_t b = *(const uint16_t *)right;
-    return (a > b) - (a < b);
-}
-
-/* 只排序临时键副本，保留原表行顺序及回调索引。 */
+/* 将 hashmap 仅用作 key 集合；插入已有 key 返回 0。 */
 static int check_unique_keys(const dp_table_t *table)
 {
-    if (table->point_count < 2) {
-        return 0;
-    }
-    uint16_t *keys = k_malloc(table->point_count * sizeof(*keys));
-    if (!keys) {
-        return -ENOMEM;
-    }
-    for (size_t i = 0; i < table->point_count; ++i) {
-        keys[i] = table->points[i].signal_key;
-    }
-    qsort(keys, table->point_count, sizeof(*keys), compare_keys);
     int err = 0;
-    for (size_t i = 1; i < table->point_count; ++i) {
-        if (keys[i - 1] == keys[i]) {
-            err = -EEXIST;
+    for (size_t i = 0; i < table->point_count; ++i) {
+        int result = sys_hashmap_insert(&registration_keys, table->points[i].signal_key, 0, NULL);
+        if (result <= 0) {
+            err = result < 0 ? result : -EEXIST;
             break;
         }
     }
-    k_free(keys);
+    sys_hashmap_clear(&registration_keys, NULL, NULL);
     return err;
 }
 
