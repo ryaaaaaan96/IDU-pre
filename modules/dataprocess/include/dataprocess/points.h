@@ -36,14 +36,16 @@ struct dp_table {
     uint16_t device_id;
     const DM_SIG_CFG_S *points;
     size_t point_count;
+    struct dp_point_state *states; /**< 与 points 等长，独立且常驻的可写状态数组。 */
+    struct dp_table *next; /**< DP 维护的登记链表；应用不读写。 */
 };
 
 /**
- * @brief 启动时逐张登记只读点表；参数分区由设备树 dp-params 别名指定。
- * @note 描述及行数组须常驻；不同表 device_id 不同，预算跨表累计。
+ * @brief 启动时逐张登记点表；参数分区由设备树 dp-params 别名指定。
+ * @note 行数组只读，表描述和 states 可写且常驻；不同表 device_id 不同。
  * @note 登记在启动线程完成；运行后不再登记。参数挂载后禁止增加持久参数。
  */
-int dp_register_table(const struct dp_table *table);
+int dp_register_table(struct dp_table *table);
 
 /**
  * @brief 同步写入单个点，字节长度必须等于配置长度。

@@ -19,27 +19,6 @@ config DP_POINT_WORDS
     default 16
     range 2 72
 
-config DP_MODELS_MAX
-    int "Maximum registered model groups"
-    default 4
-    range 1 64
-    help
-      One group per process table. Each group costs a small slot; points are
-      still bounded by DP_POINTS_MAX_POINTS.
-
-config DP_POINTS_MAX_POINTS
-    int "Maximum configured points"
-    default 32
-    range 16 768
-
-config DP_POINTS_VALUE_WORDS
-    int "Maximum total words in configured point values"
-    default 512
-    range 16 16384
-    help
-      Upper bound for the sum of point widths, validated at startup.
-      Initialization allocates only the actual total from the system heap.
-
 config DP_PARAMS_MAX_COUNT
     int "Maximum persistent parameters"
     default 8
@@ -49,14 +28,6 @@ config DP_PARAMS_TRANSACTION_BYTES
     int "Maximum encoded parameter commit image"
     default 2048
     range 256 8192
-
-config HEAP_MEM_POOL_ADD_SIZE_DATAPROCESS
-    int "System heap budget for point values (bytes)"
-    default 1024
-    range 128 32768
-    help
-      Contribution to the shared Zephyr system heap, not a private DP arena.
-      Include the configured point widths times two and allocator overhead.
 
 config HEAP_MEM_POOL_ADD_SIZE_DP_PARAMS
     int "System heap budget for parameter cache and commit buffers (bytes)"

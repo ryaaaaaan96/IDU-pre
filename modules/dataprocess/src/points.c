@@ -8,26 +8,9 @@
 
 LOG_MODULE_REGISTER(dp, LOG_LEVEL_INF);
 
-struct stored_point {
-    int64_t sampled_at;
-    uint16_t *words;
-    uint32_t generation;
-    int error;
-    uint16_t quality;
-};
-
-/* 每张点表独立申请点值块。 */
-struct table_slot {
-    const struct dp_table *cfg;
-    size_t first;
-};
-
-static struct table_slot slots[CONFIG_DP_MODELS_MAX];
-static size_t table_count;
-static size_t point_count;
-static size_t value_words;
+/* 表描述及点状态均由调用方静态提供，模块只维护登记链表。 */
+static struct dp_table *tables;
 static size_t param_points;
-static struct stored_point states[CONFIG_DP_POINTS_MAX_POINTS];
 static uint32_t generation;
 static K_MUTEX_DEFINE(store_lock);
 
@@ -73,7 +56,7 @@ static void pack(uint8_t *bytes, const struct dp_value *value, size_t size)
     }
 }
 
-static int row_view(uint16_t dev, const DM_SIG_CFG_S *row, struct dp_point_cfg *p)
+int dp_describe_point(uint16_t dev, const DM_SIG_CFG_S *row, struct dp_point_cfg *p)
 {
     if (!row || !row->sig_id || !row->sig_size ||
         row->sig_size > DP_POINT_WORDS * 2) { return -EINVAL; }
@@ -146,117 +129,82 @@ static int row_view(uint16_t dev, const DM_SIG_CFG_S *row, struct dp_point_cfg *
     return dp_check_value(p, &p->initial);
 }
 
-const struct dp_point_cfg *dp_config_point(size_t index, struct dp_point_cfg *scratch)
-{
-    if (!scratch) { return NULL; }
-    for (size_t i = 0; i < table_count; ++i) {
-        const struct table_slot *slot = &slots[i];
-        if (index < slot->first + slot->cfg->point_count) {
-            return row_view(slot->cfg->device_id,
-                            &slot->cfg->points[index - slot->first], scratch) ?
-                   NULL : scratch;
-        }
-    }
-    return NULL;
-}
+const struct dp_table *dp_tables(void) { return tables; }
 
-int dp_config_index(struct dp_key key)
+static int find_point(struct dp_key key, struct dp_point_cfg *point,
+                      struct dp_point_state **state)
 {
     if (!key.dev_id || !key.sig_id) { return -EINVAL; }
-    for (size_t i = 0; i < table_count; ++i) {
-        const struct dp_table *cfg = slots[i].cfg;
-        if (cfg->device_id != key.dev_id) { continue; }
-        for (size_t n = 0; n < cfg->point_count; ++n) {
-            if (cfg->points[n].sig_id == key.sig_id) { return slots[i].first + n; }
+    for (struct dp_table *table = tables; table; table = table->next) {
+        if (table->device_id != key.dev_id) { continue; }
+        for (size_t i = 0; i < table->point_count; ++i) {
+            if (table->points[i].sig_id != key.sig_id) { continue; }
+            *state = &table->states[i];
+            return dp_describe_point(key.dev_id, &table->points[i], point);
         }
         return -ENOENT;
     }
     return -ENOENT;
 }
 
-size_t dp_point_count(void) { return point_count; }
-
-int dp_register_table(const struct dp_table *table)
+int dp_register_table(struct dp_table *table)
 {
     if (k_is_in_isr()) { return -EWOULDBLOCK; }
-    if (!table || !table->device_id || !table->points || !table->point_count) {
-        return -EINVAL;
-    }
-    for (size_t i = 0; i < table_count; ++i) {
-        if (slots[i].cfg->device_id == table->device_id) { return -EEXIST; }
-    }
-    if (table_count == ARRAY_SIZE(slots)) { return -ENOSPC; }
-    if (table->point_count > CONFIG_DP_POINTS_MAX_POINTS - point_count) {
-        return -EINVAL;
+    if (!table || !table->device_id || !table->points || !table->point_count ||
+        !table->states) { return -EINVAL; }
+    for (const struct dp_table *item = tables; item; item = item->next) {
+        if (item->device_id == table->device_id) { return -EEXIST; }
+        if (item->states == table->states) { return -EINVAL; }
     }
 
-    size_t words = 0, params = 0;
-    for (size_t n = 0; n < table->point_count; ++n) {
-        struct dp_point_cfg p;
-        if (row_view(table->device_id, &table->points[n], &p)) { return -EINVAL; }
-        words += p.width;
-        if (value_words + words > CONFIG_DP_POINTS_VALUE_WORDS) { return -ENOSPC; }
-        if (p.source == DP_SOURCE_PARAMETER && ++params > CONFIG_DP_PARAMS_MAX_COUNT) {
-            return -ENOSPC;
-        }
-        for (size_t m = 0; m < n; ++m) {
-            if (table->points[m].sig_id == table->points[n].sig_id) { return -EEXIST; }
-        }
-    }
-    if (param_points + params > CONFIG_DP_PARAMS_MAX_COUNT) { return -ENOSPC; }
-    if (params && dp_params_mounted()) { return -EBUSY; }
-
-    uint16_t *values = k_malloc(words * sizeof(*values));
-    if (!values) { return -ENOMEM; }
-    const size_t first = point_count;
-    size_t offset = 0;
-    for (size_t n = 0; n < table->point_count; ++n) {
-        struct dp_point_cfg p;
-        if (row_view(table->device_id, &table->points[n], &p)) {
-            k_free(values);
+    /* 全表通过校验后才写状态、挂接，失败不影响已登记表。 */
+    size_t params = 0;
+    for (size_t i = 0; i < table->point_count; ++i) {
+        struct dp_point_cfg point;
+        if (dp_describe_point(table->device_id, &table->points[i], &point)) {
             return -EINVAL;
         }
-        struct stored_point *state = &states[first + n];
-        state->words = values + offset;
-        state->sampled_at = 0;
-        state->generation = 0;
-        state->error = p.source == DP_SOURCE_CONSTANT ? 0 : -ENODATA;
-        state->quality = p.source == DP_SOURCE_CONSTANT ?
-                        DP_QUALITY_GOOD : DP_QUALITY_UNINITIALIZED;
-        memcpy(state->words, p.initial.words, p.width * 2);
-        offset += p.width;
+        if (point.source == DP_SOURCE_PARAMETER) { ++params; }
+        for (size_t n = 0; n < i; ++n) {
+            if (table->points[n].sig_id == table->points[i].sig_id) { return -EEXIST; }
+        }
     }
-    slots[table_count].cfg = table;
-    slots[table_count].first = first;
-    ++table_count;
-    point_count += table->point_count;
-    value_words += words;
+    if (params > CONFIG_DP_PARAMS_MAX_COUNT - param_points) { return -ENOSPC; }
+    if (params && dp_params_mounted()) { return -EBUSY; }
+
+    for (size_t i = 0; i < table->point_count; ++i) {
+        struct dp_point_cfg point;
+        dp_describe_point(table->device_id, &table->points[i], &point);
+        table->states[i] = (struct dp_point_state){
+            .value = point.initial,
+            .error = point.source == DP_SOURCE_CONSTANT ? 0 : -ENODATA,
+            .quality = point.source == DP_SOURCE_CONSTANT ?
+                       DP_QUALITY_GOOD : DP_QUALITY_UNINITIALIZED,
+        };
+    }
+    table->next = tables;
+    tables = table;
     param_points += params;
     return 0;
 }
 
-static int read_point(int index, const struct dp_point_cfg *point,
-                      struct dp_point_state *state)
+static int read_point(const struct dp_point_cfg *point,
+                      const struct dp_point_state *stored, struct dp_point_state *state)
 {
-    const struct dp_point_cfg p = *point;
-    const struct dp_key key = p.key;
-    if (p.read) {
+    if (point->read) {
+        k_mutex_lock(&store_lock, K_FOREVER);
+        uint32_t current = ++generation;
+        k_mutex_unlock(&store_lock);
         *state = (struct dp_point_state){
             .quality = DP_QUALITY_GOOD,
             .sampled_at = k_uptime_get(),
-            .generation = ++generation,
+            .generation = current,
         };
-        return p.read(key, state);
+        return point->read(point->key, state);
     }
-    if (p.source == DP_SOURCE_PARAMETER) { return dp_params_read(key, state); }
+    if (point->source == DP_SOURCE_PARAMETER) { return dp_params_read(point->key, state); }
     k_mutex_lock(&store_lock, K_FOREVER);
-    *state = (struct dp_point_state){
-        .sampled_at = states[index].sampled_at,
-        .generation = states[index].generation,
-        .error = states[index].error,
-        .quality = states[index].quality,
-    };
-    memcpy(state->value.words, states[index].words, p.width * 2);
+    *state = *stored;
     k_mutex_unlock(&store_lock);
     return 0;
 }
@@ -266,24 +214,24 @@ int dp_set_para(uint16_t dev_id, uint16_t sig_id, uint8_t size, const uint8_t *b
     if (k_is_in_isr()) { return -EWOULDBLOCK; }
     if (!bytes) { return -EINVAL; }
     struct dp_key key = {dev_id, sig_id};
-    int index = dp_config_index(key);
-    if (index < 0) { return index; }
     struct dp_point_cfg p;
-    if (!dp_config_point(index, &p)) { return -ENOENT; }
+    struct dp_point_state *stored;
+    int err = find_point(key, &p, &stored);
+    if (err) { return err; }
     if (size != p.size_bytes) { return -EMSGSIZE; }
     if (p.source == DP_SOURCE_CONSTANT) { return -EACCES; }
     struct dp_value value;
     unpack(&value, bytes, size);
-    int err = dp_check_value(&p, &value);
+    err = dp_check_value(&p, &value);
     if (err) { return err; }
     if (p.handler) { return p.handler(key, &value); }
     if (p.source == DP_SOURCE_PARAMETER) { return dp_params_write(key, &value); }
     k_mutex_lock(&store_lock, K_FOREVER);
-    memcpy(states[index].words, value.words, p.width * 2);
-    states[index].sampled_at = k_uptime_get();
-    states[index].quality = DP_QUALITY_GOOD;
-    states[index].error = 0;
-    states[index].generation = ++generation;
+    stored->value = value;
+    stored->sampled_at = k_uptime_get();
+    stored->quality = DP_QUALITY_GOOD;
+    stored->error = 0;
+    stored->generation = ++generation;
     k_mutex_unlock(&store_lock);
     return 0;
 }
@@ -293,13 +241,13 @@ int dp_get_para(uint16_t dev_id, uint16_t sig_id, uint8_t capacity, uint8_t *byt
     if (k_is_in_isr()) { return -EWOULDBLOCK; }
     if (!bytes) { return -EINVAL; }
     struct dp_key key = {dev_id, sig_id};
-    int index = dp_config_index(key);
-    if (index < 0) { return index; }
     struct dp_point_cfg p;
-    if (!dp_config_point(index, &p)) { return -ENOENT; }
+    struct dp_point_state *stored;
+    int err = find_point(key, &p, &stored);
+    if (err) { return err; }
     if (capacity < p.size_bytes) { return -EMSGSIZE; }
     struct dp_point_state state;
-    int err = read_point(index, &p, &state);
+    err = read_point(&p, stored, &state);
     if (err) { return err; }
     pack(bytes, &state.value, p.size_bytes);
     return capacity;

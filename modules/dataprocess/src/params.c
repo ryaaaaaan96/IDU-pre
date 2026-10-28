@@ -16,7 +16,10 @@ LOG_MODULE_REGISTER(dp_params, LOG_LEVEL_INF);
 #define IMAGE_MAX CONFIG_DP_PARAMS_TRANSACTION_BYTES
 
 static size_t param_count;
-static uint16_t defs[CONFIG_DP_PARAMS_MAX_COUNT];
+static struct {
+    uint16_t device_id;
+    const DM_SIG_CFG_S *row;
+} defs[CONFIG_DP_PARAMS_MAX_COUNT];
 static bool stored[CONFIG_DP_PARAMS_MAX_COUNT];
 static struct nvs_fs fs;
 /* 应用必须提供固定分区别名；名称约定属于 DP 模块。 */
@@ -49,15 +52,16 @@ static int ensure_mounted(void);
 
 static const struct dp_point_cfg *param(size_t index, struct dp_point_cfg *scratch)
 {
-    return dp_config_point(defs[index], scratch);
+    return dp_describe_point(defs[index].device_id, defs[index].row, scratch) ?
+           NULL : scratch;
 }
 
 static int index_of(struct dp_key key)
 {
     for (size_t i = 0; i < param_count; ++i) {
-        struct dp_point_cfg p;
-        if (!param(i, &p)) { continue; }
-        if (p.key.dev_id == key.dev_id && p.key.sig_id == key.sig_id) { return i; }
+        if (defs[i].device_id == key.dev_id && defs[i].row->sig_id == key.sig_id) {
+            return i;
+        }
     }
     return -ENOENT;
 }
@@ -344,8 +348,8 @@ static int mount_once(void)
     if (ready) {
         return (status.flags & DP_PARAM_STORAGE_READY) ? 0 : -EROFS;
     }
-    /* 尚未登记任何模型时不锁存，允许登记后再次访问。 */
-    if (!dp_point_count()) { return -ENODEV; }
+    /* 尚未登记任何点表时不锁存，允许登记后再次访问。 */
+    if (!dp_tables()) { return -ENODEV; }
     ready = true;
     buffers = k_malloc(sizeof(*buffers));
     if (!buffers) {
@@ -353,15 +357,13 @@ static int mount_once(void)
         return -ENOMEM;
     }
     memset(buffers, 0, sizeof(*buffers));
-    for (size_t i = 0; i < dp_point_count(); ++i) {
-        struct dp_point_cfg p;
-        if (!dp_config_point(i, &p)) { continue; }
-        if (p.source != DP_SOURCE_PARAMETER) { continue; }
-        if (param_count == CONFIG_DP_PARAMS_MAX_COUNT) {
-            set_status(-ENOSPC, 0);
-            return -ENOSPC;
+    for (const struct dp_table *table = dp_tables(); table; table = table->next) {
+        for (size_t i = 0; i < table->point_count; ++i) {
+            const DM_SIG_CFG_S *row = &table->points[i];
+            if (!(row->sig_flag & FLAG_PERSISTENCE)) { continue; }
+            defs[param_count].device_id = table->device_id;
+            defs[param_count++].row = row;
         }
-        defs[param_count++] = i;
     }
     for (size_t i = 0; i < param_count; ++i) {
         struct dp_point_cfg p;

@@ -32,9 +32,8 @@ struct dp_point_cfg {
 int dp_params_read(struct dp_key key, struct dp_point_state *state);
 bool dp_params_mounted(void);
 int dp_params_write(struct dp_key key, const struct dp_value *value);
-size_t dp_point_count(void);
-int dp_config_index(struct dp_key key);
-const struct dp_point_cfg *dp_config_point(size_t index, struct dp_point_cfg *scratch);
+const struct dp_table *dp_tables(void);
+int dp_describe_point(uint16_t dev, const DM_SIG_CFG_S *row, struct dp_point_cfg *point);
 int dp_check_value(const struct dp_point_cfg *point, const struct dp_value *value);
 
 #endif

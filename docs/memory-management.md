@@ -1,11 +1,15 @@
 # 工作缓冲区与系统堆
 
-DP 最小核心只保留两处常驻动态分配：
+DP 点状态改为每张表静态持有，登记不分配内存：
 
 | 工作区 | 申请与释放 |
 | --- | --- |
-| 点值缓冲区 | `dp_register_table()` 每组按实际字数申请一块，服务生命周期内持有；失败返回 `-ENOMEM` |
-| 参数缓存与提交镜像 | 首次访问参数接口时一次申请；存储故障时仍保留缓存，允许继续读取默认值 |
+| 表描述和点状态 | 应用静态定义，状态数组长度由点表行数确定；服务生命周期内持有 |
+| 参数缓存与提交镜像 | 首次访问参数接口时一次申请，保留到重启 |
+
+当前 24 个点每个状态 56 B，共 1344 B；包含每点 16 words 的完整值数组。
+移除原 slots（32 B）、全局 states（768 B）和点值堆预算（512 B）。
+参数枚举直接引用行定义，不再通过全局点下标查找。
 
 IAP 的位图、数据包、SGZ 与 Flash 写工作区由 `iap_init_config()` 一次申请，
 失败时关闭 Flash 区域且不启动任务。SGZ/QuickLZ 纯算法接口仍由调用者提供工作区。
@@ -17,23 +21,23 @@ IAP 的位图、数据包、SGZ 与 Flash 写工作区由 `iap_init_config()` �
 
 | 配置后缀 | 当前预算（字节） |
 | --- | ---: |
-| `DATAPROCESS` | 512 |
 | `DP_PARAMS` | 4096 |
 | `IAP` | 12288 |
-| 合计 | 16896 |
+| 合计 | 16384 |
 
-实测 `kheap__system_heap` 为 16,988 B（含分配器开销）。IAP 预算覆盖
+2026-10-28 默认 MCUboot + IAPv3 构建测得 `kheap__system_heap` 为 16,476 B（含分配器开销）。IAP 预算覆盖
 `receiver_buffers`：512 B 镜像写入缓冲、4.25 KiB 解包工作区、1 KiB 报文、
 按容器位图约 4 KiB 及扇区位图 16 B。容器上限与板级暂存分区同为 512 KiB，
 改任一项须同步 `CONFIG_IAP_MAX_CONTAINER_SIZE`。
 
-`HEAP_MEM_POOL_ADD_SIZE_DATAPROCESS` 只需覆盖当前 24 点、61 words 的
-122 B 点值及分配器开销；`HEAP_MEM_POOL_ADD_SIZE_DP_PARAMS` 覆盖
-`struct param_buffers` 约 3.3 KB。新增点表宽度或持久参数时须重新核算。
+`HEAP_MEM_POOL_ADD_SIZE_DP_PARAMS` 覆盖 `struct param_buffers` 约 3.3 KB。
+新增点表或调整 `DP_POINT_WORDS` 时，静态 RAM 用量随点数和单点最大宽度增长。
 
-`k_malloc()` 不等待，申请失败返回 `NULL`。DP 初始化失败返回 `-ENOMEM`；
-参数区挂载失败只降级为 RAM 默认值，由参数状态接口报告存储错误。
-IAP 分配失败关闭 Flash 区域并返回错误。
+本轮默认固件静态 RAM 为 40,856 B，较改动前 40,760 B 增加 96 B；
+Flash 为 87,932 B，较改动前 88,756 B 减少 824 B。它们是链接结果，不代表实板峰值。
+
+`k_malloc()` 只用于参数和 IAP 工作区，失败返回错误；应用读取采样周期失败时
+使用默认值。IAP 分配失败关闭 Flash 区域并返回错误。
 
 ## 栈与验证
 

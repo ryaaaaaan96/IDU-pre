@@ -24,7 +24,7 @@ flowchart TD
 统一包含 `<dataprocess/points.h>`：
 
 ```c
-int dp_register_table(const struct dp_table *table);
+int dp_register_table(struct dp_table *table);
 int dp_set_para(uint16_t dev_id, uint16_t sig_id, uint8_t size, const uint8_t *bytes);
 int dp_get_para(uint16_t dev_id, uint16_t sig_id, uint8_t capacity, uint8_t *bytes);
 ```
@@ -48,10 +48,12 @@ dp_params: partition@10000 {
 
 ```c
 static const DM_SIG_CFG_S rows[] = { /* 产品测点 */ };
-const struct dp_table local_table = {
+static struct dp_point_state states[ARRAY_SIZE(rows)];
+struct dp_table local_table = {
     .device_id = 1,
     .points = rows,
     .point_count = ARRAY_SIZE(rows),
+    .states = states,
 };
 
 int protocol_init(void)
@@ -60,9 +62,24 @@ int protocol_init(void)
 }
 ```
 
-表描述及行数组必须常驻只读。每张表使用不同 `device_id`，重复返回 `-EEXIST`；
-不同表可以复用 `sig_id`。点数、字数、参数预算跨表累计，每张表按实际字数分配点值。
-登记失败只影响本张表。参数区挂载后不能增加持久参数（`-EBUSY`）。
+测点行数组只读；表描述和状态数组可写，三者都须常驻。`states` 长度必须与
+`points` 相同，按 `ARRAY_SIZE(rows)` 定义；不同表各自提供独立数组，不能共用或重叠。
+登记后应用不再修改表描述、行定义、状态或 next，只通过 DP 读写接口访问数据。
+
+每张表使用不同 `device_id`，重复返回 `-EEXIST`；不同表可以复用 `sig_id`。
+DP 校验整张表后初始化 states，再将表挂入单向链表；失败不改变状态数组或已登记表。
+无全局表槽位、全局点下标、最大表/点数量配置，也没有点值动态分配。
+每个状态直接包含 `DP_POINT_WORDS` 字点值，使用更多静态 RAM 换取简单寻址。
+持久参数数量仍按所有表累计检查；参数挂载后不能增加持久参数（`-EBUSY`）。
+
+```text
+DP 链表 → table B → table A → NULL
+             │         │
+             ├ points  ├ points   只读定义
+             └ states  └ states   各表独立状态及点值
+
+读取/写入：device_id → 表 → sig_id → 本表 states[i]
+```
 
 读写均在线程上下文同步执行，ISR 返回 `-EWOULDBLOCK`。字节序为低字节在前；
 写长度须与点表一致，读容量须足够。写成功返回 0；读成功保留原约定返回传入容量。
@@ -102,6 +119,6 @@ NVS 首次访问时挂载。读写按 `(dev_id, sig_id)` 保存，记录及提�
 | `parameter_store.c` | NVS 记录、提交镜像及掉电恢复 |
 | `src/dp_internal.h`、`src/parameter_store.h` | 模块内部实现接口 |
 
-容量仍通过 Kconfig 配置：`DP_MODELS_MAX`（表数量上限）、`DP_POINTS_MAX_POINTS`、
-`DP_POINTS_VALUE_WORDS`、`DP_POINT_WORDS`、`DP_PARAMS_MAX_COUNT` 和
-`DP_PARAMS_TRANSACTION_BYTES`；堆预算见[内存管理](../../docs/memory-management.md)。
+容量通过 `DP_POINT_WORDS` 配置单点最大字数；`DP_PARAMS_MAX_COUNT` 和
+`DP_PARAMS_TRANSACTION_BYTES` 限制持久参数数量和提交镜像。
+参数缓冲仍在首次访问时分配，点表和状态不占系统堆；见[内存管理](../../docs/memory-management.md)。

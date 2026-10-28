@@ -275,9 +275,12 @@ static const DM_SIG_CFG_S local_process_rows[] = {
     },
 };
 
-/* 与测点表在同一编译单元，指针及数量均为编译期常量；仅供 process_runtime 使用。 */
-const struct dp_table protocol_local_table = {
+/* 与测点表在同一编译单元，点表只读，状态数组及链表描述可写；仅供 process_runtime 使用。 */
+static struct dp_point_state local_states[ARRAY_SIZE(local_process_rows)];
+
+struct dp_table protocol_local_table = {
     .device_id = DEVICE_LOCAL,
     .points = local_process_rows,
     .point_count = ARRAY_SIZE(local_process_rows),
+    .states = local_states,
 };

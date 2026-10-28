@@ -78,10 +78,13 @@ static const DM_SIG_CFG_S alt_rows[] = {
 };
 
 /* 业务层逐组登记，顺序不限。 */
-static const struct dp_table models[] = {
-    {.device_id = DEV, .points = rows, .point_count = ARRAY_SIZE(rows)},
+static struct dp_point_state model_states[ARRAY_SIZE(rows)];
+static struct dp_point_state alt_states[ARRAY_SIZE(alt_rows)];
+static struct dp_table models[] = {
+    {.device_id = DEV, .points = rows, .point_count = ARRAY_SIZE(rows),
+     .states = model_states},
     {.device_id = DEV_ALT, .points = alt_rows,
-     .point_count = ARRAY_SIZE(alt_rows)},
+     .point_count = ARRAY_SIZE(alt_rows), .states = alt_states},
 };
 
 /* 参数区挂载后再加入持久参数必须被拒绝。 */
@@ -94,10 +97,31 @@ static const DM_SIG_CFG_S late_rows[] = {
     },
 };
 
-static const struct dp_table late_model = {
+static struct dp_point_state late_states[ARRAY_SIZE(late_rows)];
+static struct dp_table late_model = {
     .device_id = 9,
     .points = late_rows,
     .point_count = ARRAY_SIZE(late_rows),
+    .states = late_states,
+};
+
+/* 共用只读行，分别持有状态；数量超过旧目录上限 4。 */
+static const DM_SIG_CFG_S array_row[] = {
+    {.sig_id = 77, .sig_size = 3, .data_type = DATA_TYPE_U8ARRAY,
+     .data.def_value.str = {1, 2, 3}},
+};
+static struct dp_point_state extra_states[5][ARRAY_SIZE(array_row)];
+static struct dp_table extra_tables[] = {
+    {.device_id = 20, .points = array_row, .point_count = ARRAY_SIZE(array_row),
+     .states = extra_states[0]},
+    {.device_id = 21, .points = array_row, .point_count = ARRAY_SIZE(array_row),
+     .states = extra_states[1]},
+    {.device_id = 22, .points = array_row, .point_count = ARRAY_SIZE(array_row),
+     .states = extra_states[2]},
+    {.device_id = 23, .points = array_row, .point_count = ARRAY_SIZE(array_row),
+     .states = extra_states[3]},
+    {.device_id = 24, .points = array_row, .point_count = ARRAY_SIZE(array_row),
+     .states = extra_states[4]},
 };
 
 static void read_u16(uint16_t dev, uint16_t sig, uint16_t expected)
@@ -121,15 +145,60 @@ ZTEST(dp_core, test_core)
 {
     const char *phase = getenv("IDU_DP_PHASE");
 
-    static const struct dp_table duplicate = {
+    static struct dp_point_state duplicate_states[ARRAY_SIZE(alt_rows)];
+    static struct dp_table duplicate = {
         .device_id = DEV, .points = alt_rows,
         .point_count = ARRAY_SIZE(alt_rows),
+        .states = duplicate_states,
     };
     zassert_equal(dp_register_table(NULL), -EINVAL);
     zassert_ok(dp_register_table(&models[0]));
     zassert_equal(dp_register_table(&duplicate), -EEXIST);
     zassert_ok(dp_register_table(&models[1]));
     zassert_equal(dp_register_table(&models[1]), -EEXIST);
+
+    struct dp_table no_states = {
+        .device_id = 30, .points = array_row, .point_count = ARRAY_SIZE(array_row),
+    };
+    zassert_equal(dp_register_table(&no_states), -EINVAL);
+    struct dp_table shared_states = {
+        .device_id = 31, .points = rows, .point_count = ARRAY_SIZE(rows),
+        .states = model_states,
+    };
+    zassert_equal(dp_register_table(&shared_states), -EINVAL);
+
+    /* 表校验失败不得初始化一半，也不得挂入目录。 */
+    static const DM_SIG_CFG_S bad_rows[] = {
+        {.sig_id = 1, .sig_size = 2, .data_type = DATA_TYPE_U16},
+        {.sig_id = 1, .sig_size = 2, .data_type = DATA_TYPE_U16},
+    };
+    static struct dp_point_state bad_states[ARRAY_SIZE(bad_rows)] = {
+        {.value.words = {0x7777}},
+    };
+    static struct dp_table bad_table = {
+        .device_id = 32, .points = bad_rows, .point_count = ARRAY_SIZE(bad_rows),
+        .states = bad_states,
+    };
+    zassert_equal(dp_register_table(&bad_table), -EEXIST);
+    zassert_equal(bad_states[0].value.words[0], 0x7777);
+    uint8_t missing[2];
+    zassert_equal(dp_get_para(32, 1, sizeof(missing), missing), -ENOENT);
+
+    for (size_t i = 0; i < ARRAY_SIZE(extra_tables); ++i) {
+        zassert_ok(dp_register_table(&extra_tables[i]));
+        uint8_t bytes[4] = {0, 0, 0, 0xaa};
+        zassert_equal(dp_get_para(extra_tables[i].device_id, 77, sizeof(bytes), bytes),
+                      sizeof(bytes));
+        const uint8_t expected[] = {1, 2, 3, 0xaa};
+        zassert_mem_equal(bytes, expected, sizeof(bytes));
+    }
+    uint8_t array_value[] = {9, 8, 7};
+    zassert_ok(dp_set_para(20, 77, sizeof(array_value), array_value));
+    uint8_t array_result[3];
+    zassert_equal(dp_get_para(20, 77, sizeof(array_result), array_result),
+                  sizeof(array_result));
+    zassert_mem_equal(array_value, array_result, sizeof(array_value));
+    zassert_equal(extra_states[1][0].value.words[0], 0x0201);
 
     if (phase && !strcmp(phase, "verify")) {
         read_u16(DEV, SIG_PARAM, 700);

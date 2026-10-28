@@ -4,10 +4,10 @@
 #include <zephyr/sys/util.h>
 
 /* 与本地测点表同编译单元，声明只在使用方保留。 */
-extern const struct dp_table protocol_local_table;
+extern struct dp_table protocol_local_table;
 
 /* 业务层逐组登记；增加处理表时在这里追加一项。 */
-static const struct dp_table *const product_tables[] = {
+static struct dp_table *const product_tables[] = {
     &protocol_local_table,
 };
 
