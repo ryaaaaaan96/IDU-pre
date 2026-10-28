@@ -51,9 +51,28 @@ static dp_param_buffers_t *buffers;
 
 static int ensure_mounted(void);
 
-static const dp_point_cfg_t *param(size_t index, dp_point_cfg_t *scratch)
+/* NVS 编码固定，独立于公共 value_type_t 的枚举顺序。 */
+static dp_storage_type_t storage_type(const dp_point_config_t *point)
 {
-    return dp_describe_point(defs[index].device_id, defs[index].row, scratch) ? NULL : scratch;
+    switch (point->type) {
+    case VALUE_TYPE_U8:
+        return DP_U8;
+    case VALUE_TYPE_U16:
+        return DP_U16;
+    case VALUE_TYPE_S16:
+        return DP_S16;
+    case VALUE_TYPE_U32:
+        return DP_U32;
+    case VALUE_TYPE_S32:
+        return DP_S32;
+    default:
+        return DP_WORDS;
+    }
+}
+
+static uint8_t storage_width(const dp_point_config_t *point)
+{
+    return (point->size + 1) / 2;
 }
 
 static int index_of(uint16_t device_id, uint16_t signal_key)
@@ -92,9 +111,9 @@ static void commit_cache(uint32_t sequence, const bool *selected)
 }
 
 static int load_value(
-    const dp_point_cfg_t *p, uint8_t type, uint8_t width, const uint8_t *bytes, value_t *value)
+    const dp_point_config_t *p, uint8_t type, uint8_t width, const uint8_t *bytes, value_t *value)
 {
-    if (type != p->type || width != p->width) {
+    if (type != storage_type(p) || width != storage_width(p)) {
         return -EPROTO;
     }
     *value = (value_t){0};
@@ -113,22 +132,20 @@ static size_t encode_changes(uint8_t *buf, uint32_t sequence)
     sys_put_le32(0, buf + 8);
     sys_put_le32(sequence, buf + 12);
     for (size_t i = 0; i < param_count; ++i) {
-        dp_point_cfg_t p;
-        if (!param(i, &p) || (p.flags & FLAG_PERSISTENCE) == 0) {
+        const dp_point_config_t *p = defs[i].row;
+        if (stored[i] &&
+            !memcmp(&buffers->durable_stage[i], &buffers->durable[i], storage_width(p) * 2)) {
             continue;
         }
-        if (stored[i] && !memcmp(&buffers->durable_stage[i], &buffers->durable[i], p.width * 2)) {
-            continue;
-        }
-        if (offset + 6 + p.width * 2 > IMAGE_MAX) {
+        if (offset + 6 + storage_width(p) * 2 > IMAGE_MAX) {
             return 0;
         }
-        sys_put_le16(p.device_id, buf + offset);
-        sys_put_le16(p.signal_key, buf + offset + 2);
-        buf[offset + 4] = p.type;
-        buf[offset + 5] = p.width;
+        sys_put_le16(defs[i].device_id, buf + offset);
+        sys_put_le16(p->signal_key, buf + offset + 2);
+        buf[offset + 4] = storage_type(p);
+        buf[offset + 5] = storage_width(p);
         offset += 6;
-        for (size_t w = 0; w < p.width; ++w) {
+        for (size_t w = 0; w < storage_width(p); ++w) {
             sys_put_le16(buffers->durable_stage[i].words[w], buf + offset);
             offset += 2;
         }
@@ -161,18 +178,15 @@ static int apply(const bool *selected)
         if (!selected[i]) {
             continue;
         }
-        dp_point_cfg_t p;
-        if (!param(i, &p)) {
-            return -ENOENT;
-        }
-        if (!(p.flags & FLAG_PERSISTENCE)) {
+        const dp_point_config_t *p = defs[i].row;
+        if (!(p->flags & FLAG_PERSISTENCE)) {
             return -EACCES;
         }
-        int err = dp_check_value(&p, &buffers->staged[i]);
+        int err = dp_check_value(p, &buffers->staged[i]);
         if (err) {
             return err;
         }
-        changed |= memcmp(&defs[i].data->value, &buffers->staged[i], p.width * 2) != 0;
+        changed |= memcmp(&defs[i].data->value, &buffers->staged[i], storage_width(p) * 2) != 0;
         buffers->durable_stage[i] = buffers->staged[i];
         store = true;
     }
@@ -211,11 +225,6 @@ int dp_params_write(uint16_t device_id, uint16_t signal_key, const value_t *valu
         k_mutex_unlock(&params_lock);
         return index;
     }
-    dp_point_cfg_t p;
-    if (!param(index, &p) || p.source != DP_SOURCE_PARAMETER) {
-        k_mutex_unlock(&params_lock);
-        return -EACCES;
-    }
     buffers->staged[index] = *value;
     bool selected[CONFIG_DP_PARAMS_MAX_COUNT] = {0};
     selected[index] = true;
@@ -253,11 +262,11 @@ int dp_params_restore(uint16_t dev_id)
     bool selected[CONFIG_DP_PARAMS_MAX_COUNT] = {0};
     bool found = false;
     for (size_t i = 0; i < param_count; ++i) {
-        dp_point_cfg_t p;
-        if (!param(i, &p) || p.device_id != dev_id || (p.flags & FLAG_NO_RESTORE)) {
+        const dp_point_config_t *p = defs[i].row;
+        if (defs[i].device_id != dev_id || (p->flags & FLAG_NO_RESTORE)) {
             continue;
         }
-        buffers->staged[i] = p.initial;
+        dp_initial_value(p, &buffers->staged[i]);
         selected[i] = true;
         found = true;
     }
@@ -314,12 +323,9 @@ static int load_locked(bool *incompatible)
     }
 
     for (size_t i = 0; i < param_count; ++i) {
-        dp_point_cfg_t p;
-        if (!param(i, &p)) {
-            return -ENOENT;
-        }
-        buffers->durable_stage[i] = p.initial;
-        buffers->staged[i] = p.initial;
+        const dp_point_config_t *p = defs[i].row;
+        dp_initial_value(p, &buffers->durable_stage[i]);
+        dp_initial_value(p, &buffers->staged[i]);
     }
     uint32_t sequence = 0;
     bool recovered = false, present = false, converted = false;
@@ -333,12 +339,9 @@ static int load_locked(bool *incompatible)
     bool seed[CONFIG_DP_PARAMS_MAX_COUNT] = {0};
     if (present) {
         for (size_t i = 0; i < param_count; ++i) {
-            dp_point_cfg_t p;
-            if (!param(i, &p) || !(p.flags & FLAG_PERSISTENCE)) {
-                continue;
-            }
+            const dp_point_config_t *p = defs[i].row;
             dp_stored_value_t value;
-            err = dp_store_read(&fs, p.device_id, p.signal_key, &value, &recovered);
+            err = dp_store_read(&fs, defs[i].device_id, p->signal_key, &value, &recovered);
             if (err == -ENOENT) {
                 seed[i] = true;
                 continue;
@@ -351,12 +354,12 @@ static int load_locked(bool *incompatible)
             for (size_t w = 0; w < value.width; ++w) {
                 sys_put_le16(value.words[w], bytes + w * 2);
             }
-            err = load_value(&p, value.type, value.width, bytes, &buffers->durable_stage[i]);
+            err = load_value(p, value.type, value.width, bytes, &buffers->durable_stage[i]);
             if (err) {
                 *incompatible = incompatible_format(err);
                 return err;
             }
-            stored[i] = value.width == p.width;
+            stored[i] = value.width == storage_width(p);
             if (!stored[i]) {
                 converted = true;
             }
@@ -374,17 +377,14 @@ static int load_locked(bool *incompatible)
     }
     bool need_save = !present;
     for (size_t i = 0; i < param_count; ++i) {
-        dp_point_cfg_t p;
-        if (!param(i, &p)) {
-            return -ENOENT;
-        }
+        const dp_point_config_t *p = defs[i].row;
         if (seed[i]) {
-            err = dp_check_value(&p, &buffers->durable_stage[i]);
+            err = dp_check_value(p, &buffers->durable_stage[i]);
             if (err) {
                 return err;
             }
         }
-        need_save |= (p.flags & FLAG_PERSISTENCE) && !stored[i];
+        need_save |= (p->flags & FLAG_PERSISTENCE) && !stored[i];
     }
     memcpy(buffers->staged, buffers->durable_stage, sizeof(buffers->staged));
     memcpy(buffers->durable, buffers->durable_stage, sizeof(buffers->durable));
@@ -453,13 +453,9 @@ static int mount_once(void)
         }
     }
     for (size_t i = 0; i < param_count; ++i) {
-        dp_point_cfg_t p;
-        if (!param(i, &p)) {
-            set_status(-ENOENT, 0);
-            return -ENOENT;
-        }
-        buffers->staged[i] = p.initial;
-        buffers->durable_stage[i] = p.initial;
+        const dp_point_config_t *p = defs[i].row;
+        dp_initial_value(p, &buffers->staged[i]);
+        dp_initial_value(p, &buffers->durable_stage[i]);
     }
     if (!param_count) {
         set_status(0, DP_PARAM_STORAGE_READY);

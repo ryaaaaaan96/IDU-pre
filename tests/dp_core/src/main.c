@@ -178,6 +178,52 @@ ZTEST(dp_core, test_core)
     zassert_equal(dp_register_table(32, &bad_table), -EEXIST);
     zassert_is_null(data(32, 1));
 
+    /* 配置直接引用后仍按各自的数值类型检查范围及加载数组初值。 */
+    static const uint8_t typed_initial[] = {1, 2, 3, 4, 5, 6};
+    static const dp_point_config_t typed_rows[] = {
+        {.signal_key = 101,
+            .size = 1,
+            .type = VALUE_TYPE_U8,
+            .flags = FLAG_RANGE_CHECK,
+            .data = {.initial.u8 = 2, .minimum.u8 = 1, .maximum.u8 = 9}},
+        {.signal_key = 102,
+            .size = 2,
+            .type = VALUE_TYPE_S16,
+            .flags = FLAG_RANGE_CHECK,
+            .data = {.initial.s16 = -2, .minimum.s16 = -10, .maximum.s16 = 10}},
+        {.signal_key = 103,
+            .size = 4,
+            .type = VALUE_TYPE_U32,
+            .flags = FLAG_RANGE_CHECK,
+            .data = {.initial.u32 = 0x80000000U,
+                .minimum.u32 = 0x80000000U,
+                .maximum.u32 = UINT32_MAX}},
+        {.signal_key = 104,
+            .size = 4,
+            .type = VALUE_TYPE_S32,
+            .flags = FLAG_RANGE_CHECK,
+            .data = {.initial.s32 = -100000, .minimum.s32 = -200000, .maximum.s32 = 200000}},
+        {.signal_key = 105,
+            .size = 6,
+            .type = VALUE_TYPE_BYTES,
+            .data.initial.array = typed_initial},
+    };
+    const dp_table_t typed_table = {.points = typed_rows, .point_count = ARRAY_SIZE(typed_rows)};
+    zassert_ok(dp_register_table(33, &typed_table));
+    zassert_equal(dp_set_para(33, 101, 1, (uint8_t[]){10}), -ERANGE);
+    zassert_ok(dp_set_para(33, 101, 1, (uint8_t[]){9}));
+    write_u16(33, 102, (uint16_t)-11, -ERANGE);
+    write_u16(33, 102, (uint16_t)-10, 0);
+    zassert_equal(dp_set_para(33, 103, 4, (uint8_t[]){0xff, 0xff, 0xff, 0x7f}), -ERANGE);
+    zassert_ok(dp_set_para(33, 103, 4, (uint8_t[]){0xff, 0xff, 0xff, 0xff}));
+    zassert_equal(dp_set_para(33, 104, 4, (uint8_t[]){0, 0, 0, 0x80}), -ERANGE);
+    zassert_ok(dp_set_para(33, 104, 4, (uint8_t[]){0xff, 0xff, 0xff, 0xff}));
+    uint8_t initial_array[6];
+    zassert_equal(
+        dp_get_para(33, 105, sizeof(initial_array), initial_array), sizeof(initial_array));
+    const uint8_t initial_expected[] = {1, 2, 3, 4, 5, 6};
+    zassert_mem_equal(initial_array, initial_expected, sizeof(initial_array));
+
     /* 同一份只读表登记给 5 个设备，目录及点数据均由模块持有。 */
     for (uint16_t device = 20; device < 25; ++device) {
         const dp_table_t temporary = array_table;

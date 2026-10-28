@@ -31,27 +31,6 @@ typedef enum {
     DP_U8 = 5,
 } dp_storage_type_t;
 
-typedef enum {
-    DP_SOURCE_CONSTANT,
-    DP_SOURCE_LOCAL,
-    DP_SOURCE_PARAMETER,
-} dp_source_t;
-
-typedef struct {
-    uint16_t device_id;
-    uint16_t signal_key;
-    dp_source_t source;
-    dp_storage_type_t type;
-    uint8_t width;
-    uint8_t size_bytes;
-    uint8_t flags;
-    dp_callback_t write_callback;
-    dp_callback_t read_callback;
-    value_t initial;
-    int64_t minimum;
-    int64_t maximum;
-} dp_point_cfg_t;
-
 int dp_params_read(uint16_t device_id, uint16_t signal_key, dp_point_data_t *state);
 bool dp_params_mounted(void);
 int dp_params_write(uint16_t device_id, uint16_t signal_key, const value_t *value);
@@ -66,7 +45,7 @@ typedef struct dp_registered_table {
 } dp_registered_table_t;
 
 dp_registered_table_t *dp_tables(void);
-int dp_describe_point(uint16_t dev, const dp_point_config_t *row, dp_point_cfg_t *point);
-int dp_check_value(const dp_point_cfg_t *point, const value_t *value);
+void dp_initial_value(const dp_point_config_t *point, value_t *value);
+int dp_check_value(const dp_point_config_t *point, const value_t *value);
 
 #endif

@@ -17,40 +17,43 @@ static dp_registered_table_t *tables;
 static size_t param_points;
 static K_MUTEX_DEFINE(store_lock);
 
-static int64_t number(const dp_point_cfg_t *p, const value_t *v)
+static int64_t number(value_type_t type, const value_t *value)
 {
-    uint32_t u = v->words[0] | ((uint32_t)v->words[1] << 16);
-
-    switch (p->type) {
-    case DP_S16:
-        return (int16_t)v->words[0];
-    case DP_S32:
-        return (int32_t)u;
-    case DP_U32:
-        return u;
+    switch (type) {
+    case VALUE_TYPE_S16:
+        return value->s16;
+    case VALUE_TYPE_S32:
+        return value->s32;
+    case VALUE_TYPE_U32:
+        return value->u32;
     default:
-        return v->words[0];
+        return value->u16;
     }
 }
 
-int dp_check_value(const dp_point_cfg_t *p, const value_t *v)
+int dp_check_value(const dp_point_config_t *point, const value_t *value)
 {
-    if (!p || !v) {
+    if (!point || !value) {
         return -EINVAL;
     }
-    if (p->type == DP_U8 &&
-        (v->words[0] > UINT8_MAX || (p->size_bytes == 1 && (v->words[0] & 0xff00U)))) {
+    if (point->type == VALUE_TYPE_U8 && value->u16 > UINT8_MAX) {
         return -ERANGE;
     }
-    if (p->type == DP_WORDS) {
-        if ((p->size_bytes & 1U) &&
-            (p->size_bytes / 2 >= DP_POINT_WORDS || (v->words[p->size_bytes / 2] & 0xff00U))) {
+    if (point->type == VALUE_TYPE_STRING || point->type == VALUE_TYPE_BYTES ||
+        point->type == VALUE_TYPE_WORDS) {
+        if ((point->size & 1U) && (value->words[point->size / 2] & 0xff00U)) {
             return -ERANGE;
         }
         return 0;
     }
-    int64_t n = number(p, v);
-    return n < p->minimum || n > p->maximum ? -ERANGE : 0;
+    if (!(point->flags & FLAG_RANGE_CHECK)) {
+        return 0;
+    }
+    int64_t n = number(point->type, value);
+    return n < number(point->type, &point->data.minimum) ||
+                   n > number(point->type, &point->data.maximum)
+               ? -ERANGE
+               : 0;
 }
 
 static void unpack(value_t *value, const uint8_t *bytes, size_t size)
@@ -68,125 +71,67 @@ static void pack(uint8_t *bytes, const value_t *value, size_t size)
     }
 }
 
-int dp_describe_point(uint16_t dev, const dp_point_config_t *row, dp_point_cfg_t *p)
+void dp_initial_value(const dp_point_config_t *point, value_t *value)
 {
-    if (!row || !row->signal_key || !row->size || row->size > DP_POINT_WORDS * 2) {
+    const uint8_t *bytes = point->size > 4 ? point->data.initial.array : point->data.initial.bytes;
+    *value = (value_t){0};
+    if (bytes) {
+        unpack(value, bytes, point->size);
+    }
+}
+
+/* 登记时校验一次；运行期间配置常驻只读，不再解析或复制配置行。 */
+static int validate_point(const dp_point_config_t *point)
+{
+    if (!point->signal_key || !point->size || point->size > DP_POINT_WORDS * 2) {
         return -EINVAL;
     }
-    *p = (dp_point_cfg_t){
-        .device_id = dev,
-        .signal_key = row->signal_key,
-        .size_bytes = row->size,
-        .width = (row->size + 1) / 2,
-        .flags = row->flags,
-        .write_callback = row->write_callback,
-        .read_callback = row->read_callback,
-    };
-    switch (row->type) {
+    switch (point->type) {
     case VALUE_TYPE_U8:
-        if (row->size != 1) {
+        if (point->size != 1 ||
+            ((point->flags & FLAG_RANGE_CHECK) && point->data.maximum.u16 > UINT8_MAX)) {
             return -EINVAL;
         }
-        p->type = DP_U8;
-        p->minimum = 0;
-        p->maximum = UINT8_MAX;
         break;
     case VALUE_TYPE_U16:
-        if (row->size != 2) {
-            return -EINVAL;
-        }
-        p->type = DP_U16;
-        p->minimum = 0;
-        p->maximum = UINT16_MAX;
-        break;
     case VALUE_TYPE_S16:
-        if (row->size != 2) {
+        if (point->size != 2) {
             return -EINVAL;
         }
-        p->type = DP_S16;
-        p->minimum = INT16_MIN;
-        p->maximum = INT16_MAX;
         break;
     case VALUE_TYPE_U32:
-        if (row->size != 4) {
-            return -EINVAL;
-        }
-        p->type = DP_U32;
-        p->minimum = 0;
-        p->maximum = UINT32_MAX;
-        break;
     case VALUE_TYPE_S32:
-        if (row->size != 4) {
+        if (point->size != 4) {
             return -EINVAL;
         }
-        p->type = DP_S32;
-        p->minimum = INT32_MIN;
-        p->maximum = INT32_MAX;
         break;
+    case VALUE_TYPE_WORDS:
+        if (point->size & 1U) {
+            return -EINVAL;
+        }
+        __fallthrough;
     case VALUE_TYPE_STRING:
     case VALUE_TYPE_BYTES:
-    case VALUE_TYPE_WORDS:
-        if (row->type == VALUE_TYPE_WORDS && (row->size & 1U)) {
-            return -EINVAL;
+        if (point->flags & FLAG_RANGE_CHECK) {
+            return -ENOTSUP;
         }
-        p->type = DP_WORDS;
         break;
     default:
         return -ENOTSUP;
     }
-    if (row->flags & FLAG_CONSTANT) {
-        if ((row->flags & FLAG_PERSISTENCE) || row->write_callback) {
-            return -EINVAL;
-        }
-        p->source = DP_SOURCE_CONSTANT;
-    } else if (row->flags & FLAG_PERSISTENCE) {
-        p->source = DP_SOURCE_PARAMETER;
-    } else {
-        p->source = DP_SOURCE_LOCAL;
-    }
-    if (p->source == DP_SOURCE_PARAMETER && (row->write_callback || row->read_callback)) {
+    if ((point->flags & FLAG_CONSTANT) &&
+        ((point->flags & FLAG_PERSISTENCE) || point->write_callback)) {
         return -EINVAL;
     }
-    if ((row->flags & FLAG_READ_CALLBACK) && !row->read_callback) {
+    if ((point->flags & FLAG_PERSISTENCE) && (point->write_callback || point->read_callback)) {
         return -EINVAL;
     }
-    if (row->flags & FLAG_RANGE_CHECK) {
-        if (p->type == DP_WORDS) {
-            return -ENOTSUP;
-        }
-        switch (p->type) {
-        case DP_U8:
-            p->minimum = row->data.minimum.u16;
-            p->maximum = row->data.maximum.u16;
-            if (p->maximum > UINT8_MAX) {
-                return -ERANGE;
-            }
-            break;
-        case DP_U16:
-            p->minimum = row->data.minimum.u16;
-            p->maximum = row->data.maximum.u16;
-            break;
-        case DP_S16:
-            p->minimum = row->data.minimum.s16;
-            p->maximum = row->data.maximum.s16;
-            break;
-        case DP_U32:
-            p->minimum = row->data.minimum.u32;
-            p->maximum = row->data.maximum.u32;
-            break;
-        case DP_S32:
-            p->minimum = row->data.minimum.s32;
-            p->maximum = row->data.maximum.s32;
-            break;
-        default:
-            break;
-        }
+    if ((point->flags & FLAG_READ_CALLBACK) && !point->read_callback) {
+        return -EINVAL;
     }
-    const uint8_t *bytes = row->size > 4 ? row->data.initial.array : row->data.initial.bytes;
-    if (bytes) {
-        unpack(&p->initial, bytes, row->size);
-    }
-    return dp_check_value(p, &p->initial);
+    value_t initial;
+    dp_initial_value(point, &initial);
+    return dp_check_value(point, &initial);
 }
 
 dp_registered_table_t *dp_tables(void)
@@ -196,7 +141,7 @@ dp_registered_table_t *dp_tables(void)
 
 static int find_point(uint16_t device_id,
     uint16_t signal_key,
-    dp_point_cfg_t *point,
+    const dp_point_config_t **point,
     dp_point_data_t **state,
     size_t *signal_index)
 {
@@ -213,7 +158,8 @@ static int find_point(uint16_t device_id,
             }
             *signal_index = i;
             *state = &table->data[i];
-            return dp_describe_point(device_id, &table->points[i], point);
+            *point = &table->points[i];
+            return 0;
         }
         return -ENOENT;
     }
@@ -237,11 +183,11 @@ int dp_register_table(uint16_t device_id, const dp_table_t *table)
 
     size_t params = 0;
     for (size_t i = 0; i < table->point_count; ++i) {
-        dp_point_cfg_t point;
-        if (dp_describe_point(device_id, &table->points[i], &point)) {
+        const dp_point_config_t *point = &table->points[i];
+        if (validate_point(point)) {
             return -EINVAL;
         }
-        if (point.source == DP_SOURCE_PARAMETER) {
+        if (point->flags & FLAG_PERSISTENCE) {
             ++params;
         }
         for (size_t n = 0; n < i; ++n) {
@@ -266,9 +212,7 @@ int dp_register_table(uint16_t device_id, const dp_table_t *table)
     entry->points = table->points;
     entry->point_count = table->point_count;
     for (size_t i = 0; i < table->point_count; ++i) {
-        dp_point_cfg_t point;
-        dp_describe_point(device_id, &table->points[i], &point);
-        entry->data[i].value = point.initial;
+        dp_initial_value(&table->points[i], &entry->data[i].value);
     }
     /* 校验、分配和初始化全部完成后才发布。 */
     entry->next = tables;
@@ -277,7 +221,8 @@ int dp_register_table(uint16_t device_id, const dp_table_t *table)
     return 0;
 }
 
-static int read_point(const dp_point_cfg_t *point,
+static int read_point(uint16_t device_id,
+    const dp_point_config_t *point,
     dp_point_data_t *stored,
     dp_point_data_t *state,
     size_t signal_index)
@@ -287,7 +232,7 @@ static int read_point(const dp_point_cfg_t *point,
         *state = *stored;
         k_mutex_unlock(&store_lock);
         const dp_callback_context_t context = {
-            .device_id = point->device_id,
+            .device_id = device_id,
             .signal_key = point->signal_key,
             .signal_index = signal_index,
             .value = &state->value,
@@ -304,8 +249,8 @@ static int read_point(const dp_point_cfg_t *point,
         }
         return err;
     }
-    if (point->source == DP_SOURCE_PARAMETER) {
-        return dp_params_read(point->device_id, point->signal_key, state);
+    if (point->flags & FLAG_PERSISTENCE) {
+        return dp_params_read(device_id, point->signal_key, state);
     }
     k_mutex_lock(&store_lock, K_FOREVER);
     *state = *stored;
@@ -321,35 +266,35 @@ int dp_set_para(uint16_t device_id, uint16_t signal_key, uint8_t size, const uin
     if (!bytes) {
         return -EINVAL;
     }
-    dp_point_cfg_t p;
+    const dp_point_config_t *p;
     dp_point_data_t *stored;
     size_t signal_index;
     int err = find_point(device_id, signal_key, &p, &stored, &signal_index);
     if (err) {
         return err;
     }
-    if (size != p.size_bytes) {
+    if (size != p->size) {
         return -EMSGSIZE;
     }
-    if (p.source == DP_SOURCE_CONSTANT) {
+    if (p->flags & FLAG_CONSTANT) {
         return -EACCES;
     }
     value_t value;
     unpack(&value, bytes, size);
-    err = dp_check_value(&p, &value);
+    err = dp_check_value(p, &value);
     if (err) {
         return err;
     }
-    if (p.write_callback) {
+    if (p->write_callback) {
         const dp_callback_context_t context = {
             .device_id = device_id,
             .signal_key = signal_key,
             .signal_index = signal_index,
             .value = &value,
         };
-        return p.write_callback(&context);
+        return p->write_callback(&context);
     }
-    if (p.source == DP_SOURCE_PARAMETER) {
+    if (p->flags & FLAG_PERSISTENCE) {
         return dp_params_write(device_id, signal_key, &value);
     }
     k_mutex_lock(&store_lock, K_FOREVER);
@@ -367,21 +312,21 @@ int dp_get_para(uint16_t device_id, uint16_t signal_key, uint8_t capacity, uint8
     if (!bytes) {
         return -EINVAL;
     }
-    dp_point_cfg_t p;
+    const dp_point_config_t *p;
     dp_point_data_t *stored;
     size_t signal_index;
     int err = find_point(device_id, signal_key, &p, &stored, &signal_index);
     if (err) {
         return err;
     }
-    if (capacity < p.size_bytes) {
+    if (capacity < p->size) {
         return -EMSGSIZE;
     }
     dp_point_data_t state;
-    err = read_point(&p, stored, &state, signal_index);
+    err = read_point(device_id, p, stored, &state, signal_index);
     if (err) {
         return err;
     }
-    pack(bytes, &state.value, p.size_bytes);
+    pack(bytes, &state.value, p->size);
     return capacity;
 }
