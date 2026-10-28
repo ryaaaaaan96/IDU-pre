@@ -15,21 +15,10 @@ LOG_MODULE_REGISTER(dp, LOG_LEVEL_INF);
 static dp_registered_table_t *tables;
 static K_MUTEX_DEFINE(store_lock);
 
-static int64_t number(value_type_t type, const value_t *value)
-{
-    switch (type) {
-    case VALUE_TYPE_U8:
-        return value->u8;
-    case VALUE_TYPE_S16:
-        return value->s16;
-    case VALUE_TYPE_S32:
-        return value->s32;
-    case VALUE_TYPE_U32:
-        return value->u32;
-    default:
-        return value->u16;
-    }
-}
+/* 保留成员自身的有符号性，switch 选择成员后直接比较配置上下限。 */
+#define DP_OUTSIDE_RANGE(point, value, member)                                                     \
+    ((value)->member < (point)->data.minimum.member ||                                             \
+        (value)->member > (point)->data.maximum.member)
 
 static int check_value(const dp_point_config_t *point, const value_t *value)
 {
@@ -46,11 +35,27 @@ static int check_value(const dp_point_config_t *point, const value_t *value)
     if (!(point->flags & DP_POINT_FLAG_CHECK_RANGE)) {
         return 0;
     }
-    int64_t n = number(point->type, value);
-    return n < number(point->type, &point->data.minimum) ||
-                   n > number(point->type, &point->data.maximum)
-               ? -ERANGE
-               : 0;
+    bool outside;
+    switch (point->type) {
+    case VALUE_TYPE_U8:
+        outside = DP_OUTSIDE_RANGE(point, value, u8);
+        break;
+    case VALUE_TYPE_U16:
+        outside = DP_OUTSIDE_RANGE(point, value, u16);
+        break;
+    case VALUE_TYPE_S16:
+        outside = DP_OUTSIDE_RANGE(point, value, s16);
+        break;
+    case VALUE_TYPE_U32:
+        outside = DP_OUTSIDE_RANGE(point, value, u32);
+        break;
+    case VALUE_TYPE_S32:
+        outside = DP_OUTSIDE_RANGE(point, value, s32);
+        break;
+    default:
+        return -ENOTSUP;
+    }
+    return outside ? -ERANGE : 0;
 }
 
 static void unpack(value_t *value, const uint8_t *bytes, size_t size)

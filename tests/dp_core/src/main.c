@@ -36,7 +36,13 @@ static const dp_point_config_t rows[] = {
         .write_callback = callback,
         .read_callback = callback,
         .data = {.initial.u16 = 50, .minimum.u16 = 1, .maximum.u16 = 100}},
-    {.signal_key = 1, .size = 4, .type = VALUE_TYPE_U32, .data.initial.u32 = 0x12345678},
+    {.signal_key = 1,
+        .size = 4,
+        .type = VALUE_TYPE_U32,
+        .flags = DP_POINT_FLAG_CHECK_RANGE,
+        .data = {.initial.u32 = 0x12345678,
+            .minimum.u32 = 0x10000000U,
+            .maximum.u32 = 0xf0000000U}},
     {.signal_key = 2,
         .size = 2,
         .type = VALUE_TYPE_S16,
@@ -224,7 +230,9 @@ ZTEST(dp_core, test_core)
     const dp_point_data_t skipped_before = *data(7, 1);
     const uint8_t other_device[] = {9, 8, 7};
     zassert_ok(dp_set_para(8, 99, sizeof(other_device), other_device));
-    zassert_ok(dp_set_para(7, 1, 4, (uint8_t[]){1, 0, 0, 0}));
+    zassert_ok(dp_set_para(7, 1, 4, (uint8_t[]){0, 0, 0, 0xf0}));
+    zassert_equal(dp_set_para(7, 1, 4, (uint8_t[]){1, 0, 0, 0xf0}), -ERANGE);
+    zassert_equal(dp_set_para(7, 1, 4, (uint8_t[]){0xff, 0xff, 0xff, 0x0f}), -ERANGE);
     zassert_equal(dp_restore_defaults(0), -EINVAL);
     zassert_equal(dp_restore_defaults(123), -ENOENT);
     fail_callback = true;
