@@ -8,7 +8,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define DP_POINT_WORDS VALUE_WORDS
 
 typedef enum {
     DP_POINT_FLAG_SKIP_RESTORE = (1U << 5), /**< 显式恢复默认时跳过，不影响上电设置初值。 */
@@ -53,10 +52,6 @@ typedef struct {
     size_t point_count;
 } dp_table_t;
 
-#define DP_POINT_DEFAULT_VALUE 0
-#define DP_POINT_DEFAULT_FLAGS 0U
-#define DP_POINT_DEFAULT_CALLBACK NULL
-#define DP_POINT_DEFAULT_ARRAY NULL
 
 /**
  * @brief 启动线程逐张登记设备点表；描述可临时，行数组及其引用数据必须常驻只读，不得修改或释放。

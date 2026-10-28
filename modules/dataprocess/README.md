@@ -25,7 +25,7 @@ int dp_get_para(uint16_t device_id, uint16_t signal_key,
 配置行使用 dp_point_config_t，初值及上下限为公共 value_t，统一内嵌 u16/words/bytes 等成员。
 不得将 initial.array 用作外部初值引用；行数组须 static const 或具有同等常驻只读生命周期。
 dp_table_t 描述本身可以临时存在。运行数据为值和 uint32_t updated_at_s。
-单点容量 CONFIG_COMMON_VALUE_WORDS，系统堆预算 HEAP_MEM_POOL_ADD_SIZE_DATAPROCESS。
+单点容量由 CONFIG_COMMON_VALUE_WORDS 决定，系统堆预算 HEAP_MEM_POOL_ADD_SIZE_DATAPROCESS。
 
 写入：解码 → 写回调（可选）→ 校验最终值 → 保存 RAM 和时间。
 读取：复制当前值 → 读回调（可选）→ 校验并保存 RAM → 编码返回。
@@ -66,3 +66,6 @@ DP_POINT_FLAG_SKIP_RESTORE 控制显式恢复默认时跳过该点，不影响�
 仅在线程使用，设备不存在返回 -ENOENT，设备 ID 为零返回 -EINVAL。
 恢复直接复制已校验的初值，不调用读写回调，不增加参数存储或额外锁。
 并发回调仍采用最后提交者覆盖语义；恢复默认不会取消已经在执行的回调。
+
+零值配置使用 C 静态初始化规则，不再提供 DEFAULT_VALUE/FLAGS/CALLBACK/ARRAY 宏。
+点表不填写未启用的上下限；容量直接检查公共 value_t 内嵌 bytes 成员长度。

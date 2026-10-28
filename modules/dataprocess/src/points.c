@@ -2,7 +2,6 @@
 #include "dp_internal.h"
 #include <errno.h>
 #include <stdlib.h>
-#include <string.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 
@@ -34,9 +33,6 @@ static int64_t number(value_type_t type, const value_t *value)
 
 static int check_value(const dp_point_config_t *point, const value_t *value)
 {
-    if (!point || !value) {
-        return -EINVAL;
-    }
     if (point->type == VALUE_TYPE_U8 && value->u16 > UINT8_MAX) {
         return -ERANGE;
     }
@@ -75,7 +71,7 @@ static void pack(uint8_t *bytes, const value_t *value, size_t size)
 /* 登记时校验一次；运行期间配置常驻只读，不再解析或复制配置行。 */
 static int validate_point(uint16_t device_id, const dp_point_config_t *point)
 {
-    if (!point->signal_key || !point->size || point->size > DP_POINT_WORDS * 2) {
+    if (!point->signal_key || !point->size || point->size > sizeof(point->data.initial.bytes)) {
         return -EINVAL;
     }
     switch (point->type) {
@@ -239,32 +235,6 @@ static int save_value(const dp_point_config_t *point, dp_point_data_t *stored, c
     return 0;
 }
 
-static int read_point(uint16_t device_id,
-    const dp_point_config_t *point,
-    dp_point_data_t *stored,
-    dp_point_data_t *state,
-    size_t signal_index)
-{
-    k_mutex_lock(&store_lock, K_FOREVER);
-    *state = *stored;
-    k_mutex_unlock(&store_lock);
-    if (!point->read_callback) {
-        return 0;
-    }
-    const dp_callback_context_t context = {
-        .device_id = device_id,
-        .signal_key = point->signal_key,
-        .signal_index = signal_index,
-        .is_write = false,
-        .value = &state->value,
-    };
-    int err = point->read_callback(&context);
-    if (err) {
-        return err;
-    }
-    return save_value(point, stored, &state->value);
-}
-
 int dp_set_para(uint16_t device_id, uint16_t signal_key, uint8_t size, const uint8_t *bytes)
 {
     if (k_is_in_isr()) {
@@ -320,9 +290,25 @@ int dp_get_para(uint16_t device_id, uint16_t signal_key, uint8_t capacity, uint8
         return -EMSGSIZE;
     }
     dp_point_data_t state;
-    err = read_point(device_id, p, stored, &state, signal_index);
-    if (err) {
-        return err;
+    k_mutex_lock(&store_lock, K_FOREVER);
+    state = *stored;
+    k_mutex_unlock(&store_lock);
+    if (p->read_callback) {
+        const dp_callback_context_t context = {
+            .device_id = device_id,
+            .signal_key = signal_key,
+            .signal_index = signal_index,
+            .is_write = false,
+            .value = &state.value,
+        };
+        err = p->read_callback(&context);
+        if (err) {
+            return err;
+        }
+        err = save_value(p, stored, &state.value);
+        if (err) {
+            return err;
+        }
     }
     pack(bytes, &state.value, p->size);
     return capacity;
