@@ -11,10 +11,8 @@
 
 ```c
 int dp_register_table(uint16_t device_id, const dp_table_t *table);
-int dp_set_para(uint16_t device_id, uint16_t signal_key,
-                uint8_t size, const uint8_t *bytes);
-int dp_get_para(uint16_t device_id, uint16_t signal_key,
-                uint8_t capacity, uint8_t *bytes);
+int dp_set_para(uint16_t device_id, uint16_t signal_key, const value_t *value);
+int dp_get_para(uint16_t device_id, uint16_t signal_key, value_t *value);
 ```
 
 登记先检查入参、大小和重复键，分配私有节点及全部点数据，再逐点校验并复制配置初值。
@@ -28,10 +26,12 @@ int dp_get_para(uint16_t device_id, uint16_t signal_key,
 dp_table_t 描述本身可以临时存在。运行数据为值和 uint32_t updated_at_s。
 单点容量由 CONFIG_COMMON_VALUE_WORDS 决定，系统堆预算 HEAP_MEM_POOL_ADD_SIZE_DATAPROCESS。
 
-写入：解码 → 写回调（可选）→ 校验最终值 → 保存 RAM 和时间。
-读取：复制当前值 → 读回调（可选）→ 校验并保存 RAM → 编码返回。
+写入：复制 value_t → 写回调（可选）→ 校验最终值 → 保存 RAM 和时间。
+读取：复制当前值 → 读回调（可选）→ 校验并保存 RAM → 返回 value_t。
 没有读回调时仅复制，不更新时间。回调失败或最终值越界时不改变点值、时间及读输出。
-写长度须完全匹配；读容量须足够，成功返回传入容量；字节编码低字节在前。
+读写成功均返回 0，失败返回负错误码；传入空指针返回 -EINVAL。
+调用方须初始化整个 value_t 并按点表类型填写成员，DP 不负责字节序或线协议编码。
+写入使用副本，回调修改不影响调用方输入；读取成功才覆盖输出。
 任何修改重启后均恢复配置初值，不会加载或写入原参数 Flash 分区。
 
 ## 回调与索引
@@ -75,3 +75,7 @@ DP_POINT_FLAG_SKIP_RESTORE 控制显式恢复默认时跳过该点，不影响�
 内存明显大于原 uint16_t 副本。扩容时新旧桶同时存在，需按峰值调整系统堆。
 512 行测试显式增加测试堆，产品当前 21 点仍使用原 2048 B DP 堆预算。
 静态描述符只用于启动串行登记，桶在结束后释放，不参与运行期查找。
+
+例如 `value_t value = {.u16 = 1234}; dp_set_para(device_id, key, &value);`。
+读回时传入 `value_t *`，通过配置类型对应的成员访问。数组使用内嵌 bytes/words，
+有效长度仍由点配置 size 决定；协议接入层负责外部报文与本机数值的转换。

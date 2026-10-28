@@ -32,7 +32,7 @@ typedef struct {
 typedef int (*dp_callback_t)(const dp_callback_context_t *context);
 
 typedef struct {
-    value_t initial;
+    value_t initial; 
     value_t minimum;
     value_t maximum;
 } dp_point_limits_t;
@@ -62,11 +62,14 @@ typedef struct {
  */
 int dp_register_table(uint16_t device_id, const dp_table_t *table);
 
-/** @brief 同步写点；长度须匹配，回调后校验最终值并保存，仅更新 RAM。 */
-int dp_set_para(uint16_t device_id, uint16_t signal_key, uint8_t size, const uint8_t *bytes);
+/**
+ * @brief 同步写点，回调后校验最终值并保存 RAM；成功返回 0。
+ * @note 按点表类型填写 value 对应成员，调用方须将整个联合体初始化；输入不被修改。
+ */
+int dp_set_para(uint16_t device_id, uint16_t signal_key, const value_t *value);
 
-/** @brief 同步读点，可执行读回调；成功返回传入容量，数据按低字节在前编码。 */
-int dp_get_para(uint16_t device_id, uint16_t signal_key, uint8_t capacity, uint8_t *bytes);
+/** @brief 同步读点，可执行读回调；成功返回 0，失败时输出保持不变。 */
+int dp_get_para(uint16_t device_id, uint16_t signal_key, value_t *value);
 
 /**
  * @brief 将指定设备的点值恢复为配置初值，跳过 SKIP_RESTORE 点，不调用业务回调。

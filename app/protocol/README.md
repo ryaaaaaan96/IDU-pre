@@ -14,3 +14,5 @@ DP_POINT_FLAG_CHECK_RANGE 控制数值范围检查；SKIP_RESTORE 可排除 RAM 
 数组初值直接填写 initial.words 或 initial.bytes，不使用外部指针。
 app/process/points.c 只负责 points_sample_period_ms()；失败回退 Kconfig 默认采样周期。
 读写回调能力仍在通用 DP 模块中保留，当前产品无需存储维护回调。
+
+应用调用 DP 时直接传 value_t，DI/AI 和采样周期使用 u16 成员，不再拆装字节。

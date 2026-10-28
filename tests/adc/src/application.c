@@ -4,24 +4,23 @@
 #include <acquisition/acquisition.h>
 
 #include "protocol/inc/signal_keys.h"
-#include <zephyr/sys/byteorder.h>
+#include <dataprocess/dataprocess.h>
 
 static uint16_t di_value, current_values[SAMPLE_ANALOG_COUNT];
 static unsigned updates;
 static int set_error;
 
-int32_t dp_set_para(uint16_t device, uint16_t signal, uint8_t size, uint8_t *bytes)
+int dp_set_para(uint16_t device, uint16_t signal, const value_t *value)
 {
     zassert_equal(device, DEVICE_LOCAL);
-    zassert_equal(size, 2);
     if (set_error) {
         return set_error;
     }
     if (signal == SIGNAL_DI) {
-        di_value = sys_get_le16(bytes);
+        di_value = value->u16;
     } else {
         zassert_true(signal >= SIGNAL_CURRENT_1 && signal < SIGNAL_CURRENT_1 + SAMPLE_ANALOG_COUNT);
-        current_values[signal - SIGNAL_CURRENT_1] = sys_get_le16(bytes);
+        current_values[signal - SIGNAL_CURRENT_1] = value->u16;
     }
     ++updates;
     return 0;

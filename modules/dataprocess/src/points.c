@@ -29,14 +29,8 @@ SYS_HASHMAP_OA_LP_DEFINE_STATIC_ADVANCED(registration_keys,
 
 static int check_value(const dp_point_config_t *point, const value_t *value)
 {
-    if (point->type == VALUE_TYPE_U8 && value->u16 > UINT8_MAX) {
-        return -ERANGE;
-    }
     if (point->type == VALUE_TYPE_STRING || point->type == VALUE_TYPE_BYTES ||
         point->type == VALUE_TYPE_WORDS) {
-        if ((point->size & 1U) && (value->words[point->size / 2] & 0xff00U)) {
-            return -ERANGE;
-        }
         return 0;
     }
     if (!(point->flags & DP_POINT_FLAG_CHECK_RANGE)) {
@@ -63,21 +57,6 @@ static int check_value(const dp_point_config_t *point, const value_t *value)
         return -ENOTSUP;
     }
     return outside ? -ERANGE : 0;
-}
-
-static void unpack(value_t *value, const uint8_t *bytes, size_t size)
-{
-    *value = (value_t){0};
-    for (size_t i = 0; i < size; ++i) {
-        value->words[i / 2] |= (uint16_t)bytes[i] << (8 * (i % 2));
-    }
-}
-
-static void pack(uint8_t *bytes, const value_t *value, size_t size)
-{
-    for (size_t i = 0; i < size; ++i) {
-        bytes[i] = (uint8_t)(value->words[i / 2] >> (8 * (i % 2)));
-    }
 }
 
 /* 登记时校验一次；运行期间配置常驻只读，不再解析或复制配置行。 */
@@ -188,7 +167,9 @@ static int save_value(const dp_point_config_t *point, dp_point_data_t *stored, c
 
 int dp_register_table(uint16_t device_id, const dp_table_t *table)
 {
-    if (k_is_in_isr()) { return -EWOULDBLOCK; }
+    if (k_is_in_isr()) {
+        return -EWOULDBLOCK;
+    }
     if (!device_id || !table || !table->points || !table->point_count) {
         return -EINVAL;
     }
@@ -232,12 +213,12 @@ int dp_register_table(uint16_t device_id, const dp_table_t *table)
     return 0;
 }
 
-int dp_set_para(uint16_t device_id, uint16_t signal_key, uint8_t size, const uint8_t *bytes)
+int dp_set_para(uint16_t device_id, uint16_t signal_key, const value_t *value)
 {
     if (k_is_in_isr()) {
         return -EWOULDBLOCK;
     }
-    if (!bytes) {
+    if (!value) {
         return -EINVAL;
     }
     const dp_point_config_t *p;
@@ -247,33 +228,29 @@ int dp_set_para(uint16_t device_id, uint16_t signal_key, uint8_t size, const uin
     if (err) {
         return err;
     }
-    if (size != p->size) {
-        return -EMSGSIZE;
-    }
-    value_t value;
-    unpack(&value, bytes, size);
+    value_t pending = *value;
     if (p->write_callback) {
         const dp_callback_context_t context = {
             .device_id = device_id,
             .signal_key = signal_key,
             .signal_index = signal_index,
             .is_write = true,
-            .value = &value,
+            .value = &pending,
         };
         err = p->write_callback(&context);
         if (err) {
             return err;
         }
     }
-    return save_value(p, stored, &value);
+    return save_value(p, stored, &pending);
 }
 
-int dp_get_para(uint16_t device_id, uint16_t signal_key, uint8_t capacity, uint8_t *bytes)
+int dp_get_para(uint16_t device_id, uint16_t signal_key, value_t *value)
 {
     if (k_is_in_isr()) {
         return -EWOULDBLOCK;
     }
-    if (!bytes) {
+    if (!value) {
         return -EINVAL;
     }
     const dp_point_config_t *p;
@@ -282,9 +259,6 @@ int dp_get_para(uint16_t device_id, uint16_t signal_key, uint8_t capacity, uint8
     int err = find_point(device_id, signal_key, &p, &stored, &signal_index);
     if (err) {
         return err;
-    }
-    if (capacity < p->size) {
-        return -EMSGSIZE;
     }
     dp_point_data_t state;
     k_mutex_lock(&store_lock, K_FOREVER);
@@ -307,8 +281,8 @@ int dp_get_para(uint16_t device_id, uint16_t signal_key, uint8_t capacity, uint8
             return err;
         }
     }
-    pack(bytes, &state.value, p->size);
-    return capacity;
+    *value = state.value;
+    return 0;
 }
 
 int dp_restore_defaults(uint16_t device_id)

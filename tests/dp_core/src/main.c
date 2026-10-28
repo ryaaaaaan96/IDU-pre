@@ -99,15 +99,16 @@ static const dp_point_data_t *data(uint16_t device, size_t index)
 
 static void write_u16(uint16_t key, uint16_t value, int expected)
 {
-    const uint8_t bytes[] = {(uint8_t)value, (uint8_t)(value >> 8)};
-    zassert_equal(dp_set_para(7, key, sizeof(bytes), bytes), expected);
+    const value_t input = {.u16 = value};
+    zassert_equal(dp_set_para(7, key, &input), expected);
+    zassert_equal(input.u16, value);
 }
 
 static void read_u16(uint16_t key, uint16_t expected)
 {
-    uint8_t bytes[2];
-    zassert_equal(dp_get_para(7, key, sizeof(bytes), bytes), sizeof(bytes));
-    zassert_equal(bytes[0] | ((uint16_t)bytes[1] << 8), expected);
+    value_t value;
+    zassert_ok(dp_get_para(7, key, &value));
+    zassert_equal(value.u16, expected);
 }
 
 static K_THREAD_STACK_DEFINE(writer_stack, 2048);
@@ -121,8 +122,8 @@ static void writer(void *a, void *b, void *c)
     ARG_UNUSED(c);
     for (size_t i = 0; i < 64; ++i) {
         uint8_t byte = i & 1 ? 0x55 : 0xaa;
-        const uint8_t bytes[] = {byte, byte, byte};
-        zassert_ok(dp_set_para(7, 99, sizeof(bytes), bytes));
+        const value_t value = {.bytes = {byte, byte, byte}};
+        zassert_ok(dp_set_para(7, 99, &value));
         k_yield();
     }
 }
@@ -133,10 +134,10 @@ static void reader(void *a, void *b, void *c)
     ARG_UNUSED(b);
     ARG_UNUSED(c);
     for (size_t i = 0; i < 64; ++i) {
-        uint8_t bytes[3];
-        zassert_equal(dp_get_para(7, 99, sizeof(bytes), bytes), sizeof(bytes));
-        zassert_equal(bytes[0], bytes[1]);
-        zassert_equal(bytes[1], bytes[2]);
+        value_t value;
+        zassert_ok(dp_get_para(7, 99, &value));
+        zassert_equal(value.bytes[0], value.bytes[1]);
+        zassert_equal(value.bytes[1], value.bytes[2]);
         k_yield();
     }
 }
@@ -194,20 +195,20 @@ ZTEST(dp_core, test_core)
         zassert_equal(dp_register_table(9, &invalid_table), -EINVAL);
         zassert_is_null(data(9, 0));
     }
-    uint8_t words[6];
-    zassert_equal(dp_get_para(7, 5, sizeof(words), words), sizeof(words));
-    const uint8_t expected_words[] = {1, 0, 2, 0, 3, 0};
-    zassert_mem_equal(words, expected_words, sizeof(words));
-    zassert_ok(dp_set_para(7, 4, 1, (uint8_t[]){9}));
-    zassert_equal(dp_set_para(7, 4, 1, (uint8_t[]){10}), -ERANGE);
+    value_t words;
+    zassert_ok(dp_get_para(7, 5, &words));
+    zassert_equal(words.words[0], 1);
+    zassert_equal(words.words[1], 2);
+    zassert_equal(words.words[2], 3);
+    zassert_ok(dp_set_para(7, 4, &(value_t){.u8 = 9}));
+    zassert_equal(dp_set_para(7, 4, &(value_t){.u8 = 10}), -ERANGE);
     write_u16(2, (uint16_t)-10, 0);
     write_u16(2, (uint16_t)-11, -ERANGE);
-    zassert_ok(dp_set_para(7, 3, 4, (uint8_t[]){0xff, 0xff, 0xff, 0xff}));
-    zassert_equal(dp_set_para(7, 3, 4, (uint8_t[]){0, 0, 0, 0x80}), -ERANGE);
-    zassert_equal(dp_set_para(7, 300, 1, (uint8_t[]){1}), -EMSGSIZE);
-    zassert_equal(dp_set_para(7, 301, 2, (uint8_t[]){1, 0}), -ENOENT);
-    zassert_equal(dp_set_para(7, 300, 2, NULL), -EINVAL);
-    zassert_equal(dp_get_para(7, 300, 1, words), -EMSGSIZE);
+    zassert_ok(dp_set_para(7, 3, &(value_t){.s32 = -1}));
+    zassert_equal(dp_set_para(7, 3, &(value_t){.s32 = INT32_MIN}), -ERANGE);
+    zassert_equal(dp_set_para(7, 301, &(value_t){.u16 = 1}), -ENOENT);
+    zassert_equal(dp_set_para(7, 300, NULL), -EINVAL);
+    zassert_equal(dp_get_para(7, 300, NULL), -EINVAL);
 
     const uint32_t epoch = 1761600000U;
     const struct timespec now = {.tv_sec = epoch};
@@ -226,20 +227,19 @@ ZTEST(dp_core, test_core)
     write_u16(300, 50, -ERANGE);
     write_result = 0;
     read_result = 101;
-    uint8_t output[] = {0xaa, 0xbb};
-    zassert_equal(dp_get_para(7, 300, sizeof(output), output), -ERANGE);
-    zassert_equal(output[0], 0xaa);
-    zassert_equal(output[1], 0xbb);
+    value_t output = {.u16 = 0xbbaa};
+    zassert_equal(dp_get_para(7, 300, &output), -ERANGE);
+    zassert_equal(output.u16, 0xbbaa);
     read_result = 0;
     fail_callback = true;
     write_u16(300, 50, -EIO);
-    zassert_equal(dp_get_para(7, 300, sizeof(output), output), -EIO);
+    zassert_equal(dp_get_para(7, 300, &output), -EIO);
     fail_callback = false;
     zassert_equal(data(7, 1)->value.u16, before.value.u16);
     zassert_equal(data(7, 1)->updated_at_s, before.updated_at_s);
 
-    const uint8_t initial[] = {0x55, 0x55, 0x55};
-    zassert_ok(dp_set_para(7, 99, sizeof(initial), initial));
+    const value_t initial = {.bytes = {0x55, 0x55, 0x55}};
+    zassert_ok(dp_set_para(7, 99, &initial));
     k_thread_create(&writer_thread,
         writer_stack,
         K_THREAD_STACK_SIZEOF(writer_stack),
@@ -264,11 +264,11 @@ ZTEST(dp_core, test_core)
     zassert_ok(k_thread_join(&reader_thread, K_SECONDS(10)));
     write_u16(300, 80, 0);
     const dp_point_data_t skipped_before = *data(7, 1);
-    const uint8_t other_device[] = {9, 8, 7};
-    zassert_ok(dp_set_para(8, 99, sizeof(other_device), other_device));
-    zassert_ok(dp_set_para(7, 1, 4, (uint8_t[]){0, 0, 0, 0xf0}));
-    zassert_equal(dp_set_para(7, 1, 4, (uint8_t[]){1, 0, 0, 0xf0}), -ERANGE);
-    zassert_equal(dp_set_para(7, 1, 4, (uint8_t[]){0xff, 0xff, 0xff, 0x0f}), -ERANGE);
+    const value_t other_device = {.bytes = {9, 8, 7}};
+    zassert_ok(dp_set_para(8, 99, &other_device));
+    zassert_ok(dp_set_para(7, 1, &(value_t){.u32 = 0xf0000000U}));
+    zassert_equal(dp_set_para(7, 1, &(value_t){.u32 = 0xf0000001U}), -ERANGE);
+    zassert_equal(dp_set_para(7, 1, &(value_t){.u32 = 0x0fffffffU}), -ERANGE);
     zassert_equal(dp_restore_defaults(0), -EINVAL);
     zassert_equal(dp_restore_defaults(123), -ENOENT);
     fail_callback = true;
@@ -280,7 +280,7 @@ ZTEST(dp_core, test_core)
     zassert_true(data(7, 2)->updated_at_s >= epoch);
     zassert_equal(data(7, 1)->value.u16, skipped_before.value.u16);
     zassert_equal(data(7, 1)->updated_at_s, skipped_before.updated_at_s);
-    zassert_mem_equal(data(8, 0)->value.bytes, other_device, sizeof(other_device));
+    zassert_mem_equal(data(8, 0)->value.bytes, other_device.bytes, 3);
 
     const struct timespec beyond = {.tv_sec = (int64_t)UINT32_MAX + 1};
     zassert_ok(sys_clock_settime(SYS_CLOCK_REALTIME, &beyond));

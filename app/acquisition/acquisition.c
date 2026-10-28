@@ -3,7 +3,6 @@
 #include <dataprocess/dataprocess.h>
 #include <zephyr/drivers/adc.h>
 #include <zephyr/drivers/gpio.h>
-#include <zephyr/sys/byteorder.h>
 #include <errno.h>
 
 #define IO_NODE DT_NODELABEL(idu_io)
@@ -134,7 +133,7 @@ int acquisition_inputs_init(void)
 int acquisition_cycle(void)
 {
     uint16_t digital = 0;
-    uint8_t bytes[2];
+    value_t point_value = {0};
 
     for (size_t i = 0; i < ARRAY_SIZE(digital_inputs.spec); ++i) {
         int value = gpio_pin_get_dt(&digital_inputs.spec[i]);
@@ -145,8 +144,8 @@ int acquisition_cycle(void)
             DT_ENUM_IDX(IO_NODE, di_bit_order) == 0 ? i : ARRAY_SIZE(digital_inputs.spec) - 1 - i;
         digital |= (uint16_t)((uint32_t)value << bit);
     }
-    sys_put_le16(digital, bytes);
-    int err = dp_set_para(digital_inputs.device_id, digital_inputs.signal_key, sizeof(bytes), bytes);
+    point_value.u16 = digital;
+    int err = dp_set_para(digital_inputs.device_id, digital_inputs.signal_key, &point_value);
     if (err) {
         return err;
     }
@@ -175,8 +174,8 @@ int acquisition_cycle(void)
         if (value > UINT16_MAX) {
             value = UINT16_MAX;
         }
-        sys_put_le16(value, bytes);
-        err = dp_set_para(input->device_id, input->signal_key, sizeof(bytes), bytes);
+        point_value.u16 = (uint16_t)value;
+        err = dp_set_para(input->device_id, input->signal_key, &point_value);
         if (err) {
             return err;
         }
