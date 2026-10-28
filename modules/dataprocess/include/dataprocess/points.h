@@ -2,22 +2,13 @@
 #ifndef DP_POINTS_H
 #define DP_POINTS_H
 
+#include <common/value.h>
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-#define DP_POINT_WORDS CONFIG_DP_POINT_WORDS
-
-typedef enum {
-    DP_TYPE_U8,
-    DP_TYPE_U16,
-    DP_TYPE_S16,
-    DP_TYPE_U32,
-    DP_TYPE_S32,
-    DP_TYPE_STRING,
-    DP_TYPE_BYTES,
-    DP_TYPE_WORDS,
-} dp_value_type_t;
+#define DP_POINT_WORDS VALUE_WORDS
 
 typedef enum {
     FLAG_PERSISTENCE = (1U << 0),
@@ -27,59 +18,32 @@ typedef enum {
     FLAG_CONSTANT = (1U << 7),
 } dp_flags_t;
 
-/** @brief 联合体只提供访问视图，实际类型及有效长度由点表确定。 */
-typedef union {
-    uint8_t bytes[DP_POINT_WORDS * 2];
-    uint16_t words[DP_POINT_WORDS];
-    uint8_t u8;
-    uint16_t u16;
-    int16_t s16;
-    uint32_t u32;
-    int32_t s32;
-    float f32; /**< 当前点表不支持浮点校验和持久化。 */
-} dp_value_t;
-
 typedef struct {
-    dp_value_t value;
+    value_t value;
     uint32_t updated_at_s; /**< UNIX 秒，UTC；未校时、默认值和历史恢复值为 0。 */
 } dp_point_data_t;
 
-typedef struct {
-    uint16_t device_id;
-    uint16_t signal_id;
-} dp_key_t;
-
-typedef int (*dp_write_callback_t)(dp_key_t key, const dp_value_t *value);
-typedef int (*dp_read_callback_t)(dp_key_t key, dp_value_t *value);
-
-/** @brief 点表字面值；大于 4 字节的初值使用常驻只读数组指针。 */
-typedef union {
-    uint16_t u16;
-    int16_t s16;
-    uint32_t u32;
-    int32_t s32;
-    const void *array;
-    uint8_t bytes[4];
-} dp_default_value_t;
+typedef int (*dp_write_callback_t)(uint16_t device_id, uint16_t signal_id, const value_t *value);
+typedef int (*dp_read_callback_t)(uint16_t device_id, uint16_t signal_id, value_t *value);
 
 typedef struct {
-    dp_default_value_t initial;
-    dp_default_value_t minimum;
-    dp_default_value_t maximum;
+    value_t initial;
+    value_t minimum;
+    value_t maximum;
 } dp_point_limits_t;
 
 typedef struct {
     uint16_t signal_id;
     uint8_t size;
     uint8_t flags;
-    dp_value_type_t type;
+    value_type_t type;
     dp_write_callback_t write_callback;
     dp_read_callback_t read_callback;
     dp_point_limits_t data;
-} dp_point_def_t;
+} dp_point_config_t;
 
 typedef struct {
-    const dp_point_def_t *points;
+    const dp_point_config_t *points;
     size_t point_count;
 } dp_table_t;
 

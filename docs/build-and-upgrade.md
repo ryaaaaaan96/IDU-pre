@@ -27,7 +27,7 @@ DP 最小核心的线程和容量配置集中在 `prj.conf`：
 | 配置 | 当前值 | 说明 |
 | --- | ---: | --- |
 | `CONFIG_DATAPROCESS` | y | 启用点值和参数核心 |
-| `CONFIG_DP_POINT_WORDS` | 16 | 单点最大字数；每设备运行数据由 DP 内部分配 |
+| `CONFIG_COMMON_VALUE_WORDS` | 16 | 单点最大字数；每设备运行数据由 DP 内部分配 |
 | `CONFIG_DP_PARAMS_MAX_COUNT` | 8 | 当前 3 个持久参数 |
 | `CONFIG_DP_PARAMS_TRANSACTION_BYTES` | 2048 | 参数提交镜像上限 |
 | `CONFIG_MAIN_STACK_SIZE` | 4096 | 主循环、本地采样和 DP 同步调用 |

@@ -1,7 +1,7 @@
 # 工作缓冲区与系统堆
 
 DP 登记时一次分配私有节点及该设备的全部点数据；应用只提供只读点表。
-当前 `DP_POINT_WORDS=16`，`dp_value_t` 32 B，`dp_point_data_t` 36 B；
+当前 `COMMON_VALUE_WORDS=16`，`value_t` 32 B，`dp_point_data_t` 36 B；
 ARM 上私有节点头 16 B，本机 24 点一次申请 880 B（含头、不含堆开销）。
 运行数据只保留点值和秒级更新时间。
 
@@ -33,7 +33,8 @@ IAP 的位图、数据包、SGZ 与 Flash 写工作区由 `iap_init_config()` �
 `sizeof(dp_point_data_t)` 和分配器开销。新增设备或增大单点容量时须调整预算。
 `HEAP_MEM_POOL_ADD_SIZE_DP_PARAMS` 覆盖参数副本和提交镜像。
 
-本轮默认固件静态 RAM 41,576 B、Flash 88,340 B；前一版为 40,856 B / 87,932 B。
+公共 value_t 合并后默认固件静态 RAM 41,576 B、Flash 90,332 B；合并前为 41,576 B / 88,340 B。
+点表初值和上下限使用完整联合体，增加只读 Flash；ARM 上运行数据大小不变。
 增加的堆预算换取私有运行数据和更小的公共接口；链接结果不代表实板峰值。
 UNIX 更新时间通过系统墙钟获取；未校时时不写入伪日期，也不额外分配 RTC 任务。
 

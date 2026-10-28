@@ -24,7 +24,7 @@
 
 ## 点表
 
-`tables/process.c` 使用 `dp_point_def_t` 显式填写每一行：
+`tables/process.c` 使用 `dp_point_config_t` 显式填写每一行：
 
 - `SIGNAL_DI`、`SIGNAL_CURRENT_1..8`：本地点，无标志。
 - `SIGNAL_SAMPLE_PERIOD`、`SIGNAL_LABEL`、`SIGNAL_SAVED_ADDRESS`：

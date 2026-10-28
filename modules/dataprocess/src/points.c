@@ -17,7 +17,7 @@ static dp_registered_table_t *tables;
 static size_t param_points;
 static K_MUTEX_DEFINE(store_lock);
 
-static int64_t number(const dp_point_cfg_t *p, const dp_value_t *v)
+static int64_t number(const dp_point_cfg_t *p, const value_t *v)
 {
     uint32_t u = v->words[0] | ((uint32_t)v->words[1] << 16);
 
@@ -33,7 +33,7 @@ static int64_t number(const dp_point_cfg_t *p, const dp_value_t *v)
     }
 }
 
-int dp_check_value(const dp_point_cfg_t *p, const dp_value_t *v)
+int dp_check_value(const dp_point_cfg_t *p, const value_t *v)
 {
     if (!p || !v) {
         return -EINVAL;
@@ -53,28 +53,29 @@ int dp_check_value(const dp_point_cfg_t *p, const dp_value_t *v)
     return n < p->minimum || n > p->maximum ? -ERANGE : 0;
 }
 
-static void unpack(dp_value_t *value, const uint8_t *bytes, size_t size)
+static void unpack(value_t *value, const uint8_t *bytes, size_t size)
 {
-    *value = (dp_value_t){0};
+    *value = (value_t){0};
     for (size_t i = 0; i < size; ++i) {
         value->words[i / 2] |= (uint16_t)bytes[i] << (8 * (i % 2));
     }
 }
 
-static void pack(uint8_t *bytes, const dp_value_t *value, size_t size)
+static void pack(uint8_t *bytes, const value_t *value, size_t size)
 {
     for (size_t i = 0; i < size; ++i) {
         bytes[i] = (uint8_t)(value->words[i / 2] >> (8 * (i % 2)));
     }
 }
 
-int dp_describe_point(uint16_t dev, const dp_point_def_t *row, dp_point_cfg_t *p)
+int dp_describe_point(uint16_t dev, const dp_point_config_t *row, dp_point_cfg_t *p)
 {
     if (!row || !row->signal_id || !row->size || row->size > DP_POINT_WORDS * 2) {
         return -EINVAL;
     }
     *p = (dp_point_cfg_t){
-        .key = {dev, row->signal_id},
+        .device_id = dev,
+        .signal_id = row->signal_id,
         .size_bytes = row->size,
         .width = (row->size + 1) / 2,
         .flags = row->flags,
@@ -82,7 +83,7 @@ int dp_describe_point(uint16_t dev, const dp_point_def_t *row, dp_point_cfg_t *p
         .read_callback = row->read_callback,
     };
     switch (row->type) {
-    case DP_TYPE_U8:
+    case VALUE_TYPE_U8:
         if (row->size != 1) {
             return -EINVAL;
         }
@@ -90,7 +91,7 @@ int dp_describe_point(uint16_t dev, const dp_point_def_t *row, dp_point_cfg_t *p
         p->minimum = 0;
         p->maximum = UINT8_MAX;
         break;
-    case DP_TYPE_U16:
+    case VALUE_TYPE_U16:
         if (row->size != 2) {
             return -EINVAL;
         }
@@ -98,7 +99,7 @@ int dp_describe_point(uint16_t dev, const dp_point_def_t *row, dp_point_cfg_t *p
         p->minimum = 0;
         p->maximum = UINT16_MAX;
         break;
-    case DP_TYPE_S16:
+    case VALUE_TYPE_S16:
         if (row->size != 2) {
             return -EINVAL;
         }
@@ -106,7 +107,7 @@ int dp_describe_point(uint16_t dev, const dp_point_def_t *row, dp_point_cfg_t *p
         p->minimum = INT16_MIN;
         p->maximum = INT16_MAX;
         break;
-    case DP_TYPE_U32:
+    case VALUE_TYPE_U32:
         if (row->size != 4) {
             return -EINVAL;
         }
@@ -114,7 +115,7 @@ int dp_describe_point(uint16_t dev, const dp_point_def_t *row, dp_point_cfg_t *p
         p->minimum = 0;
         p->maximum = UINT32_MAX;
         break;
-    case DP_TYPE_S32:
+    case VALUE_TYPE_S32:
         if (row->size != 4) {
             return -EINVAL;
         }
@@ -122,10 +123,10 @@ int dp_describe_point(uint16_t dev, const dp_point_def_t *row, dp_point_cfg_t *p
         p->minimum = INT32_MIN;
         p->maximum = INT32_MAX;
         break;
-    case DP_TYPE_STRING:
-    case DP_TYPE_BYTES:
-    case DP_TYPE_WORDS:
-        if (row->type == DP_TYPE_WORDS && (row->size & 1U)) {
+    case VALUE_TYPE_STRING:
+    case VALUE_TYPE_BYTES:
+    case VALUE_TYPE_WORDS:
+        if (row->type == VALUE_TYPE_WORDS && (row->size & 1U)) {
             return -EINVAL;
         }
         p->type = DP_WORDS;
@@ -193,21 +194,22 @@ dp_registered_table_t *dp_tables(void)
     return tables;
 }
 
-static int find_point(dp_key_t key, dp_point_cfg_t *point, dp_point_data_t **state)
+static int find_point(
+    uint16_t device_id, uint16_t signal_id, dp_point_cfg_t *point, dp_point_data_t **state)
 {
-    if (!key.device_id || !key.signal_id) {
+    if (!device_id || !signal_id) {
         return -EINVAL;
     }
     for (dp_registered_table_t *table = tables; table; table = table->next) {
-        if (table->device_id != key.device_id) {
+        if (table->device_id != device_id) {
             continue;
         }
         for (size_t i = 0; i < table->point_count; ++i) {
-            if (table->points[i].signal_id != key.signal_id) {
+            if (table->points[i].signal_id != signal_id) {
                 continue;
             }
             *state = &table->data[i];
-            return dp_describe_point(key.device_id, &table->points[i], point);
+            return dp_describe_point(device_id, &table->points[i], point);
         }
         return -ENOENT;
     }
@@ -275,7 +277,7 @@ static int read_point(const dp_point_cfg_t *point, dp_point_data_t *stored, dp_p
 {
     if (point->read_callback) {
         *state = (dp_point_data_t){0};
-        int err = point->read_callback(point->key, &state->value);
+        int err = point->read_callback(point->device_id, point->signal_id, &state->value);
         if (!err) {
             state->updated_at_s = dp_timestamp_s();
             k_mutex_lock(&store_lock, K_FOREVER);
@@ -285,7 +287,7 @@ static int read_point(const dp_point_cfg_t *point, dp_point_data_t *stored, dp_p
         return err;
     }
     if (point->source == DP_SOURCE_PARAMETER) {
-        return dp_params_read(point->key, state);
+        return dp_params_read(point->device_id, point->signal_id, state);
     }
     k_mutex_lock(&store_lock, K_FOREVER);
     *state = *stored;
@@ -301,10 +303,9 @@ int dp_set_para(uint16_t dev_id, uint16_t sig_id, uint8_t size, const uint8_t *b
     if (!bytes) {
         return -EINVAL;
     }
-    dp_key_t key = {dev_id, sig_id};
     dp_point_cfg_t p;
     dp_point_data_t *stored;
-    int err = find_point(key, &p, &stored);
+    int err = find_point(dev_id, sig_id, &p, &stored);
     if (err) {
         return err;
     }
@@ -314,17 +315,17 @@ int dp_set_para(uint16_t dev_id, uint16_t sig_id, uint8_t size, const uint8_t *b
     if (p.source == DP_SOURCE_CONSTANT) {
         return -EACCES;
     }
-    dp_value_t value;
+    value_t value;
     unpack(&value, bytes, size);
     err = dp_check_value(&p, &value);
     if (err) {
         return err;
     }
     if (p.write_callback) {
-        return p.write_callback(key, &value);
+        return p.write_callback(dev_id, sig_id, &value);
     }
     if (p.source == DP_SOURCE_PARAMETER) {
-        return dp_params_write(key, &value);
+        return dp_params_write(dev_id, sig_id, &value);
     }
     k_mutex_lock(&store_lock, K_FOREVER);
     stored->value = value;
@@ -341,10 +342,9 @@ int dp_get_para(uint16_t dev_id, uint16_t sig_id, uint8_t capacity, uint8_t *byt
     if (!bytes) {
         return -EINVAL;
     }
-    dp_key_t key = {dev_id, sig_id};
     dp_point_cfg_t p;
     dp_point_data_t *stored;
-    int err = find_point(key, &p, &stored);
+    int err = find_point(dev_id, sig_id, &p, &stored);
     if (err) {
         return err;
     }

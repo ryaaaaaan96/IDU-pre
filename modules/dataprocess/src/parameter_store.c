@@ -37,12 +37,16 @@ static int read_history(
     return -EIO;
 }
 
-static int find_slot(
-    struct nvs_fs *fs, dp_key_t key, uint16_t *id, uint8_t *record, bool *recovered)
+static int find_slot(struct nvs_fs *fs,
+    uint16_t device_id,
+    uint16_t signal_id,
+    uint16_t *id,
+    uint8_t *record,
+    bool *recovered)
 {
     uint8_t bytes[4];
-    sys_put_le16(key.device_id, bytes);
-    sys_put_le16(key.signal_id, bytes + 2);
+    sys_put_le16(device_id, bytes);
+    sys_put_le16(signal_id, bytes + 2);
     uint16_t start = crc32_ieee(bytes, sizeof(bytes)) % SLOT_COUNT;
     for (size_t i = 0; i < SLOT_COUNT; ++i) {
         *id = SLOT_FIRST + (start + i) % SLOT_COUNT;
@@ -59,19 +63,22 @@ static int find_slot(
             len != DP_STORE_VALUE_HEADER + 2U * record[11]) {
             return -EPROTO;
         }
-        if (sys_get_le16(record + 6) == key.device_id &&
-            sys_get_le16(record + 8) == key.signal_id) {
+        if (sys_get_le16(record + 6) == device_id && sys_get_le16(record + 8) == signal_id) {
             return len;
         }
     }
     return -ENOSPC;
 }
 
-int dp_store_read(struct nvs_fs *fs, dp_key_t key, dp_stored_value_t *value, bool *recovered)
+int dp_store_read(struct nvs_fs *fs,
+    uint16_t device_id,
+    uint16_t signal_id,
+    dp_stored_value_t *value,
+    bool *recovered)
 {
     uint8_t record[VALUE_MAX];
     uint16_t id;
-    int len = find_slot(fs, key, &id, record, recovered);
+    int len = find_slot(fs, device_id, signal_id, &id, record, recovered);
     if (len < 0) {
         return len;
     }
@@ -117,17 +124,18 @@ static int apply_image(struct nvs_fs *fs, const uint8_t *image, size_t length)
     uint8_t record[VALUE_MAX];
     uint32_t sequence = sys_get_le32(image + 12);
     for (size_t at = DP_STORE_IMAGE_HEADER; at < length; at += 6 + 2U * image[at + 5]) {
-        dp_key_t key = {sys_get_le16(image + at), sys_get_le16(image + at + 2)};
+        uint16_t device_id = sys_get_le16(image + at);
+        uint16_t signal_id = sys_get_le16(image + at + 2);
         uint16_t id;
         bool recovered = false;
-        err = find_slot(fs, key, &id, record, &recovered);
+        err = find_slot(fs, device_id, signal_id, &id, record, &recovered);
         if (err < 0 && err != -ENOENT) {
             return err;
         }
         sys_put_le32(VALUE_MAGIC, record);
         sys_put_le16(DP_STORE_VERSION, record + 4);
-        sys_put_le16(key.device_id, record + 6);
-        sys_put_le16(key.signal_id, record + 8);
+        sys_put_le16(device_id, record + 6);
+        sys_put_le16(signal_id, record + 8);
         record[10] = image[at + 4];
         record[11] = image[at + 5];
         sys_put_le32(sequence, record + 12);

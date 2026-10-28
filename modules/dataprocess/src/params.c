@@ -19,7 +19,7 @@ static size_t param_count;
 
 static struct {
     uint16_t device_id;
-    const dp_point_def_t *row;
+    const dp_point_config_t *row;
     dp_point_data_t *data;
 } defs[CONFIG_DP_PARAMS_MAX_COUNT];
 
@@ -41,9 +41,9 @@ static K_MUTEX_DEFINE(params_lock);
 static K_MUTEX_DEFINE(status_lock);
 
 typedef struct {
-    dp_value_t staged[CONFIG_DP_PARAMS_MAX_COUNT];
-    dp_value_t durable[CONFIG_DP_PARAMS_MAX_COUNT];
-    dp_value_t durable_stage[CONFIG_DP_PARAMS_MAX_COUNT];
+    value_t staged[CONFIG_DP_PARAMS_MAX_COUNT];
+    value_t durable[CONFIG_DP_PARAMS_MAX_COUNT];
+    value_t durable_stage[CONFIG_DP_PARAMS_MAX_COUNT];
     uint8_t image[IMAGE_MAX];
 } dp_param_buffers_t;
 
@@ -56,10 +56,10 @@ static const dp_point_cfg_t *param(size_t index, dp_point_cfg_t *scratch)
     return dp_describe_point(defs[index].device_id, defs[index].row, scratch) ? NULL : scratch;
 }
 
-static int index_of(dp_key_t key)
+static int index_of(uint16_t device_id, uint16_t signal_id)
 {
     for (size_t i = 0; i < param_count; ++i) {
-        if (defs[i].device_id == key.device_id && defs[i].row->signal_id == key.signal_id) {
+        if (defs[i].device_id == device_id && defs[i].row->signal_id == signal_id) {
             return i;
         }
     }
@@ -92,12 +92,12 @@ static void commit_cache(uint32_t sequence, const bool *selected)
 }
 
 static int load_value(
-    const dp_point_cfg_t *p, uint8_t type, uint8_t width, const uint8_t *bytes, dp_value_t *value)
+    const dp_point_cfg_t *p, uint8_t type, uint8_t width, const uint8_t *bytes, value_t *value)
 {
     if (type != p->type || width != p->width) {
         return -EPROTO;
     }
-    *value = (dp_value_t){0};
+    *value = (value_t){0};
     for (size_t w = 0; w < width; ++w) {
         value->words[w] = sys_get_le16(bytes + w * 2);
     }
@@ -123,8 +123,8 @@ static size_t encode_changes(uint8_t *buf, uint32_t sequence)
         if (offset + 6 + p.width * 2 > IMAGE_MAX) {
             return 0;
         }
-        sys_put_le16(p.key.device_id, buf + offset);
-        sys_put_le16(p.key.signal_id, buf + offset + 2);
+        sys_put_le16(p.device_id, buf + offset);
+        sys_put_le16(p.signal_id, buf + offset + 2);
         buf[offset + 4] = p.type;
         buf[offset + 5] = p.width;
         offset += 6;
@@ -196,7 +196,7 @@ static int apply(const bool *selected)
     return 0;
 }
 
-int dp_params_write(dp_key_t key, const dp_value_t *value)
+int dp_params_write(uint16_t device_id, uint16_t signal_id, const value_t *value)
 {
     if (!value) {
         return -EINVAL;
@@ -206,7 +206,7 @@ int dp_params_write(dp_key_t key, const dp_value_t *value)
         return err;
     }
     k_mutex_lock(&params_lock, K_FOREVER);
-    int index = index_of(key);
+    int index = index_of(device_id, signal_id);
     if (index < 0) {
         k_mutex_unlock(&params_lock);
         return index;
@@ -224,7 +224,7 @@ int dp_params_write(dp_key_t key, const dp_value_t *value)
     return err;
 }
 
-int dp_params_read(dp_key_t key, dp_point_data_t *state)
+int dp_params_read(uint16_t device_id, uint16_t signal_id, dp_point_data_t *state)
 {
     if (!state) {
         return -EINVAL;
@@ -233,7 +233,7 @@ int dp_params_read(dp_key_t key, dp_point_data_t *state)
     if (err) {
         return err;
     }
-    int index = index_of(key);
+    int index = index_of(device_id, signal_id);
     if (index < 0) {
         return index;
     }
@@ -254,7 +254,7 @@ int dp_params_restore(uint16_t dev_id)
     bool found = false;
     for (size_t i = 0; i < param_count; ++i) {
         dp_point_cfg_t p;
-        if (!param(i, &p) || p.key.device_id != dev_id || (p.flags & FLAG_NO_RESTORE)) {
+        if (!param(i, &p) || p.device_id != dev_id || (p.flags & FLAG_NO_RESTORE)) {
             continue;
         }
         buffers->staged[i] = p.initial;
@@ -338,7 +338,7 @@ static int load_locked(bool *incompatible)
                 continue;
             }
             dp_stored_value_t value;
-            err = dp_store_read(&fs, p.key, &value, &recovered);
+            err = dp_store_read(&fs, p.device_id, p.signal_id, &value, &recovered);
             if (err == -ENOENT) {
                 seed[i] = true;
                 continue;
@@ -443,7 +443,7 @@ static int mount_once(void)
     memset(buffers, 0, sizeof(*buffers));
     for (dp_registered_table_t *table = dp_tables(); table; table = table->next) {
         for (size_t i = 0; i < table->point_count; ++i) {
-            const dp_point_def_t *row = &table->points[i];
+            const dp_point_config_t *row = &table->points[i];
             if (!(row->flags & FLAG_PERSISTENCE)) {
                 continue;
             }

@@ -1,0 +1,4 @@
+name: common
+build:
+  cmake: .
+  kconfig: Kconfig

@@ -14,11 +14,6 @@ config DP_PARAMS
       Compatibility symbol for modules that select a parameter persistence
       policy. Parameters are always part of the minimal DP core.
 
-config DP_POINT_WORDS
-    int "Maximum words in one point"
-    default 16
-    range 2 72
-
 config DP_PARAMS_MAX_COUNT
     int "Maximum persistent parameters"
     default 8

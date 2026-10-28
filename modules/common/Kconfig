@@ -1,0 +1,4 @@
+config COMMON_VALUE_WORDS
+    int "Maximum words in a shared value"
+    default 16
+    range 2 72

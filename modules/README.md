@@ -6,6 +6,7 @@
 
 | 模块 | 接口 | 职责 |
 | --- | --- | --- |
+| `common` | `<common/value.h>` | 共享数值类型，不依赖业务模块 |
 | `dataprocess` | `dp_*` | 点值、质量、单点同步读写、NVS 参数 |
 | `modbus` | `modbus_support_*` | 无分配 RTU 编解码及 Zephyr Modbus 构建兼容；IAP 复用 ADU 结构 |
 | `iap` | `iap_*` | IAPv3/SGZ 接收、解包、验签和结果日志 |

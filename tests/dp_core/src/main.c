@@ -42,15 +42,17 @@ static int fail_flash_write(const struct device *dev, off_t offset, uint8_t valu
     return -EIO;
 }
 
-static int command(dp_key_t key, const dp_value_t *value)
+static int command(uint16_t device_id, uint16_t signal_id, const value_t *value)
 {
-    ARG_UNUSED(key);
+    ARG_UNUSED(device_id);
+    ARG_UNUSED(signal_id);
     return value->u16 == 0xa55a ? 0 : -EINVAL;
 }
 
-static int status(dp_key_t key, dp_value_t *value)
+static int status(uint16_t device_id, uint16_t signal_id, value_t *value)
 {
-    ARG_UNUSED(key);
+    ARG_UNUSED(device_id);
+    ARG_UNUSED(signal_id);
     if (fail_read) {
         return -EIO;
     }
@@ -63,37 +65,37 @@ static int status(dp_key_t key, dp_value_t *value)
     return 0;
 }
 
-static const dp_point_def_t rows[] = {
-    {.signal_id = SIG_LOCAL, .size = 2, .type = DP_TYPE_U16},
+static const dp_point_config_t rows[] = {
+    {.signal_id = SIG_LOCAL, .size = 2, .type = VALUE_TYPE_U16},
     {.signal_id = SIG_CONST,
         .size = 4,
-        .type = DP_TYPE_U32,
+        .type = VALUE_TYPE_U32,
         .flags = FLAG_CONSTANT,
         .data.initial.u32 = 0x12345678},
     {.signal_id = SIG_PARAM,
         .size = 2,
-        .type = DP_TYPE_U16,
+        .type = VALUE_TYPE_U16,
         .flags = FLAG_PERSISTENCE | FLAG_RANGE_CHECK,
         .data = {.initial.u16 = 500, .minimum.u16 = 100, .maximum.u16 = 1000}},
-    {.signal_id = SIG_CMD, .size = 2, .type = DP_TYPE_U16, .write_callback = command},
+    {.signal_id = SIG_CMD, .size = 2, .type = VALUE_TYPE_U16, .write_callback = command},
     {.signal_id = SIG_STATUS,
         .size = 8,
-        .type = DP_TYPE_WORDS,
+        .type = VALUE_TYPE_WORDS,
         .flags = FLAG_READ_CALLBACK,
         .read_callback = status},
 };
-static const dp_point_def_t alt_rows[] = {
-    {.signal_id = SIG_LOCAL, .size = 2, .type = DP_TYPE_U16, .data.initial.u16 = 0x1111},
+static const dp_point_config_t alt_rows[] = {
+    {.signal_id = SIG_LOCAL, .size = 2, .type = VALUE_TYPE_U16, .data.initial.u16 = 0x1111},
     {.signal_id = SIG_PARAM,
         .size = 2,
-        .type = DP_TYPE_U16,
+        .type = VALUE_TYPE_U16,
         .flags = FLAG_PERSISTENCE | FLAG_RANGE_CHECK,
         .data = {.initial.u16 = 600, .minimum.u16 = 100, .maximum.u16 = 1000}},
 };
 static const dp_table_t local_table = {.points = rows, .point_count = ARRAY_SIZE(rows)};
 static const dp_table_t alt_table = {.points = alt_rows, .point_count = ARRAY_SIZE(alt_rows)};
-static const dp_point_def_t array_rows[] = {
-    {.signal_id = 77, .size = 3, .type = DP_TYPE_BYTES, .data.initial.bytes = {1, 2, 3}},
+static const dp_point_config_t array_rows[] = {
+    {.signal_id = 77, .size = 3, .type = VALUE_TYPE_BYTES, .data.initial.bytes = {1, 2, 3}},
 };
 static const dp_table_t array_table = {.points = array_rows, .point_count = ARRAY_SIZE(array_rows)};
 
@@ -144,9 +146,9 @@ ZTEST(dp_core, test_core)
     zassert_ok(dp_register_table(DEV_ALT, &alt_table));
     zassert_equal(dp_register_table(DEV_ALT, &alt_table), -EEXIST);
 
-    const dp_point_def_t bad_rows[] = {
-        {.signal_id = 1, .size = 2, .type = DP_TYPE_U16},
-        {.signal_id = 1, .size = 2, .type = DP_TYPE_U16},
+    const dp_point_config_t bad_rows[] = {
+        {.signal_id = 1, .size = 2, .type = VALUE_TYPE_U16},
+        {.signal_id = 1, .size = 2, .type = VALUE_TYPE_U16},
     };
     const dp_table_t bad_table = {.points = bad_rows, .point_count = ARRAY_SIZE(bad_rows)};
     zassert_equal(dp_register_table(32, &bad_table), -EEXIST);
@@ -242,8 +244,8 @@ ZTEST(dp_core, test_core)
     zassert_equal(data(DEV, SIG_STATUS)->updated_at_s, read_update);
     fail_read = false;
 
-    const dp_point_def_t late_row = {
-        .signal_id = SIG_PARAM, .size = 2, .type = DP_TYPE_U16, .flags = FLAG_PERSISTENCE};
+    const dp_point_config_t late_row = {
+        .signal_id = SIG_PARAM, .size = 2, .type = VALUE_TYPE_U16, .flags = FLAG_PERSISTENCE};
     const dp_table_t late_table = {.points = &late_row, .point_count = 1};
     zassert_equal(dp_register_table(9, &late_table), -EBUSY);
     if (!phase) {

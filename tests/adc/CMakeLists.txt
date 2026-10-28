@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.20.0)
 get_filename_component(IDU_APP ${CMAKE_CURRENT_SOURCE_DIR}/../.. ABSOLUTE)
 list(APPEND DTS_ROOT ${IDU_APP})
+list(APPEND ZEPHYR_EXTRA_MODULES ${IDU_APP}/modules/common)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(idu_adc_tests)
 target_include_directories(app BEFORE PRIVATE fakes ../../app)
@@ -9,5 +10,3 @@ target_sources(app PRIVATE src/driver.c src/application.c ../../app/acquisition/
 target_compile_definitions(app PRIVATE CONFIG_IDU_ADC_AVERAGE_COUNT=10)
 
 target_include_directories(app PRIVATE ../../modules/dataprocess/include)
-
-target_compile_definitions(app PRIVATE CONFIG_DP_POINT_WORDS=16)

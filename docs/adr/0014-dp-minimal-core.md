@@ -107,3 +107,16 @@ dp_write_callback_t/dp_read_callback_t。明确它们是业务回调，与 DP �
 不仅用于启动初始化，也用于恢复默认；只改名称，不改变数值或存储格式。
 
 用户随后决定将 default_value 字段恢复为 initial（初始值）；回调命名保持不变。
+
+## 2026-10-28：公共数值类型
+
+将 dp_value_t 和 dp_default_value_t 合并为 modules/common/include/common/value.h 的 value_t。
+容量由 COMMON_VALUE_WORDS 配置，其他模块不依赖 DP 即可使用。DP 继续通过点类型和长度
+解释数据；大于四字节的点表初值仍使用 array 外部只读引用，运行值使用内嵌数组。
+公共类型不定义编码、转换或持久化；DP 不因此新增浮点测点支持，NVS 格式保持不变。
+
+点表配置类型同步由 dp_point_def_t 改为 dp_point_config_t，明确其配置用途，
+与运行数据 dp_point_data_t 区分。
+
+value_type_t 和 VALUE_TYPE_* 同时迁入 common。删除 dp_key_t，回调及内部函数
+直接传 device_id、signal_id；参数键编码保持不变。

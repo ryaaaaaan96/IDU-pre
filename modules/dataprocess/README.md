@@ -16,9 +16,9 @@ int dp_get_para(uint16_t device_id, uint16_t signal_id, uint8_t capacity, uint8_
 ```
 
 ```c
-static const dp_point_def_t points[] = {
-    {.signal_id = 1, .size = 2, .type = DP_TYPE_U16},
-    {.signal_id = 2, .size = 2, .type = DP_TYPE_U16,
+static const dp_point_config_t points[] = {
+    {.signal_id = 1, .size = 2, .type = VALUE_TYPE_U16},
+    {.signal_id = 2, .size = 2, .type = VALUE_TYPE_U16,
      .flags = FLAG_PERSISTENCE | FLAG_RANGE_CHECK,
      .data = {.initial.u16 = 500, .minimum.u16 = 100, .maximum.u16 = 1000}},
 };
@@ -55,10 +55,9 @@ flowchart TD
 
 | 类型 | 内容 |
 | --- | --- |
-| `dp_point_def_t` | signal_id、size、flags、type、write_callback、read_callback、data |
+| `dp_point_config_t` | signal_id、size、flags、type、write_callback、read_callback、data |
 | `dp_table_t` | points、point_count；无设备 ID、链表或运行数据 |
-| `dp_key_t` | device_id、signal_id |
-| `dp_value_t` | 联合体：bytes、words、u8、u16、s16、u32、s32、f32 |
+| `value_t` | 联合体：bytes、words、u8、u16、s16、u32、s32、f32 |
 | `dp_point_data_t` | value、uint32_t updated_at_s |
 | `dp_param_status_t` | 参数存储就绪、错误、序号等状态 |
 
@@ -68,11 +67,12 @@ flowchart TD
 
 所有读写在线程同步执行，ISR 返回 `-EWOULDBLOCK`。写长度必须匹配；读容量必须
 足够，成功返回传入容量。普通点更新值；常量返回 `-EACCES`；命令点仅调用 `write_callback`，
-不保存触发值。`read_callback` 只输出 `dp_value_t`，成功时 DP 保存生成快照及时间。
+不保存触发值。`read_callback` 只输出 `value_t`，成功时 DP 保存生成快照及时间。
 
 标志保留 `FLAG_CONSTANT`、`FLAG_PERSISTENCE`、`FLAG_RANGE_CHECK`、
 `FLAG_READ_CALLBACK`、`FLAG_NO_RESTORE`。常量不支持写回调，参数不支持读写回调。
-未启用范围检查时按类型范围校验。`data.initial/minimum/maximum` 为字面值联合体，
+未启用范围检查时按类型范围校验。`data.initial/minimum/maximum` 与运行值统一使用公共 `value_t`，定义于 `<common/value.h>`，
+容量由 `CONFIG_COMMON_VALUE_WORDS` 配置；
 初值大于 4 字节时使用 `.array` 常驻只读指针，NULL 表示全零。
 
 ## 更新时间
@@ -123,3 +123,6 @@ I/O 错误停写；应用采样周期读取失败时回退到默认值。
 `DP_PARAMS_TRANSACTION_BYTES` 限定提交镜像。系统堆预算由
 `HEAP_MEM_POOL_ADD_SIZE_DATAPROCESS` 与 `HEAP_MEM_POOL_ADD_SIZE_DP_PARAMS` 提供。
 细节见[内存管理](../../docs/memory-management.md)。
+
+读写回调直接接收 `uint16_t device_id, uint16_t signal_id`，不再使用键结构体。
+点表行类型为 `dp_point_config_t`，与运行数据 `dp_point_data_t` 区分。

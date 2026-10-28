@@ -26,7 +26,11 @@ int dp_store_open(struct nvs_fs *fs,
     uint32_t *sequence,
     bool *present,
     bool *recovered);
-int dp_store_read(struct nvs_fs *fs, dp_key_t key, dp_stored_value_t *value, bool *recovered);
+int dp_store_read(struct nvs_fs *fs,
+    uint16_t device_id,
+    uint16_t signal_id,
+    dp_stored_value_t *value,
+    bool *recovered);
 /* image 为自描述的键/类型/长度/值列表，仅存本次变化和新建的参数。
  * 提交日志成功后即决定整组新值；写参数中断时下次打开幂等完成，不发送硬件操作。
  */
