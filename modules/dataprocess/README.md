@@ -20,7 +20,7 @@ static const dp_point_def_t points[] = {
     {.signal_id = 1, .size = 2, .type = DP_TYPE_U16},
     {.signal_id = 2, .size = 2, .type = DP_TYPE_U16,
      .flags = FLAG_PERSISTENCE | FLAG_RANGE_CHECK,
-     .data = {.default_value.u16 = 500, .minimum.u16 = 100, .maximum.u16 = 1000}},
+     .data = {.initial.u16 = 500, .minimum.u16 = 100, .maximum.u16 = 1000}},
 };
 static const dp_table_t table = {
     .points = points,
@@ -72,7 +72,7 @@ flowchart TD
 
 标志保留 `FLAG_CONSTANT`、`FLAG_PERSISTENCE`、`FLAG_RANGE_CHECK`、
 `FLAG_READ_CALLBACK`、`FLAG_NO_RESTORE`。常量不支持写回调，参数不支持读写回调。
-未启用范围检查时按类型范围校验。`data.default_value/minimum/maximum` 为字面值联合体，
+未启用范围检查时按类型范围校验。`data.initial/minimum/maximum` 为字面值联合体，
 初值大于 4 字节时使用 `.array` 常驻只读指针，NULL 表示全零。
 
 ## 更新时间

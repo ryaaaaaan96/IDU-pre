@@ -46,7 +46,7 @@ typedef struct {
     uint8_t flags;
     dp_write_callback_t write_callback;
     dp_read_callback_t read_callback;
-    dp_value_t default_value;
+    dp_value_t initial;
     int64_t minimum;
     int64_t maximum;
 } dp_point_cfg_t;

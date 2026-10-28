@@ -63,7 +63,7 @@ typedef union {
 } dp_default_value_t;
 
 typedef struct {
-    dp_default_value_t default_value;
+    dp_default_value_t initial;
     dp_default_value_t minimum;
     dp_default_value_t maximum;
 } dp_point_limits_t;

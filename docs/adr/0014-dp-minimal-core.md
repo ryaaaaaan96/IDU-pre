@@ -105,3 +105,5 @@ dp_write_callback_t/dp_read_callback_t。明确它们是业务回调，与 DP �
 
 点表字面值及内部解析配置中的 initial 同时改为 default_value，明确它是产品默认值，
 不仅用于启动初始化，也用于恢复默认；只改名称，不改变数值或存储格式。
+
+用户随后决定将 default_value 字段恢复为 initial（初始值）；回调命名保持不变。

@@ -181,12 +181,11 @@ int dp_describe_point(uint16_t dev, const dp_point_def_t *row, dp_point_cfg_t *p
             break;
         }
     }
-    const uint8_t *bytes =
-        row->size > 4 ? row->data.default_value.array : row->data.default_value.bytes;
+    const uint8_t *bytes = row->size > 4 ? row->data.initial.array : row->data.initial.bytes;
     if (bytes) {
-        unpack(&p->default_value, bytes, row->size);
+        unpack(&p->initial, bytes, row->size);
     }
-    return dp_check_value(p, &p->default_value);
+    return dp_check_value(p, &p->initial);
 }
 
 dp_registered_table_t *dp_tables(void)
@@ -263,7 +262,7 @@ int dp_register_table(uint16_t device_id, const dp_table_t *table)
     for (size_t i = 0; i < table->point_count; ++i) {
         dp_point_cfg_t point;
         dp_describe_point(device_id, &table->points[i], &point);
-        entry->data[i].value = point.default_value;
+        entry->data[i].value = point.initial;
     }
     /* 校验、分配和初始化全部完成后才发布。 */
     entry->next = tables;

@@ -257,7 +257,7 @@ int dp_params_restore(uint16_t dev_id)
         if (!param(i, &p) || p.key.device_id != dev_id || (p.flags & FLAG_NO_RESTORE)) {
             continue;
         }
-        buffers->staged[i] = p.default_value;
+        buffers->staged[i] = p.initial;
         selected[i] = true;
         found = true;
     }
@@ -318,8 +318,8 @@ static int load_locked(bool *incompatible)
         if (!param(i, &p)) {
             return -ENOENT;
         }
-        buffers->durable_stage[i] = p.default_value;
-        buffers->staged[i] = p.default_value;
+        buffers->durable_stage[i] = p.initial;
+        buffers->staged[i] = p.initial;
     }
     uint32_t sequence = 0;
     bool recovered = false, present = false, converted = false;
@@ -458,8 +458,8 @@ static int mount_once(void)
             set_status(-ENOENT, 0);
             return -ENOENT;
         }
-        buffers->staged[i] = p.default_value;
-        buffers->durable_stage[i] = p.default_value;
+        buffers->staged[i] = p.initial;
+        buffers->durable_stage[i] = p.initial;
     }
     if (!param_count) {
         set_status(0, DP_PARAM_STORAGE_READY);
