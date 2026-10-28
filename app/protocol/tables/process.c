@@ -7,49 +7,10 @@
 
 /* 每行显式配置全部字段；默认值来自 DP，非空 read_callback 启用读回调。 */
 static const dp_point_config_t local_process_rows[PROCESS_SIGNAL_COUNT] = {
-    [PROCESS_RESTORE_LOCAL] = {
-        .signal_key = SIGNAL_RESTORE_LOCAL,
-        .size = 2,
-        .flags = DP_POINT_DEFAULT_FLAGS,
-        .type = VALUE_TYPE_U16,
-        .write_callback = points_parameter_command,
-        .data =
-            {
-                .initial.u16 = DP_POINT_DEFAULT_VALUE,
-                .minimum.u16 = DP_POINT_DEFAULT_VALUE,
-                .maximum.u16 = DP_POINT_DEFAULT_VALUE,
-            },
-    },
-    [PROCESS_RESTORE_REMOTE] = {
-        .signal_key = SIGNAL_RESTORE_REMOTE,
-        .size = 2,
-        .flags = DP_POINT_DEFAULT_FLAGS,
-        .type = VALUE_TYPE_U16,
-        .write_callback = points_parameter_command,
-        .data =
-            {
-                .initial.u16 = DP_POINT_DEFAULT_VALUE,
-                .minimum.u16 = DP_POINT_DEFAULT_VALUE,
-                .maximum.u16 = DP_POINT_DEFAULT_VALUE,
-            },
-    },
-    [PROCESS_PARAMETER_STATUS] = {
-        .signal_key = SIGNAL_PARAMETER_STATUS,
-        .size = 8,
-        .flags = DP_POINT_DEFAULT_FLAGS,
-        .type = VALUE_TYPE_WORDS,
-        .read_callback = points_parameter_status,
-        .data =
-            {
-                .initial.words = {0},
-                .minimum.array = DP_POINT_DEFAULT_ARRAY,
-                .maximum.array = DP_POINT_DEFAULT_ARRAY,
-            },
-    },
     [PROCESS_SAMPLE_PERIOD] = {
         .signal_key = SIGNAL_SAMPLE_PERIOD,
         .size = 2,
-        .flags = DP_POINT_FLAG_PERSISTENT | DP_POINT_FLAG_CHECK_RANGE,
+        .flags = DP_POINT_FLAG_CHECK_RANGE,
         .type = VALUE_TYPE_U16,
         .data =
             {
@@ -61,7 +22,7 @@ static const dp_point_config_t local_process_rows[PROCESS_SIGNAL_COUNT] = {
     [PROCESS_LABEL] = {
         .signal_key = SIGNAL_LABEL,
         .size = 16,
-        .flags = DP_POINT_FLAG_PERSISTENT,
+        .flags = DP_POINT_DEFAULT_FLAGS,
         .type = VALUE_TYPE_WORDS,
         .data =
             {
@@ -73,7 +34,7 @@ static const dp_point_config_t local_process_rows[PROCESS_SIGNAL_COUNT] = {
     [PROCESS_SAVED_ADDRESS] = {
         .signal_key = SIGNAL_SAVED_ADDRESS,
         .size = 2,
-        .flags = DP_POINT_FLAG_PERSISTENT | DP_POINT_FLAG_CHECK_RANGE,
+        .flags = DP_POINT_FLAG_CHECK_RANGE,
         .type = VALUE_TYPE_U16,
         .data =
             {

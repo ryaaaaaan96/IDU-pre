@@ -2,7 +2,6 @@
 #include "protocol/inc/process_table.h"
 #include "protocol/inc/signal_keys.h"
 #include <dataprocess/points.h>
-#include <dataprocess/params.h>
 #include <errno.h>
 #include <string.h>
 #include <zephyr/ztest.h>
@@ -27,18 +26,6 @@ ZTEST(process_runtime, test_local_process_without_communication)
         dp_get_para(DEVICE_LOCAL, SIGNAL_SAMPLE_PERIOD, sizeof(period), period), sizeof(period));
     zassert_equal(period[0] | ((uint16_t)period[1] << 8), CONFIG_IDU_SAMPLE_PERIOD_MS);
 
-    dp_param_status_t storage;
-    dp_params_get_status(&storage);
-    zassert_true(storage.flags & DP_PARAM_STORAGE_READY);
-
-    const uint8_t restore[] = {0x5a, 0xa5};
-    zassert_ok(dp_set_para(DEVICE_LOCAL, SIGNAL_RESTORE_LOCAL, sizeof(restore), restore));
-    uint8_t command_value[2] = {0xff, 0xff};
-    zassert_equal(
-        dp_get_para(DEVICE_LOCAL, SIGNAL_RESTORE_LOCAL, sizeof(command_value), command_value),
-        sizeof(command_value));
-    zassert_equal(command_value[0], 0);
-    zassert_equal(command_value[1], 0);
     zassert_equal(protocol_init(), -EEXIST);
 }
 

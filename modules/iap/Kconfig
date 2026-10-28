@@ -60,23 +60,7 @@ config IAP_AES_KEY_HEX
       Interoperability key for the old host tool. It does not authenticate
       firmware; MCUboot ECDSA-P256 remains mandatory.
 
-choice IAP_REBOOT_POLICY
-    prompt "State persistence before upgrade/reboot"
-    default IAP_REBOOT_DP_PARAMS if DP_PARAMS
-    default IAP_REBOOT_NO_STATE
 
-config IAP_REBOOT_NO_STATE
-    bool "No application state to save"
-
-config IAP_REBOOT_DP_PARAMS
-    bool "Flush and freeze dataprocess parameters"
-    depends on DP_PARAMS
-    help
-      Use the DP transaction API after signature verification. Failed
-      commit/upgrade requests unfreeze parameter writes. Other products
-      can provide callbacks with iap_init_config() for a different state store.
-
-endchoice
 
 endif
 

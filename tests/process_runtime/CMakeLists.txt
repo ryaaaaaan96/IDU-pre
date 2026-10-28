@@ -1,7 +1,6 @@
 cmake_minimum_required(VERSION 3.20.0)
 get_filename_component(IDU_APP ${CMAKE_CURRENT_SOURCE_DIR}/../.. ABSOLUTE)
 include(${IDU_APP}/modules/modules.cmake)
-set(DTC_OVERLAY_FILE ${CMAKE_CURRENT_SOURCE_DIR}/app.overlay)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(process_runtime_tests)
 target_include_directories(app PRIVATE ${IDU_APP}/app ${IDU_APP}/app/protocol/inc)

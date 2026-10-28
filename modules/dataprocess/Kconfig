@@ -1,28 +1,8 @@
 menuconfig DATAPROCESS
-    bool "Data management and local parameter storage"
+    bool "Point tables and synchronous RAM values"
     select KERNEL_MEM_POOL
-    select NVS
-    select NVS_DATA_CRC
-    depends on FLASH && FLASH_PAGE_LAYOUT && FLASH_MAP
 
 if DATAPROCESS
-
-config DP_PARAMS
-    bool
-    default y
-    help
-      Compatibility symbol for modules that select a parameter persistence
-      policy. Parameters are always part of the minimal DP core.
-
-config DP_PARAMS_MAX_COUNT
-    int "Maximum persistent parameters"
-    default 8
-    range 1 64
-
-config DP_PARAMS_TRANSACTION_BYTES
-    int "Maximum encoded parameter commit image"
-    default 2048
-    range 256 8192
 
 config HEAP_MEM_POOL_ADD_SIZE_DATAPROCESS
     int "System heap budget for registered devices and point data (bytes)"
@@ -31,14 +11,5 @@ config HEAP_MEM_POOL_ADD_SIZE_DATAPROCESS
     help
       Each device registration allocates one private node with its point data.
       Include the node, point_count times sizeof(dp_point_data_t), and heap overhead.
-
-config HEAP_MEM_POOL_ADD_SIZE_DP_PARAMS
-    int "System heap budget for parameter cache and commit buffers (bytes)"
-    default 4096
-    range 1024 131072
-    help
-      Allocated once by the parameter store. Covers the per-parameter cache,
-      staging/durable copies and the commit image. These buffers remain
-      available during storage failure so cached reads can continue.
 
 endif

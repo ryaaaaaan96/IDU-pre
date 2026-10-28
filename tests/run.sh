@@ -10,27 +10,14 @@ fi
 test_dir="build/IDU-pre/tests"
 mkdir -p "$test_dir"
 
-# DP 最小核心：常量、局部写读、范围、命令点、参数状态。
+# DP 最小核心：常量、局部写读、范围、命令点、回调及 RAM 快照。
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/dp_core -d "$test_dir/dp_core"
-timeout 30s "$test_dir/dp_core/zephyr/zephyr.exe" -flash_in_ram
-env IDU_DP_REGISTRATION_FAILURE=1 timeout 30s "$test_dir/dp_core/zephyr/zephyr.exe" -flash_in_ram
-env IDU_DP_READ_SAVE_FAILURE=1 timeout 30s "$test_dir/dp_core/zephyr/zephyr.exe" -flash_in_ram
-
-# 同一份模拟 Flash 跨进程验证参数持久化与恢复默认。
-flash_test_file="$(mktemp "$workspace_dir/$test_dir/dp-core-flash.XXXXXX")"
-trap 'rm -f -- "$flash_test_file"' EXIT
-for phase in main incompatible; do
-    env IDU_DP_PHASE="$phase" timeout 30s "$test_dir/dp_core/zephyr/zephyr.exe" \
-        -flash="$flash_test_file"
-done
-env IDU_DP_PHASE=verify IDU_DP_ADD_PARAMETER=1 \
-    timeout 30s "$test_dir/dp_core/zephyr/zephyr.exe" -flash="$flash_test_file"
-
+timeout 30s "$test_dir/dp_core/zephyr/zephyr.exe"
 # 产品模型与本地 process 装配。
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/process_runtime -d "$test_dir/process_runtime"
-timeout 30s "$test_dir/process_runtime/zephyr/zephyr.exe" -flash_in_ram
+timeout 30s "$test_dir/process_runtime/zephyr/zephyr.exe"
 
 for suite in adc modbus_support; do
     env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \

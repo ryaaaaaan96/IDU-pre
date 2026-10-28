@@ -1,5 +1,4 @@
 #include <dataprocess/points.h>
-#include <dataprocess/params.h>
 #include "dp_internal.h"
 #include <errno.h>
 #include <stdlib.h>
@@ -33,7 +32,7 @@ static int64_t number(value_type_t type, const value_t *value)
     }
 }
 
-int dp_check_value(const dp_point_config_t *point, const value_t *value)
+static int check_value(const dp_point_config_t *point, const value_t *value)
 {
     if (!point || !value) {
         return -EINVAL;
@@ -74,7 +73,7 @@ static void pack(uint8_t *bytes, const value_t *value, size_t size)
 }
 
 /* 登记时校验一次；运行期间配置常驻只读，不再解析或复制配置行。 */
-int dp_validate_point(uint16_t device_id, const dp_point_config_t *point)
+static int validate_point(uint16_t device_id, const dp_point_config_t *point)
 {
     if (!point->signal_key || !point->size || point->size > DP_POINT_WORDS * 2) {
         return -EINVAL;
@@ -112,11 +111,6 @@ int dp_validate_point(uint16_t device_id, const dp_point_config_t *point)
         break;
     default:
         return -ENOTSUP;
-    }
-    if ((point->flags & DP_POINT_FLAG_SKIP_RESTORE) && !(point->flags & DP_POINT_FLAG_PERSISTENT)) {
-        LOG_WRN("Device %u key %u: skip restore ignored for nonpersistent point",
-            device_id,
-            point->signal_key);
     }
     return 0;
 }
@@ -213,29 +207,30 @@ int dp_register_table(uint16_t device_id, const dp_table_t *table)
     entry->device_id = device_id;
     entry->points = table->points;
     entry->point_count = table->point_count;
-    err = dp_params_register(entry);
-    if (err) {
-        k_free(entry);
-        return err;
+    for (size_t i = 0; i < table->point_count; ++i) {
+        const dp_point_config_t *point = &table->points[i];
+        err = validate_point(device_id, point);
+        if (!err) {
+            entry->data[i].value = point->data.initial;
+            err = check_value(point, &entry->data[i].value);
+        }
+        if (err) {
+            k_free(entry);
+            return -EINVAL;
+        }
     }
-    /* 校验、加载及缺失参数提交全部完成后才发布。 */
+    /* 整表校验及初值设置成功后才发布。 */
     entry->next = tables;
     tables = entry;
     return 0;
 }
 
 /* 回调只操作副本；最终校验及存储成功后才更新点数据。 */
-static int save_value(uint16_t device_id,
-    const dp_point_config_t *point,
-    dp_point_data_t *stored,
-    const value_t *value)
+static int save_value(const dp_point_config_t *point, dp_point_data_t *stored, const value_t *value)
 {
-    int err = dp_check_value(point, value);
+    int err = check_value(point, value);
     if (err) {
         return err;
-    }
-    if (point->flags & DP_POINT_FLAG_PERSISTENT) {
-        return dp_params_write(device_id, point->signal_key, value);
     }
     k_mutex_lock(&store_lock, K_FOREVER);
     stored->value = *value;
@@ -250,16 +245,9 @@ static int read_point(uint16_t device_id,
     dp_point_data_t *state,
     size_t signal_index)
 {
-    if (point->flags & DP_POINT_FLAG_PERSISTENT) {
-        int err = dp_params_read(device_id, point->signal_key, state);
-        if (err) {
-            return err;
-        }
-    } else {
-        k_mutex_lock(&store_lock, K_FOREVER);
-        *state = *stored;
-        k_mutex_unlock(&store_lock);
-    }
+    k_mutex_lock(&store_lock, K_FOREVER);
+    *state = *stored;
+    k_mutex_unlock(&store_lock);
     if (!point->read_callback) {
         return 0;
     }
@@ -274,7 +262,7 @@ static int read_point(uint16_t device_id,
     if (err) {
         return err;
     }
-    return save_value(device_id, point, stored, &state->value);
+    return save_value(point, stored, &state->value);
 }
 
 int dp_set_para(uint16_t device_id, uint16_t signal_key, uint8_t size, const uint8_t *bytes)
@@ -310,7 +298,7 @@ int dp_set_para(uint16_t device_id, uint16_t signal_key, uint8_t size, const uin
             return err;
         }
     }
-    return save_value(device_id, p, stored, &value);
+    return save_value(p, stored, &value);
 }
 
 int dp_get_para(uint16_t device_id, uint16_t signal_key, uint8_t capacity, uint8_t *bytes)

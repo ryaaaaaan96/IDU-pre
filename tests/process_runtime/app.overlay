@@ -1,5 +1,0 @@
-/ {
-    aliases {
-        dp-params = &storage_partition;
-    };
-};

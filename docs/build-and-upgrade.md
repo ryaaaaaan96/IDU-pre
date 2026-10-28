@@ -28,8 +28,6 @@ DP 最小核心的线程和容量配置集中在 `prj.conf`：
 | --- | ---: | --- |
 | `CONFIG_DATAPROCESS` | y | 启用点值和参数核心 |
 | `CONFIG_COMMON_VALUE_WORDS` | 16 | 单点最大字数；每设备运行数据由 DP 内部分配 |
-| `CONFIG_DP_PARAMS_MAX_COUNT` | 8 | 当前 3 个持久参数 |
-| `CONFIG_DP_PARAMS_TRANSACTION_BYTES` | 2048 | 参数提交镜像上限 |
 | `CONFIG_MAIN_STACK_SIZE` | 4096 | 主循环、本地采样和 DP 同步调用 |
 | `CONFIG_SYSTEM_WORKQUEUE_STACK_SIZE` | 2048 | 看门狗等系统工作 |
 
@@ -46,16 +44,14 @@ IDU NVS、IAP 和 MCUboot 的有效存储偏移保持不变：
 
 | 外部 Flash 内容 | 偏移 | 大小 |
 | --- | --- | --- |
-| IDU NVS 参数/事务 | 0x010000 | 16 KiB |
+| 原参数保留区（当前 DP 不使用） | 0x010000 | 16 KiB |
 | IAP 日志（启用 IAP 时） | 0x018000 | 16 KiB |
 | IAP SGZ 暂存（启用 IAP 时） | 0x201000 | 512 KiB |
 | MCUboot slot1 | 0x300000 | 448 KiB |
 | MCUboot scratch | 0x370000 | 8 KiB |
 
-删除分区声明本身不擦除实物 Flash。参数后端读取到不兼容的存储格式时，
-自动清空 `dp-params` 并记录日志，以当前点表默认值重新初始化；不迁移旧整体快照。
-挂载时存储日志格式不兼容沿用清空策略；登记时单点类型/宽度不兼容仅拒绝该表，保留其他历史记录。
-新增或重排参数保留原逻辑键的值；I/O 故障报错停写。IAP 镜像和日志分区不参与参数清空。
+删除分区声明本身不擦除实物 Flash。当前 DP 不挂载原参数分区，也不读取或擦除其中历史数据。
+所有 DP 点值当前仅存 RAM，重启恢复配置初值。IAP 镜像和日志分区不参与参数清空。
 
 ## 默认固件构建
 
@@ -98,7 +94,7 @@ ECDSA P-256 签名、`swap-scratch` 交换、试运行后确认；未确认的�
 
 [IAPv3](#iapv3) 是唯一的应用级升级入口，接收封装签名 BIN 的 AES/SGZ 包。
 包内必须是针对新地址构建并签名的 MCUboot 镜像。旧 `IAPV3_INFO` 不再作为新
-启动程序的升级命令；参数只使用独立 NVS。
+启动程序的升级命令；当前 DP 参数只存 RAM。
 
 内部 Flash 和外部 NOR 的地址空间分别计算：
 
@@ -165,7 +161,7 @@ python applications/IDU-pre/tests/test_mcuboot_artifacts.py \
 接收、解包、验签和结果恢复由 [`modules/iap`](../modules/iap/README.md) 提供。
 板级 DTS 的 `iap,staging`／`iap,journal` 选择分区，执行地址和
 RAM 范围取自 `slot0_partition`／`zephyr,sram`；`conf/iapv3.conf` 配置镜像上限、
-暂存容量、堆预算、AES 密钥及 DP 参数保存策略。公钥文件默认跟随 MCUboot
+暂存容量、堆预算、AES 密钥；DP 参数持久化已移除。公钥文件默认跟随 MCUboot
 签名配置。分区属于板级布局，所有构建共用，不再使用单独的 overlay。
 无需独立的 IDU IAP 适配 `.c`，启动顺序与初始化成功后的镜像确认仍由应用编排。
 自动导出 SGZ 时读取本次构建的 `.config`；单独运行 `pack_sgz.py` 时也可用
@@ -235,7 +231,7 @@ IAP 配置额外划分两个外部 NOR 区域：`0x18000–0x1BFFF` 为独立 NV
 slot1 位于 `0x300000`，不会从应用直接写当前镜像或 BOOT。
 暂存容量与 `CONFIG_IAP_MAX_CONTAINER_SIZE` 成对维护：容器为签名镜像加上分包
 开销，上限 0x6e000 的镜像即使按未压缩帧膨胀也在 512 KiB 以内。
-日志使用固定 48 字节小端布局和自身 CRC；当前 IDU 的 DP 参数模块还启用全局
+日志使用固定 48 字节小端布局和自身 CRC；当前 IDU 的 DP 参数模块已不使用 NVS；IAP 配置显式启用
 `NVS_DATA_CRC`。IAP 模块不切换该选项，迁移已有 NVS 数据时须保持此配置一致。
 
 解包校验 SGZ CRC、子文件 CRC、输出长度与 CRC，然后校验 MCUboot 头、

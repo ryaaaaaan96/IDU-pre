@@ -7,19 +7,6 @@
 #define RAM DT_CHOSEN(zephyr_sram)
 #define PRIMARY DT_NODELABEL(slot0_partition)
 
-#ifdef CONFIG_IAP_REBOOT_DP_PARAMS
-#include <dataprocess/params.h>
-#include <errno.h>
-
-static int prepare_reboot(void *user)
-{
-    ARG_UNUSED(user);
-    dp_param_status_t status;
-    dp_params_get_status(&status);
-    return status.flags & DP_PARAM_STORAGE_READY ? 0 : -EROFS;
-}
-#endif
-
 int iap_init(void)
 {
     const struct iap_config config = {
@@ -35,9 +22,6 @@ int iap_init(void)
                 .public_key = iap_public_key,
                 .key_hash = iap_key_hash,
             },
-#ifdef CONFIG_IAP_REBOOT_DP_PARAMS
-        .prepare_reboot = prepare_reboot,
-#endif
     };
     return iap_init_config(&config);
 }

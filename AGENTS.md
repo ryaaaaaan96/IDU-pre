@@ -17,12 +17,12 @@
 - 产品代码、板级支持和点表模块保存在本应用内；依赖版本由工作区 `manifest/west.yml` 管理。
 - `modules/gd32e505` 通过 Zephyr `soc_root` / `dts_root` 提供 E505 SoC、设备树时钟配置和 ADC0 驱动；本板保持 20 MHz bypass / 180 MHz；`modules/hardware.cmake` 供应用和 Sysbuild 共用。
 - 通用模块只保留 [modules/README.md](modules/README.md) 列出的最小集合。`modules/collect`、`modules/transmit`、`modules/vport` 已删除；不要恢复其头文件、Kconfig 或应用装配。
-- `modules/dataprocess` 是最小原子核心，接口为 `dp_*`：模型登记、单点同步写读、本机 NVS 参数。不要恢复异步样本队列、业务线程、定时器、参考表目录、`data_process.h` 字节适配层或 collect/transmit 描述符。
-- 点表行使用 `dp_point_config_t`：`DP_POINT_FLAG_PERSISTENT`、`DP_POINT_FLAG_CHECK_RANGE`、`DP_POINT_FLAG_SKIP_RESTORE`；命令点用 `write_callback`，状态点用 `read_callback`。新增字段须同时更新 [DP 模块](modules/dataprocess/README.md) 和应用点表说明。
-- 先调用 dp_init() 挂载存储；三个点表接口为 `dp_register_table(device_id, table)`、`dp_set_para()`、`dp_get_para()`；启动线程逐表登记加载参数，再开始业务读写。表描述只含 points/count，可临时；行数组及引用初值须常驻只读。链表和设备点数据由模块一次分配、内部维护；同表可登记给多个设备。点值为 `value_t` 联合体，运行数据仅含值及 uint32_t UNIX 秒时间（未知为 0）。启用 DP 必须提供设备树 `dp-params` 别名并指向启用的固定分区。参数维护仅保留恢复默认和状态查询，NVS 键及格式保持兼容。
-- 参数写入在调用线程同步提交 NVS，没有去抖、意图日志或下游读回。`params.c` 内部的 NVS 记录/提交镜像格式保持兼容；不要因改点表而改变键或格式。
+- `modules/dataprocess` 是最小原子核心，接口为 `dp_*`：点表登记、单点同步 RAM 写读、回调和范围检查。不要恢复异步样本队列、业务线程、定时器、参考表目录、`data_process.h` 字节适配层或 collect/transmit 描述符。
+- 点表行使用 dp_point_config_t，仅保留 DP_POINT_FLAG_CHECK_RANGE；回调结果校验成功后保存 RAM。配置行数组常驻只读，初值为内嵌 value_t。
+- DP 仅保留 dp_register_table(device_id, table)、dp_set_para()、dp_get_para()；启动线程完成全部登记再并发读写。节点和点值由模块私有分配，重启恢复初值，不需要 dp_init、NVS 或设备树参数别名。
+- 参数持久化、恢复默认命令、存储状态和 IAP 的 DP 保存门禁暂时移除。当前只有一把点值快照锁，回调在锁外执行；IAP 独立 NVS 日志保留。
 - `app/main.c` 启动状态、硬件和可选 IAP 后调用 `protocol_init()`，保留采样周期和休眠，终止后主线程留驻并每 5 秒查询打印最近故障。`acquisition` 只按硬件 spec 与 device_id/signal_key 映射读取 DI 位图和 ADC，并用 `dp_set_para()` 同步写点。
-- `app/process/points.c` 只保留 `points_sample_period_ms()`、`points_parameter_command()` 和 `points_parameter_status()`。读写回调后校验并按配置保存；恢复命令在成功后将回调值清零。
+- `app/process/points.c` 只保留 points_sample_period_ms()。
 - 状态与 LED 归 `app/status/`；看门狗实现在 `modules/watchdog`；IAP 归 `modules/iap`，调用方直接使用 `<iap/iap.h>`。
 - IAP 模块提供 `iap_route()`，但当前最小产品没有 TR/Modbus 路由，串口上传尚不可用；不要在文档或报告中宣称 IAPv3 上传已工作。重新启用必须新增最小路由适配层并单独验证。
 
@@ -31,7 +31,7 @@
 - 在工作区根目录使用 `./applications/IDU-pre/scripts/build.sh`。默认 MCUboot + IAPv3；`--no-upload` 关闭接收器。不要使用根目录 `./build.sh`。
 - 首次构建生成签名密钥 `build/keys/IDU-pre-dev.pem`。删除 `build/` 前必须备份；`--pristine always` 会保留密钥。
 - 删除或重命名配置符号后，用 `--pristine always` 重建，避免 CMake/Kconfig 缓存残留。
-- 完整回归：`bash applications/IDU-pre/tests/run.sh`。当前套件覆盖 DP 核心、参数持久化、产品 process 装配、ADC、IO、Modbus 支持、看门狗、时钟和 IAP。
+- 完整回归：`bash applications/IDU-pre/tests/run.sh`。当前套件覆盖 DP 的 RAM 核心、产品 process 装配、ADC、IO、Modbus 支持、看门狗、时钟和 IAP。
 - 只运行与改动相关的套件。单套件示例：
 
   ```bash

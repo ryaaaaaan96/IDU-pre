@@ -5,9 +5,6 @@
 #include <dataprocess/points.h>
 
 typedef enum {
-    PROCESS_RESTORE_LOCAL,
-    PROCESS_RESTORE_REMOTE,
-    PROCESS_PARAMETER_STATUS,
     PROCESS_SAMPLE_PERIOD,
     PROCESS_LABEL,
     PROCESS_SAVED_ADDRESS,

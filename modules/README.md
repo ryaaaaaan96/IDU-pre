@@ -7,7 +7,7 @@
 | 模块 | 接口 | 职责 |
 | --- | --- | --- |
 | `common` | `<common/value.h>` | 共享数值类型，不依赖业务模块 |
-| `dataprocess` | `dp_*` | 点值、质量、单点同步读写、NVS 参数 |
+| `dataprocess` | `dp_*` | 点表登记、RAM 点值、读写回调及范围检查 |
 | `modbus` | `modbus_support_*` | 无分配 RTU 编解码及 Zephyr Modbus 构建兼容；IAP 复用 ADU 结构 |
 | `iap` | `iap_*` | IAPv3/SGZ 接收、解包、验签和结果日志 |
 | `quicklz` | `qlz_decode_level3()` | SGZ 块解码 |
@@ -22,7 +22,7 @@
 - `app/protocol/tables/process.c` 持有编译期只读模型。
 - `app/protocol/process_runtime.c` 调用 `dp_register_table(device_id, table)`，私有目录及点数据由 DP 维护。
 - `app/acquisition/acquisition.c` 同步写本地测点。
-- `app/process/points.c` 提供参数命令和状态回调。
+- `app/process/points.c` 读取应用采样周期。
 
 点表行、容量和堆预算见 [dataprocess/README.md](dataprocess/README.md) 与
 [内存管理](../docs/memory-management.md)。

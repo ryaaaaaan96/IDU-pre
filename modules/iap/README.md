@@ -18,12 +18,11 @@ IDU 无需编写独立的 IAP 适配 `.c`。配置由以下内容提供：
 | 最大签名镜像长度 | `CONFIG_IAP_IMAGE_MAX_SIZE`，包含头和 TLV，必须留足 MCUboot 交换状态／尾部空间 |
 | 公钥来源 | `CONFIG_IAP_PUBLIC_KEY_FILE`，默认跟随 `CONFIG_MCUBOOT_SIGNATURE_KEY_FILE`；相对路径以应用配置目录为基准 |
 | 旧 AES 传输密钥 | `CONFIG_IAP_AES_KEY_HEX`，32 个十六进制字符 |
-| 升级前保存策略 | `CONFIG_IAP_REBOOT_DP_PARAMS` 或 `CONFIG_IAP_REBOOT_NO_STATE` |
+| 升级前业务处理 | 显式配置可通过 iap_init_config() 的 prepare_reboot 回调提供；默认无 DP 存储依赖 |
 | 暂存容量上限 | `CONFIG_IAP_MAX_CONTAINER_SIZE`，限定位图大小；位图及工作区在初始化时从堆申请，实际接收限额为暂存分区大小 |
 
-[`conf/iapv3.conf`](../../conf/iapv3.conf) 选择 DP 保存策略。模块在验签完成后通过
-`dp_params_get_status()` 确认参数存储就绪；参数为同步写入，无需刷新或取消冻结。仅选中该策略才依赖 DP；没有持久状态的其他产品
-可选择 `IAP_REBOOT_NO_STATE`。IDU 的产品开关要求 DP 策略，避免配置时漏掉参数保存。
+当前 DP 仅存 RAM，默认 IAP 配置没有 DP 参数保存门禁。
+IAP 的升级结果日志仍独立使用 NVS；应用配置显式保持其 CRC 选项，避免已有日志格式失配。
 
 构建时从 PEM 导出公钥和哈希，签名私钥不会编入固件；AES 是旧协议互操作常量，
 不替代 ECDSA 身份验证。打包工具支持 `--config <应用 .config>`；
