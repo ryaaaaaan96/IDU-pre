@@ -13,7 +13,7 @@
 static int prepare_reboot(void *user)
 {
     ARG_UNUSED(user);
-    struct dp_param_status status;
+    dp_param_status_t status;
     dp_params_get_status(&status);
     return status.flags & DP_PARAM_STORAGE_READY ? 0 : -EROFS;
 }

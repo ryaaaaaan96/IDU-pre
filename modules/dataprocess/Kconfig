@@ -29,6 +29,14 @@ config DP_PARAMS_TRANSACTION_BYTES
     default 2048
     range 256 8192
 
+config HEAP_MEM_POOL_ADD_SIZE_DATAPROCESS
+    int "System heap budget for registered devices and point data (bytes)"
+    default 2048
+    range 256 65536
+    help
+      Each device registration allocates one private node with its point data.
+      Include the node, point_count times sizeof(dp_point_data_t), and heap overhead.
+
 config HEAP_MEM_POOL_ADD_SIZE_DP_PARAMS
     int "System heap budget for parameter cache and commit buffers (bytes)"
     default 4096

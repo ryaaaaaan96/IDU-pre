@@ -80,3 +80,19 @@ NVS 记录类型编码、逻辑键和镜像格式不变。
 参数层枚举表链表并保存直接行引用，不再保存全局点下标。
 每点预留完整值数组，使静态 RAM 略增，但去掉偏移计算、分配失败和跨表下标转换。
 默认固件链接结果见内存管理；业务故障状态仍由 status 维护。
+
+## 2026-10-28：只读表、私有设备目录与秒级更新时间
+
+在用户确认后替代上一节的应用状态数组：公共 dp_table_t 只含只读行及数量，
+设备 ID 由 dp_register_table(device_id, table) 入参指定。私有 dp_registered_table_t
+展开保存描述字段，用柔性数组与运行数据一次分配；公共类型不暴露 next 或 data。
+同表可用于多个设备。失败不发布节点，分配失败可重试。
+
+DM_SIG_CFG_S 改为 dp_point_def_t，所有 DP 类型使用 dp_*_t 别名；字段统一
+signal_id/size/flags/type/write/read。读回调只生成 dp_value_t，模块记录快照时间。
+数值改为联合体，运行数据只保留 value 和 uint32_t updated_at_s。更新时间为 UNIX 秒，
+默认、历史恢复及未校时记 0；不将 uptime 当作日期，超出 32 位范围记未知。
+不引入 DP 授时接口，由系统 sys_clock_settime 设置墙钟，零墙钟偏移视为未校时。
+
+参数共享设备点数据，删除第二份参数点缓存。参数 NVS 编码、哈希键和版本不变；
+UNIX 时间不持久化。分配预算、结果及验证见内存管理和 .scratch/dp-private-registry/。

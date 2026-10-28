@@ -1,208 +1,153 @@
 #include <dataprocess/points.h>
 #include <dataprocess/params.h>
+/* 私有数据只供本测试检查时间语义，不增加产品查询接口。 */
+#include "dp_internal.h"
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include <zephyr/kernel.h>
+#include <zephyr/drivers/flash/flash_simulator.h>
+#include <zephyr/storage/flash_map.h>
 #include <zephyr/ztest.h>
 
-enum { DEV = 7, DEV_ALT = 8 };
-/* 两组模型故意使用相同 sig_id，验证键按 (device_id, sig_id) 隔离。 */
-enum { SIG_LOCAL = 1, SIG_CONST, SIG_PARAM, SIG_CMD, SIG_STATUS };
+typedef enum { DEV = 7, DEV_ALT = 8 } test_device_t;
+typedef enum { SIG_LOCAL = 1, SIG_CONST, SIG_PARAM, SIG_CMD, SIG_STATUS } test_signal_t;
 
-static int command(struct dp_key key, const struct dp_value *value)
+static bool fail_allocation, fail_read;
+void *__real_k_calloc(size_t count, size_t size);
+void *__wrap_k_calloc(size_t count, size_t size)
 {
-    ARG_UNUSED(key);
-    return value->words[0] == 0xa55a ? 0 : -EINVAL;
+    if (fail_allocation) { return NULL; }
+    return __real_k_calloc(count, size);
 }
 
-static int status(struct dp_key key, struct dp_point_state *state)
+static int fail_flash_write(const struct device *dev, off_t offset, uint8_t value)
+{
+    ARG_UNUSED(dev);
+    ARG_UNUSED(offset);
+    ARG_UNUSED(value);
+    return -EIO;
+}
+
+static int command(dp_key_t key, const dp_value_t *value)
 {
     ARG_UNUSED(key);
-    struct dp_param_status value;
-    dp_params_get_status(&value);
-    state->value.words[0] = value.flags;
-    state->value.words[1] = (uint16_t)(int16_t)value.error;
-    state->value.words[2] = value.sequence & 0xffff;
-    state->value.words[3] = value.sequence >> 16;
-    state->quality = DP_QUALITY_GOOD;
+    return value->u16 == 0xa55a ? 0 : -EINVAL;
+}
+
+static int status(dp_key_t key, dp_value_t *value)
+{
+    ARG_UNUSED(key);
+    if (fail_read) { return -EIO; }
+    dp_param_status_t status;
+    dp_params_get_status(&status);
+    value->words[0] = status.flags;
+    value->words[1] = (uint16_t)(int16_t)status.error;
+    value->words[2] = status.sequence & 0xffff;
+    value->words[3] = status.sequence >> 16;
     return 0;
 }
 
-static const DM_SIG_CFG_S rows[] = {
-    {
-        .sig_id = SIG_LOCAL, .sig_size = 2, .data_type = DATA_TYPE_U16,
-        .data = {.def_value.u16 = 0, .min_value.u16 = 0,
-                 .max_value.u16 = UINT16_MAX},
-    },
-    {
-        .sig_id = SIG_CONST, .sig_size = 4, .sig_flag = FLAG_CONSTANT,
-        .data_type = DATA_TYPE_U32,
-        .data = {.def_value.u32 = 0x12345678, .min_value.u32 = 0,
-                 .max_value.u32 = UINT32_MAX},
-    },
-    {
-        .sig_id = SIG_PARAM, .sig_size = 2,
-        .sig_flag = FLAG_PERSISTENCE | FLAG_RANGE_CHECK,
-        .data_type = DATA_TYPE_U16,
-        .data = {.def_value.u16 = 500, .min_value.u16 = 100,
-                 .max_value.u16 = 1000},
-    },
-    {
-        .sig_id = SIG_CMD, .sig_size = 2, .data_type = DATA_TYPE_U16,
-        .handler = command,
-        .data = {.def_value.u16 = 0, .min_value.u16 = 0,
-                 .max_value.u16 = UINT16_MAX},
-    },
-    {
-        .sig_id = SIG_STATUS, .sig_size = 8, .sig_flag = FLAG_READ_CALLBACK,
-        .data_type = DATA_TYPE_U16ARRAY, .read = status,
-        .data = {.def_value.pst = NULL, .min_value.pst = NULL,
-                 .max_value.pst = NULL},
-    },
+static const dp_point_def_t rows[] = {
+    {.signal_id = SIG_LOCAL, .size = 2, .type = DP_TYPE_U16},
+    {.signal_id = SIG_CONST, .size = 4, .type = DP_TYPE_U32, .flags = FLAG_CONSTANT,
+     .data.initial.u32 = 0x12345678},
+    {.signal_id = SIG_PARAM, .size = 2, .type = DP_TYPE_U16,
+     .flags = FLAG_PERSISTENCE | FLAG_RANGE_CHECK,
+     .data = {.initial.u16 = 500, .minimum.u16 = 100, .maximum.u16 = 1000}},
+    {.signal_id = SIG_CMD, .size = 2, .type = DP_TYPE_U16, .write = command},
+    {.signal_id = SIG_STATUS, .size = 8, .type = DP_TYPE_WORDS,
+     .flags = FLAG_READ_CALLBACK, .read = status},
 };
+static const dp_point_def_t alt_rows[] = {
+    {.signal_id = SIG_LOCAL, .size = 2, .type = DP_TYPE_U16, .data.initial.u16 = 0x1111},
+    {.signal_id = SIG_PARAM, .size = 2, .type = DP_TYPE_U16,
+     .flags = FLAG_PERSISTENCE | FLAG_RANGE_CHECK,
+     .data = {.initial.u16 = 600, .minimum.u16 = 100, .maximum.u16 = 1000}},
+};
+static const dp_table_t local_table = {.points = rows, .point_count = ARRAY_SIZE(rows)};
+static const dp_table_t alt_table = {.points = alt_rows, .point_count = ARRAY_SIZE(alt_rows)};
+static const dp_point_def_t array_rows[] = {
+    {.signal_id = 77, .size = 3, .type = DP_TYPE_BYTES, .data.initial.bytes = {1, 2, 3}},
+};
+static const dp_table_t array_table = {.points = array_rows, .point_count = ARRAY_SIZE(array_rows)};
 
-static const DM_SIG_CFG_S alt_rows[] = {
-    {
-        .sig_id = SIG_LOCAL, .sig_size = 2, .data_type = DATA_TYPE_U16,
-        .data = {.def_value.u16 = 0x1111, .min_value.u16 = 0,
-                 .max_value.u16 = UINT16_MAX},
-    },
-    {
-        .sig_id = SIG_PARAM, .sig_size = 2,
-        .sig_flag = FLAG_PERSISTENCE | FLAG_RANGE_CHECK,
-        .data_type = DATA_TYPE_U16,
-        .data = {.def_value.u16 = 600, .min_value.u16 = 100,
-                 .max_value.u16 = 1000},
-    },
-};
-
-/* 业务层逐组登记，顺序不限。 */
-static struct dp_point_state model_states[ARRAY_SIZE(rows)];
-static struct dp_point_state alt_states[ARRAY_SIZE(alt_rows)];
-static struct dp_table models[] = {
-    {.device_id = DEV, .points = rows, .point_count = ARRAY_SIZE(rows),
-     .states = model_states},
-    {.device_id = DEV_ALT, .points = alt_rows,
-     .point_count = ARRAY_SIZE(alt_rows), .states = alt_states},
-};
-
-/* 参数区挂载后再加入持久参数必须被拒绝。 */
-static const DM_SIG_CFG_S late_rows[] = {
-    {
-        .sig_id = SIG_PARAM, .sig_size = 2, .sig_flag = FLAG_PERSISTENCE,
-        .data_type = DATA_TYPE_U16,
-        .data = {.def_value.u16 = 0, .min_value.u16 = 0,
-                 .max_value.u16 = UINT16_MAX},
-    },
-};
-
-static struct dp_point_state late_states[ARRAY_SIZE(late_rows)];
-static struct dp_table late_model = {
-    .device_id = 9,
-    .points = late_rows,
-    .point_count = ARRAY_SIZE(late_rows),
-    .states = late_states,
-};
-
-/* 共用只读行，分别持有状态；数量超过旧目录上限 4。 */
-static const DM_SIG_CFG_S array_row[] = {
-    {.sig_id = 77, .sig_size = 3, .data_type = DATA_TYPE_U8ARRAY,
-     .data.def_value.str = {1, 2, 3}},
-};
-static struct dp_point_state extra_states[5][ARRAY_SIZE(array_row)];
-static struct dp_table extra_tables[] = {
-    {.device_id = 20, .points = array_row, .point_count = ARRAY_SIZE(array_row),
-     .states = extra_states[0]},
-    {.device_id = 21, .points = array_row, .point_count = ARRAY_SIZE(array_row),
-     .states = extra_states[1]},
-    {.device_id = 22, .points = array_row, .point_count = ARRAY_SIZE(array_row),
-     .states = extra_states[2]},
-    {.device_id = 23, .points = array_row, .point_count = ARRAY_SIZE(array_row),
-     .states = extra_states[3]},
-    {.device_id = 24, .points = array_row, .point_count = ARRAY_SIZE(array_row),
-     .states = extra_states[4]},
-};
-
-static void read_u16(uint16_t dev, uint16_t sig, uint16_t expected)
+static const dp_point_data_t *data(uint16_t device, uint16_t signal)
 {
-    uint8_t bytes[2] = {0};
-    zassert_equal(dp_get_para(dev, sig, sizeof(bytes), bytes), sizeof(bytes),
-                  "dev=%u sig=%u", dev, sig);
-    zassert_equal(bytes[0] | ((uint16_t)bytes[1] << 8), expected,
-                  "dev=%u sig=%u", dev, sig);
+    for (const dp_registered_table_t *table = dp_tables(); table; table = table->next) {
+        if (table->device_id != device) { continue; }
+        for (size_t i = 0; i < table->point_count; ++i) {
+            if (table->points[i].signal_id == signal) { return &table->data[i]; }
+        }
+    }
+    return NULL;
 }
 
-static void write_u16(uint16_t dev, uint16_t sig, uint16_t value, int expected)
+static void read_u16(uint16_t device, uint16_t signal, uint16_t expected)
 {
-    uint8_t bytes[2] = {(uint8_t)value, (uint8_t)(value >> 8)};
-    int err = dp_set_para(dev, sig, sizeof(bytes), bytes);
-    zassert_equal(err, expected, "dev=%u sig=%u value=%u err=%d",
-                  dev, sig, value, err);
+    uint8_t bytes[2];
+    zassert_equal(dp_get_para(device, signal, sizeof(bytes), bytes), sizeof(bytes));
+    zassert_equal(bytes[0] | ((uint16_t)bytes[1] << 8), expected);
+}
+
+static void write_u16(uint16_t device, uint16_t signal, uint16_t value, int expected)
+{
+    uint8_t bytes[] = {(uint8_t)value, (uint8_t)(value >> 8)};
+    zassert_equal(dp_set_para(device, signal, sizeof(bytes), bytes), expected);
 }
 
 ZTEST(dp_core, test_core)
 {
     const char *phase = getenv("IDU_DP_PHASE");
+    zassert_equal(dp_register_table(DEV, NULL), -EINVAL);
+    zassert_equal(dp_register_table(0, &local_table), -EINVAL);
+    const dp_table_t too_large = {.points = rows, .point_count = SIZE_MAX};
+    zassert_equal(dp_register_table(DEV, &too_large), -EOVERFLOW);
+    const dp_table_t empty = {0};
+    zassert_equal(dp_register_table(DEV, &empty), -EINVAL);
 
-    static struct dp_point_state duplicate_states[ARRAY_SIZE(alt_rows)];
-    static struct dp_table duplicate = {
-        .device_id = DEV, .points = alt_rows,
-        .point_count = ARRAY_SIZE(alt_rows),
-        .states = duplicate_states,
-    };
-    zassert_equal(dp_register_table(NULL), -EINVAL);
-    zassert_ok(dp_register_table(&models[0]));
-    zassert_equal(dp_register_table(&duplicate), -EEXIST);
-    zassert_ok(dp_register_table(&models[1]));
-    zassert_equal(dp_register_table(&models[1]), -EEXIST);
+    fail_allocation = true;
+    zassert_equal(dp_register_table(DEV, &local_table), -ENOMEM);
+    zassert_is_null(data(DEV, SIG_LOCAL));
+    fail_allocation = false;
+    zassert_ok(dp_register_table(DEV, &local_table));
+    zassert_equal(dp_register_table(DEV, &alt_table), -EEXIST);
+    zassert_ok(dp_register_table(DEV_ALT, &alt_table));
+    zassert_equal(dp_register_table(DEV_ALT, &alt_table), -EEXIST);
 
-    struct dp_table no_states = {
-        .device_id = 30, .points = array_row, .point_count = ARRAY_SIZE(array_row),
+    const dp_point_def_t bad_rows[] = {
+        {.signal_id = 1, .size = 2, .type = DP_TYPE_U16},
+        {.signal_id = 1, .size = 2, .type = DP_TYPE_U16},
     };
-    zassert_equal(dp_register_table(&no_states), -EINVAL);
-    struct dp_table shared_states = {
-        .device_id = 31, .points = rows, .point_count = ARRAY_SIZE(rows),
-        .states = model_states,
-    };
-    zassert_equal(dp_register_table(&shared_states), -EINVAL);
+    const dp_table_t bad_table = {.points = bad_rows, .point_count = ARRAY_SIZE(bad_rows)};
+    zassert_equal(dp_register_table(32, &bad_table), -EEXIST);
+    zassert_is_null(data(32, 1));
 
-    /* 表校验失败不得初始化一半，也不得挂入目录。 */
-    static const DM_SIG_CFG_S bad_rows[] = {
-        {.sig_id = 1, .sig_size = 2, .data_type = DATA_TYPE_U16},
-        {.sig_id = 1, .sig_size = 2, .data_type = DATA_TYPE_U16},
-    };
-    static struct dp_point_state bad_states[ARRAY_SIZE(bad_rows)] = {
-        {.value.words = {0x7777}},
-    };
-    static struct dp_table bad_table = {
-        .device_id = 32, .points = bad_rows, .point_count = ARRAY_SIZE(bad_rows),
-        .states = bad_states,
-    };
-    zassert_equal(dp_register_table(&bad_table), -EEXIST);
-    zassert_equal(bad_states[0].value.words[0], 0x7777);
-    uint8_t missing[2];
-    zassert_equal(dp_get_para(32, 1, sizeof(missing), missing), -ENOENT);
-
-    for (size_t i = 0; i < ARRAY_SIZE(extra_tables); ++i) {
-        zassert_ok(dp_register_table(&extra_tables[i]));
-        uint8_t bytes[4] = {0, 0, 0, 0xaa};
-        zassert_equal(dp_get_para(extra_tables[i].device_id, 77, sizeof(bytes), bytes),
-                      sizeof(bytes));
+    /* 同一份只读表登记给 5 个设备，目录及点数据均由模块持有。 */
+    for (uint16_t device = 20; device < 25; ++device) {
+        const dp_table_t temporary = array_table;
+        zassert_ok(dp_register_table(device, &temporary));
+        uint8_t bytes[] = {0, 0, 0, 0xaa};
         const uint8_t expected[] = {1, 2, 3, 0xaa};
+        zassert_equal(dp_get_para(device, 77, sizeof(bytes), bytes), sizeof(bytes));
         zassert_mem_equal(bytes, expected, sizeof(bytes));
     }
     uint8_t array_value[] = {9, 8, 7};
     zassert_ok(dp_set_para(20, 77, sizeof(array_value), array_value));
     uint8_t array_result[3];
-    zassert_equal(dp_get_para(20, 77, sizeof(array_result), array_result),
-                  sizeof(array_result));
+    zassert_equal(dp_get_para(20, 77, sizeof(array_result), array_result), sizeof(array_result));
     zassert_mem_equal(array_value, array_result, sizeof(array_value));
-    zassert_equal(extra_states[1][0].value.words[0], 0x0201);
+    zassert_equal(data(21, 77)->value.words[0], 0x0201);
+    zassert_equal(data(20, 77)->updated_at_s, 0);
 
+    /* 先确认未授时时不把 uptime 记作 UNIX 时间，再模拟上位机授时。 */
+    const uint32_t epoch = 1761600000U;
+    const struct timespec now = {.tv_sec = epoch};
+    zassert_ok(sys_clock_settime(SYS_CLOCK_REALTIME, &now));
     if (phase && !strcmp(phase, "verify")) {
         read_u16(DEV, SIG_PARAM, 700);
         read_u16(DEV_ALT, SIG_PARAM, 800);
+        zassert_equal(data(DEV, SIG_PARAM)->updated_at_s, 0);
         zassert_ok(dp_params_restore(DEV));
         read_u16(DEV, SIG_PARAM, 500);
         read_u16(DEV_ALT, SIG_PARAM, 800);
@@ -211,38 +156,39 @@ ZTEST(dp_core, test_core)
         return;
     }
 
-    uint8_t constant[4] = {0};
-    zassert_equal(dp_get_para(DEV, SIG_CONST, sizeof(constant), constant),
-                  sizeof(constant));
-    zassert_equal(constant[0], 0x78);
-    zassert_equal(constant[1], 0x56);
-    zassert_equal(constant[2], 0x34);
-    zassert_equal(constant[3], 0x12);
-
+    uint8_t constant[4];
+    zassert_equal(dp_get_para(DEV, SIG_CONST, sizeof(constant), constant), sizeof(constant));
+    const uint8_t expected_constant[] = {0x78, 0x56, 0x34, 0x12};
+    zassert_mem_equal(constant, expected_constant, sizeof(constant));
+    zassert_equal(data(DEV, SIG_CONST)->value.u32, 0x12345678);
+    zassert_equal(data(DEV, SIG_CONST)->updated_at_s, 0);
     write_u16(DEV, SIG_LOCAL, 0x1234, 0);
     read_u16(DEV, SIG_LOCAL, 0x1234);
-    write_u16(DEV, SIG_LOCAL, 0x1234, 0);
+    zassert_true(data(DEV, SIG_LOCAL)->updated_at_s >= epoch);
+    zassert_true(data(DEV, SIG_LOCAL)->updated_at_s <= epoch + 2);
+    const uint32_t last_update = data(DEV, SIG_LOCAL)->updated_at_s;
+    const struct timespec later = {.tv_sec = epoch + 10};
+    zassert_ok(sys_clock_settime(SYS_CLOCK_REALTIME, &later));
     zassert_equal(dp_set_para(DEV, SIG_LOCAL, 1, (uint8_t[]){0}), -EMSGSIZE);
+    zassert_equal(data(DEV, SIG_LOCAL)->updated_at_s, last_update);
     zassert_equal(dp_set_para(DEV, 99, 2, (uint8_t[]){0, 0}), -ENOENT);
-
-    /* 同名的 sig_id 在另一组模型里是独立测点。 */
     read_u16(DEV_ALT, SIG_LOCAL, 0x1111);
     write_u16(DEV_ALT, SIG_LOCAL, 0x2222, 0);
-    read_u16(DEV_ALT, SIG_LOCAL, 0x2222);
     read_u16(DEV, SIG_LOCAL, 0x1234);
 
     read_u16(DEV, SIG_PARAM, 500);
+    zassert_equal(data(DEV, SIG_PARAM)->updated_at_s, 0);
     write_u16(DEV, SIG_PARAM, 700, 0);
     read_u16(DEV, SIG_PARAM, 700);
+    zassert_true(data(DEV, SIG_PARAM)->updated_at_s >= epoch);
+    const uint32_t parameter_update = data(DEV, SIG_PARAM)->updated_at_s;
     write_u16(DEV, SIG_PARAM, 2000, -ERANGE);
-    zassert_equal(dp_set_para(DEV, SIG_CONST, 4, (uint8_t[]){1, 0, 0, 0}),
-                  -EACCES);
+    read_u16(DEV, SIG_PARAM, 700);
+    zassert_equal(data(DEV, SIG_PARAM)->updated_at_s, parameter_update);
+    zassert_equal(dp_set_para(DEV, SIG_CONST, 4, (uint8_t[]){1, 0, 0, 0}), -EACCES);
 
-    /* 参数按设备分别提交和恢复。 */
     read_u16(DEV_ALT, SIG_PARAM, 600);
     write_u16(DEV_ALT, SIG_PARAM, 800, 0);
-    read_u16(DEV_ALT, SIG_PARAM, 800);
-    read_u16(DEV, SIG_PARAM, 700);
     zassert_ok(dp_params_restore(DEV));
     read_u16(DEV, SIG_PARAM, 500);
     read_u16(DEV_ALT, SIG_PARAM, 800);
@@ -253,13 +199,43 @@ ZTEST(dp_core, test_core)
 
     write_u16(DEV, SIG_CMD, 0x1234, -EINVAL);
     write_u16(DEV, SIG_CMD, 0xa55a, 0);
-
+    read_u16(DEV, SIG_CMD, 0);
+    zassert_equal(data(DEV, SIG_CMD)->updated_at_s, 0);
     uint8_t state[8];
     zassert_equal(dp_get_para(DEV, SIG_STATUS, sizeof(state), state), sizeof(state));
     zassert_true(state[0] & DP_PARAM_STORAGE_READY);
-    read_u16(DEV_ALT, SIG_PARAM, 800);
-    zassert_equal(dp_register_table(&late_model), -EBUSY);
+    const uint32_t read_update = data(DEV, SIG_STATUS)->updated_at_s;
+    zassert_true(read_update >= epoch);
+    const struct timespec after_read = {.tv_sec = epoch + 20};
+    zassert_ok(sys_clock_settime(SYS_CLOCK_REALTIME, &after_read));
+    fail_read = true;
+    zassert_equal(dp_get_para(DEV, SIG_STATUS, sizeof(state), state), -EIO);
+    zassert_equal(data(DEV, SIG_STATUS)->updated_at_s, read_update);
+    fail_read = false;
 
+    const dp_point_def_t late_row = {.signal_id = SIG_PARAM, .size = 2,
+                                    .type = DP_TYPE_U16, .flags = FLAG_PERSISTENCE};
+    const dp_table_t late_table = {.points = &late_row, .point_count = 1};
+    zassert_equal(dp_register_table(9, &late_table), -EBUSY);
+    if (!phase) {
+        /* Flash 提交失败不得覆盖共用缓存和更新时间。 */
+        const dp_point_data_t before = *data(DEV, SIG_PARAM);
+        const struct flash_area *area;
+        zassert_ok(flash_area_open(DT_FIXED_PARTITION_ID(DT_ALIAS(dp_params)), &area));
+        const struct device *flash = flash_area_get_device(area);
+        const struct flash_simulator_cb failure = {.write_byte = fail_flash_write};
+        const struct flash_simulator_cb normal = {0};
+        flash_simulator_set_callbacks(flash, &failure);
+        write_u16(DEV, SIG_PARAM, 900, -EIO);
+        flash_simulator_set_callbacks(flash, &normal);
+        flash_area_close(area);
+        zassert_equal(data(DEV, SIG_PARAM)->value.u16, before.value.u16);
+        zassert_equal(data(DEV, SIG_PARAM)->updated_at_s, before.updated_at_s);
+    }
+    const struct timespec beyond_range = {.tv_sec = (int64_t)UINT32_MAX + 10};
+    zassert_ok(sys_clock_settime(SYS_CLOCK_REALTIME, &beyond_range));
+    write_u16(DEV, SIG_LOCAL, 42, 0);
+    zassert_equal(data(DEV, SIG_LOCAL)->updated_at_s, 0);
 }
 
 ZTEST_SUITE(dp_core, NULL, NULL, NULL, NULL, NULL);

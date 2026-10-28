@@ -12,14 +12,14 @@
 #define DP_PARAM_HISTORY_RECOVERED BIT(1)
 #define DP_PARAM_STORAGE_RESET BIT(2)
 
-struct dp_param_status {
+typedef struct {
     uint32_t sequence;
     int error;
     uint16_t flags;
     int storage_error;
-};
+} dp_param_status_t;
 
 int dp_params_restore(uint16_t dev_id);
-void dp_params_get_status(struct dp_param_status *status);
+void dp_params_get_status(dp_param_status_t *status);
 
 #endif

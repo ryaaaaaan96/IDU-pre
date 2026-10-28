@@ -15,13 +15,13 @@ uint16_t points_sample_period_ms(void)
     return bytes[0] | ((uint16_t)bytes[1] << 8);
 }
 
-int points_parameter_command(struct dp_key key, const struct dp_value *value)
+int points_parameter_command(dp_key_t key, const dp_value_t *value)
 {
-    if (!value || key.dev_id != DEVICE_LOCAL) { return -EINVAL; }
+    if (!value || key.device_id != DEVICE_LOCAL) { return -EINVAL; }
     uint16_t expected;
     int (*action)(uint16_t);
     uint16_t argument = 0;
-    switch (key.sig_id) {
+    switch (key.signal_id) {
     case SIGNAL_RESTORE_LOCAL:
         expected = 0xa55a; action = dp_params_restore; argument = DEVICE_LOCAL; break;
     case SIGNAL_RESTORE_REMOTE:
@@ -32,18 +32,15 @@ int points_parameter_command(struct dp_key key, const struct dp_value *value)
     return value->words[0] == expected ? action(argument) : -EINVAL;
 }
 
-int points_parameter_status(struct dp_key key, struct dp_point_state *state)
+int points_parameter_status(dp_key_t key, dp_value_t *value)
 {
-    if (!state || key.dev_id != DEVICE_LOCAL ||
-        key.sig_id != SIGNAL_PARAMETER_STATUS) { return -EINVAL; }
-    struct dp_param_status status;
+    if (!value || key.device_id != DEVICE_LOCAL ||
+        key.signal_id != SIGNAL_PARAMETER_STATUS) { return -EINVAL; }
+    dp_param_status_t status;
     dp_params_get_status(&status);
-    state->value.words[0] = status.flags;
-    state->value.words[1] = (uint16_t)(int16_t)status.error;
-    state->value.words[2] = status.sequence & 0xffff;
-    state->value.words[3] = status.sequence >> 16;
-    state->quality = DP_QUALITY_GOOD;
-    state->error = 0;
-    state->sampled_at = k_uptime_get();
+    value->words[0] = status.flags;
+    value->words[1] = (uint16_t)(int16_t)status.error;
+    value->words[2] = status.sequence & 0xffff;
+    value->words[3] = status.sequence >> 16;
     return 0;
 }

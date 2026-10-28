@@ -19,7 +19,7 @@
 ## DP 使用
 
 - `app/protocol/tables/process.c` 持有编译期只读模型。
-- `app/protocol/process_runtime.c` 在 `product_tables[]` 中逐组调用 `dp_register_table()`。
+- `app/protocol/process_runtime.c` 调用 `dp_register_table(device_id, table)`，私有目录及点数据由 DP 维护。
 - `app/acquisition/acquisition.c` 同步写本地测点。
 - `app/process/points.c` 提供参数命令和状态回调。
 

@@ -32,7 +32,7 @@
 | 硬件输入 | `acquisition_inputs_init()` / `acquisition_cycle()` |
 | 看门狗、状态 | `watchdog_init()` / `status_init()` |
 
-DP 不创建线程或定时器；命令点和状态点通过点表行的 `handler` / `read` 回调执行。
+DP 不创建线程或定时器；命令点和状态点通过点表行的 `write` / `read` 回调执行。
 
 头文件与职责一致，例如 `acquisition/acquisition.h`、`process/points.h`、
 `status/inc/status.h`、`status/status_led.h`。

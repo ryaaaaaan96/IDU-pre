@@ -22,7 +22,7 @@ ZTEST(process_runtime, test_local_process_without_communication)
                              period), sizeof(period));
     zassert_equal(period[0] | ((uint16_t)period[1] << 8), CONFIG_IDU_SAMPLE_PERIOD_MS);
 
-    struct dp_param_status storage;
+    dp_param_status_t storage;
     dp_params_get_status(&storage);
     zassert_true(storage.flags & DP_PARAM_STORAGE_READY);
 
