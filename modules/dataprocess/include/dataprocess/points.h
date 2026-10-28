@@ -11,12 +11,11 @@
 #define DP_POINT_WORDS VALUE_WORDS
 
 typedef enum {
-    FLAG_PERSISTENCE = (1U << 0),
-    FLAG_READ_CALLBACK = (1U << 3),
-    FLAG_NO_RESTORE = (1U << 5),
-    FLAG_RANGE_CHECK = (1U << 6),
-    FLAG_CONSTANT = (1U << 7),
-} dp_flags_t;
+    DP_POINT_FLAG_PERSISTENT = (1U << 0), /**< 参数同步持久化。 */
+    DP_POINT_FLAG_SKIP_RESTORE = (1U << 5), /**< 恢复默认时跳过。 */
+    DP_POINT_FLAG_CHECK_RANGE = (1U << 6), /**< 按配置上下限校验。 */
+    DP_POINT_FLAG_READ_ONLY = (1U << 7), /**< 拒绝外部写入。 */
+} dp_point_flags_t;
 
 typedef struct {
     value_t value;
@@ -27,6 +26,7 @@ typedef struct {
 typedef struct {
     uint16_t device_id;
     uint16_t signal_key;
+    bool is_write; /**< true 为写回调，false 为读回调。 */
     size_t signal_index; /**< 注册表内从零开始的行下标，对应应用的 process 枚举。 */
     value_t *value;
 } dp_callback_context_t;

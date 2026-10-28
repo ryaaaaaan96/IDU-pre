@@ -5,7 +5,7 @@
 #include <dataprocess/points.h>
 #include <zephyr/sys/util.h>
 
-/* 每行显式配置全部字段；默认值来自 DP，读回调通过 FLAG_READ_CALLBACK 启用。 */
+/* 每行显式配置全部字段；默认值来自 DP，非空 read_callback 启用读回调。 */
 static const dp_point_config_t local_process_rows[PROCESS_SIGNAL_COUNT] = {
     [PROCESS_RESTORE_LOCAL] = {
         .signal_key = SIGNAL_RESTORE_LOCAL,
@@ -36,7 +36,7 @@ static const dp_point_config_t local_process_rows[PROCESS_SIGNAL_COUNT] = {
     [PROCESS_PARAMETER_STATUS] = {
         .signal_key = SIGNAL_PARAMETER_STATUS,
         .size = 8,
-        .flags = FLAG_READ_CALLBACK,
+        .flags = DP_POINT_DEFAULT_FLAGS,
         .type = VALUE_TYPE_WORDS,
         .read_callback = points_parameter_status,
         .data =
@@ -49,7 +49,7 @@ static const dp_point_config_t local_process_rows[PROCESS_SIGNAL_COUNT] = {
     [PROCESS_SAMPLE_PERIOD] = {
         .signal_key = SIGNAL_SAMPLE_PERIOD,
         .size = 2,
-        .flags = FLAG_PERSISTENCE | FLAG_RANGE_CHECK,
+        .flags = DP_POINT_FLAG_PERSISTENT | DP_POINT_FLAG_CHECK_RANGE,
         .type = VALUE_TYPE_U16,
         .data =
             {
@@ -61,7 +61,7 @@ static const dp_point_config_t local_process_rows[PROCESS_SIGNAL_COUNT] = {
     [PROCESS_LABEL] = {
         .signal_key = SIGNAL_LABEL,
         .size = 16,
-        .flags = FLAG_PERSISTENCE,
+        .flags = DP_POINT_FLAG_PERSISTENT,
         .type = VALUE_TYPE_WORDS,
         .data =
             {
@@ -73,7 +73,7 @@ static const dp_point_config_t local_process_rows[PROCESS_SIGNAL_COUNT] = {
     [PROCESS_SAVED_ADDRESS] = {
         .signal_key = SIGNAL_SAVED_ADDRESS,
         .size = 2,
-        .flags = FLAG_PERSISTENCE | FLAG_RANGE_CHECK,
+        .flags = DP_POINT_FLAG_PERSISTENT | DP_POINT_FLAG_CHECK_RANGE,
         .type = VALUE_TYPE_U16,
         .data =
             {
@@ -85,7 +85,7 @@ static const dp_point_config_t local_process_rows[PROCESS_SIGNAL_COUNT] = {
     [PROCESS_DEVICE_PROPERTIES] = {
         .signal_key = 2503,
         .size = 2,
-        .flags = FLAG_RANGE_CHECK | FLAG_CONSTANT,
+        .flags = DP_POINT_FLAG_CHECK_RANGE | DP_POINT_FLAG_READ_ONLY,
         .type = VALUE_TYPE_U16,
         .data =
             {
@@ -97,7 +97,7 @@ static const dp_point_config_t local_process_rows[PROCESS_SIGNAL_COUNT] = {
     [PROCESS_MANUFACTURER] = {
         .signal_key = 2504,
         .size = 20,
-        .flags = FLAG_CONSTANT,
+        .flags = DP_POINT_FLAG_READ_ONLY,
         .type = VALUE_TYPE_WORDS,
         .data =
             {
@@ -110,7 +110,7 @@ static const dp_point_config_t local_process_rows[PROCESS_SIGNAL_COUNT] = {
     [PROCESS_FIRMWARE_VERSION] = {
         .signal_key = 2581,
         .size = 30,
-        .flags = FLAG_CONSTANT,
+        .flags = DP_POINT_FLAG_READ_ONLY,
         .type = VALUE_TYPE_WORDS,
         .data =
             {
@@ -136,7 +136,7 @@ static const dp_point_config_t local_process_rows[PROCESS_SIGNAL_COUNT] = {
     [PROCESS_HARDWARE_VERSION] = {
         .signal_key = 2568,
         .size = 8,
-        .flags = FLAG_CONSTANT,
+        .flags = DP_POINT_FLAG_READ_ONLY,
         .type = VALUE_TYPE_WORDS,
         .data =
             {
@@ -148,7 +148,7 @@ static const dp_point_config_t local_process_rows[PROCESS_SIGNAL_COUNT] = {
     [PROCESS_DEVICE_TYPE] = {
         .signal_key = 8149,
         .size = 2,
-        .flags = FLAG_RANGE_CHECK | FLAG_CONSTANT,
+        .flags = DP_POINT_FLAG_CHECK_RANGE | DP_POINT_FLAG_READ_ONLY,
         .type = VALUE_TYPE_U16,
         .data =
             {
@@ -160,7 +160,7 @@ static const dp_point_config_t local_process_rows[PROCESS_SIGNAL_COUNT] = {
     [PROCESS_PROTOCOL] = {
         .signal_key = SIGNAL_PROTOCOL,
         .size = 4,
-        .flags = FLAG_RANGE_CHECK | FLAG_CONSTANT,
+        .flags = DP_POINT_FLAG_CHECK_RANGE | DP_POINT_FLAG_READ_ONLY,
         .type = VALUE_TYPE_U32,
         .data =
             {
@@ -172,7 +172,7 @@ static const dp_point_config_t local_process_rows[PROCESS_SIGNAL_COUNT] = {
     [PROCESS_PRODUCT_CODE] = {
         .signal_key = 5486,
         .size = 2,
-        .flags = FLAG_RANGE_CHECK | FLAG_CONSTANT,
+        .flags = DP_POINT_FLAG_CHECK_RANGE | DP_POINT_FLAG_READ_ONLY,
         .type = VALUE_TYPE_U16,
         .data =
             {
@@ -184,7 +184,7 @@ static const dp_point_config_t local_process_rows[PROCESS_SIGNAL_COUNT] = {
     [PROCESS_VIRTUAL_MODE] = {
         .signal_key = SIGNAL_VIRTUAL_MODE,
         .size = 2,
-        .flags = FLAG_RANGE_CHECK | FLAG_CONSTANT,
+        .flags = DP_POINT_FLAG_CHECK_RANGE | DP_POINT_FLAG_READ_ONLY,
         .type = VALUE_TYPE_U16,
         .data =
             {
@@ -196,7 +196,7 @@ static const dp_point_config_t local_process_rows[PROCESS_SIGNAL_COUNT] = {
     [PROCESS_ADDRESS] = {
         .signal_key = SIGNAL_ADDRESS,
         .size = 2,
-        .flags = FLAG_RANGE_CHECK,
+        .flags = DP_POINT_FLAG_CHECK_RANGE,
         .type = VALUE_TYPE_U16,
         .data =
             {

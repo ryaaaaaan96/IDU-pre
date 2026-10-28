@@ -19,7 +19,7 @@ int dp_get_para(uint16_t device_id, uint16_t signal_key, uint8_t capacity, uint8
 static const dp_point_config_t points[] = {
     {.signal_key = 1, .size = 2, .type = VALUE_TYPE_U16},
     {.signal_key = 2, .size = 2, .type = VALUE_TYPE_U16,
-     .flags = FLAG_PERSISTENCE | FLAG_RANGE_CHECK,
+     .flags = DP_POINT_FLAG_PERSISTENT | DP_POINT_FLAG_CHECK_RANGE,
      .data = {.initial.u16 = 500, .minimum.u16 = 100, .maximum.u16 = 1000}},
 };
 static const dp_table_t table = {
@@ -69,8 +69,8 @@ flowchart TD
 足够，成功返回传入容量。普通点更新值；常量返回 `-EACCES`；命令点仅调用 `write_callback`，
 不保存触发值。`read_callback` 接收当前值的副本，可修改输出；成功且通过点值校验后，DP 保存快照及时间。
 
-标志保留 `FLAG_CONSTANT`、`FLAG_PERSISTENCE`、`FLAG_RANGE_CHECK`、
-`FLAG_READ_CALLBACK`、`FLAG_NO_RESTORE`。常量不支持写回调，参数不支持读写回调。
+标志保留 `DP_POINT_FLAG_READ_ONLY`、`DP_POINT_FLAG_PERSISTENT`、`DP_POINT_FLAG_CHECK_RANGE`、
+`DP_POINT_FLAG_SKIP_RESTORE`。只读点不支持写回调，参数不支持读写回调。读回调仅由非空指针启用。
 未启用范围检查时按类型范围校验。`data.initial/minimum/maximum` 与运行值统一使用公共 `value_t`，定义于 `<common/value.h>`，
 容量由 `CONFIG_COMMON_VALUE_WORDS` 配置；
 初值大于 4 字节时使用 `.array` 常驻只读指针，NULL 表示全零。
@@ -139,3 +139,9 @@ DP 只保留 dp_point_config_t 配置行的只读指针，不接管其所有权�
 表描述 dp_table_t 本身仍可临时存在。登记时校验配置；运行时直接读取原配置，
 不生成第二份解析配置。初值只在登记、参数挂载和恢复默认时展开。
 NVS 类型编码仅在参数层转换，记录格式及键保持不变。
+
+回调上下文使用 `bool is_write` 区分方向：true 为写，false 为读，无额外枚举。
+点标志类型为 dp_point_flags_t；PERSISTENT 表示持久化，SKIP_RESTORE 表示跳过恢复默认，
+CHECK_RANGE 表示检查范围，READ_ONLY 表示拒绝外部写入；其位值保持不变。
+登记时复制 key、排序并检查相邻重复，临时内存为点数乘以 sizeof(uint16_t)，随后释放；
+原点表顺序不变。排序使用 C 库 qsort，性能取决于库实现，不承诺最坏情况复杂度。

@@ -28,14 +28,14 @@
 
 - `SIGNAL_DI`、`SIGNAL_CURRENT_1..8`：本地点，无标志。
 - `SIGNAL_SAMPLE_PERIOD`、`SIGNAL_LABEL`、`SIGNAL_SAVED_ADDRESS`：
-  `FLAG_PERSISTENCE`，初值写入 `dp-params`。
+  `DP_POINT_FLAG_PERSISTENT`，初值写入 `dp-params`。
 - `SIGNAL_RESTORE_LOCAL/REMOTE`：恢复默认命令点，`write_callback = points_parameter_command`。
 - `SIGNAL_PARAMETER_STATUS`：`FLAG_READ_CALLBACK`，
   `read_callback = points_parameter_status`。
-- 设备型号、协议版本、标签等：`FLAG_CONSTANT`，初始化即为只读有效值。
+- 设备型号、协议版本、标签等：`DP_POINT_FLAG_READ_ONLY`，初始化即为只读有效值。
 
-`FLAG_RANGE_CHECK` 使用行内的最小值/最大值；未开启时使用类型范围。
-`FLAG_NO_RESTORE` 排除在恢复默认之外。数组初值必须是静态 `const` 数据或
+`DP_POINT_FLAG_CHECK_RANGE` 使用行内的最小值/最大值；未开启时使用类型范围。
+`DP_POINT_FLAG_SKIP_RESTORE` 排除在恢复默认之外。数组初值必须是静态 `const` 数据或
 `NULL`（表示全零）。
 
 ## 回调

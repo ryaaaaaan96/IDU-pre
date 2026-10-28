@@ -48,6 +48,7 @@ static int command(const dp_callback_context_t *context)
 {
     zassert_equal(context->device_id, DEV);
     zassert_equal(context->signal_key, SIG_CMD);
+    zassert_true(context->is_write);
     zassert_equal(context->signal_index, 3);
     if (context->value->u16 != 0xa55a) {
         return -EINVAL;
@@ -59,6 +60,7 @@ static int command(const dp_callback_context_t *context)
 static int status(const dp_callback_context_t *context)
 {
     zassert_equal(context->device_id, DEV);
+    zassert_false(context->is_write);
     zassert_true(context->signal_key == SIG_STATUS || context->signal_key == SIG_BOUNDED);
     zassert_equal(context->signal_index, context->signal_key == SIG_STATUS ? 4 : 5);
     value_t *value = context->value;
@@ -88,23 +90,23 @@ static const dp_point_config_t rows[] = {
     {.signal_key = SIG_CONST,
         .size = 4,
         .type = VALUE_TYPE_U32,
-        .flags = FLAG_CONSTANT,
+        .flags = DP_POINT_FLAG_READ_ONLY,
         .data.initial.u32 = 0x12345678},
     {.signal_key = SIG_PARAM,
         .size = 2,
         .type = VALUE_TYPE_U16,
-        .flags = FLAG_PERSISTENCE | FLAG_RANGE_CHECK,
+        .flags = DP_POINT_FLAG_PERSISTENT | DP_POINT_FLAG_CHECK_RANGE,
         .data = {.initial.u16 = 500, .minimum.u16 = 100, .maximum.u16 = 1000}},
     {.signal_key = SIG_CMD, .size = 2, .type = VALUE_TYPE_U16, .write_callback = command},
     {.signal_key = SIG_STATUS,
         .size = 8,
         .type = VALUE_TYPE_WORDS,
-        .flags = FLAG_READ_CALLBACK,
+        .flags = DP_POINT_DEFAULT_FLAGS,
         .read_callback = status},
     {.signal_key = SIG_BOUNDED,
         .size = 2,
         .type = VALUE_TYPE_U16,
-        .flags = FLAG_READ_CALLBACK | FLAG_RANGE_CHECK,
+        .flags = DP_POINT_FLAG_CHECK_RANGE,
         .read_callback = status,
         .data = {.initial.u16 = 0, .minimum.u16 = 0, .maximum.u16 = 100}},
 };
@@ -113,7 +115,7 @@ static const dp_point_config_t alt_rows[] = {
     {.signal_key = SIG_PARAM,
         .size = 2,
         .type = VALUE_TYPE_U16,
-        .flags = FLAG_PERSISTENCE | FLAG_RANGE_CHECK,
+        .flags = DP_POINT_FLAG_PERSISTENT | DP_POINT_FLAG_CHECK_RANGE,
         .data = {.initial.u16 = 600, .minimum.u16 = 100, .maximum.u16 = 1000}},
 };
 static const dp_table_t local_table = {.points = rows, .point_count = ARRAY_SIZE(rows)};
@@ -178,30 +180,47 @@ ZTEST(dp_core, test_core)
     zassert_equal(dp_register_table(32, &bad_table), -EEXIST);
     zassert_is_null(data(32, 1));
 
+    /* 非相邻重复键及大表检查，不依赖原表顺序。 */
+    static dp_point_config_t duplicate_rows[512];
+    for (size_t i = 0; i < ARRAY_SIZE(duplicate_rows); ++i) {
+        duplicate_rows[i] = (dp_point_config_t){
+            .signal_key = UINT16_MAX - i,
+            .size = 2,
+            .type = VALUE_TYPE_U16,
+        };
+    }
+    duplicate_rows[511].signal_key = duplicate_rows[0].signal_key;
+    const dp_table_t duplicate_table = {
+        .points = duplicate_rows,
+        .point_count = ARRAY_SIZE(duplicate_rows),
+    };
+    zassert_equal(dp_register_table(34, &duplicate_table), -EEXIST);
+    zassert_is_null(data(34, duplicate_rows[0].signal_key));
+
     /* 配置直接引用后仍按各自的数值类型检查范围及加载数组初值。 */
     static const uint8_t typed_initial[] = {1, 2, 3, 4, 5, 6};
     static const dp_point_config_t typed_rows[] = {
         {.signal_key = 101,
             .size = 1,
             .type = VALUE_TYPE_U8,
-            .flags = FLAG_RANGE_CHECK,
+            .flags = DP_POINT_FLAG_CHECK_RANGE,
             .data = {.initial.u8 = 2, .minimum.u8 = 1, .maximum.u8 = 9}},
         {.signal_key = 102,
             .size = 2,
             .type = VALUE_TYPE_S16,
-            .flags = FLAG_RANGE_CHECK,
+            .flags = DP_POINT_FLAG_CHECK_RANGE,
             .data = {.initial.s16 = -2, .minimum.s16 = -10, .maximum.s16 = 10}},
         {.signal_key = 103,
             .size = 4,
             .type = VALUE_TYPE_U32,
-            .flags = FLAG_RANGE_CHECK,
+            .flags = DP_POINT_FLAG_CHECK_RANGE,
             .data = {.initial.u32 = 0x80000000U,
                 .minimum.u32 = 0x80000000U,
                 .maximum.u32 = UINT32_MAX}},
         {.signal_key = 104,
             .size = 4,
             .type = VALUE_TYPE_S32,
-            .flags = FLAG_RANGE_CHECK,
+            .flags = DP_POINT_FLAG_CHECK_RANGE,
             .data = {.initial.s32 = -100000, .minimum.s32 = -200000, .maximum.s32 = 200000}},
         {.signal_key = 105,
             .size = 6,
@@ -325,8 +344,10 @@ ZTEST(dp_core, test_core)
     zassert_equal(data(DEV, SIG_BOUNDED)->updated_at_s, bounded_before.updated_at_s);
     invalid_read = false;
 
-    const dp_point_config_t late_row = {
-        .signal_key = SIG_PARAM, .size = 2, .type = VALUE_TYPE_U16, .flags = FLAG_PERSISTENCE};
+    const dp_point_config_t late_row = {.signal_key = SIG_PARAM,
+        .size = 2,
+        .type = VALUE_TYPE_U16,
+        .flags = DP_POINT_FLAG_PERSISTENT};
     const dp_table_t late_table = {.points = &late_row, .point_count = 1};
     zassert_equal(dp_register_table(9, &late_table), -EBUSY);
     if (!phase) {

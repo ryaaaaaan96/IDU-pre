@@ -2,6 +2,7 @@
 #include <dataprocess/params.h>
 #include "dp_internal.h"
 #include <errno.h>
+#include <stdlib.h>
 #include <string.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
@@ -46,7 +47,7 @@ int dp_check_value(const dp_point_config_t *point, const value_t *value)
         }
         return 0;
     }
-    if (!(point->flags & FLAG_RANGE_CHECK)) {
+    if (!(point->flags & DP_POINT_FLAG_CHECK_RANGE)) {
         return 0;
     }
     int64_t n = number(point->type, value);
@@ -89,7 +90,7 @@ static int validate_point(const dp_point_config_t *point)
     switch (point->type) {
     case VALUE_TYPE_U8:
         if (point->size != 1 ||
-            ((point->flags & FLAG_RANGE_CHECK) && point->data.maximum.u16 > UINT8_MAX)) {
+            ((point->flags & DP_POINT_FLAG_CHECK_RANGE) && point->data.maximum.u16 > UINT8_MAX)) {
             return -EINVAL;
         }
         break;
@@ -112,21 +113,19 @@ static int validate_point(const dp_point_config_t *point)
         __fallthrough;
     case VALUE_TYPE_STRING:
     case VALUE_TYPE_BYTES:
-        if (point->flags & FLAG_RANGE_CHECK) {
+        if (point->flags & DP_POINT_FLAG_CHECK_RANGE) {
             return -ENOTSUP;
         }
         break;
     default:
         return -ENOTSUP;
     }
-    if ((point->flags & FLAG_CONSTANT) &&
-        ((point->flags & FLAG_PERSISTENCE) || point->write_callback)) {
+    if ((point->flags & DP_POINT_FLAG_READ_ONLY) &&
+        ((point->flags & DP_POINT_FLAG_PERSISTENT) || point->write_callback)) {
         return -EINVAL;
     }
-    if ((point->flags & FLAG_PERSISTENCE) && (point->write_callback || point->read_callback)) {
-        return -EINVAL;
-    }
-    if ((point->flags & FLAG_READ_CALLBACK) && !point->read_callback) {
+    if ((point->flags & DP_POINT_FLAG_PERSISTENT) &&
+        (point->write_callback || point->read_callback)) {
         return -EINVAL;
     }
     value_t initial;
@@ -166,6 +165,38 @@ static int find_point(uint16_t device_id,
     return -ENOENT;
 }
 
+static int compare_keys(const void *left, const void *right)
+{
+    uint16_t a = *(const uint16_t *)left;
+    uint16_t b = *(const uint16_t *)right;
+    return (a > b) - (a < b);
+}
+
+/* 只排序临时键副本，保留原表行顺序及回调索引。 */
+static int check_unique_keys(const dp_table_t *table)
+{
+    if (table->point_count < 2) {
+        return 0;
+    }
+    uint16_t *keys = k_malloc(table->point_count * sizeof(*keys));
+    if (!keys) {
+        return -ENOMEM;
+    }
+    for (size_t i = 0; i < table->point_count; ++i) {
+        keys[i] = table->points[i].signal_key;
+    }
+    qsort(keys, table->point_count, sizeof(*keys), compare_keys);
+    int err = 0;
+    for (size_t i = 1; i < table->point_count; ++i) {
+        if (keys[i - 1] == keys[i]) {
+            err = -EEXIST;
+            break;
+        }
+    }
+    k_free(keys);
+    return err;
+}
+
 int dp_register_table(uint16_t device_id, const dp_table_t *table)
 {
     if (k_is_in_isr()) { return -EWOULDBLOCK; }
@@ -187,13 +218,8 @@ int dp_register_table(uint16_t device_id, const dp_table_t *table)
         if (validate_point(point)) {
             return -EINVAL;
         }
-        if (point->flags & FLAG_PERSISTENCE) {
+        if (point->flags & DP_POINT_FLAG_PERSISTENT) {
             ++params;
-        }
-        for (size_t n = 0; n < i; ++n) {
-            if (table->points[n].signal_key == table->points[i].signal_key) {
-                return -EEXIST;
-            }
         }
     }
     if (params > CONFIG_DP_PARAMS_MAX_COUNT - param_points) {
@@ -201,6 +227,11 @@ int dp_register_table(uint16_t device_id, const dp_table_t *table)
     }
     if (params && dp_params_mounted()) {
         return -EBUSY;
+    }
+
+    int err = check_unique_keys(table);
+    if (err) {
+        return err;
     }
 
     dp_registered_table_t *entry =
@@ -235,6 +266,7 @@ static int read_point(uint16_t device_id,
             .device_id = device_id,
             .signal_key = point->signal_key,
             .signal_index = signal_index,
+            .is_write = false,
             .value = &state->value,
         };
         int err = point->read_callback(&context);
@@ -249,7 +281,7 @@ static int read_point(uint16_t device_id,
         }
         return err;
     }
-    if (point->flags & FLAG_PERSISTENCE) {
+    if (point->flags & DP_POINT_FLAG_PERSISTENT) {
         return dp_params_read(device_id, point->signal_key, state);
     }
     k_mutex_lock(&store_lock, K_FOREVER);
@@ -276,7 +308,7 @@ int dp_set_para(uint16_t device_id, uint16_t signal_key, uint8_t size, const uin
     if (size != p->size) {
         return -EMSGSIZE;
     }
-    if (p->flags & FLAG_CONSTANT) {
+    if (p->flags & DP_POINT_FLAG_READ_ONLY) {
         return -EACCES;
     }
     value_t value;
@@ -290,11 +322,12 @@ int dp_set_para(uint16_t device_id, uint16_t signal_key, uint8_t size, const uin
             .device_id = device_id,
             .signal_key = signal_key,
             .signal_index = signal_index,
+            .is_write = true,
             .value = &value,
         };
         return p->write_callback(&context);
     }
-    if (p->flags & FLAG_PERSISTENCE) {
+    if (p->flags & DP_POINT_FLAG_PERSISTENT) {
         return dp_params_write(device_id, signal_key, &value);
     }
     k_mutex_lock(&store_lock, K_FOREVER);

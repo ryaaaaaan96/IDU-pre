@@ -179,7 +179,7 @@ static int apply(const bool *selected)
             continue;
         }
         const dp_point_config_t *p = defs[i].row;
-        if (!(p->flags & FLAG_PERSISTENCE)) {
+        if (!(p->flags & DP_POINT_FLAG_PERSISTENT)) {
             return -EACCES;
         }
         int err = dp_check_value(p, &buffers->staged[i]);
@@ -263,7 +263,7 @@ int dp_params_restore(uint16_t dev_id)
     bool found = false;
     for (size_t i = 0; i < param_count; ++i) {
         const dp_point_config_t *p = defs[i].row;
-        if (defs[i].device_id != dev_id || (p->flags & FLAG_NO_RESTORE)) {
+        if (defs[i].device_id != dev_id || (p->flags & DP_POINT_FLAG_SKIP_RESTORE)) {
             continue;
         }
         dp_initial_value(p, &buffers->staged[i]);
@@ -384,7 +384,7 @@ static int load_locked(bool *incompatible)
                 return err;
             }
         }
-        need_save |= (p->flags & FLAG_PERSISTENCE) && !stored[i];
+        need_save |= (p->flags & DP_POINT_FLAG_PERSISTENT) && !stored[i];
     }
     memcpy(buffers->staged, buffers->durable_stage, sizeof(buffers->staged));
     memcpy(buffers->durable, buffers->durable_stage, sizeof(buffers->durable));
@@ -444,7 +444,7 @@ static int mount_once(void)
     for (dp_registered_table_t *table = dp_tables(); table; table = table->next) {
         for (size_t i = 0; i < table->point_count; ++i) {
             const dp_point_config_t *row = &table->points[i];
-            if (!(row->flags & FLAG_PERSISTENCE)) {
+            if (!(row->flags & DP_POINT_FLAG_PERSISTENT)) {
                 continue;
             }
             defs[param_count].device_id = table->device_id;
