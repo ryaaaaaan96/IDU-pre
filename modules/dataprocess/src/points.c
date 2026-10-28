@@ -74,11 +74,6 @@ static void pack(uint8_t *bytes, const value_t *value, size_t size)
     }
 }
 
-void dp_set_initial_value(const dp_point_config_t *point, value_t *value)
-{
-    *value = point->data.initial;
-}
-
 /* 登记时校验一次；运行期间配置常驻只读，不再解析或复制配置行。 */
 static int validate_point(uint16_t device_id, const dp_point_config_t *point)
 {
@@ -214,8 +209,7 @@ int dp_register_table(uint16_t device_id, const dp_table_t *table)
             return -EINVAL;
         }
 
-        value_t initial;
-        dp_set_initial_value(point, &initial);
+        value_t initial = point->data.initial;
 
         err = dp_check_value(point, &initial);
         if (err) {
@@ -247,7 +241,7 @@ int dp_register_table(uint16_t device_id, const dp_table_t *table)
     entry->points = table->points;
     entry->point_count = table->point_count;
     for (size_t i = 0; i < table->point_count; ++i) {
-        dp_set_initial_value(&table->points[i], &entry->data[i].value);
+        entry->data[i].value = table->points[i].data.initial;
     }
     /* 校验、分配和初始化全部完成后才发布。 */
     entry->next = tables;

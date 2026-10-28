@@ -171,3 +171,9 @@ signal_index、可修改的 value 指针。索引直接取注册表的查找下�
 dp_initial_value 改为 dp_set_initial_value，直接复制 data.initial，不再调用 unpack。
 点表数组初值统一内嵌 words/bytes；持久参数上电仍由参数层优先恢复 NVS 历史值。
 函数也用于恢复默认，故名称使用初值而非仅限上电，不改变 SKIP_RESTORE 语义。
+
+## 2026-10-28：参数加载归并
+
+删除只复制初值的 dp_set_initial_value。登记及恢复默认直接赋值；参数层 dp_load_value
+在挂载后读取历史记录，缺失时使用初值，错误向上传播。维持首次参数访问时统一挂载，
+不在逐表登记期间提前挂载，避免禁止登记后续持久点。格式不兼容保留既有重置策略。

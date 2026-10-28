@@ -110,17 +110,38 @@ static void commit_cache(uint32_t sequence, const bool *selected)
     status.sequence = sequence;
 }
 
-static int load_value(
-    const dp_point_config_t *p, uint8_t type, uint8_t width, const uint8_t *bytes, value_t *value)
+/* 调用方已挂载 NVS 并恢复提交镜像；只在缺少记录时使用配置初值。 */
+static int dp_load_value(uint16_t device_id,
+    const dp_point_config_t *point,
+    bool history_present,
+    value_t *value,
+    bool *restored,
+    bool *recovered)
 {
-    if (type != storage_type(p) || width != storage_width(p)) {
+    *restored = false;
+    *value = point->data.initial;
+    if (!(point->flags & DP_POINT_FLAG_PERSISTENT) || !history_present) {
+        return dp_check_value(point, value);
+    }
+
+    dp_stored_value_t history;
+    int err = dp_store_read(&fs, device_id, point->signal_key, &history, recovered);
+    if (err == -ENOENT) {
+        return dp_check_value(point, value);
+    }
+    if (err) {
+        return err;
+    }
+    if (history.type != storage_type(point) || history.width != storage_width(point)) {
         return -EPROTO;
     }
     *value = (value_t){0};
-    for (size_t w = 0; w < width; ++w) {
-        value->words[w] = sys_get_le16(bytes + w * 2);
+    memcpy(value->words, history.words, history.width * sizeof(history.words[0]));
+    err = dp_check_value(point, value);
+    if (!err) {
+        *restored = true;
     }
-    return dp_check_value(p, value);
+    return err;
 }
 
 static size_t encode_changes(uint8_t *buf, uint32_t sequence)
@@ -266,7 +287,7 @@ int dp_params_restore(uint16_t dev_id)
         if (defs[i].device_id != dev_id || (p->flags & DP_POINT_FLAG_SKIP_RESTORE)) {
             continue;
         }
-        dp_set_initial_value(p, &buffers->staged[i]);
+        buffers->staged[i] = p->data.initial;
         selected[i] = true;
         found = true;
     }
@@ -322,13 +343,8 @@ static int load_locked(bool *incompatible)
         return err;
     }
 
-    for (size_t i = 0; i < param_count; ++i) {
-        const dp_point_config_t *p = defs[i].row;
-        dp_set_initial_value(p, &buffers->durable_stage[i]);
-        dp_set_initial_value(p, &buffers->staged[i]);
-    }
     uint32_t sequence = 0;
-    bool recovered = false, present = false, converted = false;
+    bool recovered = false, present = false;
     memset(stored, 0, sizeof(stored));
     err =
         dp_store_open(&fs, buffers->image, sizeof(buffers->image), &sequence, &present, &recovered);
@@ -336,55 +352,28 @@ static int load_locked(bool *incompatible)
         *incompatible = incompatible_format(err);
         return err;
     }
-    bool seed[CONFIG_DP_PARAMS_MAX_COUNT] = {0};
-    if (present) {
-        for (size_t i = 0; i < param_count; ++i) {
-            const dp_point_config_t *p = defs[i].row;
-            dp_stored_value_t value;
-            err = dp_store_read(&fs, defs[i].device_id, p->signal_key, &value, &recovered);
-            if (err == -ENOENT) {
-                seed[i] = true;
-                continue;
-            }
-            if (err) {
-                *incompatible = incompatible_format(err);
-                return err;
-            }
-            uint8_t bytes[DP_STORE_MAX_WORDS * 2];
-            for (size_t w = 0; w < value.width; ++w) {
-                sys_put_le16(value.words[w], bytes + w * 2);
-            }
-            err = load_value(p, value.type, value.width, bytes, &buffers->durable_stage[i]);
-            if (err) {
-                *incompatible = incompatible_format(err);
-                return err;
-            }
-            stored[i] = value.width == storage_width(p);
-            if (!stored[i]) {
-                converted = true;
-            }
-        }
-    } else {
+    if (!present) {
         uint8_t probe;
         ssize_t legacy = nvs_read(&fs, 1, &probe, sizeof(probe));
         if (legacy != -ENOENT) {
             *incompatible = legacy >= 0;
             return legacy < 0 ? (int)legacy : -EPROTO;
         }
-        for (size_t i = 0; i < param_count; ++i) {
-            seed[i] = true;
-        }
     }
+
     bool need_save = !present;
     for (size_t i = 0; i < param_count; ++i) {
-        const dp_point_config_t *p = defs[i].row;
-        if (seed[i]) {
-            err = dp_check_value(p, &buffers->durable_stage[i]);
-            if (err) {
-                return err;
-            }
+        err = dp_load_value(defs[i].device_id,
+            defs[i].row,
+            present,
+            &buffers->durable_stage[i],
+            &stored[i],
+            &recovered);
+        if (err) {
+            *incompatible = incompatible_format(err);
+            return err;
         }
-        need_save |= (p->flags & DP_POINT_FLAG_PERSISTENT) && !stored[i];
+        need_save |= !stored[i];
     }
     memcpy(buffers->staged, buffers->durable_stage, sizeof(buffers->staged));
     memcpy(buffers->durable, buffers->durable_stage, sizeof(buffers->durable));
@@ -395,9 +384,7 @@ static int load_locked(bool *incompatible)
             return err;
         }
     }
-    set_status(0,
-        DP_PARAM_STORAGE_READY | (recovered ? DP_PARAM_HISTORY_RECOVERED : 0) |
-            (converted ? DP_PARAM_STORAGE_RESET : 0));
+    set_status(0, DP_PARAM_STORAGE_READY | (recovered ? DP_PARAM_HISTORY_RECOVERED : 0));
     return 0;
 }
 
@@ -451,11 +438,6 @@ static int mount_once(void)
             defs[param_count].data = &table->data[i];
             defs[param_count++].row = row;
         }
-    }
-    for (size_t i = 0; i < param_count; ++i) {
-        const dp_point_config_t *p = defs[i].row;
-        dp_set_initial_value(p, &buffers->staged[i]);
-        dp_set_initial_value(p, &buffers->durable_stage[i]);
     }
     if (!param_count) {
         set_status(0, DP_PARAM_STORAGE_READY);

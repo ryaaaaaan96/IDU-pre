@@ -196,6 +196,18 @@ ZTEST(dp_core, test_core)
     zassert_ok(dp_register_table(DEV_ALT, &alt_table));
     zassert_equal(dp_register_table(DEV_ALT, &alt_table), -EEXIST);
 
+    if (getenv("IDU_DP_ADD_PARAMETER")) {
+        static const dp_point_config_t added_row = {
+            .signal_key = 901,
+            .size = 2,
+            .type = VALUE_TYPE_U16,
+            .flags = DP_POINT_FLAG_PERSISTENT,
+            .data.initial.u16 = 123,
+        };
+        const dp_table_t added_table = {.points = &added_row, .point_count = 1};
+        zassert_ok(dp_register_table(37, &added_table));
+    }
+
     const dp_point_config_t bad_rows[] = {
         {.signal_key = 1, .size = 2, .type = VALUE_TYPE_U16},
         {.signal_key = 1, .size = 2, .type = VALUE_TYPE_U16},
@@ -348,6 +360,9 @@ ZTEST(dp_core, test_core)
     zassert_equal(data(DEV, SIG_CONST)->value.u32, 0x12345678);
     if (phase && !strcmp(phase, "verify")) {
         read_u16(DEV, SIG_PARAM, 700);
+        if (getenv("IDU_DP_ADD_PARAMETER")) {
+            read_u16(37, 901, 123);
+        }
         read_u16(DEV_ALT, SIG_PARAM, 800);
         read_u16(DEV_ALT, SIG_SKIP_RESTORE, 88);
         zassert_true(data(DEV, SIG_PARAM)->updated_at_s >= epoch);
