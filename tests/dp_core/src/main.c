@@ -177,6 +177,52 @@ static void write_u16(uint16_t device, uint16_t signal, uint16_t value, int expe
     zassert_equal(dp_set_para(device, signal, sizeof(bytes), bytes), expected);
 }
 
+static K_THREAD_STACK_DEFINE(writer_stack, 4096);
+static K_THREAD_STACK_DEFINE(reader_stack, 4096);
+static struct k_thread writer_thread, reader_thread;
+
+static void concurrent_writer(void *a, void *b, void *c)
+{
+    ARG_UNUSED(a);
+    ARG_UNUSED(b);
+    ARG_UNUSED(c);
+    for (uint16_t i = 0; i < 12; ++i) {
+        write_u16(DEV_ALT, SIG_PARAM, 700 + i, 0);
+        uint8_t byte = i & 1 ? 0x55 : 0xaa;
+        const uint8_t value[] = {byte, byte, byte};
+        zassert_ok(dp_set_para(20, 77, sizeof(value), value));
+        k_yield();
+    }
+}
+
+static void concurrent_reader(void *a, void *b, void *c)
+{
+    ARG_UNUSED(a);
+    ARG_UNUSED(b);
+    ARG_UNUSED(c);
+    uint32_t sequence = 0;
+    for (size_t i = 0; i < 32; ++i) {
+        dp_param_status_t state;
+        dp_params_get_status(&state);
+        zassert_true(state.flags & DP_PARAM_STORAGE_READY);
+        zassert_true(state.sequence >= sequence);
+        sequence = state.sequence;
+        uint8_t bytes[3];
+        zassert_equal(dp_get_para(20, 77, sizeof(bytes), bytes), sizeof(bytes));
+        zassert_equal(bytes[0], bytes[1]);
+        zassert_equal(bytes[1], bytes[2]);
+        uint8_t parameter[2];
+        zassert_equal(
+            dp_get_para(DEV_ALT, SIG_PARAM, sizeof(parameter), parameter), sizeof(parameter));
+        uint16_t value = parameter[0] | ((uint16_t)parameter[1] << 8);
+        zassert_true(value >= 700 && value <= 800);
+        uint8_t status_bytes[8];
+        zassert_equal(
+            dp_get_para(DEV, SIG_STATUS, sizeof(status_bytes), status_bytes), sizeof(status_bytes));
+        k_yield();
+    }
+}
+
 ZTEST(dp_core, test_core)
 {
     const char *phase = getenv("IDU_DP_PHASE");
@@ -578,6 +624,31 @@ ZTEST(dp_core, test_core)
     zassert_ok(dp_register_table(9, &late_table));
     read_u16(9, SIG_PARAM, 0);
     if (!phase) {
+        const uint8_t initial[] = {0x55, 0x55, 0x55};
+        zassert_ok(dp_set_para(20, 77, sizeof(initial), initial));
+        k_thread_create(&writer_thread,
+            writer_stack,
+            K_THREAD_STACK_SIZEOF(writer_stack),
+            concurrent_writer,
+            NULL,
+            NULL,
+            NULL,
+            5,
+            0,
+            K_NO_WAIT);
+        k_thread_create(&reader_thread,
+            reader_stack,
+            K_THREAD_STACK_SIZEOF(reader_stack),
+            concurrent_reader,
+            NULL,
+            NULL,
+            NULL,
+            5,
+            0,
+            K_NO_WAIT);
+        zassert_ok(k_thread_join(&writer_thread, K_SECONDS(10)));
+        zassert_ok(k_thread_join(&reader_thread, K_SECONDS(10)));
+        write_u16(DEV_ALT, SIG_PARAM, 800, 0);
         /* Flash 提交失败不得覆盖共用缓存和更新时间。 */
         const dp_point_data_t before = *data(DEV, SIG_PARAM);
         const struct flash_area *area;

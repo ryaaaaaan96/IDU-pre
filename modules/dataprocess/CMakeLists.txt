@@ -4,6 +4,5 @@ if(CONFIG_DATAPROCESS)
   zephyr_library_sources(
     src/points.c
     src/params.c
-    src/parameter_store.c
   )
 endif()

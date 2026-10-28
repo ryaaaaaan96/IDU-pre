@@ -59,13 +59,17 @@ typedef struct {
 #define DP_POINT_DEFAULT_CALLBACK NULL
 #define DP_POINT_DEFAULT_ARRAY NULL
 
-/** @brief 初始化参数存储：挂载分区并恢复提交日志，必须先于任何点表登记。 */
+/**
+ * @brief 初始化参数存储：挂载分区并恢复提交日志。
+ * @note 必须先于任何点表登记，初始化期间禁止并发调用其他 DP 接口。
+ */
 int dp_init(void);
 
 /**
  * @brief 启动线程逐张登记设备点表；描述可临时，行数组及其引用数据必须常驻只读，不得修改或释放。
  * @note 同一张表可登记给多个设备；设备 ID 必须非零且唯一，运行数据由 DP 独立分配。
- * @note 先调用 dp_init()；每表登记成功即已加载历史参数。登记须串行且先于业务线程。
+ * @note 先调用 dp_init()；每表登记成功即已加载历史参数。
+ * @note 登记须串行且先于业务线程，期间禁止并发读写及状态查询。
  * @retval -ENOMEM 私有登记节点和点数据分配失败。
  */
 int dp_register_table(uint16_t device_id, const dp_table_t *table);

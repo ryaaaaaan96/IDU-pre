@@ -21,16 +21,6 @@ static inline uint32_t dp_timestamp_s(void)
     return (uint32_t)now.tv_sec;
 }
 
-/* 编码属于 NVS 格式，不能随公共类型枚举重排。 */
-typedef enum {
-    DP_U16 = 0,
-    DP_S16 = 1,
-    DP_U32 = 2,
-    DP_S32 = 3,
-    DP_WORDS = 4,
-    DP_U8 = 5,
-} dp_storage_type_t;
-
 int dp_params_read(uint16_t device_id, uint16_t signal_key, dp_point_data_t *state);
 int dp_params_write(uint16_t device_id, uint16_t signal_key, const value_t *value);
 

@@ -20,6 +20,7 @@ typedef struct {
 } dp_param_status_t;
 
 int dp_params_restore(uint16_t dev_id);
+/** @brief 在线程中获取一致的存储状态，可能等待当前 NVS 操作完成。 */
 void dp_params_get_status(dp_param_status_t *status);
 
 #endif
