@@ -4,6 +4,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/hash_map.h>
+#include <zephyr/sys/reboot.h>
 
 LOG_MODULE_REGISTER(dp, LOG_LEVEL_INF);
 
@@ -18,7 +19,9 @@ LOG_MODULE_REGISTER(dp, LOG_LEVEL_INF);
 
 /* 应用只提供只读点表，设备目录与点数据均由模块私有持有。 */
 static dp_registered_table_t *tables;
-static K_MUTEX_DEFINE(store_lock);
+static K_MUTEX_DEFINE(dp_values_lock);
+static K_MUTEX_DEFINE(dp_devices_lock);
+static bool initialized;
 /* 启动登记串行执行；检查结束后释放全部桶，不保留运行期查找索引。 */
 SYS_HASHMAP_OA_LP_DEFINE_STATIC_ADVANCED(registration_keys,
     sys_hash32,
@@ -71,6 +74,9 @@ static int validate_point(uint16_t device_id, const dp_point_config_t *point)
 {
     if (!point->signal_key || !point->size || point->size > sizeof(point->data.initial.bytes)) {
         return -EINVAL;
+    }
+    if ((point->flags & DP_POINT_FLAG_PERSISTENT) && point->signal_key == UINT16_MAX) {
+        return -EINVAL; /* NVS 的 0xffff 为内部保留 ID。 */
     }
     switch (point->type) {
     case VALUE_TYPE_U8:
@@ -181,22 +187,28 @@ static int save_value(const dp_point_config_t *point, dp_point_data_t *stored, c
     if (err) {
         return err;
     }
-    k_mutex_lock(&store_lock, K_FOREVER);
+    uint32_t updated_at_s = dp_timestamp_s();
+    k_mutex_lock(&dp_values_lock, K_FOREVER);
+    if (stored->saved_value) {
+        if (stored->saved_valid) {
+            stored->dirty = memcmp(stored->saved_value->bytes, value->bytes, point->size) != 0;
+        } else if (memcmp(stored->value.bytes, value->bytes, point->size)) {
+            stored->dirty = true;
+        }
+    }
     stored->value = *value;
-    stored->updated_at_s = dp_timestamp_s();
-    k_mutex_unlock(&store_lock);
+    stored->updated_at_s = updated_at_s;
+    k_mutex_unlock(&dp_values_lock);
     return 0;
 }
 
-/* ==================== 对外接口 ==================== */
-
-int dp_register_table(uint16_t device_id, const dp_table_t *table)
+static int register_device(uint16_t device_id, const dp_table_t *table)
 {
-    if (k_is_in_isr()) {
-        return -EWOULDBLOCK;
-    }
     if (!device_id || !table || !table->points || !table->point_count) {
         return -EINVAL;
+    }
+    if (!initialized) {
+        return -EACCES;
     }
     if (find_table(device_id)) {
         return -EEXIST;
@@ -210,25 +222,70 @@ int dp_register_table(uint16_t device_id, const dp_table_t *table)
         return err;
     }
 
-    dp_registered_table_t *entry =
-        k_calloc(1, sizeof(*entry) + table->point_count * sizeof(entry->data[0]));
+    size_t persistent_count = 0;
+    for (size_t i = 0; i < table->point_count; ++i) {
+        const dp_point_config_t *point = &table->points[i];
+        err = validate_point(device_id, point);
+        if (err) {
+            return -EINVAL;
+        }
+        err = check_value(point, &point->data.initial);
+        if (err) {
+            return -EINVAL;
+        }
+        if (point->flags & DP_POINT_FLAG_PERSISTENT) {
+            ++persistent_count;
+        }
+    }
+    size_t allocation_size =
+        sizeof(dp_registered_table_t) + table->point_count * sizeof(dp_point_data_t);
+    if (persistent_count > (SIZE_MAX - allocation_size) / sizeof(value_t)) {
+        return -EOVERFLOW;
+    }
+    allocation_size += persistent_count * sizeof(value_t);
+    dp_registered_table_t *entry = k_calloc(1, allocation_size);
     if (!entry) {
         return -ENOMEM;
     }
     entry->device_id = device_id;
     entry->points = table->points;
     entry->point_count = table->point_count;
+    if (persistent_count) {
+        err = dp_params_attach(entry);
+        if (err) {
+            goto failed;
+        }
+    }
+    value_t *saved = (value_t *)&entry->data[table->point_count];
     for (size_t i = 0; i < table->point_count; ++i) {
         const dp_point_config_t *point = &table->points[i];
-        err = validate_point(device_id, point);
+        entry->data[i].value = point->data.initial;
+        if (!(point->flags & DP_POINT_FLAG_PERSISTENT)) {
+            continue;
+        }
+        entry->data[i].saved_value = saved++;
+        err = dp_params_load(entry, i);
+        if (err && err != -ENOENT && err != -ESTALE) {
+            goto failed;
+        }
         if (!err) {
-            entry->data[i].value = point->data.initial;
             err = check_value(point, &entry->data[i].value);
         }
         if (err) {
-            err = -EINVAL;
-            goto failed;
+            if (err != -ENOENT) {
+                LOG_WRN("Device %u key %u: stored value rejected (%d), using initial value",
+                    device_id,
+                    point->signal_key,
+                    err);
+            }
+            entry->data[i].value = point->data.initial;
+            err = dp_params_write(entry, i, &entry->data[i].value);
+            if (err) {
+                goto failed;
+            }
         }
+        *entry->data[i].saved_value = entry->data[i].value;
+        entry->data[i].saved_valid = true;
     }
 #ifdef CONFIG_DP_HASH_LOOKUP
     err = sys_hashmap_insert(&device_lookup, device_id, (uint64_t)(uintptr_t)entry, NULL);
@@ -242,6 +299,117 @@ int dp_register_table(uint16_t device_id, const dp_table_t *table)
     return 0;
 failed:
     k_free(entry);
+    return err;
+}
+
+/* ==================== 对外接口 ==================== */
+
+int dp_init(void)
+{
+    if (k_is_in_isr()) {
+        return -EWOULDBLOCK;
+    }
+    k_mutex_lock(&dp_devices_lock, K_FOREVER);
+    int err = 0;
+    if (!initialized) {
+        err = dp_params_init();
+        if (!err) {
+            initialized = true;
+        }
+    }
+    k_mutex_unlock(&dp_devices_lock);
+    return err;
+}
+
+int dp_register_device(uint16_t device_id, const dp_table_t *table)
+{
+    if (k_is_in_isr()) {
+        return -EWOULDBLOCK;
+    }
+    k_mutex_lock(&dp_devices_lock, K_FOREVER);
+    int err = register_device(device_id, table);
+    k_mutex_unlock(&dp_devices_lock);
+    return err;
+}
+
+int dp_flush(void)
+{
+    if (k_is_in_isr()) {
+        return -EWOULDBLOCK;
+    }
+    k_mutex_lock(&dp_devices_lock, K_FOREVER);
+    int result = initialized ? 0 : -EACCES;
+    for (dp_registered_table_t *device = initialized ? tables : NULL; device;
+        device = device->next) {
+        if (device->factory_resetting) {
+            continue;
+        }
+        for (size_t i = 0; i < device->point_count; ++i) {
+            /* 配置常驻只读；非持久点不需要检查 dirty，也不获取点值锁。 */
+            if (!(device->points[i].flags & DP_POINT_FLAG_PERSISTENT)) {
+                continue;
+            }
+            k_mutex_lock(&dp_values_lock, K_FOREVER);
+            dp_point_data_t snapshot = device->data[i];
+            k_mutex_unlock(&dp_values_lock);
+            if (!snapshot.dirty) {
+                continue;
+            }
+            int err = dp_params_write(device, i, &snapshot.value);
+            k_mutex_lock(&dp_values_lock, K_FOREVER);
+            dp_point_data_t *stored = &device->data[i];
+            if (err) {
+                /* 写入结果不确定，旧副本不能再用于取消后续保存。 */
+                stored->saved_valid = false;
+                stored->dirty = true;
+                if (!result) {
+                    result = err;
+                }
+            } else {
+                *stored->saved_value = snapshot.value;
+                stored->saved_valid = true;
+                stored->dirty =
+                    memcmp(stored->value.bytes, snapshot.value.bytes, device->points[i].size) != 0;
+            }
+            k_mutex_unlock(&dp_values_lock);
+        }
+    }
+    k_mutex_unlock(&dp_devices_lock);
+    return result;
+}
+
+int dp_remove_device(uint16_t device_id)
+{
+    if (k_is_in_isr()) {
+        return -EWOULDBLOCK;
+    }
+    if (!device_id) {
+        return -EINVAL;
+    }
+    k_mutex_lock(&dp_devices_lock, K_FOREVER);
+    dp_registered_table_t *device = find_table(device_id);
+    if (device) {
+        /* 删除失败也暂停保存，避免旧值写回已删除一部分的槽位。 */
+        device->factory_resetting = true;
+    }
+    int err = initialized ? dp_params_remove(device_id) : -EACCES;
+    if (err) {
+        goto done;
+    }
+    dp_registered_table_t **link = &tables;
+    while (*link && (*link)->device_id != device_id) {
+        link = &(*link)->next;
+    }
+    if (*link) {
+        dp_registered_table_t *entry = *link;
+#ifdef CONFIG_DP_HASH_LOOKUP
+        sys_hashmap_remove(&device_lookup, device_id, NULL);
+#endif
+        *link = entry->next;
+        k_free(entry);
+    }
+done:
+    k_mutex_unlock(&dp_devices_lock);
     return err;
 }
 
@@ -292,28 +460,28 @@ int dp_get_para(uint16_t device_id, uint16_t signal_key, value_t *value)
     if (err) {
         return err;
     }
-    dp_point_data_t state;
-    k_mutex_lock(&store_lock, K_FOREVER);
-    state = *stored;
-    k_mutex_unlock(&store_lock);
+    value_t pending;
+    k_mutex_lock(&dp_values_lock, K_FOREVER);
+    pending = stored->value;
+    k_mutex_unlock(&dp_values_lock);
     if (p->read_callback) {
         const dp_callback_context_t context = {
             .device_id = device_id,
             .signal_key = signal_key,
             .signal_index = signal_index,
             .is_write = false,
-            .value = &state.value,
+            .value = &pending,
         };
         err = p->read_callback(&context);
         if (err) {
             return err;
         }
-        err = save_value(p, stored, &state.value);
+        err = save_value(p, stored, &pending);
         if (err) {
             return err;
         }
     }
-    *value = state.value;
+    *value = pending;
     return 0;
 }
 
@@ -330,14 +498,59 @@ int dp_restore_defaults(uint16_t device_id)
         return -ENOENT;
     }
     uint32_t restored_at_s = dp_timestamp_s();
-    k_mutex_lock(&store_lock, K_FOREVER);
+    k_mutex_lock(&dp_values_lock, K_FOREVER);
     for (size_t i = 0; i < table->point_count; ++i) {
-        if (table->points[i].flags & DP_POINT_FLAG_SKIP_RESTORE) {
+        if (table->points[i].flags & DP_POINT_FLAG_SKIP_DEFAULTS) {
             continue;
+        }
+        dp_point_data_t *stored = &table->data[i];
+        const dp_point_config_t *point = &table->points[i];
+        if (stored->saved_value) {
+            if (stored->saved_valid) {
+                stored->dirty =
+                    memcmp(stored->saved_value->bytes, point->data.initial.bytes, point->size) != 0;
+            } else if (memcmp(stored->value.bytes, point->data.initial.bytes, point->size)) {
+                stored->dirty = true;
+            }
         }
         table->data[i].value = table->points[i].data.initial;
         table->data[i].updated_at_s = restored_at_s;
     }
-    k_mutex_unlock(&store_lock);
+    k_mutex_unlock(&dp_values_lock);
     return 0;
+}
+
+int dp_factory_reset(uint16_t device_id, dp_factory_reset_callback_t before_reboot, void *context)
+{
+    if (k_is_in_isr()) {
+        return -EWOULDBLOCK;
+    }
+    k_mutex_lock(&dp_devices_lock, K_FOREVER);
+    int err = -EACCES;
+    if (!initialized) {
+        goto done;
+    }
+    if (device_id == DP_DEVICE_ID_ALL) {
+        /* 包含未登记设备的历史记录；先停全部保存，再清理总参数区。 */
+        for (dp_registered_table_t *entry = tables; entry; entry = entry->next) {
+            entry->factory_resetting = true;
+        }
+        err = dp_params_remove(device_id);
+        goto done;
+    }
+    dp_registered_table_t *device = find_table(device_id);
+    if (device) {
+        /* 即使 Flash 操作失败也不恢复保存，避免旧值写回正在清理的槽位。 */
+        device->factory_resetting = true;
+    }
+    err = dp_params_remove(device_id);
+done:
+    k_mutex_unlock(&dp_devices_lock);
+    if (err) {
+        return err;
+    }
+    if (before_reboot) {
+        before_reboot(context);
+    }
+    sys_reboot(SYS_REBOOT_COLD);
 }

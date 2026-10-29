@@ -1,0 +1,13 @@
+/ { chosen { /delete-property/ zephyr,code-partition; }; aliases { dp-params = &dp_test_params; }; };
+&flash0 {
+    /delete-node/ partitions;
+    partitions {
+        compatible = "fixed-partitions";
+        #address-cells = <1>;
+        #size-cells = <1>;
+        dp_test_params: partition@0 {
+            label = "dp-params";
+            reg = <0 0x10000>;
+        };
+    };
+};

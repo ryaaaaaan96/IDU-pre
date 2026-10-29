@@ -13,19 +13,36 @@ mkdir -p "$test_dir"
 # DP 最小核心：常量、局部写读、范围、命令点、回调及 RAM 快照。
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/dp_core -d "$test_dir/dp_core"
-timeout 30s "$test_dir/dp_core/zephyr/zephyr.exe"
+timeout 30s "$test_dir/dp_core/zephyr/zephyr.exe" -flash_in_ram
 # 产品模型与本地 process 装配。
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/process_runtime -d "$test_dir/process_runtime"
-timeout 30s "$test_dir/process_runtime/zephyr/zephyr.exe"
+timeout 30s "$test_dir/process_runtime/zephyr/zephyr.exe" -flash_in_ram
 
 # 同一套行为分别验证线性查找和常驻 hashmap 索引。
 for suite in dp_core process_runtime; do
     env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
         "applications/IDU-pre/tests/$suite" -d "$test_dir/$suite-hash" -- \
         -DEXTRA_CONF_FILE=hash.conf
-    timeout 30s "$test_dir/$suite-hash/zephyr/zephyr.exe"
+    timeout 30s "$test_dir/$suite-hash/zephyr/zephyr.exe" -flash_in_ram
 done
+
+# 真实 NVS 与文件模拟 Flash：跨启动恢复、写失败和删除中断。
+for variant in normal hash three_slots; do
+    extra=()
+    if [[ "$variant" != normal ]]; then
+        extra=(-- -DEXTRA_CONF_FILE="$variant.conf")
+    fi
+    env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
+        applications/IDU-pre/tests/dp_storage -d "$test_dir/dp_storage-$variant" "${extra[@]}"
+    python3 applications/IDU-pre/tests/dp_storage/run.py \
+        "$test_dir/dp_storage-$variant/zephyr/zephyr.exe"
+done
+env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
+    applications/IDU-pre/tests/dp_storage -d "$test_dir/dp_storage-periodic" -- \
+    -DEXTRA_CONF_FILE=periodic.conf
+env IDU_DP_PHASE=periodic timeout 30s \
+    "$test_dir/dp_storage-periodic/zephyr/zephyr.exe" -flash_in_ram
 
 for suite in adc modbus_support; do
     env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \

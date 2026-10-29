@@ -9,7 +9,7 @@ static const dp_point_config_t local_process_rows[PROCESS_SIGNAL_COUNT] = {
         {
             .signal_key = SIGNAL_SAMPLE_PERIOD,
             .size = 2,
-            .flags = DP_POINT_FLAG_CHECK_RANGE,
+            .flags = DP_POINT_FLAG_CHECK_RANGE | DP_POINT_FLAG_PERSISTENT,
             .type = VALUE_TYPE_U16,
             .data =
                 {
@@ -22,6 +22,7 @@ static const dp_point_config_t local_process_rows[PROCESS_SIGNAL_COUNT] = {
         {
             .signal_key = SIGNAL_LABEL,
             .size = 16,
+            .flags = DP_POINT_FLAG_PERSISTENT,
             .type = VALUE_TYPE_WORDS,
             .data.initial.words = {0x4944, 0x552d, 0x7072, 0x6500, 0, 0, 0, 0},
         },
@@ -29,7 +30,7 @@ static const dp_point_config_t local_process_rows[PROCESS_SIGNAL_COUNT] = {
         {
             .signal_key = SIGNAL_SAVED_ADDRESS,
             .size = 2,
-            .flags = DP_POINT_FLAG_CHECK_RANGE,
+            .flags = DP_POINT_FLAG_CHECK_RANGE | DP_POINT_FLAG_PERSISTENT,
             .type = VALUE_TYPE_U16,
             .data =
                 {

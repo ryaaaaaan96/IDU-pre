@@ -28,6 +28,9 @@ DP 最小核心的线程和容量配置集中在 `prj.conf`：
 | --- | ---: | --- |
 | `CONFIG_DATAPROCESS` | y | 启用 RAM 点值核心 |
 | `CONFIG_DP_HASH_LOOKUP` | n | 可选设备 ID hashmap；测点始终线性查找 |
+| `CONFIG_DP_STORAGE_SLOT_COUNT` | 6 | 预留持久设备数量；每槽大小由总区域自动计算 |
+| `CONFIG_DP_SAVE_INTERVAL_MS` | 5000 | 保存线程两轮之间的等待毫秒数 |
+| `CONFIG_DP_SAVE_STACK_SIZE` | 2048 | 保存线程栈字节数 |
 | `CONFIG_COMMON_VALUE_WORDS` | 16 | 单点最大字数；每设备运行数据由 DP 内部分配 |
 | `CONFIG_MAIN_STACK_SIZE` | 4096 | 主循环、本地采样和 DP 同步调用 |
 | `CONFIG_SYSTEM_WORKQUEUE_STACK_SIZE` | 2048 | 看门狗等系统工作 |
@@ -40,19 +43,22 @@ DP 最小核心的线程和容量配置集中在 `prj.conf`：
 产品镜像布局集中在 `bootloader/partitions.dtsi`，由板级 DTS 引用。
 MCUboot 和应用分别通过 overlay 选择 boot 和 slot0；所有构建使用下节的同一布局。
 旧参数主备区、旧升级配置及 BIN 暂存区的设备树声明已移除，不再参与运行。
-AIDC 专用分区也已移除，0x014000–0x017fff 暂不分配；不会自动擦除其中旧内容。
-IDU NVS、IAP 和 MCUboot 的有效存储偏移保持不变：
+旧参数 0x10000/16 KiB 保留只读，不自动导入；0x14000–0x17fff 仍不分配。
+DP 新持久化区域不与 IAP、镜像区重叠：
 
 | 外部 Flash 内容 | 偏移 | 大小 |
 | --- | --- | --- |
-| 原参数保留区（当前 DP 不使用） | 0x010000 | 16 KiB |
+| 旧参数保留区 | 0x010000 | 16 KiB |
 | IAP 日志（启用 IAP 时） | 0x018000 | 16 KiB |
+| DP 参数总区域 | 0x01C000 | 64 KiB |
 | IAP SGZ 暂存（启用 IAP 时） | 0x201000 | 512 KiB |
 | MCUboot slot1 | 0x300000 | 448 KiB |
 | MCUboot scratch | 0x370000 | 8 KiB |
 
-删除分区声明本身不擦除实物 Flash。当前 DP 不挂载原参数分区，也不读取或擦除其中历史数据。
-所有 DP 点值当前仅存 RAM，重启恢复配置初值。IAP 镜像和日志分区不参与参数清空。
+新 DP 区域内部含布局标记、管理 NVS 和六个设备槽位，详见
+[DP 模块](../modules/dataprocess/README.md)。布局不匹配或管理映射内容非法时自动擦除整个 DP 参数区并重建，旧参数会丢失。
+修改总区/槽位数量会触发布局重建；需要保留参数时须先设计迁移。读取失败不会触发擦除。
+IAP 镜像和日志不参与参数清空；IAP 日志仍独立使用 NVS。
 
 ## 默认固件构建
 
@@ -162,7 +168,7 @@ python applications/IDU-pre/tests/test_mcuboot_artifacts.py \
 接收、解包、验签和结果恢复由 [`modules/iap`](../modules/iap/README.md) 提供。
 板级 DTS 的 `iap,staging`／`iap,journal` 选择分区，执行地址和
 RAM 范围取自 `slot0_partition`／`zephyr,sram`；`conf/iapv3.conf` 配置镜像上限、
-暂存容量、堆预算、AES 密钥；DP 参数持久化已移除。公钥文件默认跟随 MCUboot
+暂存容量、堆预算、AES 密钥；DP 参数由独立保存线程延后落盘。公钥文件默认跟随 MCUboot
 签名配置。分区属于板级布局，所有构建共用，不再使用单独的 overlay。
 无需独立的 IDU IAP 适配 `.c`，启动顺序与初始化成功后的镜像确认仍由应用编排。
 自动导出 SGZ 时读取本次构建的 `.config`；单独运行 `pack_sgz.py` 时也可用
@@ -232,7 +238,7 @@ IAP 配置额外划分两个外部 NOR 区域：`0x18000–0x1BFFF` 为独立 NV
 slot1 位于 `0x300000`，不会从应用直接写当前镜像或 BOOT。
 暂存容量与 `CONFIG_IAP_MAX_CONTAINER_SIZE` 成对维护：容器为签名镜像加上分包
 开销，上限 0x6e000 的镜像即使按未压缩帧膨胀也在 512 KiB 以内。
-日志使用固定 48 字节小端布局和自身 CRC；当前 IDU 的 DP 参数模块已不使用 NVS；IAP 配置显式启用
+日志使用固定 48 字节小端布局和自身 CRC；DP 参数模块使用独立 NVS；IAP 配置显式启用
 `NVS_DATA_CRC`。IAP 模块不切换该选项，迁移已有 NVS 数据时须保持此配置一致。
 
 解包校验 SGZ CRC、子文件 CRC、输出长度与 CRC，然后校验 MCUboot 头、

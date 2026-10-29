@@ -19,6 +19,7 @@
 
 ## 架构决策
 
+参数生命周期和延后保存见 [ADR 0015](adr/0015-dp-device-storage.md)。
 当前有效决策见 [`adr/`](adr/)。`modules/collect`、`modules/transmit`、
 `modules/vport` 已删除，相关 ADR 保留为历史记录；重新接入通信需要新的适配层。
 

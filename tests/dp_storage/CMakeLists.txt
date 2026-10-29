@@ -1,0 +1,8 @@
+cmake_minimum_required(VERSION 3.20.0)
+get_filename_component(IDU_APP ${CMAKE_CURRENT_SOURCE_DIR}/../.. ABSOLUTE)
+include(${IDU_APP}/modules/modules.cmake)
+find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
+project(dp_storage_tests)
+target_sources(app PRIVATE src/main.c)
+target_include_directories(app PRIVATE ${IDU_APP}/modules/dataprocess/src)
+zephyr_ld_options(-Wl,--wrap=sys_reboot -Wl,--wrap=nvs_read -Wl,--wrap=nvs_write -Wl,--wrap=nvs_delete -Wl,--wrap=flash_area_erase -Wl,--wrap=flash_area_read -Wl,--wrap=flash_area_write)

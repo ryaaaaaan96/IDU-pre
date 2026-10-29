@@ -5,5 +5,9 @@
 
 int protocol_init(void)
 {
-    return dp_register_table(DEVICE_LOCAL, &protocol_local_table);
+    int err = dp_init();
+    if (err) {
+        return err;
+    }
+    return dp_register_device(DEVICE_LOCAL, &protocol_local_table);
 }

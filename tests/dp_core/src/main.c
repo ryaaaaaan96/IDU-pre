@@ -57,7 +57,7 @@ static const dp_point_config_t rows[] = {
     {.signal_key = 300,
         .size = 2,
         .type = VALUE_TYPE_U16,
-        .flags = DP_POINT_FLAG_CHECK_RANGE | DP_POINT_FLAG_SKIP_RESTORE,
+        .flags = DP_POINT_FLAG_CHECK_RANGE | DP_POINT_FLAG_SKIP_DEFAULTS,
         .write_callback = callback,
         .read_callback = callback,
         .data = {.initial.u16 = 50, .minimum.u16 = 1, .maximum.u16 = 100}},
@@ -144,25 +144,26 @@ static void reader(void *a, void *b, void *c)
 
 ZTEST(dp_core, test_core)
 {
-    zassert_equal(dp_register_table(0, &table), -EINVAL);
-    zassert_equal(dp_register_table(7, NULL), -EINVAL);
+    zassert_ok(dp_init());
+    zassert_equal(dp_register_device(0, &table), -EINVAL);
+    zassert_equal(dp_register_device(7, NULL), -EINVAL);
     const dp_table_t too_large = {.points = rows, .point_count = SIZE_MAX};
-    zassert_equal(dp_register_table(7, &too_large), -EOVERFLOW);
+    zassert_equal(dp_register_device(7, &too_large), -EOVERFLOW);
     for (int allowed = 0; allowed < 2; ++allowed) {
         map_allocations_left = allowed;
-        zassert_equal(dp_register_table(7, &table), -ENOMEM);
+        zassert_equal(dp_register_device(7, &table), -ENOMEM);
         zassert_is_null(data(7, 0));
         zassert_equal(active_map_allocations, 0);
     }
     map_allocations_left = -1;
     fail_allocation = true;
-    zassert_equal(dp_register_table(7, &table), -ENOMEM);
+    zassert_equal(dp_register_device(7, &table), -ENOMEM);
     zassert_is_null(data(7, 0));
     fail_allocation = false;
-    zassert_ok(dp_register_table(7, &table));
+    zassert_ok(dp_register_device(7, &table));
     zassert_equal(active_map_allocations, IS_ENABLED(CONFIG_DP_HASH_LOOKUP) ? 1 : 0);
-    zassert_equal(dp_register_table(7, &table), -EEXIST);
-    zassert_ok(dp_register_table(8, &table));
+    zassert_equal(dp_register_device(7, &table), -EEXIST);
+    zassert_ok(dp_register_device(8, &table));
     zassert_equal(data(7, 1)->value.u16, 50);
     zassert_equal(data(8, 1)->value.u16, 50);
     zassert_equal(data(7, 1)->updated_at_s, 0);
@@ -174,7 +175,7 @@ ZTEST(dp_core, test_core)
         bool registered = false;
         for (int allowed = 0; allowed < 20; ++allowed) {
             map_allocations_left = allowed;
-            int err = dp_register_table(device, &table);
+            int err = dp_register_device(device, &table);
             if (!err) {
                 registered = true;
                 break;
@@ -202,7 +203,7 @@ ZTEST(dp_core, test_core)
     const dp_table_t duplicate_table = {
         .points = duplicates, .point_count = ARRAY_SIZE(duplicates)};
     for (size_t attempt = 0; attempt < 3; ++attempt) {
-        zassert_equal(dp_register_table(9, &duplicate_table), -EEXIST);
+        zassert_equal(dp_register_device(9, &duplicate_table), -EEXIST);
         zassert_equal(active_map_allocations, map_baseline);
     }
     zassert_is_null(data(9, 0));
@@ -218,7 +219,7 @@ ZTEST(dp_core, test_core)
     };
     for (size_t i = 0; i < ARRAY_SIZE(invalid); ++i) {
         const dp_table_t invalid_table = {.points = &invalid[i], .point_count = 1};
-        zassert_equal(dp_register_table(9, &invalid_table), -EINVAL);
+        zassert_equal(dp_register_device(9, &invalid_table), -EINVAL);
         zassert_is_null(data(9, 0));
     }
     value_t words;

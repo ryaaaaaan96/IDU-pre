@@ -102,9 +102,10 @@
                     compatible = "fixed-partitions";
                     #address-cells = <1>;
                     #size-cells = <1>;
-                    dp_params: partition@10000 {
-                        label = "dp-params";
+                    legacy_params: partition@10000 {
+                        label = "legacy-dp-params";
                         reg = <0x10000 0x4000>;
+                        read-only;
                     };
                     /* IAPv3 结果日志；偏移与既有设备保持一致，不参与参数清空。 */
                     iap_journal: partition@18000 {
@@ -112,6 +113,10 @@
                         reg = <0x18000 0x4000>;
                     };
                     /* SGZ 暂存上限与 CONFIG_IAP_MAX_CONTAINER_SIZE 成对维护。 */
+                    dp_params: partition@1c000 {
+                        label = "dp-params";
+                        reg = <0x1c000 0x10000>;
+                    };
                     iap_staging: partition@201000 {
                         label = "idu-iap-sgz";
                         reg = <0x201000 0x80000>;

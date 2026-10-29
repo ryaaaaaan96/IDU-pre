@@ -34,4 +34,29 @@ typedef union {
     const void *array;
 } value_t;
 
+/* 固定存储类型编码，不依赖公共枚举的数值和 C 结构体布局。 */
+static inline uint8_t value_storage_type(value_type_t type)
+{
+    switch (type) {
+    case VALUE_TYPE_U8:
+        return 1;
+    case VALUE_TYPE_U16:
+        return 2;
+    case VALUE_TYPE_S16:
+        return 3;
+    case VALUE_TYPE_U32:
+        return 4;
+    case VALUE_TYPE_S32:
+        return 5;
+    case VALUE_TYPE_STRING:
+        return 6;
+    case VALUE_TYPE_BYTES:
+        return 7;
+    case VALUE_TYPE_WORDS:
+        return 8;
+    default:
+        return 0;
+    }
+}
+
 #endif
