@@ -34,7 +34,8 @@ ISR 调用返回 -EWOULDBLOCK。缺少 init 时登记、删除、flush 返回 -E
 默认设备线性查找，启用时仅设备用 hash，按 key 查找测点仍为线性，按 index 直接访问行数组。设备链表头插，无遍历顺序约定。
 
 按 key 接口使用稳定 signal_key；按 index 接口使用从 0 开始的点表行下标，
-调用方使用 process 枚举标识。越界返回 -ENOENT。四个接口共用读写处理，
+调用方使用 process 枚举标识。越界返回 -ENOENT。内部分别由 find_point_by_key/find_point_by_index 定位，结果仅含设备表和行号；
+共用读写处理不接收寻址方式。四个接口共用读写处理，
 回调始终收到真实 key 和 index；持久化仍以 key 为记录标识。
 旧 dp_set_para/dp_get_para 已移除，原调用方迁至按 key 接口。
 

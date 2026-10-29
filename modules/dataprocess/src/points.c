@@ -137,34 +137,42 @@ static dp_registered_table_t *find_table(uint16_t device_id)
     return NULL;
 }
 
-static int find_point(uint16_t device_id,
-    size_t selector,
-    bool by_index,
-    const dp_point_config_t **point,
-    dp_point_data_t **state,
-    size_t *signal_index)
+/* 仅描述本次调用已定位的行，不保存寻址方式或增加常驻索引。 */
+typedef struct {
+    dp_registered_table_t *table;
+    size_t index;
+} dp_point_ref_t;
+
+static int find_point_by_key(uint16_t device_id, uint16_t signal_key, dp_point_ref_t *point)
 {
-    if (!device_id || (!by_index && !selector)) {
+    if (!device_id || !signal_key) {
         return -EINVAL;
     }
     dp_registered_table_t *table = find_table(device_id);
     if (!table) {
         return -ENOENT;
     }
-    size_t i = selector;
-    if (!by_index) {
-        for (i = 0; i < table->point_count; ++i) {
-            if (table->points[i].signal_key == selector) {
-                break;
-            }
+    for (size_t i = 0; i < table->point_count; ++i) {
+        if (table->points[i].signal_key == signal_key) {
+            point->table = table;
+            point->index = i;
+            return 0;
         }
     }
-    if (i >= table->point_count) {
+    return -ENOENT;
+}
+
+static int find_point_by_index(uint16_t device_id, size_t signal_index, dp_point_ref_t *point)
+{
+    if (!device_id) {
+        return -EINVAL;
+    }
+    dp_registered_table_t *table = find_table(device_id);
+    if (!table || signal_index >= table->point_count) {
         return -ENOENT;
     }
-    *signal_index = i;
-    *state = &table->data[i];
-    *point = &table->points[i];
+    point->table = table;
+    point->index = signal_index;
     return 0;
 }
 
@@ -305,31 +313,20 @@ failed:
     return err;
 }
 
-static int set_para(uint16_t device_id, size_t selector, bool by_index, const value_t *value)
+static int set_para(const dp_point_ref_t *point, const value_t *value)
 {
-    if (k_is_in_isr()) {
-        return -EWOULDBLOCK;
-    }
-    if (!value) {
-        return -EINVAL;
-    }
-    const dp_point_config_t *p;
-    dp_point_data_t *stored;
-    size_t signal_index;
-    int err = find_point(device_id, selector, by_index, &p, &stored, &signal_index);
-    if (err) {
-        return err;
-    }
+    const dp_point_config_t *p = &point->table->points[point->index];
+    dp_point_data_t *stored = &point->table->data[point->index];
     value_t pending = *value;
     if (p->write_callback) {
         const dp_callback_context_t context = {
-            .device_id = device_id,
+            .device_id = point->table->device_id,
             .signal_key = p->signal_key,
-            .signal_index = signal_index,
+            .signal_index = point->index,
             .is_write = true,
             .value = &pending,
         };
-        err = p->write_callback(&context);
+        int err = p->write_callback(&context);
         if (err) {
             return err;
         }
@@ -337,34 +334,23 @@ static int set_para(uint16_t device_id, size_t selector, bool by_index, const va
     return save_value(p, stored, &pending);
 }
 
-static int get_para(uint16_t device_id, size_t selector, bool by_index, value_t *value)
+static int get_para(const dp_point_ref_t *point, value_t *value)
 {
-    if (k_is_in_isr()) {
-        return -EWOULDBLOCK;
-    }
-    if (!value) {
-        return -EINVAL;
-    }
-    const dp_point_config_t *p;
-    dp_point_data_t *stored;
-    size_t signal_index;
-    int err = find_point(device_id, selector, by_index, &p, &stored, &signal_index);
-    if (err) {
-        return err;
-    }
+    const dp_point_config_t *p = &point->table->points[point->index];
+    dp_point_data_t *stored = &point->table->data[point->index];
     value_t pending;
     k_mutex_lock(&dp_values_lock, K_FOREVER);
     pending = stored->value;
     k_mutex_unlock(&dp_values_lock);
     if (p->read_callback) {
         const dp_callback_context_t context = {
-            .device_id = device_id,
+            .device_id = point->table->device_id,
             .signal_key = p->signal_key,
-            .signal_index = signal_index,
+            .signal_index = point->index,
             .is_write = false,
             .value = &pending,
         };
-        err = p->read_callback(&context);
+        int err = p->read_callback(&context);
         if (err) {
             return err;
         }
@@ -490,22 +476,66 @@ done:
 
 int dp_set_para_by_key(uint16_t device_id, uint16_t signal_key, const value_t *value)
 {
-    return set_para(device_id, signal_key, false, value);
+    if (k_is_in_isr()) {
+        return -EWOULDBLOCK;
+    }
+    if (!value) {
+        return -EINVAL;
+    }
+    dp_point_ref_t point;
+    int err = find_point_by_key(device_id, signal_key, &point);
+    if (err) {
+        return err;
+    }
+    return set_para(&point, value);
 }
 
 int dp_get_para_by_key(uint16_t device_id, uint16_t signal_key, value_t *value)
 {
-    return get_para(device_id, signal_key, false, value);
+    if (k_is_in_isr()) {
+        return -EWOULDBLOCK;
+    }
+    if (!value) {
+        return -EINVAL;
+    }
+    dp_point_ref_t point;
+    int err = find_point_by_key(device_id, signal_key, &point);
+    if (err) {
+        return err;
+    }
+    return get_para(&point, value);
 }
 
 int dp_set_para_by_index(uint16_t device_id, size_t signal_index, const value_t *value)
 {
-    return set_para(device_id, signal_index, true, value);
+    if (k_is_in_isr()) {
+        return -EWOULDBLOCK;
+    }
+    if (!value) {
+        return -EINVAL;
+    }
+    dp_point_ref_t point;
+    int err = find_point_by_index(device_id, signal_index, &point);
+    if (err) {
+        return err;
+    }
+    return set_para(&point, value);
 }
 
 int dp_get_para_by_index(uint16_t device_id, size_t signal_index, value_t *value)
 {
-    return get_para(device_id, signal_index, true, value);
+    if (k_is_in_isr()) {
+        return -EWOULDBLOCK;
+    }
+    if (!value) {
+        return -EINVAL;
+    }
+    dp_point_ref_t point;
+    int err = find_point_by_index(device_id, signal_index, &point);
+    if (err) {
+        return err;
+    }
+    return get_para(&point, value);
 }
 
 int dp_restore_defaults(uint16_t device_id)
