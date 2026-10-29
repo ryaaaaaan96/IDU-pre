@@ -138,25 +138,28 @@ static dp_registered_table_t *find_table(uint16_t device_id)
 }
 
 static int find_point(uint16_t device_id,
-    uint16_t signal_key,
+    size_t selector,
+    bool by_index,
     const dp_point_config_t **point,
     dp_point_data_t **state,
     size_t *signal_index)
 {
-    if (!device_id || !signal_key) {
+    if (!device_id || (!by_index && !selector)) {
         return -EINVAL;
     }
     dp_registered_table_t *table = find_table(device_id);
     if (!table) {
         return -ENOENT;
     }
-    size_t i;
-    for (i = 0; i < table->point_count; ++i) {
-        if (table->points[i].signal_key == signal_key) {
-            break;
+    size_t i = selector;
+    if (!by_index) {
+        for (i = 0; i < table->point_count; ++i) {
+            if (table->points[i].signal_key == selector) {
+                break;
+            }
         }
     }
-    if (i == table->point_count) {
+    if (i >= table->point_count) {
         return -ENOENT;
     }
     *signal_index = i;
@@ -302,6 +305,78 @@ failed:
     return err;
 }
 
+static int set_para(uint16_t device_id, size_t selector, bool by_index, const value_t *value)
+{
+    if (k_is_in_isr()) {
+        return -EWOULDBLOCK;
+    }
+    if (!value) {
+        return -EINVAL;
+    }
+    const dp_point_config_t *p;
+    dp_point_data_t *stored;
+    size_t signal_index;
+    int err = find_point(device_id, selector, by_index, &p, &stored, &signal_index);
+    if (err) {
+        return err;
+    }
+    value_t pending = *value;
+    if (p->write_callback) {
+        const dp_callback_context_t context = {
+            .device_id = device_id,
+            .signal_key = p->signal_key,
+            .signal_index = signal_index,
+            .is_write = true,
+            .value = &pending,
+        };
+        err = p->write_callback(&context);
+        if (err) {
+            return err;
+        }
+    }
+    return save_value(p, stored, &pending);
+}
+
+static int get_para(uint16_t device_id, size_t selector, bool by_index, value_t *value)
+{
+    if (k_is_in_isr()) {
+        return -EWOULDBLOCK;
+    }
+    if (!value) {
+        return -EINVAL;
+    }
+    const dp_point_config_t *p;
+    dp_point_data_t *stored;
+    size_t signal_index;
+    int err = find_point(device_id, selector, by_index, &p, &stored, &signal_index);
+    if (err) {
+        return err;
+    }
+    value_t pending;
+    k_mutex_lock(&dp_values_lock, K_FOREVER);
+    pending = stored->value;
+    k_mutex_unlock(&dp_values_lock);
+    if (p->read_callback) {
+        const dp_callback_context_t context = {
+            .device_id = device_id,
+            .signal_key = p->signal_key,
+            .signal_index = signal_index,
+            .is_write = false,
+            .value = &pending,
+        };
+        err = p->read_callback(&context);
+        if (err) {
+            return err;
+        }
+        err = save_value(p, stored, &pending);
+        if (err) {
+            return err;
+        }
+    }
+    *value = pending;
+    return 0;
+}
+
 /* ==================== 对外接口 ==================== */
 
 int dp_init(void)
@@ -413,76 +488,24 @@ done:
     return err;
 }
 
-int dp_set_para(uint16_t device_id, uint16_t signal_key, const value_t *value)
+int dp_set_para_by_key(uint16_t device_id, uint16_t signal_key, const value_t *value)
 {
-    if (k_is_in_isr()) {
-        return -EWOULDBLOCK;
-    }
-    if (!value) {
-        return -EINVAL;
-    }
-    const dp_point_config_t *p;
-    dp_point_data_t *stored;
-    size_t signal_index;
-    int err = find_point(device_id, signal_key, &p, &stored, &signal_index);
-    if (err) {
-        return err;
-    }
-    value_t pending = *value;
-    if (p->write_callback) {
-        const dp_callback_context_t context = {
-            .device_id = device_id,
-            .signal_key = signal_key,
-            .signal_index = signal_index,
-            .is_write = true,
-            .value = &pending,
-        };
-        err = p->write_callback(&context);
-        if (err) {
-            return err;
-        }
-    }
-    return save_value(p, stored, &pending);
+    return set_para(device_id, signal_key, false, value);
 }
 
-int dp_get_para(uint16_t device_id, uint16_t signal_key, value_t *value)
+int dp_get_para_by_key(uint16_t device_id, uint16_t signal_key, value_t *value)
 {
-    if (k_is_in_isr()) {
-        return -EWOULDBLOCK;
-    }
-    if (!value) {
-        return -EINVAL;
-    }
-    const dp_point_config_t *p;
-    dp_point_data_t *stored;
-    size_t signal_index;
-    int err = find_point(device_id, signal_key, &p, &stored, &signal_index);
-    if (err) {
-        return err;
-    }
-    value_t pending;
-    k_mutex_lock(&dp_values_lock, K_FOREVER);
-    pending = stored->value;
-    k_mutex_unlock(&dp_values_lock);
-    if (p->read_callback) {
-        const dp_callback_context_t context = {
-            .device_id = device_id,
-            .signal_key = signal_key,
-            .signal_index = signal_index,
-            .is_write = false,
-            .value = &pending,
-        };
-        err = p->read_callback(&context);
-        if (err) {
-            return err;
-        }
-        err = save_value(p, stored, &pending);
-        if (err) {
-            return err;
-        }
-    }
-    *value = pending;
-    return 0;
+    return get_para(device_id, signal_key, false, value);
+}
+
+int dp_set_para_by_index(uint16_t device_id, size_t signal_index, const value_t *value)
+{
+    return set_para(device_id, signal_index, true, value);
+}
+
+int dp_get_para_by_index(uint16_t device_id, size_t signal_index, value_t *value)
+{
+    return get_para(device_id, signal_index, true, value);
 }
 
 int dp_restore_defaults(uint16_t device_id)

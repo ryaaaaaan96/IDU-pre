@@ -19,9 +19,9 @@
 - 通用模块只保留 [modules/README.md](modules/README.md) 列出的最小集合。`modules/collect`、`modules/transmit`、`modules/vport` 已删除；不要恢复其头文件、Kconfig 或应用装配。
 - `modules/dataprocess` 是最小原子核心，接口为 `dp_*`：点表登记、单点同步 RAM 写读、回调和范围检查。不要恢复异步样本队列、业务线程、定时器、参考表目录、`data_process.h` 字节适配层或 collect/transmit 描述符。
 - 点表行使用 dp_point_config_t，保留 DP_POINT_FLAG_CHECK_RANGE 和 DP_POINT_FLAG_SKIP_DEFAULTS；回调结果校验成功后保存 RAM。配置行数组常驻只读，初值为内嵌 value_t。
-- DP 接口为 dp_init、dp_register_device/remove_device、dp_set_para/get_para、dp_restore_defaults、dp_factory_reset 和 dp_flush。回调在锁外，点值使用快照锁；登记/删除与保存共用设备锁，调用方须先停止并等待全部 DP 业务访问结束。
+- DP 接口为 dp_init、dp_register_device/remove_device、dp_set_para_by_key/get_para_by_key、dp_set_para_by_index/get_para_by_index、dp_restore_defaults、dp_factory_reset 和 dp_flush。回调在锁外，点值使用快照锁；登记/删除与保存共用设备锁，调用方须先停止并等待全部 DP 业务访问结束。
 - DP 始终包含参数持久化能力，要求 dp-params 别名。详情见 [DP 模块](modules/dataprocess/README.md) 和 [ADR 0015](docs/adr/0015-dp-device-storage.md)：dp-params 总分区内部管理 NVS 与设备槽位，5 秒保存线程、dirty/已保存值比较、阻塞 flush。set 成功只表示 RAM 更新；重启前由应用停止修改并 flush。IAP 自身 NVS 独立，不恢复旧 DP 门禁。
-- `app/main.c` 启动状态、硬件和可选 IAP 后调用 `protocol_init()`，保留采样周期和休眠，终止后主线程留驻并每 5 秒查询打印最近故障。`acquisition` 只按硬件 spec 与 device_id/signal_key 映射读取 DI 位图和 ADC，并用 `dp_set_para()` 同步写点。
+- `app/main.c` 启动状态、硬件和可选 IAP 后调用 `protocol_init()`，保留采样周期和休眠，终止后主线程留驻并每 5 秒查询打印最近故障。`acquisition` 只按硬件 spec 与 device_id/signal_key 映射读取 DI 位图和 ADC，并用 `dp_set_para_by_key()` 同步写点。
 - `app/process/points.c` 只保留 points_sample_period_ms()。
 - 状态与 LED 归 `app/status/`；看门狗实现在 `modules/watchdog`；IAP 归 `modules/iap`，调用方直接使用 `<iap/iap.h>`。
 - IAP 模块提供 `iap_route()`，但当前最小产品没有 TR/Modbus 路由，串口上传尚不可用；不要在文档或报告中宣称 IAPv3 上传已工作。重新启用必须新增最小路由适配层并单独验证。

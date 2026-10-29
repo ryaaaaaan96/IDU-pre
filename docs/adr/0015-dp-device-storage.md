@@ -129,3 +129,10 @@ DP 总分区，包括布局、管理映射和未登记设备历史记录；成�
 删除成功后锁外回调并重启；没有历史槽位同样视为成功。仍须先成功 dp_init。
 删除错误不回调、不重启，允许重试，其他设备不受影响。
 此决定替代上一节通过 remove_device 间接清理未登记设备的限制。
+
+## 按 key 与 index 分别读写
+
+原 dp_set_para/dp_get_para 拆为四个显式接口：dp_set_para_by_key、
+dp_get_para_by_key、dp_set_para_by_index、dp_get_para_by_index。
+index 为从零开始的点表行号，直接访问数组，不新增索引结构。
+两种寻址方式共用回调、范围校验、RAM 更新及 dirty 处理；Flash 记录仍使用 signal_key。

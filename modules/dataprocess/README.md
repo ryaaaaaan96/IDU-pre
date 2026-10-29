@@ -10,8 +10,10 @@
 int dp_init(void);
 int dp_register_device(uint16_t device_id, const dp_table_t *table);
 int dp_remove_device(uint16_t device_id);
-int dp_set_para(uint16_t device_id, uint16_t signal_key, const value_t *value);
-int dp_get_para(uint16_t device_id, uint16_t signal_key, value_t *value);
+int dp_set_para_by_key(uint16_t device_id, uint16_t signal_key, const value_t *value);
+int dp_get_para_by_key(uint16_t device_id, uint16_t signal_key, value_t *value);
+int dp_set_para_by_index(uint16_t device_id, size_t signal_index, const value_t *value);
+int dp_get_para_by_index(uint16_t device_id, size_t signal_index, value_t *value);
 int dp_restore_defaults(uint16_t device_id);
 int dp_factory_reset(uint16_t device_id, dp_factory_reset_callback_t before_reboot, void *context);
 int dp_flush(void);
@@ -29,7 +31,12 @@ ISR 调用返回 -EWOULDBLOCK。缺少 init 时登记、删除、flush 返回 -E
 全部成功才发布；失败释放本次节点。登记可能已追加前面测点，重试时直接读取，不是整表事务。
 已分配的存储槽位不因登记失败回收，下次重试仍使用它。
 临时 OA/LP hashmap 检查同表重复 key，结束释放桶；运行期索引由 DP_HASH_LOOKUP 决定：
-默认设备线性查找，启用时仅设备用 hash，测点仍线性查找。设备链表头插，无遍历顺序约定。
+默认设备线性查找，启用时仅设备用 hash，按 key 查找测点仍为线性，按 index 直接访问行数组。设备链表头插，无遍历顺序约定。
+
+按 key 接口使用稳定 signal_key；按 index 接口使用从 0 开始的点表行下标，
+调用方使用 process 枚举标识。越界返回 -ENOENT。四个接口共用读写处理，
+回调始终收到真实 key 和 index；持久化仍以 key 为记录标识。
+旧 dp_set_para/dp_get_para 已移除，原调用方迁至按 key 接口。
 
 ## RAM、回调和校验
 

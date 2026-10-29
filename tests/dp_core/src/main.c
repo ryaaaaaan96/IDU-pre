@@ -100,14 +100,14 @@ static const dp_point_data_t *data(uint16_t device, size_t index)
 static void write_u16(uint16_t key, uint16_t value, int expected)
 {
     const value_t input = {.u16 = value};
-    zassert_equal(dp_set_para(7, key, &input), expected);
+    zassert_equal(dp_set_para_by_key(7, key, &input), expected);
     zassert_equal(input.u16, value);
 }
 
 static void read_u16(uint16_t key, uint16_t expected)
 {
     value_t value;
-    zassert_ok(dp_get_para(7, key, &value));
+    zassert_ok(dp_get_para_by_key(7, key, &value));
     zassert_equal(value.u16, expected);
 }
 
@@ -123,7 +123,7 @@ static void writer(void *a, void *b, void *c)
     for (size_t i = 0; i < 64; ++i) {
         uint8_t byte = i & 1 ? 0x55 : 0xaa;
         const value_t value = {.bytes = {byte, byte, byte}};
-        zassert_ok(dp_set_para(7, 99, &value));
+        zassert_ok(dp_set_para_by_key(7, 99, &value));
         k_yield();
     }
 }
@@ -135,7 +135,7 @@ static void reader(void *a, void *b, void *c)
     ARG_UNUSED(c);
     for (size_t i = 0; i < 64; ++i) {
         value_t value;
-        zassert_ok(dp_get_para(7, 99, &value));
+        zassert_ok(dp_get_para_by_key(7, 99, &value));
         zassert_equal(value.bytes[0], value.bytes[1]);
         zassert_equal(value.bytes[1], value.bytes[2]);
         k_yield();
@@ -168,6 +168,47 @@ ZTEST(dp_core, test_core)
     zassert_equal(data(8, 1)->value.u16, 50);
     zassert_equal(data(7, 1)->updated_at_s, 0);
 
+    /* index 为行号而非 key；两种入口访问同一份数据。 */
+    value_t indexed = {.bytes = {9, 8, 7}};
+    value_t indexed_output = {0};
+    zassert_ok(dp_set_para_by_index(7, 0, &indexed));
+    zassert_ok(dp_get_para_by_key(7, 99, &indexed_output));
+    zassert_mem_equal(indexed.bytes, indexed_output.bytes, 3);
+    zassert_ok(dp_set_para_by_key(7, 99, &(value_t){.bytes = {1, 2, 3}}));
+    zassert_ok(dp_get_para_by_index(7, 0, &indexed_output));
+    zassert_equal(indexed_output.bytes[0], 1);
+    zassert_ok(dp_get_para_by_index(7, ARRAY_SIZE(rows) - 1, &indexed_output));
+    zassert_equal(indexed_output.words[2], 3);
+
+    /* 两种入口均提供真实 key/index，执行相同回调和范围检查。 */
+    write_result = 60;
+    zassert_ok(dp_set_para_by_index(7, 1, &(value_t){.u16 = 55}));
+    zassert_equal(data(7, 1)->value.u16, 60);
+    read_result = 70;
+    zassert_ok(dp_get_para_by_index(7, 1, &indexed_output));
+    zassert_equal(indexed_output.u16, 70);
+    read_result = 101;
+    zassert_equal(dp_get_para_by_index(7, 1, &indexed_output), -ERANGE);
+    zassert_equal(indexed_output.u16, 70);
+    write_result = 101;
+    zassert_equal(dp_set_para_by_index(7, 1, &(value_t){.u16 = 55}), -ERANGE);
+    fail_callback = true;
+    zassert_equal(dp_set_para_by_index(7, 1, &indexed), -EIO);
+    zassert_equal(dp_get_para_by_index(7, 1, &indexed_output), -EIO);
+    fail_callback = false;
+    write_result = 0;
+    read_result = 0;
+    zassert_ok(dp_set_para_by_index(7, 1, &(value_t){.u16 = 50}));
+
+    zassert_equal(dp_get_para_by_index(7, ARRAY_SIZE(rows), &indexed_output), -ENOENT);
+    zassert_equal(dp_set_para_by_index(7, SIZE_MAX, &indexed), -ENOENT);
+    zassert_equal(dp_get_para_by_index(999, 0, &indexed_output), -ENOENT);
+    zassert_equal(dp_set_para_by_index(999, 0, &indexed), -ENOENT);
+    zassert_equal(dp_get_para_by_index(0, 0, &indexed_output), -EINVAL);
+    zassert_equal(dp_set_para_by_index(0, 0, &indexed), -EINVAL);
+    zassert_equal(dp_get_para_by_index(7, 0, NULL), -EINVAL);
+    zassert_equal(dp_set_para_by_index(7, 0, NULL), -EINVAL);
+
 #ifdef CONFIG_DP_HASH_LOOKUP
     /* 逐一失败于临时集合及设备索引扩容，旧设备始终可读。 */
     for (uint16_t device = 10; device <= 11; ++device) {
@@ -188,9 +229,9 @@ ZTEST(dp_core, test_core)
         map_allocations_left = -1;
         zassert_true(registered);
         value_t value;
-        zassert_ok(dp_get_para(device, 99, &value));
+        zassert_ok(dp_get_para_by_key(device, 99, &value));
         zassert_equal(value.bytes[0], 1);
-        zassert_equal(dp_get_para(device, 999, &value), -ENOENT);
+        zassert_equal(dp_get_para_by_key(device, 999, &value), -ENOENT);
     }
 #endif
     size_t map_baseline = active_map_allocations;
@@ -223,19 +264,19 @@ ZTEST(dp_core, test_core)
         zassert_is_null(data(9, 0));
     }
     value_t words;
-    zassert_ok(dp_get_para(7, 5, &words));
+    zassert_ok(dp_get_para_by_key(7, 5, &words));
     zassert_equal(words.words[0], 1);
     zassert_equal(words.words[1], 2);
     zassert_equal(words.words[2], 3);
-    zassert_ok(dp_set_para(7, 4, &(value_t){.u8 = 9}));
-    zassert_equal(dp_set_para(7, 4, &(value_t){.u8 = 10}), -ERANGE);
+    zassert_ok(dp_set_para_by_key(7, 4, &(value_t){.u8 = 9}));
+    zassert_equal(dp_set_para_by_key(7, 4, &(value_t){.u8 = 10}), -ERANGE);
     write_u16(2, (uint16_t)-10, 0);
     write_u16(2, (uint16_t)-11, -ERANGE);
-    zassert_ok(dp_set_para(7, 3, &(value_t){.s32 = -1}));
-    zassert_equal(dp_set_para(7, 3, &(value_t){.s32 = INT32_MIN}), -ERANGE);
-    zassert_equal(dp_set_para(7, 301, &(value_t){.u16 = 1}), -ENOENT);
-    zassert_equal(dp_set_para(7, 300, NULL), -EINVAL);
-    zassert_equal(dp_get_para(7, 300, NULL), -EINVAL);
+    zassert_ok(dp_set_para_by_key(7, 3, &(value_t){.s32 = -1}));
+    zassert_equal(dp_set_para_by_key(7, 3, &(value_t){.s32 = INT32_MIN}), -ERANGE);
+    zassert_equal(dp_set_para_by_key(7, 301, &(value_t){.u16 = 1}), -ENOENT);
+    zassert_equal(dp_set_para_by_key(7, 300, NULL), -EINVAL);
+    zassert_equal(dp_get_para_by_key(7, 300, NULL), -EINVAL);
 
     const uint32_t epoch = 1761600000U;
     const struct timespec now = {.tv_sec = epoch};
@@ -255,18 +296,18 @@ ZTEST(dp_core, test_core)
     write_result = 0;
     read_result = 101;
     value_t output = {.u16 = 0xbbaa};
-    zassert_equal(dp_get_para(7, 300, &output), -ERANGE);
+    zassert_equal(dp_get_para_by_key(7, 300, &output), -ERANGE);
     zassert_equal(output.u16, 0xbbaa);
     read_result = 0;
     fail_callback = true;
     write_u16(300, 50, -EIO);
-    zassert_equal(dp_get_para(7, 300, &output), -EIO);
+    zassert_equal(dp_get_para_by_key(7, 300, &output), -EIO);
     fail_callback = false;
     zassert_equal(data(7, 1)->value.u16, before.value.u16);
     zassert_equal(data(7, 1)->updated_at_s, before.updated_at_s);
 
     const value_t initial = {.bytes = {0x55, 0x55, 0x55}};
-    zassert_ok(dp_set_para(7, 99, &initial));
+    zassert_ok(dp_set_para_by_key(7, 99, &initial));
     k_thread_create(&writer_thread,
         writer_stack,
         K_THREAD_STACK_SIZEOF(writer_stack),
@@ -292,10 +333,10 @@ ZTEST(dp_core, test_core)
     write_u16(300, 80, 0);
     const dp_point_data_t skipped_before = *data(7, 1);
     const value_t other_device = {.bytes = {9, 8, 7}};
-    zassert_ok(dp_set_para(8, 99, &other_device));
-    zassert_ok(dp_set_para(7, 1, &(value_t){.u32 = 0xf0000000U}));
-    zassert_equal(dp_set_para(7, 1, &(value_t){.u32 = 0xf0000001U}), -ERANGE);
-    zassert_equal(dp_set_para(7, 1, &(value_t){.u32 = 0x0fffffffU}), -ERANGE);
+    zassert_ok(dp_set_para_by_key(8, 99, &other_device));
+    zassert_ok(dp_set_para_by_key(7, 1, &(value_t){.u32 = 0xf0000000U}));
+    zassert_equal(dp_set_para_by_key(7, 1, &(value_t){.u32 = 0xf0000001U}), -ERANGE);
+    zassert_equal(dp_set_para_by_key(7, 1, &(value_t){.u32 = 0x0fffffffU}), -ERANGE);
     zassert_equal(dp_restore_defaults(0), -EINVAL);
     zassert_equal(dp_restore_defaults(123), -ENOENT);
     fail_callback = true;

@@ -1144,3 +1144,15 @@ LED 播放改为每个指示状态独立的亮灭/持续时间步骤表，重复
 ## 2026-10-27：主线程 HOLD 留驻诊断
 
 主线程终止正常业务后留驻，每 5 秒查询打印最近故障。运行时 19 个场景和选定启动场景 19 个通过，当前 MCUboot + IAPv3 构建、签名与 SGZ 导出通过。完整采集套件仍有旧 LED 时序断言与当前产品图案不一致，未作为本轮通过项。未实板验证，详见 [.scratch/main-fault-hold](../.scratch/main-fault-hold/issues/01-main-loop.md)。
+
+## DP 按 key/index 读写接口
+
+四个显式入口共用读写实现，原调用方迁至 by_key。native_sim 验证：
+
+- dp_core：线性与设备 Hash 模式通过，覆盖 index 首尾、越界、SIZE_MAX、
+  无效设备、空指针、key/index 互通、回调身份及失败、读写范围检查。
+- process_runtime：两种模式通过，产品调用方使用新 key 接口。
+- dp_storage：两种模式各 70 个跨进程存储场景通过；公共写入辅助函数按 index
+  写入、按 key 读取，覆盖持久化、回调修改、dirty、保存失败及重启恢复。
+- 周期保存场景与 ADC 应用套件通过。
+- 默认 MCUboot + IAPv3 固件构建及签名验证通过，未进行实板验证。
