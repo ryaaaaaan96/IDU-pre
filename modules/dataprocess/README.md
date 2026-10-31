@@ -4,8 +4,8 @@
 
 ## 接口及生命周期
 
-本页记录当前接口。四个读写接口增加显式类型、由 DP 执行整数转换的后续设计见
-[Transmit 与 DP 类型转换设计](../../docs/transmit-design.md)；尚未实现，不使用该设计中的接口调用当前代码。
+四个读写接口显式携带输入或输出类型，整数转换由 DP 执行。协议侧放缩与后续通信接入见
+[Transmit 与 DP 类型转换设计](../../docs/transmit-design.md)；transmit/vport 尚未实现。
 
 统一包含 `<dataprocess/dataprocess.h>`：
 
@@ -13,10 +13,10 @@
 int dp_init(void);
 int dp_register_device(uint16_t device_id, const dp_table_t *table);
 int dp_remove_device(uint16_t device_id);
-int dp_set_para_by_key(uint16_t device_id, uint16_t signal_key, const value_t *value);
-int dp_get_para_by_key(uint16_t device_id, uint16_t signal_key, value_t *value);
-int dp_set_para_by_index(uint16_t device_id, size_t signal_index, const value_t *value);
-int dp_get_para_by_index(uint16_t device_id, size_t signal_index, value_t *value);
+int dp_set_para_by_key(uint16_t device_id, uint16_t signal_key, value_type_t input_type, const value_t *value);
+int dp_get_para_by_key(uint16_t device_id, uint16_t signal_key, value_type_t output_type, value_t *value);
+int dp_set_para_by_index(uint16_t device_id, size_t signal_index, value_type_t input_type, const value_t *value);
+int dp_get_para_by_index(uint16_t device_id, size_t signal_index, value_type_t output_type, value_t *value);
 int dp_restore_defaults(uint16_t device_id);
 int dp_factory_reset(uint16_t device_id, dp_factory_reset_callback_t before_reboot, void *context);
 int dp_flush(void);
@@ -44,9 +44,16 @@ ISR 调用返回 -EWOULDBLOCK。缺少 init 时登记、删除、flush 返回 -E
 
 ## RAM、回调和校验
 
-调用者初始化整个 value_t，并按点类型填写对应成员；DP 不解释线协议字节序。
-set 复制输入 → 写回调 → 校验 → 更新 RAM 和时间；持久点与最后保存值比较，更新 dirty。
-get 无读回调时纯复制；有回调则操作快照副本，校验后更新 RAM，变化同样标记 dirty。
+调用者初始化整个 value_t，SET 按 input_type 填写对应成员，GET 按 output_type 读取；
+DP 不解释线协议字节序、比例或偏移，也没有隐式类型或旧接口兼容入口。
+set 按输入类型转换成内部类型 → 写回调 → 校验 → 更新 RAM 和时间；
+持久点与最后保存值比较，更新 dirty。
+get 无读回调时读取快照；有回调则操作内部类型副本，校验后更新 RAM，变化同样标记 dirty。
+最后转成 output_type 输出。U8/U16/S16/U32/S32 可互转，缩窄保留低位，
+有符号结果按目标位宽补码解释；不饱和，转换后的内部值仍接受配置范围检查。
+STRING/BYTES/WORDS 仅支持同类型；非法类型或不支持组合在回调前返回 -ENOTSUP。
+同类型保留原联合体复制行为，跨整数类型清零输出后填写目标成员。
+回调始终接收点表内部类型；协议侧应先做放缩再 SET，需要保留原值时 GET 应请求足够宽的类型。
 失败不修改调用方输入/读取输出；回调副作用不能回滚。所有成功接口返回 0。
 
 回调上下文含 device_id、signal_key、原行 signal_index、is_write 和可修改 value。

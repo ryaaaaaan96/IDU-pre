@@ -1156,3 +1156,11 @@ LED 播放改为每个指示状态独立的亮灭/持续时间步骤表，重复
   写入、按 key 读取，覆盖持久化、回调修改、dirty、保存失败及重启恢复。
 - 周期保存场景与 ADC 应用套件通过。
 - 默认 MCUboot + IAPv3 固件构建及签名验证通过，未进行实板验证。
+
+## DP 显式类型转换（2026-10-31）
+
+四个 DP key/index 接口要求显式传入输入或输出类型。
+`tests/dp_core` 的 `test_integer_conversion` 覆盖整数宽度、有符号扩展与低位截断；
+`test_conversion_callback_and_errors` 验证回调使用内部类型、范围检查、非法类型在回调前拒绝及输出保护。
+`tests/dp_storage` 使用跨类型接口执行保存与恢复，NVS 仍记录点表内部类型。
+本轮验证及通信模块尚未实现的范围见[任务记录](../.scratch/transmit-redesign/issues/02-typed-dp.md)。

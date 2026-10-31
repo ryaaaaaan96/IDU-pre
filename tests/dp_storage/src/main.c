@@ -166,7 +166,7 @@ ssize_t __wrap_nvs_write(struct nvs_fs *fs, uint16_t id, const void *data, size_
         if (mutate_write) {
             mutate_write = false;
             const value_t value = {.u16 = 31};
-            zassert_ok(dp_set_para_by_key(101, 300, &value));
+            zassert_ok(dp_set_para_by_key(101, 300, VALUE_TYPE_U16, &value));
         }
     }
     return __real_nvs_write(fs, id, data, len);
@@ -197,8 +197,8 @@ int __wrap_flash_area_erase(const struct flash_area *area, off_t offset, size_t 
         /* 擦除时设备锁已被持有，业务读写及其回调仍应完成。 */
         const value_t value = {.u16 = 900};
         value_t output = {0};
-        zassert_ok(dp_set_para_by_key(101, 300, &value));
-        zassert_ok(dp_get_para_by_key(101, 300, &output));
+        zassert_ok(dp_set_para_by_key(101, 300, VALUE_TYPE_U16, &value));
+        zassert_ok(dp_get_para_by_key(101, 300, VALUE_TYPE_U16, &output));
         zassert_equal(output.u16, 901);
     }
     if (fail_erase && offset >= 12288) {
@@ -241,15 +241,15 @@ static dp_point_data_t *point(uint16_t device_id, size_t index)
 
 static void set(uint16_t device_id, uint16_t value)
 {
-    const value_t input = {.u16 = value};
-    zassert_ok(dp_set_para_by_index(device_id, 0, &input));
+    const value_t input = {.u32 = value};
+    zassert_ok(dp_set_para_by_index(device_id, 0, VALUE_TYPE_U32, &input));
 }
 
 static uint16_t get(uint16_t device_id)
 {
     value_t output;
-    zassert_ok(dp_get_para_by_key(device_id, 300, &output));
-    return output.u16;
+    zassert_ok(dp_get_para_by_key(device_id, 300, VALUE_TYPE_S32, &output));
+    return (uint16_t)output.s32;
 }
 
 static void exercise(void)
@@ -313,11 +313,11 @@ static void exercise(void)
     zassert_true(point(101, 0)->dirty);
     zassert_ok(dp_flush());
     const value_t words = {.words = {0xabcd, 0xef01}};
-    zassert_ok(dp_set_para_by_key(101, 500, &words));
+    zassert_ok(dp_set_para_by_key(101, 500, VALUE_TYPE_WORDS, &words));
     zassert_ok(dp_restore_defaults(101));
     zassert_equal(get(101), 10);
     value_t output;
-    zassert_ok(dp_get_para_by_key(101, 500, &output));
+    zassert_ok(dp_get_para_by_key(101, 500, VALUE_TYPE_WORDS, &output));
     zassert_equal(output.words[0], 0xabcd);
     zassert_ok(dp_flush());
     /* 阻塞 Flash 保存时删除必须等待，但普通 RAM 更新仍能完成。 */
@@ -481,8 +481,8 @@ ZTEST(dp_storage, test_storage)
             fail_erase = false;
             const value_t value = {.u16 = 44};
             value_t output = {0};
-            zassert_ok(dp_set_para_by_key(101, 300, &value));
-            zassert_ok(dp_get_para_by_key(101, 300, &output));
+            zassert_ok(dp_set_para_by_key(101, 300, VALUE_TYPE_U16, &value));
+            zassert_ok(dp_get_para_by_key(101, 300, VALUE_TYPE_U16, &output));
             zassert_equal(output.u16, 44);
             zassert_ok(dp_restore_defaults(101));
             int writes = point_writes;
@@ -579,9 +579,9 @@ ZTEST(dp_storage, test_storage)
         set(101, 11);
         set(102, 22);
         const value_t protected_value = {.words = {0xabcd, 0xef01}};
-        zassert_ok(dp_set_para_by_key(101, 500, &protected_value));
+        zassert_ok(dp_set_para_by_key(101, 500, VALUE_TYPE_WORDS, &protected_value));
         const value_t signed_value = {.s32 = -123456};
-        zassert_ok(dp_set_para_by_key(101, 501, &signed_value));
+        zassert_ok(dp_set_para_by_key(101, 501, VALUE_TYPE_S32, &signed_value));
         zassert_ok(dp_flush());
         set(101, 12); /* 模拟保存周期内掉电，这个值不能跨启动保留。 */
     } else if (!strcmp(phase, "recover")) {
@@ -605,7 +605,7 @@ ZTEST(dp_storage, test_storage)
         const dp_table_t changed_table = {.points = &changed, .point_count = 1};
         zassert_ok(dp_register_device(101, &changed_table));
         value_t output = {0};
-        zassert_ok(dp_get_para_by_key(101, 300, &output));
+        zassert_ok(dp_get_para_by_key(101, 300, VALUE_TYPE_U32, &output));
         zassert_equal(output.u32, !strcmp(phase, "incompatible") ? 3 : 1);
         zassert_true(point(101, 0)->saved_valid);
         zassert_false(point(101, 0)->dirty);
@@ -621,7 +621,7 @@ ZTEST(dp_storage, test_storage)
         const dp_table_t changed_table = {.points = &changed, .point_count = 1};
         zassert_ok(dp_register_device(101, &changed_table));
         value_t output = {0};
-        zassert_ok(dp_get_para_by_key(101, 300, &output));
+        zassert_ok(dp_get_para_by_key(101, 300, VALUE_TYPE_U32, &output));
         zassert_equal(output.u32, 3);
         zassert_equal(point_writes, 0);
     } else if (!strcmp(phase, "range_recover")) {
@@ -714,7 +714,7 @@ ZTEST(dp_storage, test_storage)
     } else if (!strcmp(phase, "delete") || !strcmp(phase, "delete_metadata")) {
         zassert_ok(dp_register_device(101, &table));
         value_t signed_value;
-        zassert_ok(dp_get_para_by_key(101, 501, &signed_value));
+        zassert_ok(dp_get_para_by_key(101, 501, VALUE_TYPE_S32, &signed_value));
         zassert_equal(signed_value.s32, -123456); /* 暂时删点不删除历史。 */
         fail_erase = !strcmp(phase, "delete");
         fail_delete = !strcmp(phase, "delete_metadata");

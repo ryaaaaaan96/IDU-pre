@@ -1,4 +1,9 @@
-/** @file @brief 点表登记、同步点值读写。 */
+/**
+ * @file
+ * @brief 点表登记与显式类型的同步读写。
+ * @note 整数类型可互转，缩窄保留低位；数组类仅允许同类型，不解释协议放缩和字序。
+ * @note 不支持的类型组合在业务回调前返回 -ENOTSUP；业务回调始终使用点表内部类型。
+ */
 #ifndef DATAPROCESS_H
 #define DATAPROCESS_H
 
@@ -64,22 +69,26 @@ int dp_init(void);
 int dp_register_device(uint16_t device_id, const dp_table_t *table);
 
 /**
- * @brief 按 key 同步写点，回调后校验并更新 RAM；成功不代表已写入 Flash。
- * @note 按点表类型填写 value 对应成员，调用方须将整个联合体初始化；输入不被修改。
+ * @brief 按 key 同步写点，输入先转成点表类型，回调后校验并更新 RAM；成功不代表已写入 Flash。
+ * @note 按 input_type 填写 value 对应成员，调用方须将整个联合体初始化；输入不被修改。
  */
-int dp_set_para_by_key(uint16_t device_id, uint16_t signal_key, const value_t *value);
+int dp_set_para_by_key(
+    uint16_t device_id, uint16_t signal_key, value_type_t input_type, const value_t *value);
 
-/** @brief 按 key 同步读点，可执行读回调；成功返回 0，失败时输出保持不变。 */
-int dp_get_para_by_key(uint16_t device_id, uint16_t signal_key, value_t *value);
+/** @brief 按 key 同步读点，内部回调后转为 output_type；失败时输出保持不变。 */
+int dp_get_para_by_key(
+    uint16_t device_id, uint16_t signal_key, value_type_t output_type, value_t *value);
 
 /**
  * @brief 按表内从零开始的行下标同步写入；与按 key 写入共用回调、校验及保存语义。
  * @note signal_index 对应应用的 process 枚举；越界返回 -ENOENT。
  */
-int dp_set_para_by_index(uint16_t device_id, size_t signal_index, const value_t *value);
+int dp_set_para_by_index(
+    uint16_t device_id, size_t signal_index, value_type_t input_type, const value_t *value);
 
 /** @brief 按行下标同步读取；读回调可修改点值，越界返回 -ENOENT。 */
-int dp_get_para_by_index(uint16_t device_id, size_t signal_index, value_t *value);
+int dp_get_para_by_index(
+    uint16_t device_id, size_t signal_index, value_type_t output_type, value_t *value);
 
 /**
  * @brief 将指定设备的点值恢复为配置初值，跳过 SKIP_DEFAULTS 点，不调用业务回调。

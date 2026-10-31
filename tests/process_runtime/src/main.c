@@ -17,12 +17,12 @@ ZTEST(process_runtime, test_local_process_without_communication)
 
     const value_t value = {.u16 = 0x55aa};
     value_t result;
-    zassert_ok(dp_set_para_by_key(DEVICE_LOCAL, SIGNAL_DI, &value));
-    zassert_ok(dp_get_para_by_key(DEVICE_LOCAL, SIGNAL_DI, &result));
+    zassert_ok(dp_set_para_by_key(DEVICE_LOCAL, SIGNAL_DI, VALUE_TYPE_U16, &value));
+    zassert_ok(dp_get_para_by_key(DEVICE_LOCAL, SIGNAL_DI, VALUE_TYPE_U16, &result));
     zassert_equal(result.u16, value.u16);
 
     value_t period;
-    zassert_ok(dp_get_para_by_key(DEVICE_LOCAL, SIGNAL_SAMPLE_PERIOD, &period));
+    zassert_ok(dp_get_para_by_key(DEVICE_LOCAL, SIGNAL_SAMPLE_PERIOD, VALUE_TYPE_U16, &period));
     zassert_equal(period.u16, CONFIG_IDU_SAMPLE_PERIOD_MS);
 
     zassert_equal(protocol_init(), -EEXIST);

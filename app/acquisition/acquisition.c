@@ -145,7 +145,8 @@ int acquisition_cycle(void)
         digital |= (uint16_t)((uint32_t)value << bit);
     }
     point_value.u16 = digital;
-    int err = dp_set_para_by_key(digital_inputs.device_id, digital_inputs.signal_key, &point_value);
+    int err = dp_set_para_by_key(
+        digital_inputs.device_id, digital_inputs.signal_key, VALUE_TYPE_U16, &point_value);
     if (err) {
         return err;
     }
@@ -175,7 +176,7 @@ int acquisition_cycle(void)
             value = UINT16_MAX;
         }
         point_value.u16 = (uint16_t)value;
-        err = dp_set_para_by_key(input->device_id, input->signal_key, &point_value);
+        err = dp_set_para_by_key(input->device_id, input->signal_key, VALUE_TYPE_U16, &point_value);
         if (err) {
             return err;
         }

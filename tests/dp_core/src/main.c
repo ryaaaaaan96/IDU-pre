@@ -100,14 +100,14 @@ static const dp_point_data_t *data(uint16_t device, size_t index)
 static void write_u16(uint16_t key, uint16_t value, int expected)
 {
     const value_t input = {.u16 = value};
-    zassert_equal(dp_set_para_by_key(7, key, &input), expected);
+    zassert_equal(dp_set_para_by_key(7, key, VALUE_TYPE_U16, &input), expected);
     zassert_equal(input.u16, value);
 }
 
 static void read_u16(uint16_t key, uint16_t expected)
 {
     value_t value;
-    zassert_ok(dp_get_para_by_key(7, key, &value));
+    zassert_ok(dp_get_para_by_key(7, key, VALUE_TYPE_U16, &value));
     zassert_equal(value.u16, expected);
 }
 
@@ -123,7 +123,7 @@ static void writer(void *a, void *b, void *c)
     for (size_t i = 0; i < 64; ++i) {
         uint8_t byte = i & 1 ? 0x55 : 0xaa;
         const value_t value = {.bytes = {byte, byte, byte}};
-        zassert_ok(dp_set_para_by_key(7, 99, &value));
+        zassert_ok(dp_set_para_by_key(7, 99, VALUE_TYPE_BYTES, &value));
         k_yield();
     }
 }
@@ -135,7 +135,7 @@ static void reader(void *a, void *b, void *c)
     ARG_UNUSED(c);
     for (size_t i = 0; i < 64; ++i) {
         value_t value;
-        zassert_ok(dp_get_para_by_key(7, 99, &value));
+        zassert_ok(dp_get_para_by_key(7, 99, VALUE_TYPE_BYTES, &value));
         zassert_equal(value.bytes[0], value.bytes[1]);
         zassert_equal(value.bytes[1], value.bytes[2]);
         k_yield();
@@ -171,43 +171,44 @@ ZTEST(dp_core, test_core)
     /* index 为行号而非 key；两种入口访问同一份数据。 */
     value_t indexed = {.bytes = {9, 8, 7}};
     value_t indexed_output = {0};
-    zassert_ok(dp_set_para_by_index(7, 0, &indexed));
-    zassert_ok(dp_get_para_by_key(7, 99, &indexed_output));
+    zassert_ok(dp_set_para_by_index(7, 0, VALUE_TYPE_BYTES, &indexed));
+    zassert_ok(dp_get_para_by_key(7, 99, VALUE_TYPE_BYTES, &indexed_output));
     zassert_mem_equal(indexed.bytes, indexed_output.bytes, 3);
-    zassert_ok(dp_set_para_by_key(7, 99, &(value_t){.bytes = {1, 2, 3}}));
-    zassert_ok(dp_get_para_by_index(7, 0, &indexed_output));
+    zassert_ok(dp_set_para_by_key(7, 99, VALUE_TYPE_BYTES, &(value_t){.bytes = {1, 2, 3}}));
+    zassert_ok(dp_get_para_by_index(7, 0, VALUE_TYPE_BYTES, &indexed_output));
     zassert_equal(indexed_output.bytes[0], 1);
-    zassert_ok(dp_get_para_by_index(7, ARRAY_SIZE(rows) - 1, &indexed_output));
+    zassert_ok(dp_get_para_by_index(7, ARRAY_SIZE(rows) - 1, VALUE_TYPE_WORDS, &indexed_output));
     zassert_equal(indexed_output.words[2], 3);
 
     /* 两种入口均提供真实 key/index，执行相同回调和范围检查。 */
     write_result = 60;
-    zassert_ok(dp_set_para_by_index(7, 1, &(value_t){.u16 = 55}));
+    zassert_ok(dp_set_para_by_index(7, 1, VALUE_TYPE_U16, &(value_t){.u16 = 55}));
     zassert_equal(data(7, 1)->value.u16, 60);
     read_result = 70;
-    zassert_ok(dp_get_para_by_index(7, 1, &indexed_output));
+    zassert_ok(dp_get_para_by_index(7, 1, VALUE_TYPE_U16, &indexed_output));
     zassert_equal(indexed_output.u16, 70);
     read_result = 101;
-    zassert_equal(dp_get_para_by_index(7, 1, &indexed_output), -ERANGE);
+    zassert_equal(dp_get_para_by_index(7, 1, VALUE_TYPE_U16, &indexed_output), -ERANGE);
     zassert_equal(indexed_output.u16, 70);
     write_result = 101;
-    zassert_equal(dp_set_para_by_index(7, 1, &(value_t){.u16 = 55}), -ERANGE);
+    zassert_equal(dp_set_para_by_index(7, 1, VALUE_TYPE_U16, &(value_t){.u16 = 55}), -ERANGE);
     fail_callback = true;
-    zassert_equal(dp_set_para_by_index(7, 1, &indexed), -EIO);
-    zassert_equal(dp_get_para_by_index(7, 1, &indexed_output), -EIO);
+    zassert_equal(dp_set_para_by_index(7, 1, VALUE_TYPE_U16, &indexed), -EIO);
+    zassert_equal(dp_get_para_by_index(7, 1, VALUE_TYPE_U16, &indexed_output), -EIO);
     fail_callback = false;
     write_result = 0;
     read_result = 0;
-    zassert_ok(dp_set_para_by_index(7, 1, &(value_t){.u16 = 50}));
+    zassert_ok(dp_set_para_by_index(7, 1, VALUE_TYPE_U16, &(value_t){.u16 = 50}));
 
-    zassert_equal(dp_get_para_by_index(7, ARRAY_SIZE(rows), &indexed_output), -ENOENT);
-    zassert_equal(dp_set_para_by_index(7, SIZE_MAX, &indexed), -ENOENT);
-    zassert_equal(dp_get_para_by_index(999, 0, &indexed_output), -ENOENT);
-    zassert_equal(dp_set_para_by_index(999, 0, &indexed), -ENOENT);
-    zassert_equal(dp_get_para_by_index(0, 0, &indexed_output), -EINVAL);
-    zassert_equal(dp_set_para_by_index(0, 0, &indexed), -EINVAL);
-    zassert_equal(dp_get_para_by_index(7, 0, NULL), -EINVAL);
-    zassert_equal(dp_set_para_by_index(7, 0, NULL), -EINVAL);
+    zassert_equal(
+        dp_get_para_by_index(7, ARRAY_SIZE(rows), VALUE_TYPE_U16, &indexed_output), -ENOENT);
+    zassert_equal(dp_set_para_by_index(7, SIZE_MAX, VALUE_TYPE_U16, &indexed), -ENOENT);
+    zassert_equal(dp_get_para_by_index(999, 0, VALUE_TYPE_BYTES, &indexed_output), -ENOENT);
+    zassert_equal(dp_set_para_by_index(999, 0, VALUE_TYPE_BYTES, &indexed), -ENOENT);
+    zassert_equal(dp_get_para_by_index(0, 0, VALUE_TYPE_BYTES, &indexed_output), -EINVAL);
+    zassert_equal(dp_set_para_by_index(0, 0, VALUE_TYPE_BYTES, &indexed), -EINVAL);
+    zassert_equal(dp_get_para_by_index(7, 0, VALUE_TYPE_BYTES, NULL), -EINVAL);
+    zassert_equal(dp_set_para_by_index(7, 0, VALUE_TYPE_BYTES, NULL), -EINVAL);
 
 #ifdef CONFIG_DP_HASH_LOOKUP
     /* 逐一失败于临时集合及设备索引扩容，旧设备始终可读。 */
@@ -229,9 +230,9 @@ ZTEST(dp_core, test_core)
         map_allocations_left = -1;
         zassert_true(registered);
         value_t value;
-        zassert_ok(dp_get_para_by_key(device, 99, &value));
+        zassert_ok(dp_get_para_by_key(device, 99, VALUE_TYPE_BYTES, &value));
         zassert_equal(value.bytes[0], 1);
-        zassert_equal(dp_get_para_by_key(device, 999, &value), -ENOENT);
+        zassert_equal(dp_get_para_by_key(device, 999, VALUE_TYPE_U16, &value), -ENOENT);
     }
 #endif
     size_t map_baseline = active_map_allocations;
@@ -264,19 +265,19 @@ ZTEST(dp_core, test_core)
         zassert_is_null(data(9, 0));
     }
     value_t words;
-    zassert_ok(dp_get_para_by_key(7, 5, &words));
+    zassert_ok(dp_get_para_by_key(7, 5, VALUE_TYPE_WORDS, &words));
     zassert_equal(words.words[0], 1);
     zassert_equal(words.words[1], 2);
     zassert_equal(words.words[2], 3);
-    zassert_ok(dp_set_para_by_key(7, 4, &(value_t){.u8 = 9}));
-    zassert_equal(dp_set_para_by_key(7, 4, &(value_t){.u8 = 10}), -ERANGE);
+    zassert_ok(dp_set_para_by_key(7, 4, VALUE_TYPE_U8, &(value_t){.u8 = 9}));
+    zassert_equal(dp_set_para_by_key(7, 4, VALUE_TYPE_U8, &(value_t){.u8 = 10}), -ERANGE);
     write_u16(2, (uint16_t)-10, 0);
     write_u16(2, (uint16_t)-11, -ERANGE);
-    zassert_ok(dp_set_para_by_key(7, 3, &(value_t){.s32 = -1}));
-    zassert_equal(dp_set_para_by_key(7, 3, &(value_t){.s32 = INT32_MIN}), -ERANGE);
-    zassert_equal(dp_set_para_by_key(7, 301, &(value_t){.u16 = 1}), -ENOENT);
-    zassert_equal(dp_set_para_by_key(7, 300, NULL), -EINVAL);
-    zassert_equal(dp_get_para_by_key(7, 300, NULL), -EINVAL);
+    zassert_ok(dp_set_para_by_key(7, 3, VALUE_TYPE_S32, &(value_t){.s32 = -1}));
+    zassert_equal(dp_set_para_by_key(7, 3, VALUE_TYPE_S32, &(value_t){.s32 = INT32_MIN}), -ERANGE);
+    zassert_equal(dp_set_para_by_key(7, 301, VALUE_TYPE_U16, &(value_t){.u16 = 1}), -ENOENT);
+    zassert_equal(dp_set_para_by_key(7, 300, VALUE_TYPE_U16, NULL), -EINVAL);
+    zassert_equal(dp_get_para_by_key(7, 300, VALUE_TYPE_U16, NULL), -EINVAL);
 
     const uint32_t epoch = 1761600000U;
     const struct timespec now = {.tv_sec = epoch};
@@ -296,18 +297,18 @@ ZTEST(dp_core, test_core)
     write_result = 0;
     read_result = 101;
     value_t output = {.u16 = 0xbbaa};
-    zassert_equal(dp_get_para_by_key(7, 300, &output), -ERANGE);
+    zassert_equal(dp_get_para_by_key(7, 300, VALUE_TYPE_U16, &output), -ERANGE);
     zassert_equal(output.u16, 0xbbaa);
     read_result = 0;
     fail_callback = true;
     write_u16(300, 50, -EIO);
-    zassert_equal(dp_get_para_by_key(7, 300, &output), -EIO);
+    zassert_equal(dp_get_para_by_key(7, 300, VALUE_TYPE_U16, &output), -EIO);
     fail_callback = false;
     zassert_equal(data(7, 1)->value.u16, before.value.u16);
     zassert_equal(data(7, 1)->updated_at_s, before.updated_at_s);
 
     const value_t initial = {.bytes = {0x55, 0x55, 0x55}};
-    zassert_ok(dp_set_para_by_key(7, 99, &initial));
+    zassert_ok(dp_set_para_by_key(7, 99, VALUE_TYPE_BYTES, &initial));
     k_thread_create(&writer_thread,
         writer_stack,
         K_THREAD_STACK_SIZEOF(writer_stack),
@@ -333,10 +334,12 @@ ZTEST(dp_core, test_core)
     write_u16(300, 80, 0);
     const dp_point_data_t skipped_before = *data(7, 1);
     const value_t other_device = {.bytes = {9, 8, 7}};
-    zassert_ok(dp_set_para_by_key(8, 99, &other_device));
-    zassert_ok(dp_set_para_by_key(7, 1, &(value_t){.u32 = 0xf0000000U}));
-    zassert_equal(dp_set_para_by_key(7, 1, &(value_t){.u32 = 0xf0000001U}), -ERANGE);
-    zassert_equal(dp_set_para_by_key(7, 1, &(value_t){.u32 = 0x0fffffffU}), -ERANGE);
+    zassert_ok(dp_set_para_by_key(8, 99, VALUE_TYPE_BYTES, &other_device));
+    zassert_ok(dp_set_para_by_key(7, 1, VALUE_TYPE_U32, &(value_t){.u32 = 0xf0000000U}));
+    zassert_equal(
+        dp_set_para_by_key(7, 1, VALUE_TYPE_U32, &(value_t){.u32 = 0xf0000001U}), -ERANGE);
+    zassert_equal(
+        dp_set_para_by_key(7, 1, VALUE_TYPE_U32, &(value_t){.u32 = 0x0fffffffU}), -ERANGE);
     zassert_equal(dp_restore_defaults(0), -EINVAL);
     zassert_equal(dp_restore_defaults(123), -ENOENT);
     fail_callback = true;
@@ -354,6 +357,147 @@ ZTEST(dp_core, test_core)
     zassert_ok(sys_clock_settime(SYS_CLOCK_REALTIME, &beyond));
     write_u16(300, 80, 0);
     zassert_equal(data(7, 1)->updated_at_s, 0);
+}
+
+/* 与现有设备隔离，覆盖全部整数方向和符号边界。 */
+ZTEST(dp_core, test_integer_conversion)
+{
+    static const dp_point_config_t points[] = {
+        {.signal_key = 10, .size = 1, .type = VALUE_TYPE_U8},
+        {.signal_key = 20, .size = 2, .type = VALUE_TYPE_U16},
+        {.signal_key = 30, .size = 2, .type = VALUE_TYPE_S16},
+        {.signal_key = 40, .size = 4, .type = VALUE_TYPE_U32},
+        {.signal_key = 50, .size = 4, .type = VALUE_TYPE_S32},
+    };
+    const dp_table_t model = {.points = points, .point_count = ARRAY_SIZE(points)};
+    zassert_ok(dp_init());
+    zassert_ok(dp_register_device(600, &model));
+
+    const struct {
+        value_type_t type;
+        value_t value;
+        int64_t number;
+    } inputs[] = {
+        {VALUE_TYPE_U8, {.u8 = UINT8_MAX}, UINT8_MAX},
+        {VALUE_TYPE_U16, {.u16 = UINT16_MAX}, UINT16_MAX},
+        {VALUE_TYPE_S16, {.s16 = INT16_MIN}, INT16_MIN},
+        {VALUE_TYPE_S16, {.s16 = -1}, -1},
+        {VALUE_TYPE_U32, {.u32 = UINT32_MAX}, UINT32_MAX},
+        {VALUE_TYPE_U32, {.u32 = 70000}, 70000},
+        {VALUE_TYPE_S32, {.s32 = INT32_MIN}, INT32_MIN},
+        {VALUE_TYPE_S32, {.s32 = INT32_MAX}, INT32_MAX},
+        {VALUE_TYPE_S32, {.s32 = -1}, -1},
+    };
+
+    for (size_t n = 0; n < ARRAY_SIZE(inputs); ++n) {
+        for (size_t i = 0; i < ARRAY_SIZE(points); ++i) {
+            const value_t original = inputs[n].value;
+            zassert_ok(dp_set_para_by_index(600, i, inputs[n].type, &original));
+            zassert_mem_equal(&original, &inputs[n].value, sizeof(original));
+            /* 先按内部位宽计算期望，再检查 GET 的全部目标类型。 */
+            int64_t expected = inputs[n].number;
+            if (i == 0) {
+                expected = (uint8_t)expected;
+            } else if (i == 1) {
+                expected = (uint16_t)expected;
+            } else if (i == 2) {
+                expected = (uint16_t)expected;
+                if (expected > INT16_MAX) {
+                    expected -= 65536;
+                }
+            } else {
+                expected = (uint32_t)expected;
+                if (i == 4 && expected > INT32_MAX) {
+                    expected -= 4294967296LL;
+                }
+            }
+            value_t out;
+            zassert_ok(dp_get_para_by_key(600, points[i].signal_key, VALUE_TYPE_U8, &out));
+            zassert_equal(out.u8, (uint8_t)expected);
+            zassert_ok(dp_get_para_by_index(600, i, VALUE_TYPE_U16, &out));
+            zassert_equal(out.u16, (uint16_t)expected);
+            zassert_ok(dp_get_para_by_key(600, points[i].signal_key, VALUE_TYPE_U32, &out));
+            zassert_equal(out.u32, (uint32_t)expected);
+            zassert_ok(dp_get_para_by_index(600, i, VALUE_TYPE_S16, &out));
+            int64_t signed16 = (uint16_t)expected;
+            if (signed16 > INT16_MAX) {
+                signed16 -= 65536;
+            }
+            zassert_equal(out.s16, signed16);
+            zassert_ok(dp_get_para_by_key(600, points[i].signal_key, VALUE_TYPE_S32, &out));
+            int64_t signed32 = (uint32_t)expected;
+            if (signed32 > INT32_MAX) {
+                signed32 -= 4294967296LL;
+            }
+            zassert_equal(out.s32, signed32);
+        }
+    }
+    zassert_ok(dp_remove_device(600));
+}
+
+static unsigned typed_callbacks;
+
+static int typed_callback(const dp_callback_context_t *context)
+{
+    ++typed_callbacks;
+    zassert_equal(context->device_id, 601);
+    zassert_equal(context->signal_index, 0);
+    zassert_equal(context->signal_key, 123);
+    if (context->is_write) {
+        zassert_equal(context->value->u16, 4464);
+        context->value->u16 = 700;
+    } else {
+        zassert_equal(context->value->u16, 700);
+        context->value->u16 = 800;
+    }
+    return 0;
+}
+
+ZTEST(dp_core, test_conversion_callback_and_errors)
+{
+    static const dp_point_config_t points[] = {
+        {.signal_key = 123,
+            .size = 2,
+            .type = VALUE_TYPE_U16,
+            .flags = DP_POINT_FLAG_CHECK_RANGE,
+            .data = {.minimum.u16 = 1, .maximum.u16 = 1000, .initial.u16 = 1},
+            .write_callback = typed_callback,
+            .read_callback = typed_callback},
+        {.signal_key = 124,
+            .size = 2,
+            .type = VALUE_TYPE_U16,
+            .flags = DP_POINT_FLAG_CHECK_RANGE,
+            .data = {.minimum.u16 = 1, .maximum.u16 = 1000, .initial.u16 = 1}},
+        {.signal_key = 125, .size = 3, .type = VALUE_TYPE_BYTES},
+        {.signal_key = 126, .size = 3, .type = VALUE_TYPE_STRING},
+    };
+    const dp_table_t model = {.points = points, .point_count = ARRAY_SIZE(points)};
+    zassert_ok(dp_init());
+    zassert_ok(dp_register_device(601, &model));
+    typed_callbacks = 0;
+    value_t input = {.u32 = 70000};
+    zassert_ok(dp_set_para_by_key(601, 123, VALUE_TYPE_U32, &input));
+    zassert_equal(input.u32, 70000);
+    value_t output = {0};
+    zassert_ok(dp_get_para_by_index(601, 0, VALUE_TYPE_U32, &output));
+    zassert_equal(output.u32, 800);
+    zassert_equal(typed_callbacks, 2);
+    const value_t untouched = {.bytes = {0xab, 0xcd, 0xef}};
+    output = untouched;
+    zassert_equal(dp_get_para_by_key(601, 123, VALUE_TYPE_BYTES, &output), -ENOTSUP);
+    zassert_equal(dp_set_para_by_index(601, 0, VALUE_TYPE_BYTES, &input), -ENOTSUP);
+    zassert_equal(dp_get_para_by_index(601, 0, (value_type_t)-1, &output), -ENOTSUP);
+    zassert_equal(dp_set_para_by_key(601, 123, (value_type_t)99, &input), -ENOTSUP);
+    zassert_equal(typed_callbacks, 2);
+    zassert_mem_equal(&output, &untouched, sizeof(output));
+    zassert_equal(dp_set_para_by_index(601, 1, VALUE_TYPE_U32, &input), -ERANGE);
+    zassert_equal(data(601, 1)->value.u16, 1);
+    zassert_ok(dp_set_para_by_key(601, 125, VALUE_TYPE_BYTES, &untouched));
+    zassert_equal(dp_get_para_by_key(601, 125, VALUE_TYPE_STRING, &output), -ENOTSUP);
+    zassert_equal(dp_set_para_by_key(601, 126, VALUE_TYPE_BYTES, &untouched), -ENOTSUP);
+    zassert_ok(dp_get_para_by_key(601, 125, VALUE_TYPE_BYTES, &output));
+    zassert_mem_equal(output.bytes, untouched.bytes, 3);
+    zassert_ok(dp_remove_device(601));
 }
 
 ZTEST_SUITE(dp_core, NULL, NULL, NULL, NULL, NULL);

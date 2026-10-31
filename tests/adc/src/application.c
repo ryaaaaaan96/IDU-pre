@@ -10,9 +10,11 @@ static uint16_t di_value, current_values[SAMPLE_ANALOG_COUNT];
 static unsigned updates;
 static int set_error;
 
-int dp_set_para_by_key(uint16_t device, uint16_t signal, const value_t *value)
+int dp_set_para_by_key(
+    uint16_t device, uint16_t signal, value_type_t input_type, const value_t *value)
 {
     zassert_equal(device, DEVICE_LOCAL);
+    zassert_equal(input_type, VALUE_TYPE_U16);
     if (set_error) {
         return set_error;
     }

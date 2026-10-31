@@ -6,7 +6,7 @@
 uint16_t points_sample_period_ms(void)
 {
     value_t value;
-    if (dp_get_para_by_key(DEVICE_LOCAL, SIGNAL_SAMPLE_PERIOD, &value) < 0) {
+    if (dp_get_para_by_key(DEVICE_LOCAL, SIGNAL_SAMPLE_PERIOD, VALUE_TYPE_U16, &value) < 0) {
         return CONFIG_IDU_SAMPLE_PERIOD_MS;
     }
     return value.u16;

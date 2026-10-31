@@ -21,7 +21,7 @@
 
 参数生命周期和延后保存见 [ADR 0015](adr/0015-dp-device-storage.md)。
 后续通信设计见 [Transmit 与 DP 类型转换设计](transmit-design.md) 和
-[ADR 0016](adr/0016-transmit-stream-and-dp-conversion.md)；均为已确认设计，尚未实现。
+[ADR 0016](adr/0016-transmit-stream-and-dp-conversion.md)；通信部分尚未实现；DP 显式类型接口与整数转换已落地。
 当前有效决策见 [`adr/`](adr/)。`modules/collect`、`modules/transmit`、
 `modules/vport` 已删除，相关 ADR 保留为历史记录；重新接入通信需要新的适配层。
 
