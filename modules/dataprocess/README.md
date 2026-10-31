@@ -4,6 +4,9 @@
 
 ## 接口及生命周期
 
+本页记录当前接口。四个读写接口增加显式类型、由 DP 执行整数转换的后续设计见
+[Transmit 与 DP 类型转换设计](../../docs/transmit-design.md)；尚未实现，不使用该设计中的接口调用当前代码。
+
 统一包含 `<dataprocess/dataprocess.h>`：
 
 ```c
