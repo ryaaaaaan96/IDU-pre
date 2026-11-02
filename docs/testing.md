@@ -1192,3 +1192,11 @@ compat/server_fixes.py 只修改固定 Zephyr 版本的构建副本，west 源�
 本轮记录见[RAW 复用任务](../.scratch/transmit-redesign/issues/04-zephyr-raw-server.md)。
 
 RAW 专项还验证外部提交在复制前被拒绝、其他 RAW 接口保持 workqueue，以及客户端空载荷/单字节异常响应。
+
+## 2026-11-02：恢复 IAPv3 完整 ADU 路由
+
+新增地址段匹配、广播静默、站号过滤、CRC 拒绝、超长 FC16、地址重叠检查，
+并保留普通测点回归。iap-transmit 变体复用产品地址段表，逐字节输入完整上传，
+验证真实接收器解包、验签、备用槽内容和试升级请求。详见
+[任务记录](../.scratch/transmit-redesign/issues/14-iap-address-routes.md)。
+模拟器与固件构建不能替代实板串口上传和上位机互通验证。

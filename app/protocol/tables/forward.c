@@ -1,6 +1,9 @@
 #include "process_table.h"
 #include "signal_keys.h"
 #include <transmit/transmit.h>
+#ifdef CONFIG_IDU_IAPV3
+#include <iap/iap.h>
+#endif
 
 /* 独立测试地址，不沿用历史协议地址或 signal_key；DP 点仅作为测试数据源。 */
 static const value_scale_t sample_period_scale = {
@@ -101,3 +104,25 @@ const tr_modbus_point_t protocol_forward_points[] = {
     },
 };
 const size_t protocol_forward_point_count = ARRAY_SIZE(protocol_forward_points);
+
+#ifdef CONFIG_IDU_IAPV3
+static int upgrade_access(void *context,
+    const struct modbus_adu *request,
+    struct modbus_adu *response)
+{
+    ARG_UNUSED(context);
+    /* 单物理入口的固定会话编号；与 UART 控制器编号无关。 */
+    int err = iap_route(0, request, response);
+    if (err == IAP_ROUTE_SILENT) {
+        return TR_MODBUS_ROUTE_SILENT;
+    }
+    return err;
+}
+
+const tr_modbus_route_t protocol_upgrade_routes[] = {
+    {.address = 20003, .count = 1, .callback = upgrade_access},
+    {.address = 20049, .count = 56, .callback = upgrade_access},
+    {.address = 31996, .count = 2, .callback = upgrade_access},
+};
+const size_t protocol_upgrade_route_count = ARRAY_SIZE(protocol_upgrade_routes);
+#endif

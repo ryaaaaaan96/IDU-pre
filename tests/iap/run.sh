@@ -36,3 +36,10 @@ env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/iap -d build/IDU-pre/tests/iap-configured -- \
     -DEXTRA_CONF_FILE=configured.conf -DEXTRA_DTC_OVERLAY_FILE=configured.overlay
 timeout 30s build/IDU-pre/tests/iap-configured/zephyr/zephyr.exe -flash_in_ram
+
+# 应用地址段回调 + vport/transmit + 真实接收器的完整签名升级。
+env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
+    applications/IDU-pre/tests/iap -d build/IDU-pre/tests/iap-transmit -- \
+    -DEXTRA_CONF_FILE=transmit.conf -DEXTRA_DTC_OVERLAY_FILE=transmit.overlay
+timeout 30s build/IDU-pre/tests/iap-transmit/zephyr/zephyr.exe -flash_in_ram \
+    -test=iap::test_transmit_end_to_end_upgrade

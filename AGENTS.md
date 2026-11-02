@@ -26,7 +26,7 @@
 - `app/main.c` 启动状态、硬件和可选 IAP 后调用 `protocol_init()`；protocol 登记 DP 后由 port.c 初始化转发实例和 APP 串口线程。保留采样周期和休眠，终止后主线程留驻并每 5 秒查询打印最近故障。`acquisition` 只按硬件 spec 与 device_id/signal_key 映射读取 DI 位图和 ADC，并用 `dp_set_para_by_key()` 同步写点。
 - `app/process/points.c` 只保留 points_sample_period_ms()。
 - 状态与 LED 归 `app/status/`；看门狗实现在 `modules/watchdog`；IAP 归 `modules/iap`，调用方直接使用 `<iap/iap.h>`。
-- IAP 模块提供 `iap_route()`，但当前只装配标准 Modbus 点表，尚未接入 IAP 路由，串口上传尚不可用；不要在文档或报告中宣称 IAPv3 上传已工作。重新启用必须新增最小路由适配层并单独验证。
+- IAP 通过 forward.c 的完整 ADU 地址段回调接入 transmit，在标准功能码校验前调用 `iap_route()`，保留旧超长 FC16。修改上传路由前读 modules/iap/README.md；模拟器组合测试已通过，实板上传及旧上位机互通仍待验证。
 
 ## 构建与验证
 

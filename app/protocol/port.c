@@ -25,6 +25,13 @@ static const struct device *const uart = DEVICE_DT_GET(FORWARD_UART);
 static const struct gpio_dt_spec direction = GPIO_DT_SPEC_GET(FORWARD_NODE, de_gpios);
 extern const tr_modbus_point_t protocol_forward_points[];
 extern const size_t protocol_forward_point_count;
+#ifdef CONFIG_IDU_IAPV3
+extern const tr_modbus_route_t protocol_upgrade_routes[];
+extern const size_t protocol_upgrade_route_count;
+#define FORWARD_FRAME_SIZE CONFIG_MODBUS_BUFFER_SIZE
+#else
+#define FORWARD_FRAME_SIZE 256
+#endif
 
 /* 中断只接收字节和时间戳；判帧、DP 访问及发送均由 APP 线程完成。 */
 typedef struct {
@@ -39,7 +46,7 @@ static const uint8_t *tx_data;
 static size_t tx_remaining;
 static uint32_t last_cycle;
 static uint64_t accumulated_cycles;
-static K_THREAD_STACK_DEFINE(port_stack, 4096);
+static K_THREAD_STACK_DEFINE(port_stack, 8192);
 static struct k_thread port_thread;
 
 /* 频繁采样扩展 32 位硬件周期计数；小临界区使线程与 ISR 共用单调时基。 */
@@ -116,15 +123,15 @@ static vport_t forward_port = {.send = send_bytes};
 /* 启动时读取站号并填充，绑定后不再修改。 */
 static tr_protocol_t protocols[] = {
     {.type = TR_PROTOCOL_MODBUS,
-        .max_frame = 256,
-        .timeout_us = 100000,
+        .max_frame = FORWARD_FRAME_SIZE,
+        .timeout_us = 500000,
         .modbus = {.gap_us = FORWARD_GAP_US}},
 };
 static const tr_config_t ports[] = {
     {.port = &forward_port,
         .protocols = protocols,
         .protocol_count = ARRAY_SIZE(protocols),
-        .rx_capacity = 256,
+        .rx_capacity = FORWARD_FRAME_SIZE,
         .tx_capacity = 256,
         .send_timeout_ms = 100},
 };
@@ -199,6 +206,10 @@ int protocol_port_init(void)
     protocols[0].modbus.unit = address.u8;
     protocols[0].modbus.points = protocol_forward_points;
     protocols[0].modbus.point_count = protocol_forward_point_count;
+#ifdef CONFIG_IDU_IAPV3
+    protocols[0].modbus.routes = protocol_upgrade_routes;
+    protocols[0].modbus.route_count = protocol_upgrade_route_count;
+#endif
     for (size_t i = 0; i < ARRAY_SIZE(ports); ++i) {
         err = tr_register(&ports[i]);
         if (err) {

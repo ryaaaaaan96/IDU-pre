@@ -1,0 +1,8 @@
+/ {
+    aliases { dp-params = &dp_params; };
+};
+&flash0 {
+    partitions {
+        dp_params: partition@1c0000 { reg = <0x1c0000 0x20000>; };
+    };
+};

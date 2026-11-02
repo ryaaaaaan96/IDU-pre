@@ -209,7 +209,9 @@ int tr_register(const tr_config_t *config)
             }
             gap = protocol->modbus.gap_us;
             if (protocol->timeout_us < gap || protocol->max_frame < 4 ||
-                protocol->max_frame > 256 || config->tx_capacity < 256) {
+                protocol->max_frame > sizeof(((struct modbus_adu *)0)->data) + 4U ||
+                (protocol->max_frame > 256 && !protocol->modbus.route_count) ||
+                config->tx_capacity < 256) {
                 return -EINVAL;
             }
         } else if (!protocol->custom.check || !protocol->custom.execute) {

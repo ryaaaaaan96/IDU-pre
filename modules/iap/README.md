@@ -22,7 +22,8 @@ IDU 无需编写独立的 IAP 适配 `.c`。配置由以下内容提供：
 | 暂存容量上限 | `CONFIG_IAP_MAX_CONTAINER_SIZE`，限定位图大小；位图及工作区在初始化时从堆申请，实际接收限额为暂存分区大小 |
 
 DP 参数由独立线程延后保存，默认 IAP 配置没有自动 DP 保存门禁。
-后续接入上传路由时，升级前需由应用停止参数修改并同步 flush；本轮不增加路由。
+当前默认配置未增加 DP 保存门禁；升级重启前最后五秒内的未保存参数可能丢失。
+需要保留这部分参数时，应通过 prepare_reboot/cancel_reboot 配对钩子冻结修改并 flush。
 IAP 的升级结果日志仍独立使用 NVS；应用配置显式保持其 CRC 选项，避免已有日志格式失配。
 
 构建时从 PEM 导出公钥和哈希，签名私钥不会编入固件；AES 是旧协议互操作常量，
@@ -47,20 +48,20 @@ IAP 的升级结果日志仍独立使用 NVS；应用配置显式保持其 CRC �
 
 应用在开放 Modbus 路由之前调用初始化接口。模块不使用
 `SYS_INIT` 提前启动，也不注册或占用串口；调用方负责站号过滤及超长 FC16 接收。
-IDU 的 [`app/main.c`](../../app/main.c) 直接调用 `iap_init()`，
-[`app/protocol/tables/segments.c`](../../app/protocol/tables/segments.c) 将 `iap_route()`
-写入 `MB_TABLE_SEG_T`，由独立转发配置的协议段挂载。TR 按首地址分派，
-在标准 Modbus 长度校验前处理完整 IAP 报文；精确长度、功能码、广播及会话仍由 IAP 校验。
-段内返回 `-ENOENT` 会转换成非法地址，不回退到普通点表。能力寄存器 20003、
-版本寄存器 31996–31997 由本模块返回，不依赖 MV-IO 兼容路由。产品开关 `IDU_IAPV3` 归
-[`app/Kconfig`](../../app/Kconfig)，不再保留旧接口别名或应用 IAP 目录。
+IDU 的 [`app/main.c`](../../app/main.c) 先调用 iap_init()，
+[`app/protocol/tables/forward.c`](../../app/protocol/tables/forward.c) 配置三个完整 ADU 地址段，
+通过最小回调调用 iap_route(0, request, response)。0 是当前单入口的固定会话编号；
+未来增加物理入口时须分配不同的编号，不能共享该常量冒充同一个上传者。
+transmit 在标准 Modbus 功能码数量校验之前分派地址段；精确长度、功能码、广播及会话仍由 IAP 校验。
+段内错误不回退普通测点。能力寄存器 20003、版本寄存器 31996–31997 和升级寄存器
+20049–20104 由本模块处理。产品开关 IDU_IAPV3 关闭时不装配这些地址段。
 
 接收器为单实例，多端口共享上传所有权；一个互斥锁、信号量和专用线程处理
 有界任务，Flash 擦写和解包不阻塞 Modbus 回调。初始化失败释放 Flash 句柄并允许重试；
 初始化成功后再次启动返回 `-EALREADY`。不提供运行中停机／重新配置接口。
-应用健康确认仍由 [`app/status/image_confirm.c`](../../app/status/image_confirm.c) 执行，不属于上传协议。
+镜像确认由 app/main.c 在必要初始化完成后执行，不属于上传协议。
 
-IDU 启用 IAPv3 时，`CONFIG_IDU_FORWARD_UNIT=247` 在产品配置阶段被明确拒绝，
+IDU 启用 IAPv3 时，站号取自 DP 保存地址，配置范围为 1–246，
 因为旧接收器对 247 静默；这项校验保留原升级线协议。关闭 IAPv3 后普通转发可使用站号 247。
 
 ## 保持的协议和限制
@@ -98,3 +99,7 @@ CCACHE_DISABLE=1 ./applications/IDU-pre/scripts/build.sh --mcuboot --iapv3
 [Flash map](https://docs.zephyrproject.org/latest/services/storage/flash_map/flash_map.html)
 和 [DFU](https://docs.zephyrproject.org/latest/services/device_mgmt/dfu.html) 文档；
 实现按工作区固定的 Zephyr 4.4.2 API 验证。模拟器与构建结果不替代实板升级验证。
+
+新增传输组合测试复用产品 forward.c 的地址段表，经逐字节 vport 输入、transmit 路由、
+真实 IAP 接收器完成签名镜像升级并逐字节核对备用槽。
+运行 tests/iap/run.sh 会额外构建 iap-transmit 变体；模拟器不证明实板升级成功。

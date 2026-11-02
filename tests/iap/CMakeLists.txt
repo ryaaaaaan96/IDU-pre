@@ -2,7 +2,8 @@ cmake_minimum_required(VERSION 3.20.0)
 get_filename_component(IDU_APP ../.. ABSOLUTE)
 list(APPEND ZEPHYR_EXTRA_MODULES ${IDU_APP}/modules/quicklz ${IDU_APP}/modules/iap
   ${IDU_APP}/modules/dataprocess ${IDU_APP}/modules/modbus)
-list(APPEND ZEPHYR_EXTRA_MODULES ${IDU_APP}/modules/common)
+list(APPEND ZEPHYR_EXTRA_MODULES ${IDU_APP}/modules/common
+  ${IDU_APP}/modules/transmit ${IDU_APP}/modules/vport)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(iap_receiver_tests)
 target_include_directories(app PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
@@ -24,3 +25,8 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
 target_sources(app PRIVATE src/main.c)
 zephyr_ld_options(-Wl,--wrap=boot_is_img_confirmed -Wl,--wrap=boot_request_upgrade
                   -Wl,--wrap=sys_reboot)
+
+if(CONFIG_TRANSMIT)
+  target_include_directories(app PRIVATE ${IDU_APP}/app/protocol/inc)
+  target_sources(app PRIVATE ${IDU_APP}/app/protocol/tables/forward.c)
+endif()

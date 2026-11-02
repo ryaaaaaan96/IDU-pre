@@ -1,3 +1,7 @@
+# 完整 ADU 路由可接收旧协议长帧；标准功能码仍由官方服务端检查数量。
+config MODBUS_BUFFER_SIZE
+    range 64 1100 if MODBUS_SUPPORT_SERVER
+
 config MODBUS_SUPPORT
     bool "Zephyr Modbus shared transport support"
     depends on MODBUS

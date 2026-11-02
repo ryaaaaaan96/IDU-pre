@@ -272,14 +272,39 @@ static int custom_execute(void *context,
     return 0;
 }
 
+static unsigned route_calls;
+static int route_result;
+static size_t route_length;
+
+static int raw_access(void *context,
+    const struct modbus_adu *request,
+    struct modbus_adu *response)
+{
+    zassert_equal(context, (void *)0x1234);
+    ++route_calls;
+    route_length = request->length;
+    memcpy(response->data, request->data, 4);
+    response->length = 4;
+    return route_result;
+}
+
+static const tr_modbus_route_t routes[] = {
+    {.address = 20049, .count = 56, .callback = raw_access, .context = (void *)0x1234},
+};
+
 static vport_t normal_port = {.send = send_frame};
 static vport_t mixed_port = {.send = send_frame};
 static vport_t second_port = {.send = send_frame};
 static const tr_protocol_t protocols[] = {
     {.type = TR_PROTOCOL_MODBUS,
-        .max_frame = 256,
-        .timeout_us = 5000,
-        .modbus = {.unit = 1, .gap_us = 1750, .points = points, .point_count = ARRAY_SIZE(points)}},
+        .max_frame = 1100,
+        .timeout_us = 200000,
+        .modbus = {.unit = 1,
+            .gap_us = 1750,
+            .points = points,
+            .point_count = ARRAY_SIZE(points),
+            .routes = routes,
+            .route_count = ARRAY_SIZE(routes)}},
     {.type = TR_PROTOCOL_CUSTOM,
         .max_frame = 16,
         .timeout_us = 5000,
@@ -308,19 +333,19 @@ static const tr_config_t configs[] = {
     {.port = &normal_port,
         .protocols = protocols,
         .protocol_count = 1,
-        .rx_capacity = 256,
+        .rx_capacity = 1100,
         .tx_capacity = 256,
         .send_timeout_ms = 100},
     {.port = &mixed_port,
         .protocols = protocols,
         .protocol_count = 2,
-        .rx_capacity = 256,
+        .rx_capacity = 1100,
         .tx_capacity = 256,
         .send_timeout_ms = 100},
     {.port = &second_port,
         .protocols = &second_protocol,
         .protocol_count = 1,
-        .rx_capacity = 256,
+        .rx_capacity = 1100,
         .tx_capacity = 256,
         .send_timeout_ms = 100},
 };
@@ -356,6 +381,8 @@ static void before(void *fixture)
     k_sem_reset(&read_continue);
     writes = reads = sends = custom_checks = custom_runs = 0;
     sent_size = 0;
+    route_calls = 0;
+    route_result = 0;
     for (size_t i = 0; i < ARRAY_SIZE(configs); ++i) {
         zassert_equal(event(configs[i].port, VPORT_ERROR, NULL, 0, 10000), -EIO);
         zassert_ok(event(configs[i].port, VPORT_IDLE, NULL, 0, 2000));
@@ -509,7 +536,7 @@ ZTEST(transmit_stream, test_byte_input_crc_and_receive_damage)
     zassert_ok(event(&normal_port, VPORT_DATA, frame, size, 10000));
     zassert_ok(event(&normal_port, VPORT_IDLE, NULL, 0, 2000));
     zassert_equal(sends, 1);
-    uint8_t oversized[257] = {0};
+    uint8_t oversized[1101] = {0};
     zassert_equal(event(&normal_port, VPORT_DATA, oversized, sizeof(oversized), 10000), -ENOBUFS);
     frame[size - 1] ^= 1;
     zassert_equal(event(&normal_port, VPORT_DATA, frame, size, 100), -EIO);
@@ -814,6 +841,86 @@ ZTEST(transmit_stream, test_parallel_raw_interfaces_do_not_share_context)
     k_sem_give(&read_continue);
     zassert_ok(k_thread_join(&first_thread, K_SECONDS(1)));
     zassert_equal(first.value, 10);
+}
+
+ZTEST(transmit_stream, test_address_route_filtering_and_terminal_result)
+{
+    request(1, 6, (uint8_t[]){0x4e, 0x51, 0, 1}, 4);
+    zassert_equal(route_calls, 1);
+    zassert_equal(response().fc, 6);
+    unsigned previous = sends;
+    request(2, 6, (uint8_t[]){0x4e, 0x51, 0, 1}, 4);
+    zassert_equal(route_calls, 1);
+    request(0, 6, (uint8_t[]){0x4e, 0x51, 0, 1}, 4);
+    zassert_equal(route_calls, 2);
+    zassert_equal(sends, previous);
+    route_result = TR_MODBUS_ROUTE_SILENT;
+    request(1, 6, (uint8_t[]){0x4e, 0x88, 0, 1}, 4);
+    zassert_equal(route_calls, 3); /* 最后一个地址 20104。 */
+    zassert_equal(sends, previous);
+    request(1, 6, (uint8_t[]){0x4e, 0x89, 0, 1}, 4);
+    exception(6, MODBUS_EXC_ILLEGAL_DATA_ADDR);
+    zassert_equal(route_calls, 3);
+    route_result = -ENOENT;
+    uint8_t frame[256];
+    size_t length = encode(1, 6, (uint8_t[]){0x4e, 0x51, 0, 1}, 4, frame);
+    previous = sends;
+    zassert_ok(event(&normal_port, VPORT_DATA, frame, length, 10000));
+    zassert_equal(event(&normal_port, VPORT_POLL, NULL, 0, 2000), -ENOENT);
+    zassert_equal(sends, previous); /* 回调失败不进入标准点表。 */
+    zassert_equal(writes, 0);
+}
+
+ZTEST(transmit_stream, test_address_route_legacy_long_fc16_and_crc)
+{
+    struct modbus_adu adu = {.unit_id = 1, .fc = 16, .length = 1051};
+    sys_put_be16(20049, adu.data);
+    sys_put_be16(523, adu.data + 2);
+    adu.data[4] = (uint8_t)1046; /* 旧协议字节计数截断，不能先走标准校验。 */
+    uint8_t frame[1100];
+    size_t size;
+    zassert_ok(mb_rtu_encode(&adu, frame, sizeof(frame), &size));
+    for (size_t i = 0; i < size; ++i) {
+        zassert_ok(event(&normal_port, VPORT_DATA, frame + i, 1, i ? 87 : 10000));
+    }
+    zassert_ok(event(&normal_port, VPORT_POLL, NULL, 0, 2000));
+    zassert_equal(route_calls, 1);
+    zassert_equal(route_length, 1051);
+    zassert_equal(response().fc, 16);
+    frame[size - 1] ^= 1;
+    zassert_ok(event(&normal_port, VPORT_DATA, frame, size, 10000));
+    zassert_ok(event(&normal_port, VPORT_POLL, NULL, 0, 2000));
+    zassert_equal(route_calls, 1);
+    /* 超长标准点请求仍由官方服务端拒绝，不能借大缓冲放宽标准限制。 */
+    sys_put_be16(100, adu.data);
+    zassert_ok(mb_rtu_encode(&adu, frame, sizeof(frame), &size));
+    zassert_ok(event(&normal_port, VPORT_DATA, frame, size, 10000));
+    zassert_ok(event(&normal_port, VPORT_POLL, NULL, 0, 2000));
+    exception(16, MODBUS_EXC_ILLEGAL_DATA_VAL);
+    zassert_equal(writes, 0);
+}
+
+ZTEST(transmit_stream, test_address_route_registration_validation)
+{
+    vport_t port = {.send = send_frame};
+    tr_config_t config = configs[0];
+    tr_protocol_t protocol = protocols[0];
+    config.port = &port;
+    config.protocols = &protocol;
+    tr_modbus_route_t invalid[2] = {routes[0], routes[0]};
+    protocol.modbus.routes = invalid;
+    protocol.modbus.route_count = 2;
+    zassert_equal(tr_register(&config), -EEXIST);
+    protocol.modbus.route_count = 1;
+    invalid[0].address = 100;
+    zassert_equal(tr_register(&config), -EEXIST);
+    invalid[0].address = 65535;
+    invalid[0].count = 2;
+    zassert_equal(tr_register(&config), -EINVAL);
+    invalid[0] = routes[0];
+    invalid[0].callback = NULL;
+    zassert_equal(tr_register(&config), -EINVAL);
+    zassert_is_null(port.receive);
 }
 
 ZTEST_SUITE(transmit_stream, NULL, setup, before, NULL, NULL);

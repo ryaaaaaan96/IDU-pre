@@ -31,8 +31,8 @@ APP 的 protocol/port.c 创建线程并装配硬件，模块不创建通信线�
 
 ## IAPv3
 
-IAP 模块自身完整，但当前只装配标准 Modbus 点表，`iap_route()` 未被调用。
-串口上传在重新加入最小路由适配层前不可用。构建、签名和分区说明见
+IAP 模块通过产品 forward.c 的完整 ADU 地址段回调接入 transmit，复用 iap_route()。
+模拟器已验证完整升级链路；旧上位机实板上传仍待验证。构建、签名和分区说明见
 [构建与升级](../docs/build-and-upgrade.md)。
 
 ## 构建

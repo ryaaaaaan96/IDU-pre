@@ -1,2 +1,6 @@
 mainmenu "IAPv3 native receiver tests"
 source "Kconfig.zephyr"
+
+config IDU_IAPV3
+    bool
+    default y if TRANSMIT

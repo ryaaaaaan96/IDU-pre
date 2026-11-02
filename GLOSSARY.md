@@ -8,7 +8,7 @@
 | 本地点 | 由本地采样写入的测点，例如 DI 和电流；登记填默认值，成功写入后更新点值和时间。 |
 | 产品信息点 | 型号、版本等普通非持久点，登记填初值，可通过 DP 写入，重启恢复初值；写权限由调用方控制。 |
 | 点运行数据 | `dp_point_data_t`：`value_t`、UNIX 秒更新时间、dirty、saved_valid 和持久点 saved_value 指针；时间 0 为未知。 |
-| IAPv3 | 可选的 IAPv3/SGZ 升级协议，由 `modules/iap` 提供；当前产品未接入路由。 |
+| IAPv3 | 可选的 IAPv3/SGZ 固件升级协议。 |
 | 最小原子核心 | DP 管理设备及同步 RAM 读写，持久参数由私有线程延后保存，不包含采集/转发。 |
 | signal_key | DP 测点的稳定标识，与 device_id 共同定位测点；与表内行索引独立。 |
 | signal_index | process 点表的行顺序，从 0 开始，使用 process_signal_index_t 枚举标识；不参与 DP 存储键。 |

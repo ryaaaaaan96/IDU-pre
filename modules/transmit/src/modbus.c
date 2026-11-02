@@ -115,9 +115,32 @@ static int write_request(
 
 int tr_modbus_validate(const tr_modbus_t *config)
 {
-    if (!config->unit || config->unit > 247 || !config->gap_us || !config->points ||
-        !config->point_count) {
+    if (!config->unit || config->unit > 247 || !config->gap_us ||
+        (!config->point_count && !config->route_count) ||
+        (config->point_count && !config->points) ||
+        (config->route_count && !config->routes)) {
         return -EINVAL;
+    }
+    for (size_t i = 0; i < config->route_count; ++i) {
+        const tr_modbus_route_t *route = &config->routes[i];
+        uint32_t end = (uint32_t)route->address + route->count;
+        if (!route->count || end > 65536 || !route->callback) {
+            return -EINVAL;
+        }
+        for (size_t j = 0; j < i; ++j) {
+            const tr_modbus_route_t *other = &config->routes[j];
+            if (route->address < (uint32_t)other->address + other->count &&
+                other->address < end) {
+                return -EEXIST;
+            }
+        }
+        for (size_t j = 0; j < config->point_count; ++j) {
+            const tr_modbus_point_t *point = &config->points[j];
+            if (route->address < (uint32_t)point->address + point->count &&
+                point->address < end) {
+                return -EEXIST;
+            }
+        }
     }
     for (size_t i = 0; i < config->point_count; ++i) {
         const tr_modbus_point_t *point = &config->points[i];
@@ -196,6 +219,32 @@ int tr_modbus_execute(mb_server_t *server,
     int err = mb_rtu_decode(request, size, &rx);
     if (err) {
         return err;
+    }
+    *response_size = 0;
+    if (rx.unit_id && rx.unit_id != config->unit) {
+        return 0;
+    }
+    if (rx.length >= 2) {
+        uint16_t address = sys_get_be16(rx.data);
+        for (size_t i = 0; i < config->route_count; ++i) {
+            const tr_modbus_route_t *route = &config->routes[i];
+            if (address < route->address || address - route->address >= route->count) {
+                continue;
+            }
+            tx.unit_id = rx.unit_id;
+            tx.fc = rx.fc;
+            err = route->callback(route->context, &rx, &tx);
+            if (err == TR_MODBUS_ROUTE_SILENT) {
+                return 0;
+            }
+            if (err) {
+                return err;
+            }
+            if (!rx.unit_id) {
+                return 0;
+            }
+            return mb_rtu_encode(&tx, response, capacity, response_size);
+        }
     }
     bool respond = false;
     err = mb_server_process(server, &rx, &tx, &respond, access_request, (void *)config);

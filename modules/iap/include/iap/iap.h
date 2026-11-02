@@ -53,8 +53,8 @@ int iap_init(void);
  * @brief 调用方提供已按站号过滤的完整 Modbus ADU， 包括旧版超长 FC16 报文。
  *
  * 返回 0 表示回复， -ENOENT 表示地址不归本模块， IAP_ROUTE_SILENT
- * 表示接收但不回复。此处不登记传输层。 接口 ID 必须非负，多个端口共用一个上传所有者。 登记到
- * PRO_ADDR_SLAVE 表时，TR 按起始地址选择路由， 将 -ENOENT 作为地址错误，不回退到测点写入。
+ * 表示接收但不回复。此处不登记传输层。 接口 ID 必须非负，多个端口共用一个上传所有者。 由应用登记完整 ADU 地址段时，按起始地址选择路由；
+ * 已匹配请求不回退到测点写入。
  */
 int iap_route(int iface, const struct modbus_adu *request, struct modbus_adu *response);
 

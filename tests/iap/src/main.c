@@ -10,35 +10,78 @@
 #include <zephyr/ztest.h>
 #include <stdlib.h>
 #include <string.h>
-#if defined(CONFIG_TR_REGISTER_SERVICE)
-#include <transmit/registers.h>
+#ifdef CONFIG_TRANSMIT
+#include <transmit/transmit.h>
+#include <modbus_support/rtu.h>
 
-static const MB_TABLE_SEG_T upgrade_segments[] = {
-    {.reg_addr = 20003, .end_addr = 20003, .func = iap_route},
-    {.reg_addr = 20049, .end_addr = 20104, .func = iap_route},
-    {.reg_addr = 31996, .end_addr = 31997, .func = iap_route},
+extern const tr_modbus_route_t protocol_upgrade_routes[];
+extern const size_t protocol_upgrade_route_count;
+static bool through_transmit;
+static bool route_replied;
+static struct modbus_adu route_reply;
+static uint64_t route_time;
+
+static int capture(void *context, const uint8_t *data, size_t size, k_timeout_t timeout)
+{
+    ARG_UNUSED(context);
+    ARG_UNUSED(timeout);
+    route_replied = true;
+    return mb_rtu_decode(data, size, &route_reply);
+}
+
+static vport_t upgrade_port = {.send = capture};
+static tr_protocol_t upgrade_protocol = {
+    .type = TR_PROTOCOL_MODBUS,
+    .max_frame = 1100,
+    .timeout_us = 500000,
+    .modbus = {.unit = 1, .gap_us = 1750},
 };
-static const DEV_TABLE_S upgrade_device = {.dev_id = 1,
-    .ptl_tbl_cfg = {
-        [2] = {.proto_type = PRO_ADDR_SLAVE,
-            .sig_num = ARRAY_SIZE(upgrade_segments),
-            .pst_table = upgrade_segments},
-    }};
-static const struct tr_register_service upgrade_service = {
-    .device = &upgrade_device,
-    .route_broadcast = true,
+static const tr_config_t upgrade_config = {
+    .port = &upgrade_port,
+    .protocols = &upgrade_protocol,
+    .protocol_count = 1,
+    .rx_capacity = 1100,
+    .tx_capacity = 256,
+    .send_timeout_ms = 100,
 };
 #endif
 
-/* 路由变体通过 TR 分发验证真实 IAP 状态机；
- * 独立变体保留与传输无关的接收器契约。 */
 static int dispatch(int iface, const struct modbus_adu *request, struct modbus_adu *response)
 {
-#if defined(CONFIG_TR_REGISTER_SERVICE)
-    return tr_register_route(iface, request, response, (void *)&upgrade_service);
-#else
-    return iap_route(iface, request, response);
+#ifdef CONFIG_TRANSMIT
+    if (through_transmit) {
+        uint8_t frame[1100];
+        size_t size;
+        int err = mb_rtu_encode(request, frame, sizeof(frame), &size);
+        if (err) {
+            return err;
+        }
+        route_replied = false;
+        /* 逐字节输入，覆盖完整长包在转发缓存中的组帧。 */
+        route_time += 10000;
+        for (size_t i = 0; i < size; ++i) {
+            route_time += 87;
+            vport_event_t event = {
+                .type = VPORT_DATA, .data = frame + i, .size = 1, .at_us = route_time};
+            err = vport_input(&upgrade_port, &event);
+            if (err) {
+                return err;
+            }
+        }
+        route_time += 2000;
+        vport_event_t poll = {.type = VPORT_POLL, .at_us = route_time};
+        err = vport_input(&upgrade_port, &poll);
+        if (err) {
+            return err;
+        }
+        if (!route_replied) {
+            return IAP_ROUTE_SILENT;
+        }
+        *response = route_reply;
+        return 0;
+    }
 #endif
+    return iap_route(iface, request, response);
 }
 
 static struct modbus_adu rx, tx;
@@ -216,9 +259,6 @@ static void full_receive(void)
 
 static void *setup(void)
 {
-#if defined(CONFIG_TR_REGISTER_SERVICE)
-    zassert_ok(tr_register_attach(modbus_iface_get_by_name("RAW_2"), &upgrade_service));
-#endif
     phase = getenv("IDU_IAP_PHASE");
     zassert_ok(flash_area_open(DT_FIXED_PARTITION_ID(DT_NODELABEL(iap_staging)), &stage));
     zassert_ok(flash_area_open(DT_FIXED_PARTITION_ID(DT_NODELABEL(slot1_partition)), &slot));
@@ -556,5 +596,31 @@ ZTEST(iap, test_terminal_stop_at_upgrade_commit)
     zassert_equal(read_regs(20103, 1), IAP_ROUTE_SILENT);
     iap_stop();
 }
+
+#ifdef CONFIG_TRANSMIT
+ZTEST(iap, test_transmit_end_to_end_upgrade)
+{
+    upgrade_protocol.modbus.routes = protocol_upgrade_routes;
+    upgrade_protocol.modbus.route_count = protocol_upgrade_route_count;
+    zassert_ok(tr_register(&upgrade_config));
+    through_transmit = true;
+    zassert_equal(word(20003), 4);
+    zassert_equal(word(31996), 0x1200);
+    zassert_equal(word(31997), 0);
+    full_receive();
+    zassert_equal(word(20103), 0);
+    zassert_ok(k_sem_take(&rebooted, K_SECONDS(3)));
+    zassert_equal(state(), 7);
+    zassert_equal(pending_calls, 1);
+    zassert_true(frozen);
+    zassert_equal(mcuboot_swap_type(), BOOT_SWAP_TYPE_TEST);
+    uint8_t data[128];
+    for (size_t offset = 0; offset < sizeof(fixture_image); offset += sizeof(data)) {
+        size_t size = MIN(sizeof(data), sizeof(fixture_image) - offset);
+        zassert_ok(flash_area_read(slot, offset, data, size));
+        zassert_mem_equal(data, fixture_image + offset, size);
+    }
+}
+#endif
 
 ZTEST_SUITE(iap, NULL, setup, NULL, NULL, NULL);

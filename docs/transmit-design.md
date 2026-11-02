@@ -2,7 +2,7 @@
 
 状态：设计分阶段实施。2026-10-31 更新。
 DP 显式类型接口、transmit/vport、Modbus 标准点表及 APP UART 接入已实现。
-主机模拟串口已验证；RS485 实板时序及负载表现未验证，IAP 路由未接入。
+主机模拟串口和 IAP 完整 ADU 路由已验证；RS485 实板时序、负载及上传待验证。
 
 ## 模块职责
 
@@ -152,3 +152,11 @@ CUSTOM 的检查和执行通过固定配置回调接入；当前内容判帧测�
 初次验收见[实现任务](../.scratch/transmit-redesign/issues/03-stream-forwarding.md)，
 官方 RAW 复用及并行验证见[后续任务](../.scratch/transmit-redesign/issues/04-zephyr-raw-server.md)。
 实板行为单独验收，不由主机或模拟器结果推定。
+
+## IAPv3 完整 ADU 路由补充
+
+保留普通 DP 映射，新增 tr_modbus_route_t 起始地址段表。RTU 校验与站号过滤后，
+先把命中地址段的完整 ADU 同步交给回调，未命中才进入标准 RAW 服务端。
+这样保留旧版超长 FC16 的 16 位寄存器计数及截断字节计数；IAP 自行严格检查载荷。
+地址段只代表起始地址归属，不套用普通寄存器访问长度和数据区规则。
+具体回调契约及容量限制见 modules/transmit/README.md，产品地址见 app/protocol/README.md。
