@@ -6,6 +6,7 @@
 
 | 任务 | 文档 |
 | --- | --- |
+| 汇报通用模块架构与后续计划 | [通用模块设计汇报（HTML）](module-design-report.html) |
 | 构建、分区与升级 | [构建与升级](build-and-upgrade.md) |
 | 维护点表和本地参数 | [协议点表](../app/protocol/README.md)、[DP 模块](../modules/dataprocess/README.md) |
 | 调整堆、点值或参数容量 | [内存管理](memory-management.md) |

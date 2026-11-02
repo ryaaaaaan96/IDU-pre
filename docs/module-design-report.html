@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IDU · Zephyr 通用模块设计汇报</title>
+  <style>
+    :root { --bg:#f3f5f9; --paper:#fff; --ink:#18283e; --muted:#52637a;
+      --line:#dce3ed; --blue:#225ce0; --teal:#087b68; --amber:#906000; }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; scroll-padding-top:82px; }
+    body { margin:0; color:var(--ink); background:var(--bg);
+      font:16px/1.8 system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif; }
+    a { color:var(--blue); text-underline-offset:3px; }
+    button { font:inherit; cursor:pointer; }
+    nav { position:sticky; top:0; z-index:10; background:#ffffffed;
+      border-bottom:1px solid var(--line); backdrop-filter:blur(12px); }
+    .nav-inner { max-width:1240px; margin:auto; display:flex; gap:24px;
+      padding:12px 28px; align-items:center; flex-wrap:wrap; }
+    nav strong { margin-right:auto; font-size:15px; }
+    nav a { font-size:14px; color:var(--muted); text-decoration:none; }
+    .print { border:1px solid var(--line); border-radius:8px; background:white;
+      padding:5px 12px; font-size:13px; }
+    main { max-width:1184px; margin:auto; padding:32px 28px 72px; }
+    .hero { border-radius:24px; padding:48px; color:#fff;
+      background:linear-gradient(120deg,#142840,#214e92); }
+    .eyebrow { font-size:12px; font-weight:700; letter-spacing:2px; color:#b9d3ff; }
+    h1 { font-size:clamp(30px,4vw,46px); line-height:1.3; margin:12px 0 20px; }
+    .hero p { max-width:850px; color:#e0e9fa; margin:0 0 22px; font-size:18px; }
+    .meta { display:flex; gap:12px; flex-wrap:wrap; font-size:13px; color:#d8e5fb; }
+    .meta span { padding:4px 12px; border:1px solid #ffffff38; border-radius:20px; }
+    section { margin-top:48px; }
+    h2 { margin:0 0 18px; font-size:27px; line-height:1.4; }
+    h2 small { display:block; font-size:12px; color:var(--blue);
+      letter-spacing:2px; margin-bottom:8px; }
+    h3 { font-size:20px; margin:0 0 10px; line-height:1.5; }
+    h4 { font-size:15px; margin:20px 0 6px; }
+    p { margin:10px 0; }
+    .intro { color:var(--muted); margin-bottom:22px; }
+    .grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
+    .two { grid-template-columns:repeat(2,minmax(0,1fr)); }
+    .card, .module { background:var(--paper); border:1px solid var(--line);
+      border-radius:16px; padding:24px; }
+    .card p { color:var(--muted); font-size:15px; }
+    .number { display:block; color:var(--blue); font-size:12px; margin-bottom:12px; }
+    .callout { border-left:4px solid var(--blue); background:#eaf0fc;
+      padding:16px 20px; border-radius:0 10px 10px 0; margin:20px 0; }
+    .warning { background:#fff5dd; border-color:#c89325; }
+    .architecture { background:#fff; border:1px solid var(--line);
+      padding:24px; border-radius:16px; }
+    .layer { padding:18px; border-radius:12px; background:#f0f4fb; margin:10px 0; }
+    .layer strong { display:block; margin-bottom:10px; }
+    .chips { display:flex; flex-wrap:wrap; gap:9px; }
+    .chip { padding:6px 12px; background:white; border:1px solid #cbd9ee;
+      border-radius:7px; font-size:14px; }
+    .layer.app { background:#edf7f3; }
+    .layer.base { background:#f1f0fa; }
+    .arrow { text-align:center; color:var(--muted); font-size:13px; }
+    .legend { font-size:13px; color:var(--muted); }
+    .table-wrap { overflow-x:auto; border:1px solid var(--line);
+      border-radius:12px; background:white; }
+    table { width:100%; border-collapse:collapse; font-size:14px; }
+    th,td { padding:13px 16px; text-align:left; vertical-align:top;
+      border-bottom:1px solid var(--line); }
+    th { background:#eaf0f8; font-weight:650; white-space:nowrap; }
+    tr:last-child td { border-bottom:0; }
+    code { font:0.87em/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;
+      background:#eef2f8; padding:2px 5px; border-radius:4px; overflow-wrap:anywhere; }
+    .module { margin:18px 0; border-top:3px solid var(--blue); }
+    .module-head { display:flex; gap:12px; justify-content:space-between;
+      align-items:baseline; flex-wrap:wrap; }
+    .tag { font-size:12px; border-radius:20px; padding:3px 10px;
+      color:var(--teal); background:#e8f6ef; white-space:nowrap; }
+    .tag.pending { color:var(--amber); background:#fff3d7; }
+    .module .purpose { color:var(--muted); margin-top:0; }
+    .facts { display:grid; grid-template-columns:110px minmax(0,1fr); gap:8px 16px;
+      font-size:15px; margin:18px 0; }
+    .facts dt { color:var(--muted); }
+    .facts dd { margin:0; }
+    .flow { display:flex; gap:8px; align-items:center; flex-wrap:wrap;
+      background:#f4f7fc; padding:14px; border-radius:10px; font-size:14px; }
+    .flow span { background:white; border:1px solid var(--line);
+      padding:6px 10px; border-radius:6px; }
+    .flow b { color:var(--blue); }
+    ul,ol { margin:8px 0; padding-left:22px; }
+    li { margin:5px 0; }
+    .source { font-size:13px; color:var(--muted); margin-top:18px; }
+    .priority { display:inline-block; font-weight:700; color:var(--blue); }
+    footer { border-top:1px solid var(--line); margin-top:36px;
+      padding-top:18px; color:var(--muted); font-size:13px; }
+    @media(max-width:760px) {
+      main { padding:20px 16px 40px; } .hero { padding:28px 24px; }
+      .grid,.two { grid-template-columns:1fr; } .nav-inner { gap:12px; padding:10px 16px; }
+      nav strong { width:100%; } .facts { grid-template-columns:1fr; gap:4px; }
+      .facts dd { margin-bottom:10px; } .module { padding:20px; }
+    }
+    @media print {
+      @page { size:A4; margin:15mm; }
+      body { font-size:10pt; background:white; color:#111; }
+      nav { display:none; } main { max-width:none; padding:0; }
+      .hero { background:#eaf0fa!important; color:#142840; padding:25px; }
+      .hero p,.meta,.eyebrow { color:#29415f; } h1 { font-size:27pt; }
+      h2 { font-size:19pt; break-after:avoid; } h3 { break-after:avoid; }
+      section { margin-top:26px; } .module,.card,.architecture { break-inside:avoid; }
+      .module { padding:16px; } .table-wrap { overflow:visible; }
+      th,td { font-size:9pt; padding:8px; } tr { break-inside:avoid; }
+      a { color:inherit; } * { print-color-adjust:exact; -webkit-print-color-adjust:exact; }
+    }
+  </style>
+</head>
+<body>
+  <nav aria-label="汇报导航">
+    <div class="nav-inner">
+      <strong>IDU / 通用模块设计</strong>
+      <a href="#overview">总体介绍</a><a href="#architecture">架构边界</a>
+      <a href="#modules">模块介绍</a><a href="#validation">验证进展</a>
+      <a href="#todo">TODO</a>
+      <button class="print" type="button" onclick="window.print()">打印 / 导出 PDF</button>
+    </div>
+  </nav>
+  <main>
+    <header class="hero">
+      <div class="eyebrow">ENGINEERING REPORT · 2026.11.02</div>
+      <h1>基于 Zephyr 的通用模块设计</h1>
+      <p>以 IDU-pre 为首个落地产品，将测点数据、协议转发、任务监控和在线升级沉淀为可复用模块，
+        为后续多设备、多产品开发建立统一基础。</p>
+      <div class="meta">
+        <span>代码基线：6faba2f</span><span>Zephyr：v4.4.2</span>
+        <span>阶段：核心实现与模拟验证，推进实板验收</span>
+      </div>
+    </header>
+
+    <section id="overview">
+      <h2><small>01 / OVERVIEW</small>总体介绍：从单板业务走向可复用能力</h2>
+      <p class="intro">项目目标是以 Zephyr 承接原平台能力，逐步形成源码可维护、模块可测试、
+        产品可配置的实现。当前重点是完成底层通用能力与产品代码的边界收敛。</p>
+      <div class="grid">
+        <article class="card"><span class="number">01 · 数据统一</span>
+          <h3>业务围绕测点运行</h3><p>DP 管理设备和点值，提供统一读写、回调、范围校验与参数保存。
+            采样和通信通过测点交互，减少直接耦合。</p></article>
+        <article class="card"><span class="number">02 · 通信分层</span>
+          <h3>端口、协议、映射分开</h3><p>vport 交付字节事件，transmit 管理协议选择与测点映射，
+            Modbus 模块复用 Zephyr 服务端；APP 管理物理串口与线程。</p></article>
+        <article class="card"><span class="number">03 · 保障独立</span>
+          <h3>监控与升级模块化</h3><p>watchdog 管理健康检查与硬件喂狗，IAP 管理接收、解包、验签与升级。
+            产品状态和显示策略由 APP 维护。</p></article>
+      </div>
+      <div class="callout"><strong>当前成果：</strong>通用模块已在 IDU-pre 中装配运行，具备独立测试与组合测试；
+        已完成 MCUboot + IAPv3 固件构建、签名验证和 SGZ 导出。完整旧平台功能替代仍在推进。</div>
+    </section>
+
+    <section id="architecture">
+      <h2><small>02 / ARCHITECTURE</small>整体架构与职责边界</h2>
+      <div class="architecture" role="img" aria-label="应用层装配通用模块，通用模块复用 Zephyr 与硬件支持">
+        <div class="layer app"><strong>产品应用层 · 决定业务与运行方式</strong>
+          <div class="chips"><span class="chip">main / 启动与主循环</span>
+            <span class="chip">acquisition / DI、AI 采样</span><span class="chip">protocol / 配置与协议线程</span>
+            <span class="chip">process、forward / 产品点表</span><span class="chip">status / 状态与 LED</span>
+            <span class="chip">rs485_1 / UART、GPIO、方向与队列</span></div></div>
+        <div class="arrow">↓ 显式初始化、常驻配置表、同步接口与回调 ↓</div>
+        <div class="layer"><strong>通用模块层 · 提供可复用能力</strong>
+          <div class="chips"><span class="chip">common / 类型、转换、放缩</span>
+            <span class="chip">dataprocess / 点值与参数</span><span class="chip">vport / 字节与事件</span>
+            <span class="chip">transmit / 从机协议与映射</span><span class="chip">modbus / 协议适配</span>
+            <span class="chip">watchdog / 健康与喂狗</span><span class="chip">iap / 在线升级</span>
+            <span class="chip">quicklz / 解压算法</span></div></div>
+        <div class="arrow">↓ 使用内核、存储、驱动、密码和启动服务 ↓</div>
+        <div class="layer base"><strong>平台与硬件层</strong><div class="chips">
+          <span class="chip">Zephyr 内核 / 线程、workqueue、timer、消息队列</span>
+          <span class="chip">Zephyr RAW Modbus / NVS / Flash map</span>
+          <span class="chip">MCUboot / 签名镜像与双槽升级</span>
+          <span class="chip">gd32e505 / SoC、时钟、ADC 标准接口</span>
+          <span class="chip">DTS + Kconfig / 硬件与容量配置</span></div></div>
+        <p class="legend">分层表示职责归属，并非每个模块都依赖相邻层的全部模块。
+          gd32e505 属于硬件适配支持，复用范围受芯片限制。</p>
+      </div>
+      <h3 style="margin-top:24px">关键依赖与运行归属</h3>
+      <div class="table-wrap"><table>
+        <thead><tr><th>关系</th><th>设计约定</th><th>作用</th></tr></thead>
+        <tbody>
+          <tr><td>transmit → vport / modbus / DP / common</td><td>转发表连接协议地址和内部测点</td><td>协议地址变化不修改内部点表</td></tr>
+          <tr><td>DP → common / NVS</td><td>不感知串口、寄存器地址和协议</td><td>不同协议共享同一数据源</td></tr>
+          <tr><td>IAP → Flash / NVS / MCUboot / QuickLZ</td><td>不依赖 DP、transmit 或产品状态</td><td>上传接入与升级处理分别维护</td></tr>
+          <tr><td>APP → watchdog → 回调 APP</td><td>模块不引用 status，状态响应由应用绑定</td><td>监控机制与产品指示策略分开</td></tr>
+          <tr><td>线程归属</td><td>APP 创建通信线程；DP、IAP 各有后台线程；监控使用 workqueue + timer</td><td>同步通信不再隐藏创建额外线程</td></tr>
+        </tbody>
+      </table></div>
+      <p class="source">依据：<a href="../modules/README.md">模块清单</a> ·
+        <a href="transmit-design.md">通信设计</a> · <a href="../app/protocol/README.md">产品协议装配</a></p>
+    </section>
+
+    <section id="modules">
+      <h2><small>03 / MODULES</small>各通用模块设计</h2>
+      <p class="intro">按“解决什么问题、如何实现、边界在哪里”介绍。模块名称与当前代码目录保持一致。</p>
+
+      <article class="module" id="common">
+        <div class="module-head"><h3>01 · common — 公共数值基础</h3><span class="tag">已实现</span></div>
+        <p class="purpose">让 DP 和通信模块共用一套类型与计算规则，避免各模块重复定义和转换。</p>
+        <dl class="facts">
+          <dt>核心设计</dt><dd><code>value_t</code> 联合体 + <code>value_type_t</code> 类型标识；
+            类型转换和比例偏移计算分别提供公共函数。</dd>
+          <dt>类型转换</dt><dd>U8、U16、S16、U32、S32 相互转换；收窄保留低位，按补码解释符号。
+            STRING、BYTES、WORDS 仅支持同类型复制。</dd>
+          <dt>放缩规则</dt><dd><code>输出 = 输入 × 分子 ÷ 分母 + 偏移</code>；逆向用于写入。
+            int64 中间计算、整数除法向零取整、计算溢出返回错误。</dd>
+          <dt>职责边界</dt><dd>不理解设备、测点、Modbus 字序或硬件。联合体中的浮点视图不代表系统已支持浮点测点。</dd>
+        </dl>
+        <p class="source">接口：<code>value_convert()</code>、<code>value_scale_apply()</code> ·
+          <a href="../modules/common/README.md">设计说明</a></p>
+      </article>
+
+      <article class="module" id="dp">
+        <div class="module-head"><h3>02 · dataprocess — 测点与参数中心</h3><span class="tag">已实现 / 含持久化</span></div>
+        <p class="purpose">统一设备数据模型，使采样、参数操作和通信访问使用同一个数据入口。</p>
+        <dl class="facts">
+          <dt>设备与点表</dt><dd>APP 提供常驻只读点表，DP 私有维护设备目录和运行值。
+            device_id 区分设备；signal_key 是稳定标识；signal_index 是枚举表示的点表行下标。</dd>
+          <dt>读写流程</dt><dd>支持 key / index 四个显式类型读写接口。写入先转换为内部类型，再回调、范围校验、更新 RAM。
+            读回调可更新点值；业务回调始终使用内部类型。</dd>
+          <dt>参数保存</dt><dd>DTS 指定 <code>dp-params</code> 总分区，内部划分管理区与设备槽位。
+            每持久测点一条 NVS 记录，以 key 定位；修改一个点无需重写整台设备。</dd>
+          <dt>后台与并发</dt><dd>独立线程默认每次等待 5 秒后扫描脏点。保存副本用于判断是否需要落盘；
+            Flash 操作不持有点值锁。<code>dp_flush()</code> 提供同步保存。</dd>
+          <dt>恢复与删除</dt><dd>恢复默认值更新 RAM 并标脏；出厂恢复擦除目标设备参数后重启，支持全部设备。
+            删除设备还会释放其私有 RAM。登记、删除须由 APP 管理业务静止期。</dd>
+        </dl>
+        <div class="flow"><span>dp_init</span><b>→</b><span>登记设备 / 校验点表 / 加载参数</span>
+          <b>→</b><span>业务 set / get</span><b>→</b><span>脏点延后写入 NVS</span></div>
+        <div class="callout warning"><strong>保存语义：</strong>set 成功表示 RAM 更新成功，不能等同于 Flash 已保存。
+          掉电可能丢失尚未落盘的修改；主动重启前需要停止修改并 flush。
+          存储布局不匹配会按当前策略清空总参数区并重建，版本发布须管理布局变更。</div>
+        <p class="source">接口：<code>dp_init</code>、<code>dp_register_device</code>、
+          <code>dp_*_para_by_key/index</code>、<code>dp_flush</code>、恢复与删除接口 ·
+          <a href="../modules/dataprocess/README.md">设计说明</a> ·
+          <a href="adr/0015-dp-device-storage.md">存储决策</a></p>
+      </article>
+
+      <article class="module" id="vport">
+        <div class="module-head"><h3>03 · vport — 统一端口接入</h3><span class="tag">已实现</span></div>
+        <p class="purpose">以相同方式交付不同物理端口的数据，协议模块无需操作具体 UART 和 GPIO。</p>
+        <dl class="facts">
+          <dt>接收形式</dt><dd>统一 DATA、IDLE、POLL、ERROR 事件，携带单调微秒时间戳。
+            支持单字节或字节块，不要求接入层先拼完整报文。</dd>
+          <dt>发送形式</dt><dd>通过 APP 绑定的同步带超时发送回调输出；返回前完成或中止发送，不保留借用数据指针。</dd>
+          <dt>职责边界</dt><dd>不创建线程、不判帧、不解释 CAN ID。APP 负责 CAN 分流/重组、共享总线仲裁和同端口串行交付。</dd>
+        </dl>
+        <p class="source">接口：<code>vport_bind/input/output</code> ·
+          <a href="../modules/vport/README.md">设计说明</a></p>
+      </article>
+
+      <article class="module" id="transmit">
+        <div class="module-head"><h3>04 · transmit — 对外从机协议与测点映射</h3><span class="tag">已实现 / 产品接入 Modbus</span></div>
+        <p class="purpose">把协议访问转换为 DP 操作，维护协议选择、接收缓存和对外数据表达。</p>
+        <dl class="facts">
+          <dt>实例模型</dt><dd>一个实例绑定一个 vport，每类协议最多一个；目前支持内置 Modbus RTU 与 CUSTOM 接入项。
+            APP 可登记多个实例；产品当前使用一个 Modbus 从机入口。</dd>
+          <dt>报文识别</dt><dd>transmit 保存未消费数据。候选协议等待时保持锁定，明确不匹配才环形切换；
+            候选从共同起点检查，协议检查不直接删除缓存。POLL 推进静默判帧和超时。</dd>
+          <dt>转发表</dt><dd>协议行配置地址、长度、数据区和字序；通用 mapping 内嵌设备、点 index、对外类型和可选放缩。
+            内部点表与对外地址表相互独立。</dd>
+          <dt>扩展入口</dt><dd>完整 ADU 地址段回调可接入 IAPv3。
+            在标准功能码数量校验前分派，避免旧超长 FC16 被标准限制拒绝；命中后不回退普通测点。</dd>
+          <dt>资源与边界</dt><dd>启动时分配固定接收/发送缓存，运行期不分配；不创建线程。
+            多点写首错停止且不回滚；发送失败不自动重放业务。新增内置协议仍需修改分派代码。</dd>
+        </dl>
+        <h4>当前明确的数据换算顺序</h4>
+        <div class="flow"><span>读：DP 原值</span><b>→</b><span>转换为对外类型</span><b>→</b>
+          <span>正向放缩</span><b>→</b><span>协议编码</span></div>
+        <div class="flow" style="margin-top:8px"><span>写：协议解码</span><b>→</b><span>逆向放缩</span>
+          <b>→</b><span>按对外类型表示</span><b>→</b><span>DP 转换 / 回调 / 校验</span></div>
+        <p class="legend">先转换后放缩可能先丢失高位，这是当前约定；整数收窄不做饱和。
+          scale 指针为空直接跳过计算。业务表需保证所选类型满足数值精度要求。</p>
+        <p class="source">入口：<code>tr_register()</code> ·
+          <a href="../modules/transmit/README.md">设计说明</a> ·
+          <a href="transmit-design.md">完整通信方案</a></p>
+      </article>
+
+      <article class="module" id="modbus">
+        <div class="module-head"><h3>05 · modbus — 标准协议能力与 Zephyr 适配</h3><span class="tag">已实现 / 固定版本适配</span></div>
+        <p class="purpose">复用 Zephyr 标准功能码处理，补齐适合当前同步模块架构的接口。</p>
+        <dl class="facts">
+          <dt>官方能力</dt><dd>使用 Zephyr RAW 服务端处理 01/02/03/04/05/06/15/16 的分派、数量校验、位打包和正常/异常响应。</dd>
+          <dt>项目补充</dt><dd>提供 RTU 判帧与 CRC 编解码、公共寄存器字序转换、实例上下文，以及每请求一次的整笔访问回调。</dd>
+          <dt>同步方式</dt><dd>官方 RAW 默认异步。当前通过受控构建副本扩展，使本适配器拥有的 RAW 接口在 APP 调用线程执行；
+            其他 RAW 接口保持官方行为。不修改 west 依赖源码。</dd>
+          <dt>职责边界</dt><dd>不依赖 DP 或产品点表。协议地址对应哪个测点、如何放缩由 transmit 负责。
+            RAW 不接收 UART 字节，不能替代物理接入与 RTU 边界判断。</dd>
+        </dl>
+        <div class="callout warning"><strong>版本维护成本：</strong>兼容脚本校验 Zephyr v4.4.2 源文件哈希和替换位置。
+          升级 Zephyr 时必须重新审查并验证，不能直接沿用同步扩展和协议修复。</div>
+        <p class="source">接口：<code>mb_server_*</code>、<code>mb_rtu_*</code> 与寄存器转换 ·
+          <a href="../modules/modbus/README.md">设计说明</a></p>
+      </article>
+
+      <article class="module" id="watchdog">
+        <div class="module-head"><h3>06 · watchdog — 任务健康与硬件喂狗</h3><span class="tag">已实现</span></div>
+        <p class="purpose">将任务监控、健康有效期和外部喂狗统一管理，应用不感知喂狗引脚。</p>
+        <dl class="facts">
+          <dt>健康检查</dt><dd>系统 workqueue 周期检查登记任务，软件监控随模块启用。
+            成功检查生成有效期，固定为软件检查周期的 3 倍；任务心跳本身不续期健康结论。</dd>
+          <dt>硬件喂狗</dt><dd>周期 k_timer 只读取原子状态和健康截止时间、翻转 GPIO，脱离任务共享锁。
+            本轮先按已有健康状态喂狗，再检查过期；过期后下一轮停止喂狗。</dd>
+          <dt>故障动作</dt><dd>统一 report 接口携带错误、描述、动作与复位延时。
+            HOLD 停业务、停检查并保留可用喂狗；RESET 经定时器延时冷复位。
+            CONTINUE 仅保留诊断兼容，新产品终止故障不使用。</dd>
+          <dt>APP 分工</dt><dd>status 绑定唯一故障回调，负责业务状态和 LED；watchdog 不依赖 status。
+            模块仅保留最近诊断，不提供故障历史或自动恢复业务。</dd>
+          <dt>配置来源</dt><dd>DTS 绑定外部 GPIO 与喂狗周期，Kconfig 配置软件检查周期和外部喂狗启用。
+            调试可关闭外部喂狗，显式 RESET 仍生效。</dd>
+        </dl>
+        <div class="flow"><span>任务报告进展</span><b>→</b><span>workqueue 完整检查</span>
+          <b>→</b><span>发布健康期限</span><b>→</b><span>k_timer 决定硬件喂狗</span></div>
+        <p class="legend">工作队列阻塞时，由健康过期和外部芯片兜底；关闭外部喂狗后不具备同等保障。
+          终止故障只能通过重启重新初始化，可恢复通信异常应由业务自行处理。</p>
+        <p class="source">入口：<code>watchdog_init</code>、任务登记/心跳、
+          <code>watchdog_report_fault</code>、诊断查询 ·
+          <a href="../modules/watchdog/README.md">设计说明</a></p>
+      </article>
+
+      <article class="module" id="iap">
+        <div class="module-head"><h3>07 · iap — 兼容旧协议的在线升级</h3><span class="tag pending">已接入 / 实板互通待验</span></div>
+        <p class="purpose">兼容旧 IAPv3 / SGZ 接收方式，使用 MCUboot 完成签名镜像升级。</p>
+        <dl class="facts">
+          <dt>完整链路</dt><dd>Modbus ADU 接收、1 KiB 分包、重复与乱序处理、AES 解密、SGZ/QuickLZ 解包、
+            P-256 验签、备用槽写入、升级结果 NVS 日志和试运行请求。</dd>
+          <dt>后台处理</dt><dd>专用线程处理 Flash 擦写和解包，协议回调仅提交有界任务。
+            不注册串口，也不依赖 DP；入口编号用于区分上传会话归属。</dd>
+          <dt>产品接入</dt><dd>forward.c 配置三个完整 ADU 地址段，通过回调调用 <code>iap_route()</code>。
+            transmit 先完成 CRC、站号和路由判断；IAP 自行校验功能码、包长和会话。</dd>
+          <dt>启动与确认</dt><dd>显式初始化后开放路由；必要初始化成功后由 main 确认当前镜像。
+            MCUboot 负责启动与镜像交换，IAP 不替代 bootloader。</dd>
+          <dt>当前范围</dt><dd>单 Cortex-M 镜像、双槽 scratch 交换；不包含多镜像、差分或下挂设备升级。</dd>
+        </dl>
+        <div class="callout warning"><strong>尚待闭环：</strong>默认升级流程没有接入 DP 冻结与 flush 钩子，
+          升级重启可能丢失尚未保存的参数。需要通过 prepare_reboot / cancel_reboot 配对钩子完成应用协调。</div>
+        <p class="source">接口：<code>iap_init</code>、<code>iap_init_config</code>、<code>iap_route</code> ·
+          <a href="../modules/iap/README.md">设计说明</a> · <a href="build-and-upgrade.md">构建与升级</a></p>
+      </article>
+
+      <div class="grid two">
+        <article class="card"><h3>08 · quicklz — 解压算法支撑</h3>
+          <p>提供 <code>qlz_decode_level3()</code>，服务 SGZ 压缩块解码。
+            与 IAP 会话、串口和产品点表分离，作为算法依赖单独登记。</p>
+          <p class="source"><a href="../modules/quicklz/">模块目录</a></p></article>
+        <article class="card"><h3>09 · gd32e505 — 硬件平台适配</h3>
+          <p>通过 SoC / DTS 和 ADC 驱动补齐 E505 支持，复用上游 HAL。
+            当前为 20 MHz 有源输入、180 MHz CPU；应用使用标准 Zephyr ADC / GPIO API。</p>
+          <p>当前 ADC 支持同步单通道读取；DMA、多通道序列和异步采样未实现。该模块面向 E505 平台复用。</p>
+          <p class="source"><a href="../modules/gd32e505/README.md">设计说明</a></p></article>
+      </div>
+    </section>
+
+    <section id="integration">
+      <h2><small>04 / INTEGRATION</small>在当前产品中如何组合运行</h2>
+      <div class="grid two">
+        <article class="card"><h3>本地数据链路</h3>
+          <div class="flow"><span>ADC / GPIO</span><b>→</b><span>acquisition</span>
+            <b>→</b><span>DP 测点</span></div>
+          <p>APP 按硬件映射读取 16 路 DI 和 8 路 AI。DI 作为位图测点，AI 各自写入独立测点，
+            工程量换算归产品采样逻辑。此处是本地采样，不代表南向 Modbus 采集已恢复。</p></article>
+        <article class="card"><h3>对外通信链路</h3>
+          <div class="flow"><span>RS485-1</span><b>→</b><span>vport</span><b>→</b>
+            <span>transmit</span><b>→</b><span>Modbus / DP 或 IAP</span></div>
+          <p>protocol.c 装配站号、转发表与升级路由，创建协议线程；rs485_1.c 仅提供物理事件与发送回调。
+            标准读写进入 DP，升级报文进入 IAP。</p></article>
+      </div>
+      <div class="callout"><strong>后续复用方式：</strong>新产品保留通用模块，主要提供板级 DTS、
+        内部点表、协议映射表和 APP 端口接入。扩展新协议或芯片时，仍需增加相应适配代码与测试。</div>
+    </section>
+
+    <section id="validation">
+      <h2><small>05 / VALIDATION</small>当前进展与验证边界</h2>
+      <p class="intro">以下为截至代码基线的既有验证记录。本次汇报整理未重新执行固件测试，
+        不把不同时期的历史测试数量累加为当前通过总数。</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>验证层级</th><th>已有证据</th><th>能够说明</th></tr></thead>
+        <tbody>
+          <tr><td>模块级 / 主机与模拟器</td><td>common 转换与放缩；DP 核心、NVS/Flash 模拟存储；
+            RAW 适配、transmit 协议选择；watchdog 及 IAP 专项记录</td>
+            <td>接口契约、异常处理、状态机和模拟持久化路径具备自动化覆盖</td></tr>
+          <tr><td>最近产品组合验证</td><td>process_runtime、protocol_port、iap-transmit 各 1/1 通过</td>
+            <td>产品点表、真实协议线程 + UART/GPIO 模拟接入，以及真实 IAP 接收器组合可运行</td></tr>
+          <tr><td>固件构建与产物</td><td>默认 MCUboot + IAPv3 构建、签名验证、SGZ 导出通过</td>
+            <td>当前源码可生成目标固件；构建成功不等于实板完整验收</td></tr>
+          <tr><td>实板验证</td><td>本轮通用模块重构后的连续长帧、RS485 方向、真实掉电、旧上位机上传仍待验收</td>
+            <td>需要真实串口、Flash、外部看门狗和上位机补齐证据</td></tr>
+        </tbody>
+      </table></div>
+      <p class="source">证据入口：<a href="testing.md">验证记录</a> ·
+        <a href="../.scratch/transmit-redesign/issues/17-rs485-physical-port.md">最近端口拆分验收</a> ·
+        <a href="../.scratch/transmit-redesign/issues/14-iap-address-routes.md">IAP 组合验收</a></p>
+    </section>
+
+    <section id="todo">
+      <h2><small>06 / ROADMAP</small>TODO：从模块落地到产品验收</h2>
+      <p class="intro">以下为建议推进顺序，不代表已承诺排期。先完成当前链路闭环，再恢复南向能力和扩展产品范围。</p>
+      <div class="table-wrap"><table>
+        <thead><tr><th>优先级</th><th>任务</th><th>完成标准</th></tr></thead>
+        <tbody>
+          <tr><td><span class="priority">P0</span></td><td><strong>RS485 与旧上位机实板互通</strong><br>
+            标准测点读写、广播、长帧、方向切换、超时与错误恢复；IAP 完整升级</td>
+            <td>保存报文和版本证据；确认旧上位机 1 KiB 上传、验签、试启动及镜像确认；测量 DE 和串口时序</td></tr>
+          <tr><td><span class="priority">P0</span></td><td><strong>升级前参数保存协调</strong><br>
+            APP 接入 IAP 的准备 / 取消回调，停止参数修改后执行 dp_flush</td>
+            <td>参数下发后立即升级不丢值；保存失败时行为明确，取消升级可正确解除准备状态</td></tr>
+          <tr><td><span class="priority">P0</span></td><td><strong>真实 Flash 掉电与恢复</strong><br>
+            保存、槽位删除、出厂恢复、布局重建和升级关键阶段断电</td>
+            <td>重启结果可解释，擦除不越分区；真实存储错误与内容不兼容分开处理，保留复现记录</td></tr>
+          <tr><td><span class="priority">P0</span></td><td><strong>外部看门狗与故障动作验收</strong><br>
+            任务超时、系统队列阻塞、HOLD、RESET 与调试配置</td>
+            <td>测量喂狗边沿与实际复位时间；确认队列阻塞能停喂、锁存不可恢复、HOLD 保留诊断</td></tr>
+          <tr><td><span class="priority">P1</span></td><td><strong>运行资源与压力基线</strong><br>
+            连续收发、长帧与升级并行、本地采样、参数保存</td>
+            <td>记录 CPU 负载、栈高水位、堆预算、队列溢出和最坏响应时间，确定配置余量</td></tr>
+          <tr><td><span class="priority">P1</span></td><td><strong>恢复南向 collect 能力</strong><br>
+            重新设计轮询、下发、在线状态、优先级与多总线归属</td>
+            <td>先确认接口和生命周期，再实现独立测试与端到端轮询 / 下发验证；不直接恢复旧框架</td></tr>
+          <tr><td><span class="priority">P1</span></td><td><strong>产品业务表与回归收敛</strong><br>
+            由当前覆盖测试项的转发表扩展为正式产品表；清理过时测试和文档引用</td>
+            <td>明确对外地址、类型、范围与版本策略；建立与当前架构一致的完整回归基线</td></tr>
+          <tr><td><span class="priority">P2</span></td><td><strong>平台扩展与版本演进</strong><br>
+            第二产品验证、多入口 / CAN 接入、自定义协议、Zephyr 升级评估</td>
+            <td>用第二产品证明复用边界；审查 RAW 兼容扩展，建立依赖升级与参数布局变更规则</td></tr>
+        </tbody>
+      </table></div>
+      <div class="grid two" style="margin-top:18px">
+        <article class="card"><h3>下一阶段交付物</h3><ul>
+          <li>通用模块接口与配置清单。</li><li>实板通信、掉电、看门狗与升级验收记录。</li>
+          <li>可复现的测试脚本、固件版本和资源基线。</li><li>南向 collect 的设计与分阶段实现计划。</li>
+        </ul></article>
+        <article class="card"><h3>汇报时需要明确的事项</h3><ul>
+          <li>当前重点已从框架重构转向实板闭环。</li><li>当前转发表是测试映射，不兼容旧业务地址表。</li>
+          <li>远端轮询与采集框架尚未恢复。</li><li>性能收益与开发效率改善尚未量化，不作为既有成果承诺。</li>
+        </ul></article>
+      </div>
+    </section>
+    <footer>范围：applications/IDU-pre 自有模块与产品装配。依据代码基线 6faba2f 及模块契约整理。
+      本页可离线打开，无外部字体、脚本或网络依赖；浏览器打印可导出 PDF。
+      <a href="README.md">返回文档导航</a></footer>
+  </main>
+</body>
+</html>
