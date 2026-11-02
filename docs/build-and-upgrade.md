@@ -23,6 +23,38 @@
 默认密钥为 build/keys/IDU-pre-dev.pem，首次构建自动生成，后续必须沿用。
 清理整个 build 前单独备份密钥；已有 MCUboot 只接受对应签名，私钥不加入 Git。
 
+### 新电脑离线编译
+
+`scripts/package-offline.py` 可生成工作区根目录的
+`IDU-pre-offline-linux-x86_64.tar.gz`。包内包含当前源码快照、必要 west 依赖、
+SDK 1.0.1 ARM GCC、CMake/Ninja 和 Python 3.12–3.14 离线 wheel。
+不携带 Git 历史、旧构建结果和现有签名私钥；仅支持 Linux x86_64 / WSL2。
+
+新 Ubuntu 安装一次系统前置依赖，随后编译不需要联网：
+
+```bash
+sudo apt update
+sudo apt install python3 python3-venv git device-tree-compiler
+tar -xzf IDU-pre-offline-linux-x86_64.tar.gz
+cd IDU-pre-offline
+./build.sh --pristine always
+```
+
+入口自动创建 `.venv`，固定使用包内工具链；无需 `west init/update`。
+输出路径仍为 `build/hex/IDU-pre-mcuboot-iapv3/`。
+首次自动生成新开发密钥，适用于完整工厂烧录；升级已有设备须单独迁移原私钥，
+传入 `./build.sh --key /path/to/original.pem`。
+
+维护者重新打包时传入已准备好的 SDK 和 wheel 目录：
+
+```bash
+python3 applications/IDU-pre/scripts/package-offline.py \
+  --sdk /path/to/zephyr-sdk-1.0.1 --wheels /path/to/wheels
+```
+
+包外 `.sha256` 校验压缩包，包内 `SHA256SUMS` 校验源码和工具文件；
+`VERSIONS.json` 记录实际依赖提交及产品工作区状态。
+
 ## 产物
 
 应用构建目录：`build/IDU-pre/mcuboot-iapv3/IDU-pre/`。
