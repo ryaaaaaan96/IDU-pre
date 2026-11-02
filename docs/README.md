@@ -20,10 +20,10 @@
 ## 架构决策
 
 参数生命周期和延后保存见 [ADR 0015](adr/0015-dp-device-storage.md)。
-后续通信设计见 [Transmit 与 DP 类型转换设计](transmit-design.md) 和
-[ADR 0016](adr/0016-transmit-stream-and-dp-conversion.md)；通信部分尚未实现；DP 显式类型接口与整数转换已落地。
-当前有效决策见 [`adr/`](adr/)。`modules/collect`、`modules/transmit`、
-`modules/vport` 已删除，相关 ADR 保留为历史记录；重新接入通信需要新的适配层。
+通信实现及设计见 [Transmit 与 DP 类型转换设计](transmit-design.md) 和
+[ADR 0016](adr/0016-transmit-stream-and-dp-conversion.md)；transmit/vport、标准 Modbus 及 DP 转换已实现，硬件时序待实板验证。
+当前有效决策见 [`adr/`](adr/)。旧通信相关 ADR 保留为历史记录，
+新实现以 ADR 0016 为准，南向 collect 尚未恢复。
 
 ## 历史与证据
 

@@ -3,7 +3,7 @@
 [文档导航](README.md) · [验证说明](testing.md) · [硬件说明](hardware.md)
 
 以下命令均从 West 工作区根目录执行。全部固件使用 MCUboot；默认构建包含 IAPv3
-模块，但当前最小产品没有 TR/Modbus 路由，串口上传尚不可用。`--no-upload`
+模块；当前转发只装配标准 Modbus 点表，没有 IAP 路由，串口上传尚不可用。`--no-upload`
 使用独立的构建/导出目录。旧 BOOT 构建和旧路径迁移代码已删除。
 
 ## 配置选择
@@ -16,8 +16,8 @@
 
 所有构建使用同一套 IDU 产品点表和业务。IAPv3 是唯一的镜像上传接收器，
 `--no-upload` 只关闭接收器，不切换产品点表；不再保留 AIDC 产品分支。
-当前产品不运行采集和转发，`modules/collect`、`modules/transmit`、`modules/vport`
-及其应用装配已移除；重新接入需要新的 DP 适配层。
+当前产品启用 APP 串口线程及 transmit/vport 北向从机转发；南向 collect 未恢复。
+点表、默认站号和协议地址见[产品协议](../app/protocol/README.md)。
 
 从包含旧产品分支的版本更新后，首次执行 `./applications/IDU-pre/scripts/build.sh --pristine always`
 重新生成构建目录，清除已删除开关的配置缓存。
@@ -175,7 +175,7 @@ RAM 范围取自 `slot0_partition`／`zephyr,sram`；`conf/iapv3.conf` 配置镜
 `--config <应用 .config>` 保持密钥和上限一致。
 
 适用当前 MV-IO 单 ARM 硬件。`modules/iap` 提供 `iap_route()`，但当前最小产品
-没有编译 TR/Modbus 路由，`iap_init()` 初始化的接收器没有调用者；IAPv3 上传在
+尚未在标准 Modbus 转发外装配 IAP 路由，`iap_init()` 初始化的接收器没有调用者；IAPv3 上传在
 本构建中尚不可用。最小路由计划在下次调试 IAP 配置时实现，见
 [.scratch/iap-route](../../.scratch/iap-route/spec.md)；重新启用后单独验证总线窗口
 与上传时序。这是唯一的镜像上传入口；应用不再提供第二个写 slot1 的接收器。

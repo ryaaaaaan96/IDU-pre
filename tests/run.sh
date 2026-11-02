@@ -50,6 +50,19 @@ for suite in adc modbus_support; do
     timeout 30s "$test_dir/$suite/zephyr/zephyr.exe"
 done
 
+# Modbus 模块独立 RAW 服务端，不链接 DP/transmit。
+env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
+    applications/IDU-pre/tests/modbus_support -d "$test_dir/modbus_support-server" -- \
+    -DEXTRA_CONF_FILE=server.conf
+timeout 40s "$test_dir/modbus_support-server/zephyr/zephyr.exe"
+
+# 完整字节/事件路径及产品 APP 串口线程。
+for suite in transmit_stream protocol_port; do
+    env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
+        "applications/IDU-pre/tests/$suite" -d "$test_dir/$suite"
+    timeout 40s "$test_dir/$suite/zephyr/zephyr.exe" -flash_in_ram
+done
+
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/io -d "$test_dir/io"
 python3 applications/IDU-pre/tests/io/run.py "$test_dir/io/zephyr/zephyr.exe"

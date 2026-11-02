@@ -37,86 +37,6 @@ SYS_HASHMAP_OA_LP_DEFINE_STATIC_ADVANCED(device_lookup,
 
 /* ==================== 内部实现 ==================== */
 
-/* 类型合法性先于业务回调检查；数组类仅允许同类型访问。 */
-static bool can_convert(value_type_t source, value_type_t target)
-{
-    switch (source) {
-    case VALUE_TYPE_U8:
-    case VALUE_TYPE_U16:
-    case VALUE_TYPE_S16:
-    case VALUE_TYPE_U32:
-    case VALUE_TYPE_S32:
-        switch (target) {
-        case VALUE_TYPE_U8:
-        case VALUE_TYPE_U16:
-        case VALUE_TYPE_S16:
-        case VALUE_TYPE_U32:
-        case VALUE_TYPE_S32:
-            return true;
-        default:
-            return false;
-        }
-    case VALUE_TYPE_STRING:
-    case VALUE_TYPE_BYTES:
-    case VALUE_TYPE_WORDS:
-        return source == target;
-    default:
-        return false;
-    }
-}
-
-/* 调用方已检查类型组合；中间值覆盖现有全部整数类型。 */
-static void convert_value(
-    value_type_t source_type, value_type_t target_type, const value_t *source, value_t *target)
-{
-    if (source_type == target_type) {
-        *target = *source;
-        return;
-    }
-    int64_t number;
-    switch (source_type) {
-    case VALUE_TYPE_U8:
-        number = source->u8;
-        break;
-    case VALUE_TYPE_U16:
-        number = source->u16;
-        break;
-    case VALUE_TYPE_S16:
-        number = source->s16;
-        break;
-    case VALUE_TYPE_U32:
-        number = source->u32;
-        break;
-    default:
-        number = source->s32;
-        break;
-    }
-    *target = (value_t){0};
-    switch (target_type) {
-    case VALUE_TYPE_U8:
-        target->u8 = (uint8_t)number;
-        break;
-    case VALUE_TYPE_U16:
-        target->u16 = (uint16_t)number;
-        break;
-    case VALUE_TYPE_S16: {
-        uint16_t bits = (uint16_t)number;
-        int32_t signed_number = bits <= INT16_MAX ? (int32_t)bits : (int32_t)bits - 65536;
-        target->s16 = (int16_t)signed_number;
-        break;
-    }
-    case VALUE_TYPE_U32:
-        target->u32 = (uint32_t)number;
-        break;
-    default: {
-        uint32_t bits = (uint32_t)number;
-        int64_t signed_number = bits <= INT32_MAX ? (int64_t)bits : (int64_t)bits - 4294967296LL;
-        target->s32 = (int32_t)signed_number;
-        break;
-    }
-    }
-}
-
 static int check_value(const dp_point_config_t *point, const value_t *value)
 {
     if (point->type == VALUE_TYPE_STRING || point->type == VALUE_TYPE_BYTES ||
@@ -397,11 +317,11 @@ static int set_para(const dp_point_ref_t *point, value_type_t input_type, const 
 {
     const dp_point_config_t *p = &point->table->points[point->index];
     dp_point_data_t *stored = &point->table->data[point->index];
-    if (!can_convert(input_type, p->type)) {
-        return -ENOTSUP;
-    }
     value_t pending;
-    convert_value(input_type, p->type, value, &pending);
+    int err = value_convert(input_type, value, p->type, &pending);
+    if (err) {
+        return err;
+    }
     if (p->write_callback) {
         const dp_callback_context_t context = {
             .device_id = point->table->device_id,
@@ -410,7 +330,7 @@ static int set_para(const dp_point_ref_t *point, value_type_t input_type, const 
             .is_write = true,
             .value = &pending,
         };
-        int err = p->write_callback(&context);
+        err = p->write_callback(&context);
         if (err) {
             return err;
         }
@@ -422,7 +342,7 @@ static int get_para(const dp_point_ref_t *point, value_type_t output_type, value
 {
     const dp_point_config_t *p = &point->table->points[point->index];
     dp_point_data_t *stored = &point->table->data[point->index];
-    if (!can_convert(p->type, output_type)) {
+    if (!value_can_convert(p->type, output_type)) {
         return -ENOTSUP;
     }
     value_t pending;
@@ -446,8 +366,7 @@ static int get_para(const dp_point_ref_t *point, value_type_t output_type, value
             return err;
         }
     }
-    convert_value(p->type, output_type, &pending, value);
-    return 0;
+    return value_convert(p->type, &pending, output_type, value);
 }
 
 /* ==================== 对外接口 ==================== */

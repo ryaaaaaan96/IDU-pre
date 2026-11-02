@@ -14,3 +14,11 @@ config IDU_ADC_AVERAGE_COUNT
 config IDU_IAPV3
     bool "MV-IO IAPv3 AES/SGZ receiver"
     depends on BOOTLOADER_MCUBOOT && !MCUMGR_GRP_IMG
+
+config IDU_TRANSMIT
+    bool "Product Modbus slave forwarding port"
+    depends on TRANSMIT && UART_INTERRUPT_DRIVEN && DT_HAS_IDU_FORWARD_PORT_ENABLED
+    default y if BOARD_IDU_PRE
+    help
+      Application-owned UART thread with timestamped input and RS485 direction.
+      Station address is loaded once from the saved process parameter.

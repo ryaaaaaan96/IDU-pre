@@ -1,0 +1,2 @@
+config VPORT
+    bool "Protocol-independent byte and event ports"

@@ -4,3 +4,7 @@ target_sources(app PRIVATE
   tables/process.c
   process_runtime.c
 )
+
+if(CONFIG_IDU_TRANSMIT)
+  target_sources(app PRIVATE port.c tables/forward.c)
+endif()

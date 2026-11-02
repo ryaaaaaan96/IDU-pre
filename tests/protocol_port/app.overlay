@@ -1,0 +1,27 @@
+/ { chosen { /delete-property/ zephyr,code-partition; }; aliases { dp-params = &dp_test_params; }; };
+&flash0 {
+    /delete-node/ partitions;
+    partitions {
+        compatible = "fixed-partitions";
+        #address-cells = <1>;
+        #size-cells = <1>;
+        dp_test_params: partition@0 {
+            label = "dp-params";
+            reg = <0 0x10000>;
+        };
+    };
+};
+#include <zephyr/dt-bindings/gpio/gpio.h>
+/ {
+    aliases { idu-forward = &forward_modbus; };
+    forward_uart: forward-uart {
+        compatible = "zephyr,uart-emul";
+        status = "okay";
+        current-speed = <115200>;
+    };
+    forward_modbus: forwarding-port {
+        compatible = "idu,forward-port";
+        uart = <&forward_uart>;
+        de-gpios = <&gpio0 5 GPIO_ACTIVE_HIGH>;
+    };
+};

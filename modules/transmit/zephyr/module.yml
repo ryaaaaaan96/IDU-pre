@@ -1,0 +1,4 @@
+name: transmit
+build:
+  cmake: .
+  kconfig: Kconfig

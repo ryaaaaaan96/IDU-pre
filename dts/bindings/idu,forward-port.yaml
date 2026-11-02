@@ -1,0 +1,11 @@
+description: Application-owned forwarding UART direction control
+compatible: "idu,forward-port"
+include: base.yaml
+properties:
+  de-gpios:
+    type: phandle-array
+    required: true
+    description: RS485 transmit direction output, inactive for receive
+  uart:
+    type: phandle
+    description: Explicit UART when this node is not a child of its UART controller

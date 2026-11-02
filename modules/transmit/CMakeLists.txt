@@ -1,0 +1,5 @@
+zephyr_include_directories(include)
+if(CONFIG_TRANSMIT)
+  zephyr_library()
+  zephyr_library_sources(src/transmit.c src/modbus.c src/mapping.c)
+endif()

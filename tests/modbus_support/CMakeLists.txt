@@ -4,3 +4,7 @@ include(${APP_ROOT}/modules/modules.cmake)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(modbus_support_tests)
 target_sources(app PRIVATE src/main.c)
+
+if(CONFIG_MODBUS_SUPPORT_SERVER)
+  target_sources(app PRIVATE src/server.c)
+endif()

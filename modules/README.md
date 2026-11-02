@@ -2,20 +2,22 @@
 
 [文档导航](../docs/README.md) · [DP](dataprocess/README.md) · [IAP](iap/README.md)
 
-当前产品只保留本地最小核心。模块清单：
+当前产品模块清单：
 
 | 模块 | 接口 | 职责 |
 | --- | --- | --- |
-| `common` | `<common/value.h>` | 共享数值类型，不依赖业务模块 |
+| `common` | `<common/value.h>`、`<common/scale.h>` | 共享数值类型及比例偏移整数换算 |
 | `dataprocess` | `dp_*` | 设备登记、RAM 点值、回调与NVS 延后保存 |
-| `modbus` | `modbus_support_*` | 无分配 RTU 编解码及 Zephyr Modbus 构建兼容；IAP 复用 ADU 结构 |
+| `vport` | `vport_*` | 同步交付字节与接收事件，回调输出 |
+| `transmit` | `tr_register()` | 固定缓存、锁定轮转、从机映射与协议放缩 |
+| `modbus` | `modbus_support_*` | RTU 编解码、Zephyr RAW 服务端同步适配及公共寄存器转换；不依赖 DP |
 | `iap` | `iap_*` | IAPv3/SGZ 接收、解包、验签和结果日志 |
 | `quicklz` | `qlz_decode_level3()` | SGZ 块解码 |
 | `watchdog` | `watchdog_*` | 任务健康监控和外部喂狗 |
 | `gd32e505` | SoC/DTS | GD32E505 时钟、ADC 和板级支持 |
 
-`modules/modules.cmake` 只登记上述模块。原 `collect`、`transmit`、`vport`
-已删除；DP 不再包含采集/转发描述符，重新接入通信需要新增独立的适配层。
+`modules/modules.cmake` 只登记上述模块。transmit/vport 已按新设计重新实现，collect 仍未恢复；DP 不包含通信描述符。
+APP 的 protocol/port.c 创建线程并装配硬件，模块不创建通信线程。
 
 ## DP 使用
 
@@ -29,7 +31,7 @@
 
 ## IAPv3
 
-IAP 模块自身完整，但当前产品没有 TR/Modbus 路由，`iap_route()` 未被调用。
+IAP 模块自身完整，但当前只装配标准 Modbus 点表，`iap_route()` 未被调用。
 串口上传在重新加入最小路由适配层前不可用。构建、签名和分区说明见
 [构建与升级](../docs/build-and-upgrade.md)。
 

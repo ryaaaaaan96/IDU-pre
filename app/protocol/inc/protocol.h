@@ -6,7 +6,7 @@
 #define APPLICATION_PROTOCOL_H
 
 /**
- * @brief 逐组登记本地模型；参数区在首次访问参数时挂载。
+ * @brief 初始化 DP、登记本地点表，并在启用时启动 APP 转发端口线程。
  */
 int protocol_init(void);
 

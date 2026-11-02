@@ -136,7 +136,7 @@ static const dp_point_config_t local_process_rows[PROCESS_SIGNAL_COUNT] = {
                 {
                     .initial.u16 = 1,
                     .minimum.u16 = 1,
-                    .maximum.u16 = 16,
+                    .maximum.u16 = 246,
                 },
         },
     [PROCESS_DI] =

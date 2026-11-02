@@ -1164,3 +1164,31 @@ LED 播放改为每个指示状态独立的亮灭/持续时间步骤表，重复
 `test_conversion_callback_and_errors` 验证回调使用内部类型、范围检查、非法类型在回调前拒绝及输出保护。
 `tests/dp_storage` 使用跨类型接口执行保存与恢复，NVS 仍记录点表内部类型。
 本轮验证及通信模块尚未实现的范围见[任务记录](../.scratch/transmit-redesign/issues/02-typed-dp.md)。
+
+## 新转发接入（2026-10-31）
+
+`tests/transmit_stream` 覆盖锁定轮转、接收恢复、标准 Modbus 映射和 common 放缩，
+`tests/protocol_port` 在 UART/GPIO 模拟器上运行 APP 的 port.c 线程；均已加入 tests/run.sh。
+带 ASan/UBSan 的构建可另选目录并传 `-DCONFIG_ASAN=y -DCONFIG_UBSAN=y`，
+运行时按环境使用 `ASAN_OPTIONS=detect_leaks=0`。
+模拟器没有证明 GD32 的实际中断延迟、RS485 方向时序或持续满速输入。
+
+实板验收使用 USART2/RS485，115200 8N1、默认站号 1；先读 04 地址 8152（1 寄存器）、
+8163（8 寄存器），再写 06 地址 31000 的采样周期并读回。
+广播写不响应；写 30461 保存新站号，等待保存或显式 flush 后重启，再使用新站号验证。
+实板结果另行记录；本轮实现及模拟证据见[任务记录](../.scratch/transmit-redesign/issues/03-stream-forwarding.md)。
+
+## Zephyr RAW 复用验证（2026-10-31）
+
+`tests/modbus_support/server.conf` 启用同步 RAW 适配，保持 DATAPROCESS=n，独立验证
+官方服务端解析、最大寄存器/位数量、畸形长度、精确字节数、线圈值、地址溢出、
+禁用 FP 后的高地址、异常码、调用线程和递归保护及资源回收。
+`tests/transmit_stream` 验证批量预检、每点单次快照和并行 RAW 接口：
+一个实例的业务回调等待时，另一个实例仍完成访问自己的设备。
+`tests/protocol_port` 继续验证 APP UART/GPIO 接入，功能码实际经过 modbus_raw_submit_rx。
+
+compat/server_fixes.py 只修改固定 Zephyr 版本的构建副本，west 源码不变；
+脚本保留源文件 SHA256、替换锚点与数量检查，版本漂移必须先审查再构建。
+本轮记录见[RAW 复用任务](../.scratch/transmit-redesign/issues/04-zephyr-raw-server.md)。
+
+RAW 专项还验证外部提交在复制前被拒绝、其他 RAW 接口保持 workqueue，以及客户端空载荷/单字节异常响应。

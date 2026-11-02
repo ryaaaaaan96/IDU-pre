@@ -1,5 +1,8 @@
-/* 当前产品只运行本地 process；通信模块不参与本构建。 */
+/* 先登记 DP，再由 APP 接入可选通信端口。 */
 #include "inc/protocol.h"
+#ifdef CONFIG_IDU_TRANSMIT
+#include "port.h"
+#endif
 #include "inc/signal_keys.h"
 #include "inc/process_table.h"
 
@@ -9,5 +12,13 @@ int protocol_init(void)
     if (err) {
         return err;
     }
-    return dp_register_device(DEVICE_LOCAL, &protocol_local_table);
+    err = dp_register_device(DEVICE_LOCAL, &protocol_local_table);
+    if (err) {
+        return err;
+    }
+#ifdef CONFIG_IDU_TRANSMIT
+    return protocol_port_init();
+#else
+    return 0;
+#endif
 }

@@ -11,8 +11,10 @@
 /**
  * @brief 逻辑设备与信号键；与 process 行索引和协议寄存器地址独立。
  */
-#define DEVICE_LOCAL 1
-#define DEVICE_REMOTE_IO 10
+typedef enum {
+    DEVICE_LOCAL = 1,
+    DEVICE_REMOTE_IO = 10,
+} protocol_device_id_t;
 
 /**
  * @brief 本地与南向设备共用这些信号键，通过设备 ID 区分测点。

@@ -69,9 +69,12 @@ int mb_raw_rx_begin(struct modbus_context *ctx)
     if (iface < 0) {
         return iface;
     }
-    /* 直接调用 Zephyr 的使用者保留自己的调度契约；
-     * 绑定的报文端口通过完成钩子持有所有权，直到协议处理结束。 */
-    if (!mb_io[iface].done) {
+    /* 自有 RAW 接口先校验调用者，再占用缓冲；拒绝外部写入覆盖正在执行的请求。 */
+    int claim = mb_support_raw_claim(ctx);
+    if (claim < 0) {
+        return claim;
+    }
+    if (!mb_io[iface].done && !claim) {
         return 0;
     }
     return atomic_cas(&mb_io[iface].raw_busy, 0, 1) ? 0 : -EBUSY;

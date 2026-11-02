@@ -7,6 +7,7 @@
 from pathlib import Path
 import hashlib
 import sys
+from server_fixes import apply_server_fixes
 
 EXPECTED_SHA256 = {
     "modbus_core.c": "c9a503faa301f003fea86899126fbedd4e736d0f37883b864e0c90310dabcbb0",
@@ -45,6 +46,12 @@ for name in EXPECTED_SHA256:
         )
     if name == "modbus_raw.c":
         source = replace_once(source, "(MODBUS_RTU_MIN_MSG_SIZE - 2)", "1")
+        source = replace_once(
+            source,
+            "ctx->rx_adu.length < MODBUS_RAW_MIN_MSG_SIZE ||\n\t    ctx->rx_adu.length > MODBUS_RAW_BUFFER_SIZE",
+            "(ctx->client && ctx->rx_adu.length < MODBUS_RAW_MIN_MSG_SIZE) ||\n"
+            "\t    ctx->rx_adu.length > MODBUS_RAW_BUFFER_SIZE",
+        )
         source = replace_once(source, "(CONFIG_MODBUS_BUFFER_SIZE - 2)", "sizeof(ctx->rx_adu.data)")
         source = replace_once(
             source,
@@ -145,21 +152,15 @@ void mb_serial_abort(struct modbus_context *ctx)
 }
 """
     if name == "modbus_server.c":
+        source = apply_server_fixes(source, replace_once)
         source = replace_once(
             source, "if (addr != 0 && addr != ctx->unit_id)", "if (!mb_support_accept_request(ctx))"
         )
         source = replace_once(
             source,
-            "\tswitch (fc) {",
-            "\tif (!mb_support_write_request(ctx, &send_reply)) {\n\tswitch (fc) {",
-        )
-        source = replace_once(
-            source, "\n\tif (addr == 0) {", "\n\t}\n\tif (mb_support_suppress_broadcast(ctx)) {"
-        )
-        source = replace_once(
-            source,
-            "\n\treturn send_reply;",
-            "\n\tmb_support_complete_request(ctx, send_reply);\n\treturn send_reply;",
+            "static void mbs_exception_rsp(struct modbus_context *ctx, uint8_t excep_code)\n{",
+            "static void mbs_exception_rsp(struct modbus_context *ctx, uint8_t excep_code)\n{\n"
+            "\texcep_code = mb_support_exception_code(ctx, excep_code);",
         )
     (output / name).write_text(source)
     (output / (name + ".sha256")).write_text(hashlib.sha256(original.encode()).hexdigest() + "\n")

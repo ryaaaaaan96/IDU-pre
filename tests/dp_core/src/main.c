@@ -500,4 +500,24 @@ ZTEST(dp_core, test_conversion_callback_and_errors)
     zassert_ok(dp_remove_device(601));
 }
 
+ZTEST(dp_core, test_common_value_conversion_contract)
+{
+    /* 公共接口支持同一联合体原地转换，窄有符号整数保留低位。 */
+    value_t value = {.u32 = 100000};
+    zassert_ok(value_convert(VALUE_TYPE_U32, &value, VALUE_TYPE_S16, &value));
+    zassert_equal(value.s16, -31072);
+    zassert_ok(value_convert(VALUE_TYPE_S16, &value, VALUE_TYPE_S32, &value));
+    zassert_equal(value.s32, -31072);
+
+    const value_t input = {.bytes = {0x12, 0x34, 0x56}};
+    value_t output = input;
+    zassert_equal(value_convert(VALUE_TYPE_BYTES, &input, VALUE_TYPE_U16, &output), -ENOTSUP);
+    zassert_equal(value_convert((value_type_t)99, &input, (value_type_t)99, &output), -ENOTSUP);
+    zassert_equal(value_convert(VALUE_TYPE_U16, NULL, VALUE_TYPE_U16, &output), -EINVAL);
+    zassert_equal(value_convert(VALUE_TYPE_U16, &input, VALUE_TYPE_U16, NULL), -EINVAL);
+    zassert_mem_equal(&output, &input, sizeof(output));
+    zassert_ok(value_convert(VALUE_TYPE_BYTES, &input, VALUE_TYPE_BYTES, &output));
+    zassert_mem_equal(&output, &input, sizeof(output));
+}
+
 ZTEST_SUITE(dp_core, NULL, NULL, NULL, NULL, NULL);

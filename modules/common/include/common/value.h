@@ -2,7 +2,9 @@
 #ifndef COMMON_VALUE_H
 #define COMMON_VALUE_H
 
+#include <stdbool.h>
 #include <stdint.h>
+#include <stddef.h>
 
 #define VALUE_WORDS CONFIG_COMMON_VALUE_WORDS
 
@@ -33,6 +35,29 @@ typedef union {
     float f32;
     const void *array;
 } value_t;
+
+/** @brief 整数位宽；非整数类型返回 0。 */
+size_t value_integer_bits(value_type_t type);
+
+/** @brief 按类型取得整数；整数类型要求 value 非空，非整数类型返回 0。 */
+int64_t value_integer_get(value_type_t type, const value_t *value);
+
+/** @brief 取低位构造整数，有符号按补码解释；非整数类型返回全零值。 */
+value_t value_integer_from_bits(value_type_t type, uint32_t bits);
+
+/** @brief 整数类型之间可互转；STRING/BYTES/WORDS 仅允许同类型复制。 */
+bool value_can_convert(value_type_t source_type, value_type_t target_type);
+
+/**
+ * @brief 转换本地数值；同类型复制，整数收窄保留低位，有符号按补码解释。
+ * @note 支持原地转换；失败不修改输出；不处理协议字序、放缩或有效数组长度。
+ * @retval -EINVAL 输入或输出指针为空。
+ * @retval -ENOTSUP 类型无效或转换组合不支持。
+ */
+int value_convert(value_type_t source_type,
+    const value_t *source,
+    value_type_t target_type,
+    value_t *target);
 
 /* 固定存储类型编码，不依赖公共枚举的数值和 C 结构体布局。 */
 static inline uint8_t value_storage_type(value_type_t type)

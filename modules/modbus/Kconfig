@@ -9,6 +9,18 @@ config MODBUS_SUPPORT_SERVER_HOOKS
     bool
     depends on MODBUS_SUPPORT
     help
-      Internal contract selected by the forwarding adapter. The selecting
-      adapter supplies request routing and execution hooks; otherwise the
-      shared compatibility code uses Zephyr's ordinary handling.
+      Internal contract selected by the synchronous RAW server adapter.
+      Other interfaces retain Zephyr work submission and ordinary handling.
+
+config MODBUS_SUPPORT_SERVER
+    bool "Synchronous Zephyr RAW server adapter"
+    depends on MODBUS_SUPPORT && MODBUS_SERVER && !MODBUS_FP_EXTENSIONS
+    select MODBUS_RAW_ADU
+    select MODBUS_SUPPORT_SERVER_HOOKS
+    help
+      Keep official function-code parsing and formatting, with a synchronous
+      application-thread adapter and one whole-request access callback.
+
+config MODBUS_NUMOF_RAW_ADU
+    depends on MODBUS_RAW_ADU
+    default 4 if MODBUS_SUPPORT_SERVER

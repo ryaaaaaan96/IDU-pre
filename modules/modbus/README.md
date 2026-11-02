@@ -1,44 +1,59 @@
 # Modbus support
 
-Zephyr module 名为 `modbus_support`，公共配置开关为 `MODBUS_SUPPORT`。
-CO/TR 的 Modbus 适配启用时自动选择它，也可单独启用。
+公共头文件位于 `<modbus_support/>`。本模块不依赖 DP、transmit、vport 或产品点表。
 
-## 职责与依赖
-
-- `src/rtu.c` 提供完整 RTU 帧校验、解码和编码，使用 Zephyr CRC、字节序及 ADU 类型。
-- `modbus_support/transport.h` 提供公共串口完整帧接口及 RAW 完成通知。
-- `compat/` 在构建目录生成固定 Zephyr 版本的适配源码，保留源文件哈希与替换锚点检查。
-- 转发专用请求选择、整笔写入、广播和工作队列处理仍在 transmit；它选择
-  `MODBUS_SUPPORT_SERVER_HOOKS` 并实现公共模块声明的内部钩子。
-  未选择该扩展时使用普通 Zephyr 工作提交及请求处理路径。
-
-本模块不依赖 collect、transmit、DP、vport 或产品配置，不创建执行线程或应用路由。
-CO/TR 保留各自的 RAW 端口登记、事务身份、接收占用、缓冲区生命周期和完成处理。
-应用继续选择物理接口及编排共享链路。
-
-## 编解码契约
-
-公开头文件：`modbus_support/rtu.h`。
-
-| 接口 | 行为 |
+| 接口 | 提供者与职责 |
 | --- | --- |
-| `mb_rtu_validate(frame, size)` | 检查长度及 CRC；可在分配内存或占用接收上下文之前调用。 |
-| `mb_rtu_decode(frame, size, adu)` | 再次校验并填入调用者 ADU，清零 TCP 事务及协议标识。 |
-| `mb_rtu_encode(adu, frame, capacity, size)` | 填入站号、功能码、数据和 CRC，返回完整帧长度。 |
+| `modbus_init_server`、`modbus_raw_submit_rx` | Zephyr 官方 RAW 服务端入口 |
+| 官方服务端功能码处理 | 01/02/03/04/05/06/15/16 解析、数量校验、位打包及正常/异常响应 |
+| `server.h` 的 `mb_server_*` | 本模块的同步适配，整笔访问回调及逐实例上下文 |
+| `rtu.h` 的 `mb_rtu_*` | 本模块的完整 RTU 长度/CRC 校验及 ADU 编解码，使用 Zephyr 工具 |
+| `rtu_frame.h` 的 `mb_rtu_probe` | 本模块的流检查，根据外部实际时序判定完整帧 |
+| `registers.h` | 本模块的公共数值与寄存器字序转换，不认识转发表 |
+| `transport.h` | 保留的 Zephyr 传输扩展，不是官方公共接口 |
 
-所有缓冲区由调用者持有；内部不分配、提交或发送。输入输出不得重叠，调用期间输入保持稳定。
-长度超限或容量不足返回 `-EMSGSIZE`，CRC 错误返回 `-EBADMSG`，空指针返回 `-EINVAL`；
-失败不修改输出。RTU 帧长度允许 4 至 `CONFIG_MODBUS_BUFFER_SIZE`，语义及功能码校验归协议处理。
-RAW 适配在接收占用前预校验，随后解码再次校验，以保留既有非法帧及忙状态错误的判定顺序。
+RAW 输入是完整 ADU，不能直接接收 UART 字节，也不提供 RTU 静默判帧和线 CRC。
+这些仍由 APP 时序输入与本模块的 RTU 适配负责，物理 UART 不交给 Zephyr Modbus SERIAL。
 
-`modbus_raw_submit_rx()`、`raw_tx_cb`、客户端读写和服务端能力仍来自 Zephyr；
-`mb_serial_*`、`mb_raw_set_done` 和内部扩展钩子由本模块提供，不能当作官方接口。
+## 同步 RAW 服务端
 
-`mb_client_begin/end` 为同一线程的同步 Zephyr 客户端调用限定总期限，并持有
-Zephyr 自身的可递归接口锁；不允许嵌套会话。`begin` 超时表示尚未发送，返回
-`-EBUSY`。会话期间 RAW 发送使用 `mb_client_remaining`，内部响应等待取原
-`rx_timeout` 与剩余总预算的较小值。原始 Zephyr API 的协议校验仍然执行。
-普通直接 Zephyr 调用不建立会话时保持原行为。此适配也受固定源文件哈希检查。
+`mb_server_open(unit, &server)` 在启动时占用一个官方 RAW 接口，
+`mb_server_process()` 调用官方 modbus_raw_submit_rx，`mb_server_close()` 只用于启动失败回退。
+配置数量由 MODBUS_NUMOF_RAW_ADU 决定，Zephyr 4.4.2 支持 1–4，当前产品配置 1。
+模块默认预算 4，其他 RAW 使用者已占用的接口不会被抢占；不足返回 -ENOSPC。
+成功绑定后由 APP 串行调用，递归或同实例并发返回 -EBUSY，关闭正在处理的实例也返回 -EBUSY。
 
-独立回归见 `tests/modbus_support`；完整 RAW/RTU、内存失败、身份及并发见
-`tests/communication`，产品共线行为见 `tests/shared_rs485`。
+官方用户回调按单寄存器/位提供，且没有 user_data，因此本模块按 RAW 槽位生成独立回调。
+第一次官方数据回调时，将已校验请求规范化为 mb_request_t，并调用一次整笔访问后端：
+
+- 读后端填充预清零数据，再由官方逐寄存器/位读取它并构造响应。
+- 写后端看到全部载荷，可先预检再执行；后续官方单值回调不再重复执行业务。
+- 后端返回 Modbus 异常码，交给官方异常响应函数；不在 transmit 重写响应格式。
+
+每实例固定 250 B 数据暂存，对应标准最大读取 125 个寄存器或 2000 位。
+没有请求期动态申请，不使用线程全局上下文；不同实例可以在不同 APP 线程同时执行。
+业务后端、输入/输出指针均只在同步调用期间有效，不得保留。
+
+## 固定版本兼容
+
+Zephyr 原生 modbus_raw_submit_rx 默认投递系统 workqueue。本模块在构建副本中使用受控扩展：
+仅本适配器拥有的 RAW 接口在调用线程执行原工作处理函数，未绑定接口保留官方异步投递。
+自有 RAW 在复制入站数据前检查调用线程并占用缓冲，防止绕过适配器的提交覆盖活动请求。
+这不是官方 RAW 的默认同步能力，不创建额外模块线程。
+
+compat 对四个 Zephyr 4.4.2 源文件校验 SHA256 及替换锚点，只生成构建目录副本，不修改 west 仓库。
+本轮 server_fixes.py 修复高地址在禁用 FP 后的读取循环、响应缓冲边界、非法线圈值、
+写数量上限与精确字节数校验，并将错误 PDU 长度统一返回异常 03。
+从机 RAW 允许零数据载荷，以便未知功能码或缺失参数交给服务端判断；客户端仍要求至少一个响应数据字节。
+只保留接收占用、同步投递、请求接受和异常码翻译内部钩子，移除旧转发框架的整笔替换/完成钩子。
+
+自有适配接口在访问后端前忽略广播读；广播写执行且官方不响应，其他站号也静默消费。
+产品范围、放缩及整笔访问规则仍由 transmit 决定；IAP 路由尚未接入。
+独立验证见 tests/modbus_support/server.conf：链接官方 RAW 服务端，不启用 DP/transmit。
+
+## 数据区命名
+
+自有同步适配使用 mb_data_area_t 和 MB_DATA_AREA_* 表示四个 Modbus 数据区，
+请求与转发表字段统一命名为 area；它不表示数值类型或 Flash 区域。
+Zephyr 原生使用 coil_rd、discrete_input_rd、holding_reg_rd、input_reg_rd 等分区回调，
+未提供本模块这一统一数据区枚举；mb_data_area_t 属于本项目的适配接口。

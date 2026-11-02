@@ -16,7 +16,8 @@ foreach(name modbus_core.c modbus_raw.c modbus_serial.c modbus_server.c)
   endforeach()
 endforeach()
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
-             ${CMAKE_CURRENT_LIST_DIR}/prepare_modbus.py)
+             ${CMAKE_CURRENT_LIST_DIR}/prepare_modbus.py
+  ${CMAKE_CURRENT_LIST_DIR}/server_fixes.py)
 set_property(TARGET subsys__modbus PROPERTY SOURCES ${modbus_support_sources})
 target_include_directories(subsys__modbus PRIVATE ${CMAKE_CURRENT_LIST_DIR})
 zephyr_include_directories(${CMAKE_CURRENT_LIST_DIR})

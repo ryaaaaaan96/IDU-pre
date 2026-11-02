@@ -4,8 +4,8 @@
 
 ## 接口及生命周期
 
-四个读写接口显式携带输入或输出类型，整数转换由 DP 执行。协议侧放缩与后续通信接入见
-[Transmit 与 DP 类型转换设计](../../docs/transmit-design.md)；transmit/vport 尚未实现。
+四个读写接口显式携带输入或输出类型，DP 调用 common/value 完成整数转换。协议侧放缩与后续通信接入见
+[Transmit 与 DP 类型转换设计](../../docs/transmit-design.md)；transmit/vport 已实现，协议侧不缓存 DP 内部类型。
 
 统一包含 `<dataprocess/dataprocess.h>`：
 
@@ -53,6 +53,8 @@ get 无读回调时读取快照；有回调则操作内部类型副本，校验�
 有符号结果按目标位宽补码解释；不饱和，转换后的内部值仍接受配置范围检查。
 STRING/BYTES/WORDS 仅支持同类型；非法类型或不支持组合在回调前返回 -ENOTSUP。
 同类型保留原联合体复制行为，跨整数类型清零输出后填写目标成员。
+类型兼容判断调用 value_can_convert，实际转换调用 value_convert，算法统一位于 common/value。
+GET 在回调前检查组合，实际转换在回调与校验完成后执行。
 回调始终接收点表内部类型；协议侧应先做放缩再 SET，需要保留原值时 GET 应请求足够宽的类型。
 失败不修改调用方输入/读取输出；回调副作用不能回滚。所有成功接口返回 0。
 

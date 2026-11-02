@@ -40,7 +40,7 @@
     aliases {
         dp-params = &dp_params;
         led0 = &run_led;
-        idu-forward = &modbus0;
+        idu-forward = &forward_port;
         /* CO/TR 共用此 RS485 链路，用于单总线性能测试。 */
     };
 
@@ -149,8 +149,8 @@
     current-speed = <115200>;
     pinctrl-0 = <&rs485_uart_default>;
     pinctrl-names = "default";
-    modbus0: modbus {
-        compatible = "zephyr,modbus-serial";
+    forward_port: forwarding-port {
+        compatible = "idu,forward-port";
         de-gpios = <&gpioa 15 GPIO_ACTIVE_HIGH>;
         status = "okay";
     };
