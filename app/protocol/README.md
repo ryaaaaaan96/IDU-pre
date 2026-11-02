@@ -1,6 +1,7 @@
 # 产品协议与 process 点表
 
-protocol_init() 先初始化 DP，登记 21 行本地 process，再在 IDU_TRANSMIT 启用时初始化 APP 端口。
+protocol_init() 先初始化 DP，登记 21 行本地 process，再初始化 APP 转发端口。
+转发属于产品必需功能，不设置单独产品开关；通用模块保留 CONFIG_TRANSMIT。
 `tables/process.c` 描述内部类型、范围、初值及持久化；`tables/forward.c` 独立配置北向协议映射。
 设备使用 protocol_device_id_t，点行使用 process_signal_index_t，协议地址与稳定 key、行顺序独立。
 采样周期、标签和保存地址持久化；其他点启动使用初值。

@@ -2,6 +2,8 @@
 set(required_services
   BOOTLOADER_MCUBOOT
   DATAPROCESS
+  TRANSMIT
+  UART_INTERRUPT_DRIVEN
   GPIO ADC)
 foreach(feature IN LISTS required_services)
   if(NOT CONFIG_${feature})

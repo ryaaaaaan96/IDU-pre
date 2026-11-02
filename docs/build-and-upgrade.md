@@ -36,7 +36,7 @@ DP 最小核心的线程和容量配置集中在 `prj.conf`：
 | `CONFIG_SYSTEM_WORKQUEUE_STACK_SIZE` | 2048 | 看门狗等系统工作 |
 
 `app/CMakeLists.txt` 在配置阶段检查 `BOOTLOADER_MCUBOOT`、`DATAPROCESS`、
-`GPIO` 和 `ADC`。模块仍可由其他应用或独立测试按需启用。
+`TRANSMIT`、`UART_INTERRUPT_DRIVEN`、`GPIO` 和 `ADC`。产品固定启用转发端口。模块仍可由其他应用或独立测试按需启用。
 
 ## Flash 与启动布局
 

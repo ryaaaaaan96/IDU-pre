@@ -3,8 +3,6 @@ target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/inc)
 target_sources(app PRIVATE
   tables/process.c
   protocol.c
+  port.c
+  tables/forward.c
 )
-
-if(CONFIG_IDU_TRANSMIT)
-  target_sources(app PRIVATE port.c tables/forward.c)
-endif()
