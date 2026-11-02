@@ -22,7 +22,7 @@ APP 的 protocol/port.c 创建线程并装配硬件，模块不创建通信线�
 ## DP 使用
 
 - `app/protocol/tables/process.c` 持有编译期只读模型。
-- `app/protocol/process_runtime.c` 先调用 `dp_init()`，再调用 `dp_register_device(device_id, table)`，私有目录及点数据由 DP 维护。
+- `app/protocol/protocol.c` 先调用 `dp_init()`，再调用 `dp_register_device(device_id, table)`，私有目录及点数据由 DP 维护。
 - `app/acquisition/acquisition.c` 同步写本地测点。
 - `app/process/points.c` 读取应用采样周期。
 

@@ -195,7 +195,7 @@ static const dp_point_config_t local_process_rows[PROCESS_SIGNAL_COUNT] = {
         },
 };
 
-/* 与测点表在同一编译单元，只读表不包含设备 ID 和运行数据；仅供 process_runtime 使用。 */
+/* 与测点表在同一编译单元，只读表不包含设备 ID 和运行数据；仅供 protocol.c 使用。 */
 const dp_table_t protocol_local_table = {
     .points = local_process_rows,
     .point_count = ARRAY_SIZE(local_process_rows),
