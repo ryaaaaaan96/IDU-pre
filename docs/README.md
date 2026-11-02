@@ -16,6 +16,7 @@
 | 硬件、时钟、引脚和采样 | [硬件说明](hardware.md)、[GD32E505 模块](../modules/gd32e505/README.md) |
 | 堆、线程栈、缓存与容量 | [内存管理](memory-management.md) |
 | 测试入口、当前结果与实板待验 | [验证说明](testing.md) |
+| Modbus 实板读写与 DP 测试报文 | [手动测试](modbus-test.md) |
 | 编辑器与代码跳转 | [VS Code 与 clangd](editor.md) |
 | WSL / Windows J-Link 烧录与调试 | [远程调试](wsl-jlink.md) |
 
