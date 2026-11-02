@@ -1,6 +1,6 @@
 # Transmit 与 DP 类型转换设计
 
-状态：设计分阶段实施。2026-10-31 更新。
+当前基线：Zephyr v4.5.0。
 DP 显式类型接口、transmit/vport、Modbus 标准点表及 APP UART 接入已实现。
 主机模拟串口和 IAP 完整 ADU 路由已验证；RS485 实板时序、负载及上传待验证。
 
@@ -76,7 +76,7 @@ transmit 做映射预检及 DP 操作，保留逐点快照和非事务失败行�
 
 原生 RAW 是异步投递；本项目使用固定版本、校验哈希的构建目录扩展，仅对自有接口同步执行，
 业务仍归 APP 线程。modbus 模块不依赖 DP，独立测试禁用 DP/transmit。
-RAW 接口由 Kconfig 预留，Zephyr 4.4.2 上限 4 个，当前产品用 1 个；并行实例不共享临时业务上下文。
+RAW 接口由 Kconfig 预留，Zephyr 4.5.0 上限 4 个，当前产品用 1 个；并行实例不共享临时业务上下文。
 CRC 与 RTU 帧边界不属于 RAW 输入能力，仍由前面的接收时序与 RTU 适配处理。
 
 ## DP 显式类型接口（已实现）
@@ -149,8 +149,7 @@ CUSTOM 的检查和执行通过固定配置回调接入；当前内容判帧测�
 
 验证包括拆帧/多帧、RTU 间隔、锁定环形轮转、噪声及损坏恢复、广播、其他站号、
 地址/对象类别/部分写、非事务失败、读取先转换后放缩及写入先逆放缩后收窄、发送失败不重放及模拟 UART 方向控制。
-初次验收见[实现任务](../.scratch/transmit-redesign/issues/03-stream-forwarding.md)，
-官方 RAW 复用及并行验证见[后续任务](../.scratch/transmit-redesign/issues/04-zephyr-raw-server.md)。
+当前专项结果见[验证说明](testing.md)。
 实板行为单独验收，不由主机或模拟器结果推定。
 
 ## IAPv3 完整 ADU 路由补充
@@ -159,4 +158,4 @@ CUSTOM 的检查和执行通过固定配置回调接入；当前内容判帧测�
 先把命中地址段的完整 ADU 同步交给回调，未命中才进入标准 RAW 服务端。
 这样保留旧版超长 FC16 的 16 位寄存器计数及截断字节计数；IAP 自行严格检查载荷。
 地址段只代表起始地址归属，不套用普通寄存器访问长度和数据区规则。
-具体回调契约及容量限制见 modules/transmit/README.md，产品地址见 app/protocol/README.md。
+具体契约见 [transmit 模块](../modules/transmit/README.md)，地址见[产品协议](../app/protocol/README.md)。

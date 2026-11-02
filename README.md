@@ -1,6 +1,6 @@
 # IDU-pre
 
-面向 GD32E505 / MV-IO 硬件的 Zephyr 4.4.2 最小应用：本地 DI/AI 采样、
+面向 GD32E505 / MV-IO 硬件的 Zephyr 4.5.0 最小应用：本地 DI/AI 采样、
 点值存储、本机 NVS 参数、Modbus 从机转发和 MCUboot 升级。
 APP 管理通信线程，DP 负责显式类型读写和参数持久化。
 
@@ -65,11 +65,14 @@ device list
 
 ```text
 app/main.c                    启动、采样周期、故障留驻
-  ├─ app/protocol/            本地模型和 dp_register_model()
+  ├─ app/protocol/            DP 登记、协议装配与通信线程
   ├─ app/acquisition/         读取 DI/AI，同步写 DP
-  ├─ app/process/points.c     采样周期、参数命令、参数状态
+  ├─ app/process/points.c     读取采样周期
   └─ app/status/              整机状态、LED、故障
-modules/dataprocess/          点值、质量、本机参数 NVS
+modules/dataprocess/          点值、回调、本机参数 NVS
+modules/common/               共享数值类型、转换与放缩
+modules/vport/                字节与事件输入、同步发送回调
+modules/transmit/             协议识别、转发表与 DP 映射
 modules/iap/                  IAPv3/SGZ 接收和解包
 modules/modbus/               无分配 RTU 编解码和构建兼容
 modules/watchdog/             任务监控与外部喂狗
@@ -77,7 +80,7 @@ modules/gd32e505/             SoC、时钟、ADC
 ```
 
 启动顺序：`status_init()` → `acquisition_inputs_init()` → 可选 `iap_init()` →
-`protocol_init()`（逐组 `dp_register_model()`）→ 镜像确认。主循环按 `points_sample_period_ms()`
+`protocol_init()`（DP 初始化、设备登记、转发装配）→ 镜像确认与启动等待。主循环按 `points_sample_period_ms()`
 采样并写点；终止故障后只留驻诊断，不恢复业务。
 
 ## 文档
@@ -86,11 +89,10 @@ modules/gd32e505/             SoC、时钟、ADC
 
 | 要做的事 | 文档 |
 | --- | --- |
-| 维护点表、参数和命令寄存器 | [协议点表](app/protocol/README.md) |
+| 维护点表和参数映射 | [协议点表](app/protocol/README.md) |
 | 使用 DP 接口 | [DP 模块](modules/dataprocess/README.md) |
 | 调整堆、点值或参数容量 | [内存管理](docs/memory-management.md) |
 | 构建、签名、分区 | [构建与升级](docs/build-and-upgrade.md) |
 | 核对硬件 | [硬件说明](docs/hardware.md) |
 | 运行测试 | [验证说明](docs/testing.md) |
-| 命名与采样边界 | [命名与采样边界](docs/naming.md) |
-| 故障与看门狗 | [故障策略](docs/fault-policy.md)、[任务看门狗](docs/task-watchdog.md) |
+| 故障与看门狗 | [故障策略](docs/fault-policy.md)、[watchdog 模块](modules/watchdog/README.md) |

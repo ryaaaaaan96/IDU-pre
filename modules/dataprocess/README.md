@@ -1,6 +1,6 @@
 # dataprocess
 
-[文档导航](../../docs/README.md) · [ADR 0015](../../docs/adr/0015-dp-device-storage.md)
+[文档导航](../../docs/README.md)
 
 ## 接口及生命周期
 

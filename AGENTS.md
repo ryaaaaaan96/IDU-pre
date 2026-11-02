@@ -22,7 +22,7 @@
 - common/scale.h 提供 value_scale_t 和整数换算；转发表 scale 指针为 NULL 时跳过，不维护独立放缩标志。
 - 点表行使用 dp_point_config_t，保留 DP_POINT_FLAG_CHECK_RANGE 和 DP_POINT_FLAG_SKIP_DEFAULTS；回调结果校验成功后保存 RAM。配置行数组常驻只读，初值为内嵌 value_t。
 - DP 接口为 dp_init、dp_register_device/remove_device、dp_set_para_by_key/get_para_by_key、dp_set_para_by_index/get_para_by_index、dp_restore_defaults、dp_factory_reset 和 dp_flush。回调在锁外，点值使用快照锁；登记/删除与保存共用设备锁，调用方须先停止并等待全部 DP 业务访问结束。
-- DP 始终包含参数持久化能力，要求 dp-params 别名。详情见 [DP 模块](modules/dataprocess/README.md) 和 [ADR 0015](docs/adr/0015-dp-device-storage.md)：dp-params 总分区内部管理 NVS 与设备槽位，5 秒保存线程、dirty/已保存值比较、阻塞 flush。set 成功只表示 RAM 更新；重启前由应用停止修改并 flush。IAP 自身 NVS 独立，不恢复旧 DP 门禁。
+- DP 始终包含参数持久化能力，要求 dp-params 别名。详情见 [DP 模块](modules/dataprocess/README.md)：dp-params 总分区内部管理 NVS 与设备槽位，5 秒保存线程、dirty/已保存值比较、阻塞 flush。set 成功只表示 RAM 更新；重启前由应用停止修改并 flush。IAP 自身 NVS 独立，不恢复旧 DP 门禁。
 - `app/main.c` 启动状态、硬件和可选 IAP 后调用 `protocol_init()`；protocol.c 登记 DP、装配转发实例并创建协议线程；rs485_1.c 只负责物理收发与事件采集。保留采样周期和休眠，终止后主线程留驻并每 5 秒查询打印最近故障。`acquisition` 只按硬件 spec 与 device_id/signal_key 映射读取 DI 位图和 ADC，并用 `dp_set_para_by_key()` 同步写点。
 - `app/process/points.c` 只保留 points_sample_period_ms()。
 - 状态与 LED 归 `app/status/`；看门狗实现在 `modules/watchdog`；IAP 归 `modules/iap`，调用方直接使用 `<iap/iap.h>`。
@@ -47,21 +47,12 @@
   `CCACHE_DISABLE=1 ASAN_OPTIONS=detect_leaks=0 bash applications/IDU-pre/tests/run.sh`。
 - 主机和模拟器结果不能证明硬件行为；主机、模拟器和实板证据分开记录。
 
-## 文档与任务
+## 文档维护
 
-- 对话、说明和文档使用中文；运行时字符串、日志、故障描述及 CLI/配置帮助使用英文；注释和 Doxygen 使用中文。
-- 任务规格和验证记录在 `.scratch/<feature>/`（见 [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md)）。
-- 当前行为文档集中在 [docs/](docs/README.md)。`docs/forward-loopback.md` 和 `scripts/forward-loopback/` 是用户未完成的改动，不要触碰或纳入本轮提交。
-- 修改点表、参数键/格式、堆预算或启动顺序前，先读 [DP 模块](modules/dataprocess/README.md)、[内存管理](docs/memory-management.md) 和 [构建与升级](docs/build-and-upgrade.md)。
-
-## Agent skills
-
-### Issue tracker
-
-使用本地 Markdown 记录任务和规格，通过本仓库的 Git 提交保存。
-具体约定见 [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md)。
-
-### Domain docs
-
-采用单一领域布局：仓库根目录 `GLOSSARY.md` 与 `docs/adr/`。
-读取规则见 [docs/agents/domain.md](docs/agents/domain.md)。
+- 当前说明集中在 [docs/README.md](docs/README.md)，模块 API 与生命周期以模块 README 为准。
+- 修改点表、参数、堆或启动顺序前，读取 DP 模块、docs/memory-management.md 和 docs/build-and-upgrade.md。
+- 当前实现直接更新对应主题；验证范围记录在 docs/testing.md，区分模拟器和实板结果。
+- 设计讨论和中间任务不保留为正式文档；.scratch 仅作临时草稿，任务完成后清理。
+- 领域术语沿用根目录 GLOSSARY.md。历史方案通过 Git 查询，不恢复过程 ADR 或重复台账。
+- docs/forward-loopback.md 和 scripts/forward-loopback/ 是保留的用户调试资料，专项修改时再处理。
+- HTML 是设计报告源文件，更新后运行 python3 scripts/docs/export_module_report.py 同步 Word。

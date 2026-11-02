@@ -2,9 +2,9 @@
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Zephyr 通用模块设计报告</title><style>
 @page { size:A4; margin:25mm 22mm; }
 * { box-sizing:border-box; }
-body { margin:0; background:#e9ebee; color:#111; font:16px/1.85 "SimSun","Songti SC","Noto Serif CJK SC",serif; }
+body { margin:0; background:#e9ebee; color:#111; font:16px/1.85 &quot;SimSun&quot;,&quot;Songti SC&quot;,&quot;Noto Serif CJK SC&quot;,serif; }
 main { max-width:920px; margin:24px auto; padding:72px 80px; background:#fff; box-shadow:0 2px 14px #0001; }
-h1,h2,h3,h4 { font-family:"SimHei","Microsoft YaHei",sans-serif; font-weight:600; color:#111; }
+h1,h2,h3,h4 { font-family:&quot;SimHei&quot;,&quot;Microsoft YaHei&quot;,sans-serif; font-weight:600; color:#111; }
 h1 { font-size:32px; } h2 { font-size:24px; margin:36px 0 20px; }
 h3 { font-size:20px; margin:28px 0 14px; } h4 { font-size:17px; margin:22px 0 10px; }
 p { margin:9px 0; text-align:justify; } .cover { text-align:center; padding:90px 0 110px; border-bottom:1px solid #aaa; }
@@ -17,7 +17,7 @@ p { margin:9px 0; text-align:justify; } .cover { text-align:center; padding:90px
 .facts dt { font-weight:bold; } .facts dd { margin:0; } ul,ol { padding-left:24px; }
 table { width:100%; border-collapse:collapse; margin:12px 0 20px; font-size:14px; table-layout:fixed; }
 th,td { border:1px solid #777; padding:8px 10px; vertical-align:top; overflow-wrap:anywhere; }
-th { background:#edf0f3; text-align:left; } code { font:0.88em/1.55 Consolas,"Courier New",monospace; overflow-wrap:anywhere; }
+th { background:#edf0f3; text-align:left; } code { font:0.88em/1.55 Consolas,&quot;Courier New&quot;,monospace; overflow-wrap:anywhere; }
 pre { white-space:pre-wrap; overflow-wrap:anywhere; padding:14px; border:1px solid #bbb; background:#f6f6f6; }
 pre code { white-space:pre-wrap; font-size:12px; } .source,.legend,.example-note { font-size:14px; color:#444; }
 .flow { border-left:3px solid #777; padding:10px 14px; margin:12px 0; } .flow span { margin-right:6px; }
@@ -27,7 +27,7 @@ pre code { white-space:pre-wrap; font-size:12px; } .source,.legend,.example-note
 .cover,.contents { break-after:page; border:0; } h2 { break-before:page; } .contents h2 { break-before:auto; }
 h2,h3,h4 { break-after:avoid; } tr { break-inside:avoid; } pre { font-size:9pt; } th { background:#eee; } }
 </style></head><body><main>
-    <header class="cover"><p>IDU-pre 软件平台建设</p><h1>Zephyr 通用模块设计报告</h1><p>总体架构、模块接口及集成方案</p><p>报告日期：2026 年 11 月 2 日</p><p>技术基线：6ecdf3e ｜ Zephyr v4.5.0</p><p>构建环境：Zephyr SDK 1.0.1 ｜ ARM GCC 14.3.0</p><p>当前阶段：4.5.0 适配及专项验证完成，完整回归与实板验收待完成</p></header><section class="contents"><h2>目录</h2><p><a href="#overview">1 项目概述</a></p><p><a href="#architecture">2 总体架构设计</a></p><p><a href="#modules">3 通用模块设计</a></p><p><a href="#integration">4 产品集成方案</a></p><p><a href="#validation">5 实现进展与验证情况</a></p><p><a href="#todo">6 后续工作计划</a></p><p><a href="#api-appendix">附录 A 接口声明</a></p></section>
+    <header class="cover"><p>IDU-pre 软件平台建设</p><h1>Zephyr 通用模块设计报告</h1><p>总体架构、模块接口及集成方案</p><p>报告日期：2026 年 11 月 2 日</p><p>技术基线：6ecdf3e ｜ Zephyr v4.5.0</p><p>构建环境：Zephyr SDK 1.0.1 ｜ ARM GCC 14.3.0</p><p>当前阶段：4.5.0 适配及专项验证完成，完整回归与实板验收待完成</p></header><section class="contents"><h2>目录</h2><p><a href="#overview">1 项目概述</a></p><p><a href="#architecture">2 总体架构设计</a></p><p><a href="#modules">3 通用模块设计</a></p><p><a href="#integration">4 产品集成方案</a></p><p><a href="#validation">5 实现进展与验证情况</a></p><p><a href="#todo">6 后续工作计划</a></p></section>
 
     <section id="overview">
       <h2>1 项目概述</h2>
@@ -109,7 +109,7 @@ h2,h3,h4 { break-after:avoid; } tr { break-inside:avoid; } pre { font-size:9pt; 
       <h2>3 通用模块设计</h2>
       <p class="intro">本章按模块职责、数据模型、处理流程、接口约束和调用方式说明通用模块设计。模块名称与当前代码目录保持一致。</p>
 
-      <div class="callout">各模块分别说明设计方案、对外接口与调用示例，完整声明列于附录 A。
+      <div class="callout">各模块分别说明设计方案、对外接口与调用示例，完整类型与函数声明以模块公开头文件为准。
         DP → vport → transmit 三段示例构成连续集成流程，其余示例分别说明独立调用方式。
         调用示例用于说明接口集成方式；产品适配函数由 APP 实现，示例不计入已交付功能。</div>
 
@@ -118,16 +118,8 @@ h2,h3,h4 { break-after:avoid; } tr { break-inside:avoid; } pre { font-size:9pt; 
       <article class="module" id="common">
         <div class="module-head"><h3>3.1 common — 公共数值基础</h3><span class="tag">已实现</span></div>
         <p class="purpose">让 DP 和通信模块共用一套类型与计算规则，避免各模块重复定义和转换。</p>
-        <dl class="facts">
-          <dt>核心设计</dt><dd><code>value_t</code> 联合体 + <code>value_type_t</code> 类型标识；
-            类型转换和比例偏移计算分别提供公共函数。</dd>
-          <dt>类型转换</dt><dd>U8、U16、S16、U32、S32 相互转换；收窄保留低位，按补码解释符号。
-            STRING、BYTES、WORDS 仅支持同类型复制。</dd>
-          <dt>放缩规则</dt><dd><code>输出 = 输入 × 分子 ÷ 分母 + 偏移</code>；逆向用于写入。
-            int64 中间计算、整数除法向零取整、计算溢出返回错误。</dd>
-          <dt>职责边界</dt><dd>不理解设备、测点、Modbus 字序或硬件。联合体中的浮点视图不代表系统已支持浮点测点。</dd>
-        </dl>
-        <div class="deep-dive"><h4>设计方案</h4><div class="design-prose"><p>共享类型放在 common，其他模块只依赖基础库，无需为使用数值联合体引入 DP 依赖。类型标识由接口显式传递，避免根据联合体内容猜类型。</p><p>数值转换和协议编解码分开：value_convert 处理本机数值语义，寄存器大端字节、CRC 等归 Modbus。</p><p>放缩独立于类型转换：同一比例对象可以被多张映射表引用；NULL 表示恒等，不另外维护 enabled 标志。</p><p>支持的整数转换具有明确的低位截取规则；计算中间溢出则报错。这两种处理针对不同步骤，数值收窄与中间运算溢出分别执行约定规则。</p></div><h4>对外接口</h4><div class="table-wrap"><table><thead><tr><th>接口</th><th>作用与调用约束</th></tr></thead><tbody><tr><td><code>value_can_convert(source_type, target_type)</code></td><td>先判断组合是否支持，不运行回调。</td></tr><tr><td><code>value_convert(source_type, source, target_type, target)</code></td><td>复制或转换 value_t；允许原地转换，失败不修改目标。</td></tr><tr><td><code>value_integer_bits / get / from_bits</code></td><td>分别取得位宽、提取 int64 数值、按低位构造整数；供通用计算和编码使用。</td></tr><tr><td><code>value_storage_type(type)</code></td><td>获得稳定存储类型编号；非法类型返回 0，不将枚举数字直接当作存储格式。</td></tr><tr><td><code>value_scale_apply(scale, inverse, input, output)</code></td><td>inverse=false 正向；true 逆向。成功返回 0，零分子/分母或中间溢出返回负值。</td></tr></tbody></table></div><div class="example"><h4>调用示例</h4><pre><code>#include &lt;common/value.h&gt;
+
+        <div class="deep-dive"><h4>设计方案</h4><div class="design-prose"><p>共享类型放在 common，其他模块只依赖基础库，无需为使用数值联合体引入 DP 依赖。类型标识由接口显式传递，避免根据联合体内容猜类型。</p><p>数值转换和协议编解码分开：value_convert 处理本机数值语义，寄存器大端字节、CRC 等归 Modbus。</p></div><h4>对外接口</h4><div class="table-wrap"><table><thead><tr><th>接口</th><th>作用与调用约束</th></tr></thead><tbody><tr><td><code>value_can_convert(source_type, target_type)</code></td><td>先判断组合是否支持，不运行回调。</td></tr><tr><td><code>value_convert(source_type, source, target_type, target)</code></td><td>复制或转换 value_t；允许原地转换，失败不修改目标。</td></tr><tr><td><code>value_integer_bits / get / from_bits</code></td><td>分别取得位宽、提取 int64 数值、按低位构造整数；供通用计算和编码使用。</td></tr><tr><td><code>value_storage_type(type)</code></td><td>获得稳定存储类型编号；非法类型返回 0，不将枚举数字直接当作存储格式。</td></tr><tr><td><code>value_scale_apply(scale, inverse, input, output)</code></td><td>inverse=false 正向；true 逆向。成功返回 0，零分子/分母或中间溢出返回负值。</td></tr></tbody></table></div><div class="example"><h4>调用示例</h4><pre><code>#include &lt;common/value.h&gt;
 #include &lt;common/scale.h&gt;
 
 int common_example(void)
@@ -160,24 +152,13 @@ int common_example(void)
       <article class="module" id="dp">
         <div class="module-head"><h3>3.2 dataprocess — 测点与参数中心</h3><span class="tag">已实现 / 含持久化</span></div>
         <p class="purpose">统一设备数据模型，使采样、参数操作和通信访问使用同一个数据入口。</p>
-        <dl class="facts">
-          <dt>设备与点表</dt><dd>APP 提供常驻只读点表，DP 私有维护设备目录和运行值。
-            device_id 区分设备；signal_key 是稳定标识；signal_index 是枚举表示的点表行下标。</dd>
-          <dt>读写流程</dt><dd>支持 key / index 四个显式类型读写接口。写入先转换为内部类型，再回调、范围校验、更新 RAM。
-            读回调可更新点值；业务回调始终使用内部类型。</dd>
-          <dt>参数保存</dt><dd>DTS 指定 <code>dp-params</code> 总分区，内部划分管理区与设备槽位。
-            每持久测点一条 NVS 记录，以 key 定位；修改一个点无需重写整台设备。</dd>
-          <dt>后台与并发</dt><dd>独立线程默认每次等待 5 秒后扫描脏点。保存副本用于判断是否需要落盘；
-            Flash 操作不持有点值锁。<code>dp_flush()</code> 提供同步保存。</dd>
-          <dt>恢复与删除</dt><dd>恢复默认值更新 RAM 并标脏；出厂恢复擦除目标设备参数后重启，支持全部设备。
-            删除设备还会释放其私有 RAM。登记、删除须由 APP 管理业务静止期。</dd>
-        </dl>
+
         <div class="flow"><span>dp_init</span><b>→</b><span>登记设备 / 校验点表 / 加载参数</span>
           <b>→</b><span>业务 set / get</span><b>→</b><span>脏点延后写入 NVS</span></div>
         <div class="callout warning"><strong>保存语义：</strong>set 成功表示 RAM 更新成功，不能等同于 Flash 已保存。
           掉电可能丢失尚未落盘的修改；主动重启前需要停止修改并 flush。
           存储布局不匹配会按当前策略清空总参数区并重建，版本发布须管理布局变更。</div>
-        <div class="deep-dive"><h4>设计方案</h4><div class="design-prose"><p>将配置和运行值分离：只读点表由应用常驻持有，DP 分配私有运行数据。同一配置可登记给多个设备，点值互不共享。</p><p>key 与 index 分工：key 是持久记录的稳定身份，点表重排不应改变 key；index 是当前表的行下标，使用枚举和指定下标初始化，便于直接定位。</p><p>四个读写入口只在寻址方式上不同，后续转换、回调、校验和提交走同一处理路径。回调在锁外使用值副本，校验通过才提交 RAM；回调已产生的外部副作用不能回滚。</p><p>快速读写与慢速 Flash 分离：普通业务仅使用短点值锁；保存线程复制快照后写 Flash，再与最新 RAM 比较。saved_value / saved_valid / dirty 用于处理保存期间再次修改及保存失败。</p><p>存储按设备槽位隔离、按点追加记录，避免更新单点重写整表。NVS 自己维护追加、回收和查找缓存，测点不保存可能随 NVS 回收而变化的物理 Flash 地址。</p><p>生命周期保持显式：init → register → 业务访问。运行中登记/移除须等待所有 DP 调用结束；出厂恢复是 Flash 删除与重启，和运行期恢复初值不同。</p></div><h4>对外接口</h4><div class="table-wrap"><table><thead><tr><th>接口</th><th>作用与调用约束</th></tr></thead><tbody><tr><td><code>dp_init(void)</code></td><td>线程调用；初始化总存储布局与保存线程；成功后可重复调用。</td></tr><tr><td><code>dp_register_device(device_id, table)</code></td><td>登记并加载持久值；device_id 非零且唯一。表行常驻；不能与业务访问并发。</td></tr><tr><td><code>dp_set_para_by_key(device_id, signal_key, input_type, value)</code></td><td>按稳定 key 写入；转换→写回调→范围校验→RAM；返回 0 不代表落盘。</td></tr><tr><td><code>dp_get_para_by_key(device_id, signal_key, output_type, value)</code></td><td>按 key 读取；读回调使用内部类型，之后转换输出；失败保持输出不变。</td></tr><tr><td><code>dp_set_para_by_index(device_id, signal_index, input_type, value)</code></td><td>按枚举行下标写入；索引从 0 开始，越界 -ENOENT。</td></tr><tr><td><code>dp_get_para_by_index(device_id, signal_index, output_type, value)</code></td><td>按枚举行下标读取；与按 key 访问同一个点。</td></tr><tr><td><code>dp_flush(void)</code></td><td>线程同步保存当前脏点；并发新修改未必包含在本轮，保证落盘前须停止修改。</td></tr><tr><td><code>dp_restore_defaults(device_id)</code></td><td>恢复 RAM 初值、标记持久点待保存；跳过 SKIP_DEFAULTS，不调用业务回调。</td></tr><tr><td><code>dp_factory_reset(device_id, before_reboot, context)</code></td><td>删除 Flash 后执行可选回调并冷重启；成功不返回。ALL=0 仅在本接口表示所有设备。</td></tr><tr><td><code>dp_remove_device(device_id)</code></td><td>永久删除设备 Flash、索引和私有 RAM；不存在返回 0；调用前等待全部业务静止。</td></tr></tbody></table></div><div class="example"><h4>调用示例</h4><pre><code>#include &lt;dataprocess/dataprocess.h&gt;
+        <div class="deep-dive"><h4>设计方案</h4><div class="design-prose"><p>将配置和运行值分离：只读点表由应用常驻持有，DP 分配私有运行数据。同一配置可登记给多个设备，点值互不共享。</p><p>key 与 index 分工：key 是持久记录的稳定身份，点表重排不应改变 key；index 是当前表的行下标，使用枚举和指定下标初始化，便于直接定位。</p></div><h4>对外接口</h4><div class="table-wrap"><table><thead><tr><th>接口</th><th>作用与调用约束</th></tr></thead><tbody><tr><td><code>dp_init(void)</code></td><td>线程调用；初始化总存储布局与保存线程；成功后可重复调用。</td></tr><tr><td><code>dp_register_device(device_id, table)</code></td><td>登记并加载持久值；device_id 非零且唯一。表行常驻；不能与业务访问并发。</td></tr><tr><td><code>dp_set_para_by_key(device_id, signal_key, input_type, value)</code></td><td>按稳定 key 写入；转换→写回调→范围校验→RAM；返回 0 不代表落盘。</td></tr><tr><td><code>dp_get_para_by_key(device_id, signal_key, output_type, value)</code></td><td>按 key 读取；读回调使用内部类型，之后转换输出；失败保持输出不变。</td></tr><tr><td><code>dp_set_para_by_index(device_id, signal_index, input_type, value)</code></td><td>按枚举行下标写入；索引从 0 开始，越界 -ENOENT。</td></tr><tr><td><code>dp_get_para_by_index(device_id, signal_index, output_type, value)</code></td><td>按枚举行下标读取；与按 key 访问同一个点。</td></tr><tr><td><code>dp_flush(void)</code></td><td>线程同步保存当前脏点；并发新修改未必包含在本轮，保证落盘前须停止修改。</td></tr><tr><td><code>dp_restore_defaults(device_id)</code></td><td>恢复 RAM 初值、标记持久点待保存；跳过 SKIP_DEFAULTS，不调用业务回调。</td></tr><tr><td><code>dp_factory_reset(device_id, before_reboot, context)</code></td><td>删除 Flash 后执行可选回调并冷重启；成功不返回。ALL=0 仅在本接口表示所有设备。</td></tr><tr><td><code>dp_remove_device(device_id)</code></td><td>永久删除设备 Flash、索引和私有 RAM；不存在返回 0；调用前等待全部业务静止。</td></tr></tbody></table></div><div class="example"><h4>调用示例</h4><pre><code>#include &lt;dataprocess/dataprocess.h&gt;
 #include &lt;zephyr/sys/util.h&gt;
 #include &lt;errno.h&gt;
 
@@ -252,20 +233,14 @@ int demo_dp_update(void)
 }</code></pre></div><p class="example-note">前提：CONFIG_DATAPROCESS=y，DTS 存在 dp-params 别名且容量满足槽位要求。示例的设备、key、index 仅用于示例，不替换产品表。所有 DP 业务入口在线程上下文调用。</p></div>
         <p class="source">接口：<code>dp_init</code>、<code>dp_register_device</code>、
           <code>dp_*_para_by_key/index</code>、<code>dp_flush</code>、恢复与删除接口 ·
-          <a href="../modules/dataprocess/README.md">设计说明</a> ·
-          <a href="adr/0015-dp-device-storage.md">存储决策</a></p>
+          <a href="../modules/dataprocess/README.md">设计说明</a></p>
       </article>
 
       <article class="module" id="vport">
         <div class="module-head"><h3>3.3 vport — 统一端口接入</h3><span class="tag">已实现</span></div>
         <p class="purpose">以相同方式交付不同物理端口的数据，协议模块无需操作具体 UART 和 GPIO。</p>
-        <dl class="facts">
-          <dt>接收形式</dt><dd>统一 DATA、IDLE、POLL、ERROR 事件，携带单调微秒时间戳。
-            支持单字节或字节块，不要求接入层先拼完整报文。</dd>
-          <dt>发送形式</dt><dd>通过 APP 绑定的同步带超时发送回调输出；返回前完成或中止发送，不保留借用数据指针。</dd>
-          <dt>职责边界</dt><dd>不创建线程、不判帧、不解释 CAN ID。APP 负责 CAN 分流/重组、共享总线仲裁和同端口串行交付。</dd>
-        </dl>
-        <div class="deep-dive"><h4>设计方案</h4><div class="design-prose"><p>端口对象仅保存发送回调和唯一接收者，不维护全局设备目录。端口对象由 APP 持有，减少模块全局状态。</p><p>交付字节与事件而非完整报文，使流式协议和 RTU 都能在同一接入抽象上工作。实际帧边界由具体协议判断。</p><p>时间戳表达实际接收时刻，避免线程排队延迟被误判为线路静默。空闲时也要送 POLL，才能推进等待中的协议。</p><p>收发都采用同步借用指针契约，接口返回后输入可释放；发送回调返回前完成或中止。物理中断先入队，APP 线程再交付。</p></div><h4>对外接口</h4><div class="table-wrap"><table><thead><tr><th>接口</th><th>作用与调用约束</th></tr></thead><tbody><tr><td><code>vport_bind(port, receive, context)</code></td><td>启动时绑定唯一接收者；transmit 注册时内部调用，APP 不再重复绑定。</td></tr><tr><td><code>vport_input(port, event)</code></td><td>线程同步交付 DATA / IDLE / POLL / ERROR；同一端口由 APP 串行调用。</td></tr><tr><td><code>vport_output(port, data, size, timeout)</code></td><td>同步转给 APP 的发送回调；禁止回调保留 data；正返回归一为 -EIO。</td></tr><tr><td><code>vport_send_t / vport_receive_t</code></td><td>发送和接收回调类型；context 区分物理端口或上层实例。</td></tr></tbody></table></div><div class="example"><h4>调用示例</h4><pre><code>#include &lt;vport/vport.h&gt;
+
+        <div class="deep-dive"><h4>设计方案</h4><div class="design-prose"><p>端口对象仅保存发送回调和唯一接收者，不维护全局设备目录。端口对象由 APP 持有，减少模块全局状态。</p><p>交付字节与事件而非完整报文，使流式协议和 RTU 都能在同一接入抽象上工作。实际帧边界由具体协议判断。</p></div><h4>对外接口</h4><div class="table-wrap"><table><thead><tr><th>接口</th><th>作用与调用约束</th></tr></thead><tbody><tr><td><code>vport_bind(port, receive, context)</code></td><td>启动时绑定唯一接收者；transmit 注册时内部调用，APP 不再重复绑定。</td></tr><tr><td><code>vport_input(port, event)</code></td><td>线程同步交付 DATA / IDLE / POLL / ERROR；同一端口由 APP 串行调用。</td></tr><tr><td><code>vport_output(port, data, size, timeout)</code></td><td>同步转给 APP 的发送回调；禁止回调保留 data；正返回归一为 -EIO。</td></tr><tr><td><code>vport_send_t / vport_receive_t</code></td><td>发送和接收回调类型；context 区分物理端口或上层实例。</td></tr></tbody></table></div><div class="example"><h4>调用示例</h4><pre><code>#include &lt;vport/vport.h&gt;
 
 /* 由产品物理层实现：含方向控制、发送完成等待和超时中止。 */
 int app_uart_send(const uint8_t *data, size_t size, k_timeout_t timeout);
@@ -310,18 +285,7 @@ int demo_poll(uint64_t now_us)
       <article class="module" id="transmit">
         <div class="module-head"><h3>3.4 transmit — 对外从机协议与测点映射</h3><span class="tag">已实现 / 产品接入 Modbus</span></div>
         <p class="purpose">把协议访问转换为 DP 操作，维护协议选择、接收缓存和对外数据表达。</p>
-        <dl class="facts">
-          <dt>实例模型</dt><dd>一个实例绑定一个 vport，每类协议最多一个；目前支持内置 Modbus RTU 与 CUSTOM 接入项。
-            APP 可登记多个实例；产品当前使用一个 Modbus 从机入口。</dd>
-          <dt>报文识别</dt><dd>transmit 保存未消费数据。候选协议等待时保持锁定，明确不匹配才环形切换；
-            候选从共同起点检查，协议检查不直接删除缓存。POLL 推进静默判帧和超时。</dd>
-          <dt>转发表</dt><dd>协议行配置地址、长度、数据区和字序；通用 mapping 内嵌设备、点 index、对外类型和可选放缩。
-            内部点表与对外地址表相互独立。</dd>
-          <dt>扩展入口</dt><dd>完整 ADU 地址段回调可接入 IAPv3。
-            在标准功能码数量校验前分派，避免旧超长 FC16 被标准限制拒绝；命中后不回退普通测点。</dd>
-          <dt>资源与边界</dt><dd>启动时分配固定接收/发送缓存，运行期不分配；不创建线程。
-            多点写首错停止且不回滚；发送失败不自动重放业务。新增内置协议仍需修改分派代码。</dd>
-        </dl>
+
         <h4>当前明确的数据换算顺序</h4>
         <div class="flow"><span>读：DP 原值</span><b>→</b><span>转换为对外类型</span><b>→</b>
           <span>正向放缩</span><b>→</b><span>协议编码</span></div>
@@ -329,7 +293,7 @@ int demo_poll(uint64_t now_us)
           <b>→</b><span>按对外类型表示</span><b>→</b><span>DP 转换 / 回调 / 校验</span></div>
         <p class="legend">先转换后放缩可能先丢失高位，这是当前约定；整数收窄不做饱和。
           scale 指针为空直接跳过计算。业务表需保证所选类型满足数值精度要求。</p>
-        <div class="deep-dive"><h4>设计方案</h4><div class="design-prose"><p>实例将端口、协议顺序和缓存容量一起登记，成功后配置不变。所有权在启动时确定，运行期不需要动态注册或缓存申请。</p><p>识别与执行分两步：check 只检查缓存视图，返回 WAIT / MISMATCH / COMPLETE；execute 只在完整报文被选中后运行一次，避免探测阶段触发写入。</p><p>等待时锁定当前协议，明确不匹配才切换；所有候选看共同起点和接收时序。固定整帧期限避免一直等待，全部候选失败才推进恢复。</p><p>映射层只联系 device_id / signal_index / external_type / scale，协议地址和字序放在 Modbus 外层。未来增加协议可复用映射思想，保持 DP 数据模型的协议独立性。</p><p>标准点访问与完整 ADU 路由分开：普通寄存器遵守标准长度；IAP 这类兼容扩展自行处理整包。业务失败不等于协议不匹配，不应切换协议重试副作用。</p></div><h4>对外接口</h4><div class="table-wrap"><table><thead><tr><th>接口</th><th>作用与调用约束</th></tr></thead><tbody><tr><td><code>tr_register(const tr_config_t *config)</code></td><td>唯一公开函数：检查配置、申请缓存、占用 RAW 接口并绑定 vport；失败回收本次资源。</td></tr><tr><td><code>tr_config_t</code></td><td>port、protocols、protocol_count、rx_capacity、tx_capacity、send_timeout_ms。配置及引用对象常驻。</td></tr><tr><td><code>tr_protocol_t</code></td><td>type、max_frame、timeout_us，及 Modbus 配置或 CUSTOM 的 check / execute / context。每类最多一个。</td></tr><tr><td><code>tr_modbus_point_t / tr_mapping_t</code></td><td>协议侧 area/address/count/word_order，内部侧设备/index/对外类型/可选 scale。</td></tr><tr><td><code>tr_check_t / tr_execute_t</code></td><td>CUSTOM 回调：检查无副作用；COMPLETE 必须给出消费长度，execute 给出回复长度，0 长度为静默。</td></tr><tr><td><code>tr_modbus_route_t</code></td><td>address/count 保留请求起始地址范围，callback 处理完整 ADU；命中错误不回退普通测点。</td></tr></tbody></table></div><div class="example"><h4>调用示例</h4><pre><code>#include &lt;transmit/transmit.h&gt;
+        <div class="deep-dive"><h4>设计方案</h4><div class="design-prose"><p>实例将端口、协议顺序和缓存容量一起登记，成功后配置不变。所有权在启动时确定，运行期不需要动态注册或缓存申请。</p><p>识别与执行分两步：check 只检查缓存视图，返回 WAIT / MISMATCH / COMPLETE；execute 只在完整报文被选中后运行一次，避免探测阶段触发写入。</p></div><h4>对外接口</h4><div class="table-wrap"><table><thead><tr><th>接口</th><th>作用与调用约束</th></tr></thead><tbody><tr><td><code>tr_register(const tr_config_t *config)</code></td><td>唯一公开函数：检查配置、申请缓存、占用 RAW 接口并绑定 vport；失败回收本次资源。</td></tr><tr><td><code>tr_config_t</code></td><td>port、protocols、protocol_count、rx_capacity、tx_capacity、send_timeout_ms。配置及引用对象常驻。</td></tr><tr><td><code>tr_protocol_t</code></td><td>type、max_frame、timeout_us，及 Modbus 配置或 CUSTOM 的 check / execute / context。每类最多一个。</td></tr><tr><td><code>tr_modbus_point_t / tr_mapping_t</code></td><td>协议侧 area/address/count/word_order，内部侧设备/index/对外类型/可选 scale。</td></tr><tr><td><code>tr_check_t / tr_execute_t</code></td><td>CUSTOM 回调：检查无副作用；COMPLETE 必须给出消费长度，execute 给出回复长度，0 长度为静默。</td></tr><tr><td><code>tr_modbus_route_t</code></td><td>address/count 保留请求起始地址范围，callback 处理完整 ADU；命中错误不回退普通测点。</td></tr></tbody></table></div><div class="example"><h4>调用示例</h4><pre><code>#include &lt;transmit/transmit.h&gt;
 #include &lt;zephyr/sys/util.h&gt;
 
 /* 与上文 DP、vport 片段处于同一集成示例中。 */
@@ -397,14 +361,7 @@ int demo_protocol_start(void)
       <article class="module" id="modbus">
         <div class="module-head"><h3>3.5 modbus — 标准协议能力与 Zephyr 适配</h3><span class="tag">已实现 / 固定版本适配</span></div>
         <p class="purpose">复用 Zephyr 标准功能码处理，补齐适合当前同步模块架构的接口。</p>
-        <dl class="facts">
-          <dt>官方能力</dt><dd>使用 Zephyr RAW 服务端处理 01/02/03/04/05/06/15/16 的分派、数量校验、位打包和正常/异常响应。</dd>
-          <dt>项目补充</dt><dd>提供 RTU 判帧与 CRC 编解码、公共寄存器字序转换、实例上下文，以及每请求一次的整笔访问回调。</dd>
-          <dt>同步方式</dt><dd>官方 RAW 默认异步。当前通过受控构建副本扩展，使本适配器拥有的 RAW 接口在 APP 调用线程执行；
-            其他 RAW 接口通过官方 modbus_work_submit 投递，遵循系统队列或 Modbus 专用队列配置。不修改 west 依赖源码。</dd>
-          <dt>职责边界</dt><dd>不依赖 DP 或产品点表。协议地址对应哪个测点、如何放缩由 transmit 负责。
-            RAW 不接收 UART 字节，不能替代物理接入与 RTU 边界判断。</dd>
-        </dl>
+
         <div class="callout warning"><strong>版本维护成本：</strong>兼容脚本校验 Zephyr v4.5.0 源文件哈希和替换位置。
           升级 Zephyr 时必须重新审查并验证，不能直接沿用同步扩展和协议修复。</div>
 
@@ -421,7 +378,7 @@ int demo_protocol_start(void)
         <p class="example-note">CONFIG_MODBUS_WORKQUEUE 仅影响官方异步路径；当前产品默认不创建此专用队列。
           启用该配置的测试变体验证了兼容性，但不改变 APP 协议线程同步调用业务回调的归属。
           本次没有修改公开 API、点表配置、参数格式或 Flash 布局。</p>
-<div class="deep-dive"><h4>设计方案</h4><div class="design-prose"><p>把标准功能码实现交给 Zephyr，项目维护同步适配和接口上下文。这样可独立测试协议层，不需要启动 DP。</p><p>官方按寄存器/位调用的回调，经适配器合并成一次 mb_request_t 整笔访问。业务后端可预检全部数据，避免逐寄存器重复读取同一点。</p><p>RTU 校验和 ADU 服务端分离：完整线帧先校验 CRC 再解码，处理结束后重新编码。RTU 静默检测仍需要调用方提供真实时间信息。</p><p>同步扩展限定在本适配器拥有的 RAW 接口，逐实例保护请求；其他 RAW 使用者保留官方异步行为，可按 CONFIG_MODBUS_WORKQUEUE 选择专用队列。专用队列仍为异步执行，不替代自有接口的同步契约。版本升级须重新审查源码和替换位置。</p></div><h4>对外接口</h4><div class="table-wrap"><table><thead><tr><th>接口</th><th>作用与调用约束</th></tr></thead><tbody><tr><td><code>mb_server_open(unit, &amp;server)</code></td><td>启动期占用 RAW 接口；不足返回 -ENOSPC。</td></tr><tr><td><code>mb_server_process(server, request, response, &amp;respond, access, context)</code></td><td>同步处理完整 ADU；返回后根据 respond 决定是否发送，广播写不回复。</td></tr><tr><td><code>mb_server_close(server)</code></td><td>仅启动失败回退使用；正在处理时 -EBUSY，不作为运行期动态重配方案。</td></tr><tr><td><code>mb_access_t(context, request)</code></td><td>整笔访问回调返回 0 或正 Modbus 异常码；负值归一为设备故障。寄存器数据为大端字节。</td></tr><tr><td><code>mb_rtu_validate / decode / encode</code></td><td>完整 RTU 长度/CRC 检查、RTU→ADU、ADU→RTU；无动态分配。</td></tr><tr><td><code>mb_rtu_probe(...)</code></td><td>根据边界、损坏与过期标志检查缓存；等待 -EAGAIN，不匹配 -EBADMSG，成功给出帧长。</td></tr><tr><td><code>mb_register_value / mb_decode_value</code></td><td>在调用方已校验类型、容量和范围的前提下处理寄存器字序。</td></tr><tr><td><code>transport.h 中 mb_serial_* / mb_client_* / mb_raw_set_done</code></td><td>保留的传输与客户端扩展，当前产品从机链路不使用；不表示南向 collect 已恢复。完整声明见附录 A。</td></tr></tbody></table></div><div class="example"><h4>调用示例</h4><pre><code>#include &lt;modbus_support/server.h&gt;
+<div class="deep-dive"><h4>设计方案</h4><div class="design-prose"><p>把标准功能码实现交给 Zephyr，项目维护同步适配和接口上下文。这样可独立测试协议层，不需要启动 DP。</p><p>官方按寄存器/位调用的回调，经适配器合并成一次 mb_request_t 整笔访问。业务后端可预检全部数据，避免逐寄存器重复读取同一点。</p></div><h4>对外接口</h4><div class="table-wrap"><table><thead><tr><th>接口</th><th>作用与调用约束</th></tr></thead><tbody><tr><td><code>mb_server_open(unit, &amp;server)</code></td><td>启动期占用 RAW 接口；不足返回 -ENOSPC。</td></tr><tr><td><code>mb_server_process(server, request, response, &amp;respond, access, context)</code></td><td>同步处理完整 ADU；返回后根据 respond 决定是否发送，广播写不回复。</td></tr><tr><td><code>mb_server_close(server)</code></td><td>仅启动失败回退使用；正在处理时 -EBUSY，不作为运行期动态重配方案。</td></tr><tr><td><code>mb_access_t(context, request)</code></td><td>整笔访问回调返回 0 或正 Modbus 异常码；负值归一为设备故障。寄存器数据为大端字节。</td></tr><tr><td><code>mb_rtu_validate / decode / encode</code></td><td>完整 RTU 长度/CRC 检查、RTU→ADU、ADU→RTU；无动态分配。</td></tr><tr><td><code>mb_rtu_probe(...)</code></td><td>根据边界、损坏与过期标志检查缓存；等待 -EAGAIN，不匹配 -EBADMSG，成功给出帧长。</td></tr><tr><td><code>mb_register_value / mb_decode_value</code></td><td>在调用方已校验类型、容量和范围的前提下处理寄存器字序。</td></tr><tr><td><code>transport.h 中 mb_serial_* / mb_client_* / mb_raw_set_done</code></td><td>保留的传输与客户端扩展，当前产品从机链路不使用；不表示南向 collect 已恢复。完整声明见模块公开头文件。</td></tr></tbody></table></div><div class="example"><h4>调用示例</h4><pre><code>#include &lt;modbus_support/server.h&gt;
 #include &lt;modbus_support/rtu.h&gt;
 #include &lt;zephyr/sys/byteorder.h&gt;
 
@@ -473,24 +430,12 @@ int demo_mb_handle(const uint8_t *frame, size_t size,
       <article class="module" id="watchdog">
         <div class="module-head"><h3>3.6 watchdog — 任务健康与硬件喂狗</h3><span class="tag">已实现</span></div>
         <p class="purpose">将任务监控、健康有效期和外部喂狗统一管理，应用不感知喂狗引脚。</p>
-        <dl class="facts">
-          <dt>健康检查</dt><dd>系统 workqueue 周期检查登记任务，软件监控随模块启用。
-            成功检查生成有效期，固定为软件检查周期的 3 倍；任务心跳本身不续期健康结论。</dd>
-          <dt>硬件喂狗</dt><dd>周期 k_timer 只读取原子状态和健康截止时间、翻转 GPIO，脱离任务共享锁。
-            本轮先按已有健康状态喂狗，再检查过期；过期后下一轮停止喂狗。</dd>
-          <dt>故障动作</dt><dd>统一 report 接口携带错误、描述、动作与复位延时。
-            HOLD 停业务、停检查并保留可用喂狗；RESET 经定时器延时冷复位。
-            CONTINUE 仅保留诊断兼容，新产品终止故障不使用。</dd>
-          <dt>APP 分工</dt><dd>status 绑定唯一故障回调，负责业务状态和 LED；watchdog 不依赖 status。
-            模块仅保留最近诊断，不提供故障历史或自动恢复业务。</dd>
-          <dt>配置来源</dt><dd>DTS 绑定外部 GPIO 与喂狗周期，Kconfig 配置软件检查周期和外部喂狗启用。
-            调试可关闭外部喂狗，显式 RESET 仍生效。</dd>
-        </dl>
+
         <div class="flow"><span>任务报告进展</span><b>→</b><span>workqueue 完整检查</span>
           <b>→</b><span>发布健康期限</span><b>→</b><span>k_timer 决定硬件喂狗</span></div>
         <p class="legend">工作队列阻塞时，由健康过期和外部芯片兜底；关闭外部喂狗后不具备同等保障。
           终止故障只能通过重启重新初始化，可恢复通信异常应由业务自行处理。</p>
-        <div class="deep-dive"><h4>设计方案</h4><div class="design-prose"><p>任务进展不直接触发硬件喂狗。只有软件完整扫描通过，才发布可用健康结论，防止单个活跃任务掩盖其他任务卡死。</p><p>扫描在 workqueue，硬件边沿在 k_timer。硬件定时器不获取任务列表锁，避免依赖工作队列实时执行；三倍有效期给正常调度留出余量。</p><p>控制模式和诊断分离：模式决定是否检查/喂狗，最近故障用于查询。新的诊断不会自动清除锁存；迟到心跳不能恢复健康。</p><p>终止动作经统一 report / handle 路径：先通知应用只读回调，再执行 HOLD 或安排 RESET。回调负责状态变化，不负责选择或改写动作。</p><p>外部芯片的复位超时属于硬件约束；GPIO 已失败时，软件延时不能保证晚于外部复位。延时只是给输出机会，不保证日志发送或参数保存。</p></div><h4>对外接口</h4><div class="table-wrap"><table><thead><tr><th>接口</th><th>作用与调用约束</th></tr></thead><tbody><tr><td><code>watchdog_init(notify)</code></td><td>线程显式初始化；每次上电只尝试一次，唯一 notify 必须非空；初始化失败直接返回。</td></tr><tr><td><code>watchdog_task_register(task, config)</code></td><td>常驻且首次清零的任务对象；复制配置，名称常驻；线程调用。</td></tr><tr><td><code>watchdog_task_feed(task)</code></td><td>报告真实进展；迟到返回 -ETIMEDOUT 并锁存，不应只为喂狗而虚假报告。</td></tr><tr><td><code>watchdog_task_sleep_forever(task)</code></td><td>退出期限监控，不会使线程真正休眠；重新监控须登记。</td></tr><tr><td><code>watchdog_report_fault(error, description, action, reset_delay_ms)</code></td><td>线程 / ISR 可用，描述常驻且 error 非零；RESET 使用毫秒延时，0 立即复位，上限 60 秒。</td></tr><tr><td><code>watchdog_stop(mode)</code></td><td>非阻塞停止检查或全部停止；本次启动不能重新启用，不取消既有复位。</td></tr><tr><td><code>watchdog_task_get / watchdog_fault_get</code></td><td>复制诊断快照，不处理通知或恢复状态；无记录 -ENOENT。</td></tr><tr><td><code>watchdog_fault_cb_t(snapshot)</code></td><td>唯一只读回调；主动上报可从 ISR 同步进入，必须非阻塞、ISR 安全，不递归上报。</td></tr></tbody></table></div><div class="example"><h4>调用示例</h4><pre><code>#include &lt;watchdog/watchdog.h&gt;
+        <div class="deep-dive"><h4>设计方案</h4><div class="design-prose"><p>任务进展不直接触发硬件喂狗。只有软件完整扫描通过，才发布可用健康结论，防止单个活跃任务掩盖其他任务卡死。</p><p>扫描在 workqueue，硬件边沿在 k_timer。硬件定时器不获取任务列表锁，避免依赖工作队列实时执行；三倍有效期给正常调度留出余量。</p></div><h4>对外接口</h4><div class="table-wrap"><table><thead><tr><th>接口</th><th>作用与调用约束</th></tr></thead><tbody><tr><td><code>watchdog_init(notify)</code></td><td>线程显式初始化；每次上电只尝试一次，唯一 notify 必须非空；初始化失败直接返回。</td></tr><tr><td><code>watchdog_task_register(task, config)</code></td><td>常驻且首次清零的任务对象；复制配置，名称常驻；线程调用。</td></tr><tr><td><code>watchdog_task_feed(task)</code></td><td>报告真实进展；迟到返回 -ETIMEDOUT 并锁存，不应只为喂狗而虚假报告。</td></tr><tr><td><code>watchdog_task_sleep_forever(task)</code></td><td>退出期限监控，不会使线程真正休眠；重新监控须登记。</td></tr><tr><td><code>watchdog_report_fault(error, description, action, reset_delay_ms)</code></td><td>线程 / ISR 可用，描述常驻且 error 非零；RESET 使用毫秒延时，0 立即复位，上限 60 秒。</td></tr><tr><td><code>watchdog_stop(mode)</code></td><td>非阻塞停止检查或全部停止；本次启动不能重新启用，不取消既有复位。</td></tr><tr><td><code>watchdog_task_get / watchdog_fault_get</code></td><td>复制诊断快照，不处理通知或恢复状态；无记录 -ENOENT。</td></tr><tr><td><code>watchdog_fault_cb_t(snapshot)</code></td><td>唯一只读回调；主动上报可从 ISR 同步进入，必须非阻塞、ISR 安全，不递归上报。</td></tr></tbody></table></div><div class="example"><h4>调用示例</h4><pre><code>#include &lt;watchdog/watchdog.h&gt;
 #include &lt;zephyr/sys/atomic.h&gt;
 
 static struct watchdog_task sample_task;
@@ -537,20 +482,10 @@ int demo_terminal_fault(int error)
       <article class="module" id="iap">
         <div class="module-head"><h3>3.7 iap — 兼容旧协议的在线升级</h3><span class="tag pending">已接入 / 实板互通待验</span></div>
         <p class="purpose">兼容旧 IAPv3 / SGZ 接收方式，使用 MCUboot 完成签名镜像升级。</p>
-        <dl class="facts">
-          <dt>完整链路</dt><dd>Modbus ADU 接收、1 KiB 分包、重复与乱序处理、AES 解密、SGZ/QuickLZ 解包、
-            P-256 验签、备用槽写入、升级结果 NVS 日志和试运行请求。</dd>
-          <dt>后台处理</dt><dd>专用线程处理 Flash 擦写和解包，协议回调仅提交有界任务。
-            不注册串口，也不依赖 DP；入口编号用于区分上传会话归属。</dd>
-          <dt>产品接入</dt><dd>forward.c 配置三个完整 ADU 地址段，通过回调调用 <code>iap_route()</code>。
-            transmit 先完成 CRC、站号和路由判断；IAP 自行校验功能码、包长和会话。</dd>
-          <dt>启动与确认</dt><dd>显式初始化后开放路由；必要初始化成功后由 main 确认当前镜像。
-            MCUboot 负责启动与镜像交换，IAP 不替代 bootloader。</dd>
-          <dt>当前范围</dt><dd>单 Cortex-M 镜像、双槽 scratch 交换；不包含多镜像、差分或下挂设备升级。</dd>
-        </dl>
+
         <div class="callout warning"><strong>尚待闭环：</strong>默认升级流程没有接入 DP 冻结与 flush 钩子，
           升级重启可能丢失尚未保存的参数。需要通过 prepare_reboot / cancel_reboot 配对钩子完成应用协调。</div>
-        <div class="deep-dive"><h4>设计方案</h4><div class="design-prose"><p>接收与镜像处理解耦：Modbus 回调校验和提交任务，专用线程完成耗时擦写、解密、解包和验签，减少协议调用被 Flash 长操作占用。</p><p>传输兼容与可信启动分开：旧 AES 用于传输互操作，不能证明固件可信；最终使用 P-256 验签和 MCUboot 试运行机制。</p><p>IAP 只认识完整 ADU 和入口编号，不占串口。APP/transmit 先判站号，再按地址段调用；多个入口必须有不同编号，共用单接收器所有权。</p><p>升级前业务协调采用配对 prepare/cancel 钩子，IAP 不直接依赖 DP。准备成功后若日志或提交失败调用 cancel；prepare 自身失败必须自行撤销部分操作。</p><p>能力范围保持可验证：当前只支持指定单镜像格式与双槽布局。业务正常启动后的镜像确认在 APP，不能只因收包完成就确认新镜像。</p></div><h4>对外接口</h4><div class="table-wrap"><table><thead><tr><th>接口</th><th>作用与调用约束</th></tr></thead><tbody><tr><td><code>iap_init(void)</code></td><td>CONFIG_IAP_CONFIGURED 模式，从 DTS / Kconfig 与生成密钥显式初始化；先于安装路由。</td></tr><tr><td><code>iap_init_config(config)</code></td><td>显式配置暂存/日志分区、AES、公钥策略和配对回调；配置复制，密钥和 context 常驻。与 iap_init 二选一。</td></tr><tr><td><code>iap_ready(void)</code></td><td>查询接收器是否就绪。</td></tr><tr><td><code>iap_route(iface, request, response)</code></td><td>完整 ADU 路由；0 回复，IAP_ROUTE_SILENT 消费不回复，-ENOENT 不归本模块；iface 非负。</td></tr><tr><td><code>iap_stop(void)</code></td><td>线程 / ISR 可用；终止状态保持到复位，当前 Flash 操作安全完成，已准入提交不回滚。</td></tr><tr><td><code>iap_sgz_crc32 / iap_sgz_decrypt</code></td><td>容器校验和与原地 AES 解密辅助接口。</td></tr><tr><td><code>iap_sgz_unpack(read, in, received, max_image_size, write, out, ws, image_size)</code></td><td>读写回调式有界解包，调用方提供工作区和输入/输出上限。</td></tr><tr><td><code>iap_image_verify(read, context, available, policy, hash)</code></td><td>按地址、SRAM、长度及公钥策略校验 MCUboot 镜像并输出哈希。</td></tr></tbody></table></div><div class="example"><h4>调用示例</h4><pre><code>#include &lt;iap/iap.h&gt;
+        <div class="deep-dive"><h4>设计方案</h4><div class="design-prose"><p>接收与镜像处理解耦：Modbus 回调校验和提交任务，专用线程完成耗时擦写、解密、解包和验签，减少协议调用被 Flash 长操作占用。</p><p>传输兼容与可信启动分开：旧 AES 用于传输互操作，不能证明固件可信；最终使用 P-256 验签和 MCUboot 试运行机制。</p></div><h4>对外接口</h4><div class="table-wrap"><table><thead><tr><th>接口</th><th>作用与调用约束</th></tr></thead><tbody><tr><td><code>iap_init(void)</code></td><td>CONFIG_IAP_CONFIGURED 模式，从 DTS / Kconfig 与生成密钥显式初始化；先于安装路由。</td></tr><tr><td><code>iap_init_config(config)</code></td><td>显式配置暂存/日志分区、AES、公钥策略和配对回调；配置复制，密钥和 context 常驻。与 iap_init 二选一。</td></tr><tr><td><code>iap_ready(void)</code></td><td>查询接收器是否就绪。</td></tr><tr><td><code>iap_route(iface, request, response)</code></td><td>完整 ADU 路由；0 回复，IAP_ROUTE_SILENT 消费不回复，-ENOENT 不归本模块；iface 非负。</td></tr><tr><td><code>iap_stop(void)</code></td><td>线程 / ISR 可用；终止状态保持到复位，当前 Flash 操作安全完成，已准入提交不回滚。</td></tr><tr><td><code>iap_sgz_crc32 / iap_sgz_decrypt</code></td><td>容器校验和与原地 AES 解密辅助接口。</td></tr><tr><td><code>iap_sgz_unpack(read, in, received, max_image_size, write, out, ws, image_size)</code></td><td>读写回调式有界解包，调用方提供工作区和输入/输出上限。</td></tr><tr><td><code>iap_image_verify(read, context, available, policy, hash)</code></td><td>按地址、SRAM、长度及公钥策略校验 MCUboot 镜像并输出哈希。</td></tr></tbody></table></div><div class="example"><h4>调用示例</h4><pre><code>#include &lt;iap/iap.h&gt;
 #include &lt;transmit/transmit.h&gt;
 
 static int upgrade_access(void *context,
@@ -595,7 +530,7 @@ int demo_decode_block(const uint8_t *compressed, size_t compressed_size,
     /* 仅在成功后消费 plain[0..size)，不能假设总是填满缓冲。 */
     return size;
 }</code></pre></div><p class="example-note">compressed 必须是完整合法块，不能直接传未解密 SGZ 容器。IAP 已处理容器与工作区，产品业务通常不直接调用解压函数。</p></div><p class="source"><a href="../modules/quicklz/">模块目录</a></p></article>
-<article class="module" id="gd32e505"><h3>3.9 gd32e505 — 硬件平台适配</h3><div class="deep-dive"><h4>设计方案</h4><div class="design-prose"><p>以 Zephyr 模块的 soc_root / dts_root 提供缺失的芯片描述与绑定，硬件配置由 DTS 生成，避免应用包含厂商初始化代码。</p><p>应用和 MCUboot 通过同一硬件模块获得时钟来源。20 MHz 有源旁路、PLL /5×45 等配置在构建时做约束检查。</p><p>ADC 后端实现 Zephyr 标准驱动入口；启动时完成设备级初始化/校准，应用仍须配置通道，再请求读取。业务单位换算不进入驱动。</p><p>驱动用设备级锁串行化读取，超时有界；不支持的 DMA、异步、多通道序列等能力明确拒绝，不纳入当前支持范围。</p></div><h4>对外接口</h4><div class="table-wrap"><table><thead><tr><th>接口</th><th>作用与调用约束</th></tr></thead><tbody><tr><td><code>模块接入：ZEPHYR_EXTRA_MODULES / hardware.cmake</code></td><td>find_package(Zephyr) 前登记；不是应用运行期 API。SoC 和 ADC 由标准设备初始化机制启动。</td></tr><tr><td><code>adc_is_ready_dt(spec)</code></td><td>Zephyr 官方就绪检查，确认底层设备可用。</td></tr><tr><td><code>adc_channel_setup_dt(spec)</code></td><td>Zephyr 官方通道配置接口，设置引脚对应通道、增益、参考等；应用读取前调用。</td></tr><tr><td><code>adc_sequence_init_dt(spec, sequence)</code></td><td>Zephyr 官方辅助接口，从通道描述填写 sequence 的通道、分辨率、过采样配置。</td></tr><tr><td><code>adc_read_dt(spec, sequence)</code></td><td>Zephyr 官方同步采样；E505 后端目前只支持单通道。GPIO 继续使用官方 gpio_* 接口。</td></tr></tbody></table></div><div class="example"><h4>调用示例</h4><pre><code>#include &lt;zephyr/drivers/adc.h&gt;
+<article class="module" id="gd32e505"><h3>3.9 gd32e505 — 硬件平台适配</h3><div class="deep-dive"><h4>设计方案</h4><div class="design-prose"><p>以 Zephyr 模块的 soc_root / dts_root 提供缺失的芯片描述与绑定，硬件配置由 DTS 生成，避免应用包含厂商初始化代码。</p><p>应用和 MCUboot 通过同一硬件模块获得时钟来源。20 MHz 有源旁路、PLL /5×45 等配置在构建时做约束检查。</p></div><h4>对外接口</h4><div class="table-wrap"><table><thead><tr><th>接口</th><th>作用与调用约束</th></tr></thead><tbody><tr><td><code>模块接入：ZEPHYR_EXTRA_MODULES / hardware.cmake</code></td><td>find_package(Zephyr) 前登记；不是应用运行期 API。SoC 和 ADC 由标准设备初始化机制启动。</td></tr><tr><td><code>adc_is_ready_dt(spec)</code></td><td>Zephyr 官方就绪检查，确认底层设备可用。</td></tr><tr><td><code>adc_channel_setup_dt(spec)</code></td><td>Zephyr 官方通道配置接口，设置引脚对应通道、增益、参考等；应用读取前调用。</td></tr><tr><td><code>adc_sequence_init_dt(spec, sequence)</code></td><td>Zephyr 官方辅助接口，从通道描述填写 sequence 的通道、分辨率、过采样配置。</td></tr><tr><td><code>adc_read_dt(spec, sequence)</code></td><td>Zephyr 官方同步采样；E505 后端目前只支持单通道。GPIO 继续使用官方 gpio_* 接口。</td></tr></tbody></table></div><div class="example"><h4>调用示例</h4><pre><code>#include &lt;zephyr/drivers/adc.h&gt;
 #include &lt;errno.h&gt;
 
 /* 使用当前板 idu_io 的命名通道，不依赖通道在数组中的位置。 */
@@ -667,24 +602,18 @@ int demo_adc_read(int16_t *raw)
 </tbody></table></div>
       <p>导出目录为 <code>build/hex/IDU-pre-mcuboot-iapv3/</code>，
         SGZ 包大小为 106384 字节。构建通过说明目标固件可生成，不构成实板运行验收。</p>
-      <h3>5.3 文档与接口一致性</h3>
-      <p>正文保留 9 组调用示例，附录保留 17 份公开头文件声明。
-        头文件声明按当前源码更新；调用示例按当前 SDK 编译配置执行语法检查，
-        DP、vport、transmit 组合检查，其余示例分别检查。
-        语法检查不链接产品适配函数，也不执行通信、存储或硬件操作。</p>
-      <h3>5.4 验证范围与待确认事项</h3>
+      <h3>5.3 验证范围与待确认事项</h3>
       <p>历史模块测试覆盖 DP、参数存储、数值换算、watchdog、ADC 和 IAP 等能力；
         这些历史记录不等同于全部模块已在 4.5.0 下重新验证。
         当前尚未执行新版本完整回归、实板串口连续长帧、真实 Flash 掉电、外部看门狗及旧上位机上传验收。
         构建仍存在自定义 vendor prefix 和设备树地址单元警告，需在后续配置收敛中确认。
         旧 Modbus SERIAL 后端的实板行为不在本次 UART 接入测试范围内。</p>
-      <p class="source">验证依据：<a href="../.scratch/zephyr45/issues/01-modbus-compat.md">4.5.0 适配记录</a> ·
-        <a href="testing.md">测试记录</a> · <a href="build-and-upgrade.md">构建与升级说明</a></p>
+      <p class="source">验证依据：<a href="testing.md">测试记录</a> · <a href="build-and-upgrade.md">构建与升级说明</a></p>
     </section>
 
     <section id="todo">
       <h2>6 后续工作计划</h2>
-      <p class="intro">以下为建议推进顺序，不代表已承诺排期。先完成当前链路闭环，再恢复南向能力和扩展产品范围。</p>
+      <p class="intro">以下为建议推进顺序，不代表已承诺排期。优先完成当前链路闭环，再扩展南向能力。</p>
       <div class="table-wrap"><table>
         <thead><tr><th>优先级</th><th>任务</th><th>完成标准</th></tr></thead>
         <tbody>
@@ -729,807 +658,4 @@ int demo_adc_read(int16_t *raw)
       </div>
     </section>
 
-  <section id="api-appendix"><h2>附录 A 接口声明</h2><p>本附录保留报告技术基线的公开头文件声明，供接口核对使用。正文接口表说明调用用途与约束，具体函数签名及数据结构以本附录为准。硬件模块采用 Zephyr 标准 ADC API，不另行定义产品接口。</p><section><h3>A.1 common — 公共数值基础</h3><h4>modules/common/include/common/value.h</h4><pre><code>/** @file @brief 各模块共享的数值存储类型，不依赖业务模块。 */
-#ifndef COMMON_VALUE_H
-#define COMMON_VALUE_H
-
-#include &lt;stdbool.h&gt;
-#include &lt;stdint.h&gt;
-#include &lt;stddef.h&gt;
-
-#define VALUE_WORDS CONFIG_COMMON_VALUE_WORDS
-
-typedef enum {
-    VALUE_TYPE_U8,
-    VALUE_TYPE_U16,
-    VALUE_TYPE_S16,
-    VALUE_TYPE_U32,
-    VALUE_TYPE_S32,
-    VALUE_TYPE_STRING,
-    VALUE_TYPE_BYTES,
-    VALUE_TYPE_WORDS,
-} value_type_t;
-
-/**
- * @brief 数值访问视图；类型、有效长度和所有权由使用方约定。
- * @note array 是外部只读数据引用，与 bytes/words 内嵌数据互斥。
- * @note 本类型不定义序列化格式，也不负责数值转换。
- */
-typedef union {
-    uint8_t bytes[VALUE_WORDS * 2];
-    uint16_t words[VALUE_WORDS];
-    uint8_t u8;
-    uint16_t u16;
-    int16_t s16;
-    uint32_t u32;
-    int32_t s32;
-    float f32;
-    const void *array;
-} value_t;
-
-/** @brief 整数位宽；非整数类型返回 0。 */
-size_t value_integer_bits(value_type_t type);
-
-/** @brief 按类型取得整数；整数类型要求 value 非空，非整数类型返回 0。 */
-int64_t value_integer_get(value_type_t type, const value_t *value);
-
-/** @brief 取低位构造整数，有符号按补码解释；非整数类型返回全零值。 */
-value_t value_integer_from_bits(value_type_t type, uint32_t bits);
-
-/** @brief 整数类型之间可互转；STRING/BYTES/WORDS 仅允许同类型复制。 */
-bool value_can_convert(value_type_t source_type, value_type_t target_type);
-
-/**
- * @brief 转换本地数值；同类型复制，整数收窄保留低位，有符号按补码解释。
- * @note 支持原地转换；失败不修改输出；不处理协议字序、放缩或有效数组长度。
- * @retval -EINVAL 输入或输出指针为空。
- * @retval -ENOTSUP 类型无效或转换组合不支持。
- */
-int value_convert(value_type_t source_type,
-    const value_t *source,
-    value_type_t target_type,
-    value_t *target);
-
-/* 固定存储类型编码，不依赖公共枚举的数值和 C 结构体布局。 */
-static inline uint8_t value_storage_type(value_type_t type)
-{
-    switch (type) {
-    case VALUE_TYPE_U8:
-        return 1;
-    case VALUE_TYPE_U16:
-        return 2;
-    case VALUE_TYPE_S16:
-        return 3;
-    case VALUE_TYPE_U32:
-        return 4;
-    case VALUE_TYPE_S32:
-        return 5;
-    case VALUE_TYPE_STRING:
-        return 6;
-    case VALUE_TYPE_BYTES:
-        return 7;
-    case VALUE_TYPE_WORDS:
-        return 8;
-    default:
-        return 0;
-    }
-}
-
-#endif</code></pre><h4>modules/common/include/common/scale.h</h4><pre><code>/** @file @brief 协议无关的整数比例及偏移换算。 */
-#ifndef COMMON_SCALE_H
-#define COMMON_SCALE_H
-#include &lt;stdbool.h&gt;
-#include &lt;stdint.h&gt;
-
-/** @brief 正向 output = input * numerator / denominator + offset；反向先去偏移。 */
-typedef struct {
-    int32_t numerator;
-    int32_t denominator;
-    int32_t offset;
-} value_scale_t;
-
-/**
- * @brief 整数除法向零舍入；失败不修改输出，NULL 配置按恒等处理。
- * @note 非空配置的分子分母必须非零；中间算术溢出返回 -ERANGE，不截断中间结果。
- */
-int value_scale_apply(const value_scale_t *scale, bool inverse, int64_t input, int64_t *output);
-#endif</code></pre></section><section><h3>A.2 dataprocess — 测点与参数中心</h3><h4>modules/dataprocess/include/dataprocess/dataprocess.h</h4><pre><code>/**
- * @file
- * @brief 点表登记与显式类型的同步读写。
- * @note 整数类型可互转，缩窄保留低位；数组类仅允许同类型，不解释协议放缩和字序。
- * @note 不支持的类型组合在业务回调前返回 -ENOTSUP；业务回调始终使用点表内部类型。
- */
-#ifndef DATAPROCESS_H
-#define DATAPROCESS_H
-
-#include &lt;common/value.h&gt;
-
-#include &lt;stdbool.h&gt;
-#include &lt;stddef.h&gt;
-#include &lt;stdint.h&gt;
-
-/** @brief 仅供 dp_factory_reset 使用：清空全部设备的 DP 参数总区域。 */
-#define DP_DEVICE_ID_ALL 0U
-
-typedef enum {
-    DP_POINT_FLAG_PERSISTENT = (1U &lt;&lt; 0),    /**&lt; 延后保存，启动登记时加载历史值。 */
-    DP_POINT_FLAG_SKIP_DEFAULTS = (1U &lt;&lt; 5), /**&lt; 显式恢复默认时跳过，不影响上电设置初值。 */
-    DP_POINT_FLAG_CHECK_RANGE = (1U &lt;&lt; 6),   /**&lt; 按配置上下限校验。 */
-} dp_point_flags_t;
-
-/** @brief 同步回调上下文；身份只读，value 可修改，所有指针仅在回调期间有效。 */
-typedef struct {
-    uint16_t device_id;
-    uint16_t signal_key;
-    bool is_write;       /**&lt; true 为写回调，false 为读回调。 */
-    size_t signal_index; /**&lt; 注册表内从零开始的行下标，对应应用的 process 枚举。 */
-    value_t *value;
-} dp_callback_context_t;
-
-/** @brief 返回 0 表示成功，负值表示失败；不得保存上下文或 value 指针。 */
-typedef int (*dp_callback_t)(const dp_callback_context_t *context);
-
-typedef struct {
-    value_t initial;
-    value_t minimum;
-    value_t maximum;
-} dp_point_limits_t;
-
-typedef struct {
-    uint16_t signal_key;
-    uint8_t size;
-    uint8_t flags;
-    value_type_t type;
-    dp_callback_t write_callback;
-    dp_callback_t read_callback;
-    dp_point_limits_t data;
-} dp_point_config_t;
-
-typedef struct {
-    const dp_point_config_t *points;
-    size_t point_count;
-} dp_table_t;
-
-/** @brief 初始化存储及周期保存线程；重复成功调用返回 0。 */
-int dp_init(void);
-
-/**
- * @brief 启动线程逐张登记设备点表；描述可临时，行数组及其引用数据必须常驻只读，不得修改或释放。
- * @note 同一张表可登记给多个设备；设备 ID 必须非零且唯一，运行数据由 DP 独立分配。
- * @note 持久点加载历史值；缺失、不兼容或越界时使用初值并同步追加，失败不发布设备。
- * @note 不兼容或越界会警告；真正的存储读取错误直接返回，不覆盖历史记录。
- * @note 登记须串行；启动时执行，或暂停并等待全部 DP 业务访问结束后执行。
- * @retval -ENOMEM 私有登记节点和点数据分配失败。
- */
-int dp_register_device(uint16_t device_id, const dp_table_t *table);
-
-/**
- * @brief 按 key 同步写点，输入先转成点表类型，回调后校验并更新 RAM；成功不代表已写入 Flash。
- * @note 按 input_type 填写 value 对应成员，调用方须将整个联合体初始化；输入不被修改。
- */
-int dp_set_para_by_key(
-    uint16_t device_id, uint16_t signal_key, value_type_t input_type, const value_t *value);
-
-/** @brief 按 key 同步读点，内部回调后转为 output_type；失败时输出保持不变。 */
-int dp_get_para_by_key(
-    uint16_t device_id, uint16_t signal_key, value_type_t output_type, value_t *value);
-
-/**
- * @brief 按表内从零开始的行下标同步写入；与按 key 写入共用回调、校验及保存语义。
- * @note signal_index 对应应用的 process 枚举；越界返回 -ENOENT。
- */
-int dp_set_para_by_index(
-    uint16_t device_id, size_t signal_index, value_type_t input_type, const value_t *value);
-
-/** @brief 按行下标同步读取；读回调可修改点值，越界返回 -ENOENT。 */
-int dp_get_para_by_index(
-    uint16_t device_id, size_t signal_index, value_type_t output_type, value_t *value);
-
-/**
- * @brief 将指定设备的点值恢复为配置初值，跳过 SKIP_DEFAULTS 点，不调用业务回调。
- * @note 更新 RAM 并标记持久点待保存；被跳过的点保留值及时间。
- */
-int dp_restore_defaults(uint16_t device_id);
-
-/** @brief 出厂恢复成功后、重启前的同步收尾回调；不持有 DP 锁。 */
-typedef void (*dp_factory_reset_callback_t)(void *context);
-
-/**
- * @brief 删除指定设备全部持久参数，调用可选回调，然后冷重启；成功不返回。
- * @note 仅线程可用；允许并发 RAM 读写，但不得并发登记或删除设备。
- * @note 不要求设备已登记；没有持久参数也执行回调并重启。
- * @note 保留 RAM 点表至重启；回调不得登记或删除设备。
- * @note 开始删除后暂停该设备 Flash 保存，RAM 读写及默认恢复仍可用；失败可重试。
- * @note 删除失败返回错误，不调用回调、不重启；断电后继续完成已提交的删除。
- * @param device_id 目标设备；DP_DEVICE_ID_ALL 表示所有设备，包括当前未登记的历史设备。
- * @param before_reboot 可为 NULL；回调须返回，不能保证异步日志已发送。
- */
-int dp_factory_reset(uint16_t device_id, dp_factory_reset_callback_t before_reboot, void *context);
-
-/**
- * @brief 同步保存待保存参数，阻塞至本轮完成；失败保留待保存标记。
- * @note 仅线程可用。保证完整落盘前，调用方须停止参数修改。
- */
-int dp_flush(void);
-
-/**
- * @brief 移除设备、释放私有 RAM 并永久删除其持久参数；不存在返回 0。
- * @note 调用方须停止并等待全部 DP 业务访问结束；内部与后台保存串行。
- * @note 删除失败保留 RAM 并暂停该设备保存，重试或重启继续清理；应用点表不释放。
- */
-int dp_remove_device(uint16_t device_id);
-
-#endif</code></pre></section><section><h3>A.3 vport — 统一端口接入</h3><h4>modules/vport/include/vport/vport.h</h4><pre><code>/** @file @brief 协议无关的端口输入输出；调用方保证同一端口串行。 */
-#ifndef VPORT_H
-#define VPORT_H
-#include &lt;zephyr/kernel.h&gt;
-#include &lt;stddef.h&gt;
-#include &lt;stdint.h&gt;
-
-typedef enum {
-    VPORT_DATA,
-    VPORT_IDLE,
-    VPORT_POLL,
-    VPORT_ERROR,
-} vport_event_type_t;
-
-/** @brief 接收时刻使用单调微秒；DATA 为借用字节块，其余事件长度为零。 */
-typedef struct {
-    vport_event_type_t type;
-    const uint8_t *data;
-    size_t size;
-    uint64_t at_us;
-} vport_event_t;
-
-typedef int (*vport_receive_t)(void *context, const vport_event_t *event);
-typedef int (*vport_send_t)(void *context, const uint8_t *data, size_t size, k_timeout_t timeout);
-
-/** @brief APP 持有的常驻端口；receive 在启动绑定，运行期不替换。 */
-typedef struct {
-    vport_send_t send;
-    void *send_context;
-    vport_receive_t receive;
-    void *receive_context;
-} vport_t;
-
-/** @brief 启动时绑定唯一接收者；不能覆盖活动绑定。 */
-int vport_bind(vport_t *port, vport_receive_t receive, void *context);
-/** @brief 线程中同步交付事件；返回前消费或复制，不能保留借用指针。 */
-int vport_input(vport_t *port, const vport_event_t *event);
-/** @brief APP 回调返回前完成或中止发送；禁止保留缓冲区指针。 */
-int vport_output(vport_t *port, const uint8_t *data, size_t size, k_timeout_t timeout);
-#endif</code></pre></section><section><h3>A.4 transmit — 对外从机协议与测点映射</h3><h4>modules/transmit/include/transmit/transmit.h</h4><pre><code>/** @file @brief 从机协议统一入口与实例登记；APP 管理执行线程。 */
-#ifndef TRANSMIT_H
-#define TRANSMIT_H
-
-#include &lt;stddef.h&gt;
-#include &lt;stdint.h&gt;
-
-#include &lt;transmit/mapping.h&gt;
-#include &lt;transmit/modbus.h&gt;
-#include &lt;transmit/protocol.h&gt;
-#include &lt;vport/vport.h&gt;
-
-typedef struct {
-    vport_t *port;
-    const tr_protocol_t *protocols;
-    size_t protocol_count;
-    size_t rx_capacity;
-    size_t tx_capacity;
-    uint32_t send_timeout_ms;
-} tr_config_t;
-
-/** @brief 登记单实例，内部申请固定缓存并绑定端口；配置常驻只读，失败不绑定。 */
-int tr_register(const tr_config_t *config);
-
-#endif</code></pre><h4>modules/transmit/include/transmit/mapping.h</h4><pre><code>/** @file @brief 通用测点映射配置。 */
-#ifndef TRANSMIT_MAPPING_H
-#define TRANSMIT_MAPPING_H
-
-#include &lt;stddef.h&gt;
-#include &lt;stdint.h&gt;
-
-#include &lt;common/value.h&gt;
-#include &lt;common/scale.h&gt;
-
-/** @brief DP 测点与对外数值的通用映射，不包含协议地址和编码规则。 */
-typedef struct {
-    uint16_t device_id;
-    size_t signal_index;
-    value_type_t external_type;
-    const value_scale_t *scale;    /**&lt; NULL 表示不进行放缩。 */
-} tr_mapping_t;
-
-#endif</code></pre><h4>modules/transmit/include/transmit/modbus.h</h4><pre><code>/** @file @brief Modbus 转发表与从机配置。 */
-#ifndef TRANSMIT_MODBUS_H
-#define TRANSMIT_MODBUS_H
-
-#include &lt;errno.h&gt;
-#include &lt;stddef.h&gt;
-#include &lt;stdint.h&gt;
-
-#include &lt;transmit/mapping.h&gt;
-#include &lt;modbus_support/server.h&gt;
-#include &lt;modbus_support/registers.h&gt;
-
-/** @brief 一个完整测点的 Modbus 地址与编码配置。 */
-typedef struct {
-    mb_data_area_t area;
-    uint16_t address;
-    uint16_t count;
-    mb_word_order_t word_order;
-    tr_mapping_t mapping;
-} tr_modbus_point_t;
-
-/** @brief 地址段已消费但不回复。 */
-#define TR_MODBUS_ROUTE_SILENT (-ECANCELED)
-
-/**
- * @brief 完整 ADU 地址段回调；返回 0 回复，SILENT 静默，其他负值表示处理失败。
- * @note 只按请求前两个数据字节匹配起始地址，功能码及长度由回调校验。
- *       已匹配请求不回退点表。广播可进入回调，但统一禁止响应。
- *       data 保留协议字节序；请求、响应仅在同步调用期间有效。
- */
-typedef int (*tr_modbus_route_callback_t)(void *context,
-    const struct modbus_adu *request,
-    struct modbus_adu *response);
-
-typedef struct {
-    uint16_t address;
-    uint16_t count;
-    tr_modbus_route_callback_t callback;
-    void *context;
-} tr_modbus_route_t;
-
-typedef struct {
-    uint8_t unit;
-    uint32_t gap_us;
-    const tr_modbus_point_t *points;
-    size_t point_count;
-    const tr_modbus_route_t *routes;
-    size_t route_count;
-} tr_modbus_t;
-
-#endif</code></pre><h4>modules/transmit/include/transmit/protocol.h</h4><pre><code>/** @file @brief 协议匹配、执行回调与协议配置。 */
-#ifndef TRANSMIT_PROTOCOL_H
-#define TRANSMIT_PROTOCOL_H
-
-#include &lt;stdbool.h&gt;
-#include &lt;stddef.h&gt;
-#include &lt;stdint.h&gt;
-
-#include &lt;transmit/modbus.h&gt;
-
-typedef enum {
-    TR_WAIT,
-    TR_MISMATCH,
-    TR_COMPLETE,
-} tr_match_t;
-
-/** @brief 未消费缓存视图；回调不能持有指针，不允许自行删除字节或执行副作用。 */
-typedef struct {
-    const uint8_t *data;
-    size_t size;
-    size_t boundary_size;
-    bool at_boundary;
-    bool broken;
-    bool expired;
-} tr_view_t;
-
-/** @brief 同一候选视图可重复检查；不能依赖隐含字节游标或保留跨候选解析状态。 */
-typedef tr_match_t (*tr_check_t)(void *context, const tr_view_t *view, size_t *consumed);
-/** @brief 已选择的完整报文；输出长度零表示静默，返回负值不重放请求。 */
-typedef int (*tr_execute_t)(void *context,
-    const uint8_t *request,
-    size_t size,
-    uint8_t *response,
-    size_t capacity,
-    size_t *response_size);
-
-typedef enum {
-    TR_PROTOCOL_MODBUS,
-    TR_PROTOCOL_CUSTOM,
-} tr_protocol_type_t;
-
-/** @brief 每实例每类最多一个；自定义入口用于应用现有协议，不建立动态协议注册中心。 */
-typedef struct {
-    tr_protocol_type_t type;
-    size_t max_frame;
-    uint32_t timeout_us;
-
-    union {
-        tr_modbus_t modbus;
-
-        struct {
-            tr_check_t check;
-            tr_execute_t execute;
-            void *context;
-        } custom;
-    };
-} tr_protocol_t;
-
-#endif</code></pre></section><section><h3>A.5 modbus — 标准协议能力与 Zephyr 适配</h3><h4>modules/modbus/include/modbus_support/server.h</h4><pre><code>/** @file @brief Zephyr RAW 从机的同步适配；不依赖 DP 或产品转发表。 */
-#ifndef MODBUS_SUPPORT_SERVER_H
-#define MODBUS_SUPPORT_SERVER_H
-#include &lt;zephyr/modbus/modbus.h&gt;
-
-/** @brief Modbus 数据区，区分线圈、离散输入、保持寄存器和输入寄存器。 */
-typedef enum {
-    MB_DATA_AREA_COIL,
-    MB_DATA_AREA_DISCRETE_INPUT,
-    MB_DATA_AREA_HOLDING_REGISTER,
-    MB_DATA_AREA_INPUT_REGISTER,
-} mb_data_area_t;
-
-/** @brief Zephyr 已校验的整笔访问；寄存器为大端字节，位数据低位在前。 */
-typedef struct {
-    mb_data_area_t area;
-    uint16_t first;
-    uint16_t count;
-    bool writing;
-    uint8_t *data; /**&lt; 读操作在预清零缓冲填充输出，写操作只读；仅在同步回调期间有效。 */
-} mb_request_t;
-
-/** @brief 每请求最多执行一次；返回 0 或 Modbus 异常码，负值归一为设备故障。 */
-typedef int (*mb_access_t)(void *context, const mb_request_t *request);
-typedef struct mb_server mb_server_t;
-
-/** @brief 启动期占用一个官方 RAW 接口；数量由 MODBUS_NUMOF_RAW_ADU 限制。 */
-int mb_server_open(uint8_t unit, mb_server_t **server);
-/** @brief 仅用于启动失败回退，正在执行时返回 -EBUSY。 */
-int mb_server_close(mb_server_t *server);
-/**
- * @brief 调用官方 modbus_raw_submit_rx，同步返回响应；不创建线程或等待系统工作队列。
- * @note 每实例调用必须串行，不支持递归。access 在调用线程执行。
- */
-int mb_server_process(mb_server_t *server,
-    const struct modbus_adu *request,
-    struct modbus_adu *response,
-    bool *respond,
-    mb_access_t access,
-    void *context);
-#endif</code></pre><h4>modules/modbus/include/modbus_support/rtu.h</h4><pre><code>/**
- * @file
- * @brief 完整 Modbus RTU 报文的无分配编解码接口。
- *
- * 完整 RTU 帧包含地址、功能码和两个 CRC 字节。
- *
- * 缓冲由调用方持有， 不能与 ADU 重叠。此处不分配、提交、加锁或发完成通知。
- * 失败时输出不变；可在分配内存或获取接收所有权前校验，解码时也会校验输入。
- */
-#ifndef MODBUS_SUPPORT_RTU_H
-#define MODBUS_SUPPORT_RTU_H
-
-#include &lt;zephyr/modbus/modbus.h&gt;
-#include &lt;stddef.h&gt;
-#include &lt;stdint.h&gt;
-
-/**
- * @brief 校验完整 RTU 帧的长度和 CRC。
- * @param[in] frame 待校验的完整报文字节。
- * @param[in] size 报文字节数。
- * @return 有效返回 0，否则返回负错误码。
- */
-int mb_rtu_validate(const uint8_t *frame, size_t size);
-/**
- * @brief 校验完整 RTU 帧并解码为 ADU。
- * @param[in] frame 完整报文字节，不得与 adu 重叠。
- * @param[in] size 报文字节数。
- * @param[out] adu 接收解码结果；失败时保持原值。
- * @return 成功返回 0，失败返回负错误码。
- */
-int mb_rtu_decode(const uint8_t *frame, size_t size, struct modbus_adu *adu);
-/**
- * @brief 将 ADU 编码为包含 CRC 的完整 RTU 帧。
- * @param[in] adu 待编码的 ADU，不得与 frame 重叠。
- * @param[out] frame 接收编码报文的缓冲区。
- * @param[in] capacity 缓冲区字节容量。
- * @param[out] size 接收实际报文字节数；失败时保持原值。
- * @return 成功返回 0，失败返回负错误码。
- */
-int mb_rtu_encode(const struct modbus_adu *adu, uint8_t *frame, size_t capacity, size_t *size);
-
-#endif</code></pre><h4>modules/modbus/include/modbus_support/rtu_frame.h</h4><pre><code>/** @file @brief RTU 流检查；边界由实际接收时序产生，检查不执行业务。 */
-#ifndef MODBUS_RTU_FRAME_H
-#define MODBUS_RTU_FRAME_H
-#include &lt;stdbool.h&gt;
-#include &lt;stddef.h&gt;
-#include &lt;stdint.h&gt;
-/** @brief 成功输出完整帧长；等待返回 -EAGAIN，不匹配返回 -EBADMSG。 */
-int mb_rtu_probe(const uint8_t *data,
-    size_t size,
-    size_t boundary_size,
-    bool at_boundary,
-    bool broken,
-    bool expired,
-    size_t *frame_size);
-#endif</code></pre><h4>modules/modbus/include/modbus_support/registers.h</h4><pre><code>/** @file @brief 寄存器与公共数值的转换，不依赖转发表或 DP。 */
-#ifndef MODBUS_SUPPORT_REGISTERS_H
-#define MODBUS_SUPPORT_REGISTERS_H
-#include &lt;common/value.h&gt;
-#include &lt;stdbool.h&gt;
-
-typedef enum {
-    MB_HIGH_WORD_FIRST,
-    MB_LOW_WORD_FIRST,
-} mb_word_order_t;
-
-/** @brief 从已校验的完整测点取得一个寄存器；index 必须小于 count。 */
-uint16_t mb_register_value(
-    value_type_t type, mb_word_order_t order, size_t count, const value_t *value, size_t index);
-/** @brief 解码一个完整测点；调用方保证数据覆盖 offset 及 count，类型长度已校验。 */
-value_t mb_decode_value(value_type_t type,
-    mb_word_order_t order,
-    size_t count,
-    const uint8_t *data,
-    size_t offset,
-    bool bits);
-#endif</code></pre><h4>modules/modbus/include/modbus_support/transport.h</h4><pre><code>/**
- * @file
- * @brief Modbus 串口接入与有界事务接口。
- *
- * Zephyr 4.5.0 构建期适配；不依赖 transmit 服务或业务表。
- */
-#ifndef MODBUS_SUPPORT_TRANSPORT_H
-#define MODBUS_SUPPORT_TRANSPORT_H
-#include &lt;zephyr/modbus/modbus.h&gt;
-#include &lt;zephyr/kernel.h&gt;
-/** @brief 串口完整报文接收回调。 */
-typedef int (*mb_serial_receive_fn)(void *user, const uint8_t *data, size_t size);
-int mb_serial_open(
-    const char *name, struct modbus_serial_param param, mb_serial_receive_fn receive, void *user);
-int mb_serial_send(int iface, const uint8_t *data, size_t size, k_timeout_t timeout);
-int mb_serial_configure(int iface, struct modbus_serial_param param);
-void mb_serial_release(int iface);
-int mb_raw_set_done(int iface, void (*done)(void *user), void *user);
-/**
- * @brief 有界同步客户端会话。
- *
- * begin 持有 Zephyr 可递归的接口锁； 须在同一线程调用普通客户端接口，并始终调用 end。禁止嵌套；
- * 响应等待和 RAW 发送共用剩余总预算。 未发送时的所有权等待超时返回 EBUSY，不算无响应。
- */
-int mb_client_begin(int iface, k_timeout_t timeout);
-void mb_client_end(int iface);
-k_timeout_t mb_client_remaining(int iface);
-#endif</code></pre></section><section><h3>A.6 watchdog — 任务健康与硬件喂狗</h3><h4>modules/watchdog/include/watchdog/watchdog.h</h4><pre><code>/** @file @brief 工作队列任务监控、硬件喂狗和故障处理接口。 */
-#ifndef WATCHDOG_H
-#define WATCHDOG_H
-
-#include &lt;stdint.h&gt;
-
-#define WATCHDOG_TASK_ACTIVE UINT32_C(1)
-#define WATCHDOG_TASK_SLEEP_FOREVER UINT32_C(2)
-#define WATCHDOG_TASK_FAULT UINT32_C(4)
-
-struct watchdog_task_config {
-    const char *name;    /**&lt; 常驻任务名称。 */
-    uint32_t timeout_ms; /**&lt; 允许的最大心跳间隔。 */
-};
-
-struct watchdog_task_snapshot {
-    const char *name;
-    uint32_t timeout_ms;
-    int64_t last_feed_ms;
-    uint32_t flags;
-};
-
-/** @brief 首次使用前清零；登记后保持常驻，内部字段由模块维护。 */
-struct watchdog_task {
-    struct watchdog_task_snapshot state;
-    int64_t deadline_ms;
-    struct watchdog_task *next;
-};
-
-/**
- * @brief 故障处理动作；上报方请求或 watchdog 内部默认值，回调只读。
- * @note 产品终止故障只使用 HOLD 或 RESET；可恢复异常由业务模块自行处理。
- */
-typedef enum {
-    WATCHDOG_ACTION_CONTINUE = 0, /**&lt; 现有诊断兼容行为；不用于新的产品终止故障。 */
-    WATCHDOG_ACTION_HOLD = 1,     /**&lt; 停止业务并保留现场，等待人工重启。 */
-    WATCHDOG_ACTION_RESET = 2,    /**&lt; 停止业务并请求自动重启。 */
-} watchdog_action_t;
-
-typedef enum {
-    WATCHDOG_FAULT_TASK,      /**&lt; 已登记任务超时。 */
-    WATCHDOG_FAULT_CHECK,     /**&lt; 检查结果或首次检查宽限过期。 */
-    WATCHDOG_FAULT_FEED_GPIO, /**&lt; 外部看门狗喂狗 GPIO 初始化或电平翻转失败。 */
-    WATCHDOG_FAULT_REPORTED,  /**&lt; 其他模块主动上报，附带描述和动作。 */
-} watchdog_fault_reason_t;
-
-/** @brief 统一故障快照；非任务故障的 task.name 为空。 */
-struct watchdog_fault {
-    watchdog_fault_reason_t reason;
-    int error;
-    int64_t occurred_ms;
-    watchdog_action_t action; /**&lt; 上报请求或 watchdog 默认动作，回调只读。 */
-    uint32_t reset_delay_ms;  /**&lt; 仅 RESET 时有效，0 立即复位；回调只读。 */
-    const char *description;  /**&lt; 常驻英文描述，主动上报由调用方保证字符串常驻。 */
-    struct watchdog_task_snapshot task;
-};
-
-/** @brief 故障快照仅在回调期间有效，调用时不持有模块锁；回调只读，动作由上报方或 watchdog 决定。
- * @note 监控故障在系统 workqueue 通知；主动上报在调用者上下文同步通知，可能来自 ISR。
- * @note 回调须非阻塞、ISR 安全；不得递归调用 watchdog_report_fault。
- */
-typedef int (*watchdog_fault_cb_t)(const struct watchdog_fault *snapshot);
-
-typedef enum {
-    WATCHDOG_STOP_MONITOR, /**&lt; 关闭检查，保留硬件喂狗，用于应用显式留驻。 */
-    WATCHDOG_STOP_ALL,     /**&lt; 同时停止检查和硬件喂狗。 */
-} watchdog_stop_mode_t;
-
-/**
- * @brief 显式启动模块，内部读取设备树；每次上电仅尝试一次，失败不重试。
- * @note 启动宽限和健康有效期均为检查周期的三倍；仅完整检查通过才续期。
- * @note 在线程中串行调用，notify 必须非空；初始化错误直接返回，不回调。
- */
-int watchdog_init(watchdog_fault_cb_t notify);
-/**
- * @brief 同步上报业务故障，通知初始化时绑定的唯一回调；线程和 ISR 均可调用。
- * @note 产品约定：仅上报本次启动不可恢复的故障，使用 HOLD 或 RESET；不提供清除或恢复业务接口。
- * @note 重试、离线重连等可恢复异常由业务模块处理，不通过此终止故障通道上报。
- * @note 通知前更新最近故障；不改写监控锁存；回调只读，动作由本次调用决定。
- * @note description 必须非空且常驻；故障阶段与处理策略由接收者判断。
- * @param reset_delay_ms 毫秒；仅动作为 RESET 时使用，其他动作忽略。0 立即复位。
- * @note 重复复位请求只允许提前期限；需要 CONFIG_REBOOT，延时使用相对超时，不依赖
- * CONFIG_TIMEOUT_64BIT。
- * @note 延时上限为 60 秒，更长的请求按 60 秒提前复位。
- * @retval 0 回调处理成功。
- * @retval -EINVAL 参数无效。
- * @retval -EACCES 尚未绑定回调。
- * @return 返回回调处理结果；立即复位通常不返回，延时复位安排后返回。
- */
-int watchdog_report_fault(
-    int error, const char *description, watchdog_action_t action, uint32_t reset_delay_ms);
-/** @brief 非阻塞停止，可在 ISR 调用；不能重新启用任务监控。 */
-void watchdog_stop(watchdog_stop_mode_t mode);
-/** @brief 在线程中登记任务，配置值复制，名称与上下文保持常驻。 */
-int watchdog_task_register(struct watchdog_task *task, const struct watchdog_task_config *config);
-/** @brief 在线程中报告进展；迟到返回 -ETIMEDOUT，并安排工作队列通知。 */
-int watchdog_task_feed(struct watchdog_task *task);
-/** @brief 在线程中退出期限监控，不使线程实际休眠；恢复须重新登记。 */
-int watchdog_task_sleep_forever(struct watchdog_task *task);
-/** @brief 复制任务快照，可从 ISR 调用，未登记返回 -ENOENT。 */
-int watchdog_task_get(const struct watchdog_task *task, struct watchdog_task_snapshot *snapshot);
-/**
- * @brief 复制最近主动上报或监控故障，可从 ISR 调用；没有故障返回 -ENOENT。
- * @note action/reset_delay_ms 对主动上报表示原始请求；查询不消费通知或改变监控状态。
- */
-int watchdog_fault_get(struct watchdog_fault *snapshot);
-
-#endif</code></pre></section><section><h3>A.7 iap — 兼容旧协议的在线升级</h3><h4>modules/iap/include/iap/iap.h</h4><pre><code>/**
- * @file
- * @brief 固件升级接收、路由和提交接口。
- */
-#ifndef IAP_H
-#define IAP_H
-
-#include &lt;iap/sgz.h&gt;
-#include &lt;errno.h&gt;
-#include &lt;stdbool.h&gt;
-
-struct modbus_adu;
-
-struct iap_config {
-    uint8_t staging_area_id;
-    uint8_t journal_area_id;
-    const uint8_t *aes_key; /**&lt; 16 字节旧版传输互操作密钥。 */
-    struct iap_image_policy image;
-    /**
-     * @brief 可选的配对钩子，在验签后的 IAP 线程中调用。
-     *
-     * prepare 须持久化应用状态并冻结修改；失败时自行撤销部分操作。 仅在 prepare
-     * 成功而日志或升级提交失败时调用 cancel。
-     */
-    int (*prepare_reboot)(void *user);
-    void (*cancel_reboot)(void *user);
-    void *user;
-};
-
-/**
- * @brief 单接收器，在应用启动、安装路由前初始化一次。
- *
- * 配置会复制， 密钥和用户上下文须在其整个生命周期内有效。 初始化失败会释放 Flash 句柄，允许重试。
- * 使用 MCUboot slot0/slot1， 暂存与 NVS 的擦除单元为 4 KiB。重启后的健康确认仍归应用负责。
- */
-int iap_init_config(const struct iap_config *config);
-bool iap_ready(void);
-/**
- * @brief 可在 ISR 中调用，终止状态保持到复位。
- *
- * 拒绝新路由和作业， 当前 Flash 操作安全完成；已准入的升级提交不回滚。
- */
-void iap_stop(void);
-/**
- * @brief CONFIG_IAP_CONFIGURED：使用相同的显式初始化，
- * 配置来自设备树、生成的验签及传输密钥，以及所选复位策略。
- */
-int iap_init(void);
-
-/** @brief 路由接收但不回复时的返回值。 */
-#define IAP_ROUTE_SILENT (-ECANCELED)
-/**
- * @brief 调用方提供已按站号过滤的完整 Modbus ADU， 包括旧版超长 FC16 报文。
- *
- * 返回 0 表示回复， -ENOENT 表示地址不归本模块， IAP_ROUTE_SILENT
- * 表示接收但不回复。此处不登记传输层。 接口 ID 必须非负，多个端口共用一个上传所有者。 由应用登记完整 ADU 地址段时，按起始地址选择路由；
- * 已匹配请求不回退到测点写入。
- */
-int iap_route(int iface, const struct modbus_adu *request, struct modbus_adu *response);
-
-#endif</code></pre><h4>modules/iap/include/iap/sgz.h</h4><pre><code>/**
- * @file
- * @brief 升级容器解码和镜像校验接口。
- */
-#ifndef IAP_SGZ_H
-#define IAP_SGZ_H
-
-#include &lt;stddef.h&gt;
-#include &lt;stdint.h&gt;
-
-/**
- * @brief 回调须完成整个操作，否则返回负 errno。
- */
-typedef int (*iap_image_read_fn)(void *ctx, uint32_t off, void *buf, size_t len);
-typedef int (*iap_image_write_fn)(void *ctx, const void *buf, size_t len);
-
-struct iap_sgz_workspace {
-    uint8_t compressed[2304], plain[2048];
-};
-
-/**
- * @brief Cortex-M、512 字节 MCUboot 头、SHA256 和 ECDSA-P256。
- *
- * max_size 包含头和 TLV，不含预留交换及尾部空间。 sram_end 允许栈指针恰好位于 RAM
- * 上界。密钥为公钥材料。
- */
-struct iap_image_policy {
-    uint32_t max_size;
-    uint32_t load_address;
-    uint32_t sram_start;
-    uint32_t sram_end;
-    const uint8_t *public_key; /**&lt; 64 字节非压缩 P-256 公钥 X || Y。 */
-    const uint8_t *key_hash;   /**&lt; DER 公钥的 32 字节 SHA256。 */
-};
-
-uint32_t iap_sgz_crc32(uint32_t crc, const void *buf, size_t len);
-int iap_sgz_decrypt(uint8_t *data, size_t len, uint32_t file_offset, const uint8_t aes_key[16]);
-/**
- * @brief received 受调用方输入空间限制， max_image_size 限制解压输出； 不要求堆分配或 Zephyr
- * 运行环境。
- */
-int iap_sgz_unpack(iap_image_read_fn read,
-    void *in,
-    uint32_t received,
-    uint32_t max_image_size,
-    iap_image_write_fn write,
-    void *out,
-    struct iap_sgz_workspace *ws,
-    uint32_t *image_size);
-int iap_image_verify(iap_image_read_fn read,
-    void *ctx,
-    uint32_t available,
-    const struct iap_image_policy *policy,
-    uint8_t image_hash[32]);
-
-#endif</code></pre></section><section><h3>A.8 quicklz — 解压算法支撑</h3><h4>modules/quicklz/include/quicklz/quicklz.h</h4><pre><code>/**
- * @file
- * @brief 有界 QuickLZ 数据块解码接口。
- */
-#ifndef QUICKLZ_H
-#define QUICKLZ_H
-
-#include &lt;stddef.h&gt;
-#include &lt;stdint.h&gt;
-
-/**
- * @brief 解码完整的 QuickLZ 1.5 级别 3 数据块，不保留流式历史。
- *
- * 支持压缩块和原样存储块。缓冲不可重叠，cap 必须能用 int 表示；
- * 不分配内存或保留状态。返回解码字节数； 输入格式错误或目标空间不足返回
- * -EBADMSG。失败时目标内容未定义。
- */
-int qlz_decode_level3(const uint8_t *src, size_t len, uint8_t *dst, size_t cap);
-
-#endif</code></pre></section></section></main></body></html>
+  </main></body></html>

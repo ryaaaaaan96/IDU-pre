@@ -9,6 +9,7 @@ venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.scratch/
 
 # 本地凭据和签名材料（请另行私密备份）
 .env
@@ -23,3 +24,4 @@ keys/
 *.swo
 *~
 .DS_Store
+~$*.docx

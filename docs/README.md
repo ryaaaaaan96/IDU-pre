@@ -1,41 +1,33 @@
 # IDU-pre 文档导航
 
-[项目入口](../README.md) · [领域术语](../GLOSSARY.md)
+[项目入口](../README.md) · [领域术语](../GLOSSARY.md) · [通用模块](../modules/README.md)
 
-## 当前文档
+当前技术基线为 Zephyr v4.5.0、SDK 1.0.1。文档只描述当前实现、使用方法和验证范围。
 
-| 任务 | 文档 |
+## 设计与使用
+
+| 内容 | 文档 |
 | --- | --- |
-| 汇报通用模块架构与后续计划（Zephyr 4.5.0） | [设计报告（Word）](module-design-report.docx)、[HTML 文档版](module-design-report.html) |
-| 构建、分区与升级 | [构建与升级](build-and-upgrade.md) |
-| 维护点表和本地参数 | [协议点表](../app/protocol/README.md)、[DP 模块](../modules/dataprocess/README.md) |
-| 调整堆、点值或参数容量 | [内存管理](memory-management.md) |
-| 测试与验证记录 | [验证说明](testing.md) |
-| 核对硬件与引脚 | [硬件说明](hardware.md) |
-| 命名与采样边界 | [命名与采样边界](naming.md) |
-| 故障与看门狗 | [故障策略](fault-policy.md)、[任务看门狗](task-watchdog.md) |
-| 配置代码跳转 | [VS Code 与 clangd](editor.md) |
-| 在 WSL 调试实板 | [Windows J-Link 远程调试](wsl-jlink.md) |
-| GD32 支持调研 | [GD32 官方支持调研](gd32-support.md) |
+| 通用模块设计报告、API 与示例 | [Word](module-design-report.docx)、[HTML](module-design-report.html) |
+| 编译、签名、Flash 分区与 IAP 升级 | [构建与升级](build-and-upgrade.md) |
+| 设备点表、参数持久化 | [DP 模块](../modules/dataprocess/README.md)、[产品点表](../app/protocol/README.md) |
+| 通信架构、协议选择与数值转换 | [通信设计](transmit-design.md)、[transmit 契约](../modules/transmit/README.md)、[Modbus 适配](../modules/modbus/README.md) |
+| 故障动作、任务监控与指示灯 | [产品故障策略](fault-policy.md)、[watchdog 模块](../modules/watchdog/README.md) |
+| 硬件、时钟、引脚和采样 | [硬件说明](hardware.md)、[GD32E505 模块](../modules/gd32e505/README.md) |
+| 堆、线程栈、缓存与容量 | [内存管理](memory-management.md) |
+| 测试入口、当前结果与实板待验 | [验证说明](testing.md) |
+| 编辑器与代码跳转 | [VS Code 与 clangd](editor.md) |
+| WSL / Windows J-Link 烧录与调试 | [远程调试](wsl-jlink.md) |
 
-## 架构决策
+## 专项调试资料
 
-参数生命周期和延后保存见 [ADR 0015](adr/0015-dp-device-storage.md)。
-通信实现及设计见 [Transmit 与 DP 类型转换设计](transmit-design.md) 和
-[ADR 0016](adr/0016-transmit-stream-and-dp-conversion.md)；transmit/vport、标准 Modbus 及 DP 转换已实现，硬件时序待实板验证。
-当前有效决策见 [`adr/`](adr/)。旧通信相关 ADR 保留为历史记录，
-新实现以 ADR 0016 为准，南向 collect 尚未恢复。
+[串口回环脚本说明](forward-loopback.md) 为保留的用户调试资料。
+当前产品尚未恢复南向 collect，执行前需核对脚本与固件的协议配置；该资料不作为当前架构依据。
 
-## 历史与证据
+## 维护约定
 
-| 文档 | 用途 |
-| --- | --- |
-| [迁移与早期审计](migration-history.md) | 旧表、旧库和目录重构记录 |
-| `legacy-point-inventory.csv`、`legacy-audit-evidence.json` | 旧平台点表与审计证据 |
-| [任务记录](../.scratch/) | 按功能保存当时规格、讨论与验证 |
-
-## 维护规则
-
-当前行为写入对应主题；测试数量、容量和外部仓库结论须注明日期或提交。
-构建产物、日志及签名私钥保存在工作区 `build/`，不加入文档提交。
-主机、模拟器和实板证据分开记录。
+- 模块 API、生命周期和边界以各模块 README 为准；产品接线、装配和策略写入对应主题。
+- HTML 是设计报告源文件，更新后运行 `python3 scripts/docs/export_module_report.py` 生成 Word。
+- 测试结果标明代码版本和执行范围，主机、模拟器与实板证据分别记录。
+- 设计讨论、临时任务和中间重构过程不作为正式文档保留；历史通过 Git 查询。
+- 日志、构建产物和签名密钥留在本地工作区，不加入文档提交。

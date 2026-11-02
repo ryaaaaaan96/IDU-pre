@@ -1,6 +1,6 @@
 # GD32E505 硬件支持
 
-本模块补充 Zephyr 4.4.2 缺少的 E505 SoC 接入、可配置时钟启动和 ADC0 驱动，
+本模块补充 当前 Zephyr 缺少的 E505 SoC 接入、可配置时钟启动和 ADC0 驱动，
 复用 West 管理的 `hal_gigadevice` 与 Zephyr GD32 公共代码，不复制厂商固件库。
 
 ```text
@@ -66,7 +66,7 @@ AHB 固定为 `/1`，APB 分频可选 1/2/4/8/16；不提供 IRC、PLL1/2 或 US
 应用直接通过 Zephyr 标准 ADC API 处理采样与平均，
 [`app/acquisition/acquisition.c`](../../app/acquisition/acquisition.c) 装配产品配置，直接组合模拟量和 GPIO 读取：
 通道顺序 13、0、1、2、3、4、11、12，每通道 10 次整数平均，12 位、3.3 V 及
-71.5 周期采样时间与原配置相同。工程量换算继续留在 `app/process/`。
+71.5 周期采样时间与原配置相同。工程量换算位于 `app/acquisition/acquisition.c`。
 
 ## 板级与启动程序
 
