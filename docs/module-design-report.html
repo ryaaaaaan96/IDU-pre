@@ -27,7 +27,7 @@ pre code { white-space:pre-wrap; font-size:12px; } .source,.legend,.example-note
 .cover,.contents { break-after:page; border:0; } h2 { break-before:page; } .contents h2 { break-before:auto; }
 h2,h3,h4 { break-after:avoid; } tr { break-inside:avoid; } pre { font-size:9pt; } th { background:#eee; } }
 </style></head><body><main>
-    <header class="cover"><p>IDU-pre 软件平台建设</p><h1>Zephyr 通用模块设计报告</h1><p>总体架构、模块接口及集成方案</p><p>报告日期：2026 年 11 月 2 日</p><p>技术基线：6ecdf3e ｜ Zephyr v4.5.0</p><p>构建环境：Zephyr SDK 1.0.1 ｜ ARM GCC 14.3.0</p><p>当前阶段：4.5.0 适配及专项验证完成，完整回归与实板验收待完成</p></header><section class="contents"><h2>目录</h2><p><a href="#overview">1 项目概述</a></p><p><a href="#architecture">2 总体架构设计</a></p><p><a href="#modules">3 通用模块设计</a></p><p><a href="#integration">4 产品集成方案</a></p><p><a href="#validation">5 实现进展与验证情况</a></p><p><a href="#todo">6 后续工作计划</a></p></section>
+    <header class="cover"><p>IDU-pre 软件平台建设</p><h1>Zephyr 通用模块设计报告</h1><p>总体架构、模块接口及集成方案</p><p>报告日期：2026 年 11 月 2 日</p><p>技术基线：Zephyr v4.5.0 ｜ 产品点表：23 点</p><p>构建环境：Zephyr SDK 1.0.1 ｜ ARM GCC 14.3.0</p><p>当前阶段：4.5.0 适配及专项验证完成，完整回归与实板验收待完成</p></header><section class="contents"><h2>目录</h2><p><a href="#overview">1 项目概述</a></p><p><a href="#architecture">2 总体架构设计</a></p><p><a href="#modules">3 通用模块设计</a></p><p><a href="#integration">4 产品集成方案</a></p><p><a href="#validation">5 实现进展与验证情况</a></p><p><a href="#todo">6 后续工作计划</a></p></section>
 
     <section id="overview">
       <h2>1 项目概述</h2>
@@ -51,7 +51,7 @@ h2,h3,h4 { break-after:avoid; } tr { break-inside:avoid; } pre { font-size:9pt; 
 <div class="table-wrap"><table>
 <thead><tr><th>项目</th><th>当前配置</th><th>说明</th></tr></thead>
 <tbody>
-<tr><td>应用代码</td><td>6ecdf3e</td><td>Modbus 4.5.0 适配提交；报告编制不修改产品逻辑</td></tr>
+<tr><td>应用代码</td><td>保存命令与持久化对照点版本</td><td>现行源码与接口以模块头文件为准</td></tr>
 <tr><td>RTOS 与工具链</td><td>Zephyr v4.5.0 / SDK 1.0.1 / ARM GCC 14.3.0</td><td>已完成目标固件构建与签名验证</td></tr>
 <tr><td>目标硬件</td><td>GD32E505，20 MHz 有源时钟，180 MHz CPU</td><td>沿用当前 IDU-pre 硬件配置</td></tr>
 <tr><td>固件方案</td><td>MCUboot + IAPv3 / ECDSA P-256</td><td>保留既有 Flash 分区及升级线协议</td></tr>
@@ -591,18 +591,27 @@ int demo_adc_read(int16_t *raw)
 <tr><td>iap-transmit</td><td>指定升级用例 1 / 1 通过</td><td>vport / transmit / 产品地址段与真实接收器组合，解包、验签和备用槽写入；其余 10 项按过滤跳过</td></tr>
 <tr><td>合计</td><td>35 项通过，0 项失败</td><td>仅统计本次迁移专项，不表示执行了 tests/run.sh 全量回归</td></tr>
 </tbody></table></div>
-      <h3>5.2 固件构建与资源结果</h3>
+      <h3>5.2 保存命令与对照点验证</h3>
+<p>保持寄存器 0 为持久采样周期，17 为非持久对照点，16 写 1 同步保存，
+18 为操作命令（1 冷重启、2 恢复默认、3 清除全部 DP 参数后重启）。
+两点均写成 600 并保存后，模拟器跨启动验证持久点为 600、非持久点恢复初值 500；
+随后命令 2 立即恢复 500，再保存并第三次启动确认默认值已持久化。
+产品点表、保存失败/重试、非法保存与操作命令、无变化重复保存验证通过；
+命令 1 复用 watchdog 复位定时器，不锁存故障且不依赖系统 workqueue；命令 3 按手动测试验证；
+IAP 完整升级组合回归通过。
+完整范围见 <a href="testing.md">验证说明</a>，报文见 <a href="modbus-test.md">手动测试</a>。</p>
+<h3>5.3 固件构建与资源结果</h3>
       <p>SDK 1.0.1 下默认 MCUboot + IAPv3 配置构建成功，现有签名密钥未替换。
         镜像签名验证与 SGZ 导出均通过；资源数字来自构建链接输出。</p>
 <div class="table-wrap"><table>
 <thead><tr><th>对象</th><th>Flash 使用量</th><th>RAM 使用量</th></tr></thead>
 <tbody>
-<tr><td>IDU-pre 应用</td><td>105524 B</td><td>77944 B</td></tr>
-<tr><td>MCUboot</td><td>37560 B</td><td>18184 B</td></tr>
+<tr><td>IDU-pre 应用</td><td>106868 B</td><td>78000 B</td></tr>
+<tr><td>MCUboot</td><td>37672 B</td><td>18176 B</td></tr>
 </tbody></table></div>
       <p>导出目录为 <code>build/hex/IDU-pre-mcuboot-iapv3/</code>，
-        SGZ 包大小为 106384 字节。构建通过说明目标固件可生成，不构成实板运行验收。</p>
-      <h3>5.3 验证范围与待确认事项</h3>
+        SGZ 包大小为 107744 字节。构建通过说明目标固件可生成，不构成实板运行验收。</p>
+      <h3>5.4 验证范围与待确认事项</h3>
       <p>历史模块测试覆盖 DP、参数存储、数值换算、watchdog、ADC 和 IAP 等能力；
         这些历史记录不等同于全部模块已在 4.5.0 下重新验证。
         当前尚未执行新版本完整回归、实板串口连续长帧、真实 Flash 掉电、外部看门狗及旧上位机上传验收。

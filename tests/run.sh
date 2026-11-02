@@ -68,6 +68,8 @@ for suite in transmit_stream protocol_port; do
         "applications/IDU-pre/tests/$suite" -d "$test_dir/$suite"
     timeout 40s "$test_dir/$suite/zephyr/zephyr.exe" -flash_in_ram
 done
+python3 applications/IDU-pre/tests/protocol_port/run.py \
+    "$test_dir/protocol_port/zephyr/zephyr.exe"
 
 env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     applications/IDU-pre/tests/io -d "$test_dir/io"

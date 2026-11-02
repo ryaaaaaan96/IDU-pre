@@ -13,6 +13,18 @@ ZTEST(process_runtime, test_local_process_table)
     zassert_equal(
         protocol_local_table.points[PROCESS_SAMPLE_PERIOD].signal_key, SIGNAL_SAMPLE_PERIOD);
     zassert_equal(protocol_local_table.points[PROCESS_CURRENT_8].signal_key, SIGNAL_CURRENT_8);
+    zassert_equal(protocol_local_table.points[PROCESS_SAVE_PARAMETERS].signal_key,
+        SIGNAL_SAVE_PARAMETERS);
+    zassert_false(protocol_local_table.points[PROCESS_SAVE_PARAMETERS].flags &
+        DP_POINT_FLAG_PERSISTENT);
+    zassert_not_null(protocol_local_table.points[PROCESS_SAVE_PARAMETERS].write_callback);
+    zassert_false(protocol_local_table.points[PROCESS_VOLATILE_VALUE].flags &
+        DP_POINT_FLAG_PERSISTENT);
+    zassert_equal(protocol_local_table.points[PROCESS_OPERATION_COMMAND].signal_key,
+        SIGNAL_OPERATION_COMMAND);
+    zassert_false(protocol_local_table.points[PROCESS_OPERATION_COMMAND].flags &
+        DP_POINT_FLAG_PERSISTENT);
+    zassert_not_null(protocol_local_table.points[PROCESS_OPERATION_COMMAND].write_callback);
     zassert_ok(dp_init());
     zassert_ok(dp_register_device(DEVICE_LOCAL, &protocol_local_table));
 

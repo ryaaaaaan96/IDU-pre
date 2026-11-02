@@ -330,6 +330,11 @@ static void request_reset(uint32_t delay_ms)
     k_spin_unlock(&lock, key);
 }
 
+void watchdog_reboot(uint32_t delay_ms)
+{
+    request_reset(delay_ms);
+}
+
 /* ==================== 任务心跳与只读诊断 ==================== */
 
 static int task_service_error(void)

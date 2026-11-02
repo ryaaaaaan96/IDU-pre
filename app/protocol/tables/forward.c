@@ -59,6 +59,39 @@ const tr_modbus_point_t protocol_forward_points[] = {
         },
     },
     {
+        .area = MB_DATA_AREA_HOLDING_REGISTER,
+        .address = 16,
+        .count = 1,
+        .word_order = MB_HIGH_WORD_FIRST,
+        .mapping = {
+            .device_id = DEVICE_LOCAL,
+            .signal_index = PROCESS_SAVE_PARAMETERS,
+            .external_type = VALUE_TYPE_U16,
+        },
+    },
+    {
+        .area = MB_DATA_AREA_HOLDING_REGISTER,
+        .address = 17,
+        .count = 1,
+        .word_order = MB_HIGH_WORD_FIRST,
+        .mapping = {
+            .device_id = DEVICE_LOCAL,
+            .signal_index = PROCESS_VOLATILE_VALUE,
+            .external_type = VALUE_TYPE_U16,
+        },
+    },
+    {
+        .area = MB_DATA_AREA_HOLDING_REGISTER,
+        .address = 18,
+        .count = 1,
+        .word_order = MB_HIGH_WORD_FIRST,
+        .mapping = {
+            .device_id = DEVICE_LOCAL,
+            .signal_index = PROCESS_OPERATION_COMMAND,
+            .external_type = VALUE_TYPE_U16,
+        },
+    },
+    {
         .area = MB_DATA_AREA_INPUT_REGISTER,
         .address = 0,
         .count = 1,

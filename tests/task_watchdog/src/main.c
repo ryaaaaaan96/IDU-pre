@@ -8,7 +8,7 @@
 static atomic_t edges, feed_configures;
 static atomic_t last_edge_ms;
 static atomic_t queue_blocked;
-static bool expect_check_fault, expect_direct_reset;
+static bool expect_check_fault, expect_direct_reset, expect_no_fault;
 static uint32_t expected_reset_delay_ms;
 static int64_t reset_requested_ms;
 static void block_queue(void);
@@ -88,6 +88,10 @@ FUNC_NORETURN void __wrap_sys_reboot(int type)
                  elapsed < expected_reset_delay_ms + 30;
         }
         ok = ok && watchdog_task_feed(&first) == (k_is_in_isr() ? -EWOULDBLOCK : -ECANCELED);
+        if (expect_no_fault) {
+            struct watchdog_fault none;
+            ok = ok && status_phase_get() == STATUS_RUN && watchdog_fault_get(&none) == -ENOENT;
+        }
     } else {
         ok = ok && k_is_in_isr() && !watchdog_fault_get(&fault) &&
              status_phase_get() == STATUS_FAULT_LOCKED && fault.error == -ETIMEDOUT;
@@ -534,6 +538,20 @@ ZTEST(task_watchdog, test_explicit_hold_after_expiry_keeps_feed_without_clearing
     zassert_ok(watchdog_fault_get(&latest));
     zassert_str_equal(latest.description, "Explicit diagnostic hold");
     zassert_equal(watchdog_task_feed(&first), -ECANCELED);
+}
+
+ZTEST(task_watchdog, test_explicit_reboot_stops_and_reboots)
+{
+    block_queue();
+    const struct watchdog_task_config config = {.name = "reboot", .timeout_ms = 2000};
+    zassert_ok(watchdog_task_register(&first, &config));
+    expect_direct_reset = true;
+    expect_no_fault = true;
+    expected_reset_delay_ms = 80;
+    reset_requested_ms = k_uptime_get();
+    watchdog_reboot(expected_reset_delay_ms);
+    k_sleep(K_MSEC(300));
+    zassert_unreachable("Explicit reboot returned");
 }
 
 ZTEST(task_watchdog, test_direct_reset_stops_and_reboots)

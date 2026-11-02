@@ -1,5 +1,6 @@
 #include "process_table.h"
 #include "signal_keys.h"
+#include "process/points.h"
 #include <dataprocess/dataprocess.h>
 #include <zephyr/sys/util.h>
 
@@ -192,6 +193,33 @@ static const dp_point_config_t local_process_rows[PROCESS_SIGNAL_COUNT] = {
             .signal_key = SIGNAL_CURRENT_8,
             .size = 2,
             .type = VALUE_TYPE_U16,
+        },
+    [PROCESS_SAVE_PARAMETERS] =
+        {
+            .signal_key = SIGNAL_SAVE_PARAMETERS,
+            .size = 2,
+            .type = VALUE_TYPE_U16,
+            .write_callback = points_save_parameters,
+        },
+    [PROCESS_VOLATILE_VALUE] =
+        {
+            .signal_key = SIGNAL_VOLATILE_VALUE,
+            .size = 2,
+            .flags = DP_POINT_FLAG_CHECK_RANGE,
+            .type = VALUE_TYPE_U16,
+            .data =
+                {
+                    .initial.u16 = CONFIG_IDU_SAMPLE_PERIOD_MS,
+                    .minimum.u16 = 100,
+                    .maximum.u16 = 1000,
+                },
+        },
+    [PROCESS_OPERATION_COMMAND] =
+        {
+            .signal_key = SIGNAL_OPERATION_COMMAND,
+            .size = 2,
+            .type = VALUE_TYPE_U16,
+            .write_callback = points_operation_command,
         },
 };
 

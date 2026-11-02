@@ -65,6 +65,8 @@ class ApplicationRequirements(unittest.TestCase):
     required = (
         "BOOTLOADER_MCUBOOT",
         "DATAPROCESS",
+        "TRANSMIT",
+        "UART_INTERRUPT_DRIVEN",
         "GPIO",
         "ADC",
     )

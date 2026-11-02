@@ -7,13 +7,14 @@
 | --- | --- |
 | `watchdog_init(notify)` | 每次上电只尝试一次，读取硬件配置并启动检查/喂狗 |
 | `watchdog_report_fault(error, description, action, reset_delay_ms)` | 同步通知唯一回调，返回回调结果，不依赖 status |
+| `watchdog_reboot(delay_ms)` | 主动重启：停止检查与喂狗，延时后冷复位；不经过故障回调 |
 | `watchdog_stop(mode)` | MONITOR 停止检查但保留喂狗；ALL 同时停检查和喂狗 |
 | `watchdog_task_register/feed/sleep_forever` | 显式登记、报告进展、退出任务期限监控 |
 | `watchdog_task_get` / `watchdog_fault_get` | 复制任务或故障诊断，不改变状态 |
 
 删除底层多实例和 watchdog_error / watchdog_external_* / watchdog_task_monitor_* 接口。
 硬件错误、任务超时和检查结果过期都通过一个故障回调报告，初始化错误直接返回。
-使用 RESET 动作需应用启用 Zephyr CONFIG_REBOOT；延时使用相对超时，不依赖 CONFIG_TIMEOUT_64BIT，超过 60 秒的请求按 60 秒提前复位；关闭外部喂狗不抑制软件监控或显式复位。
+使用 RESET 动作或 watchdog_reboot 需应用启用 Zephyr CONFIG_REBOOT；延时使用相对超时，不依赖 CONFIG_TIMEOUT_64BIT，超过 60 秒的请求按 60 秒提前复位；关闭外部喂狗不抑制软件监控或显式复位。
 
 ## 检查、有效期与硬件喂狗
 
@@ -98,7 +99,9 @@ RESET 的 reset_delay_ms 为 0 时同步立即复位；重复非零请求保留�
 延时仅给日志线程和串口留出处理机会，不保证打印完成或参数保存。GPIO 已失败或喂狗此前已停用时不会自动恢复，外部芯片可能先于软件期限复位。
 工作队列卡死时，故障通知不能运行；硬件定时器仍会按三倍有效期停喂，由外部芯片兜底复位。
 
-复位入口不对外提供，所有业务故障统一通过四参数 watchdog_report_fault 上报；普通调用对 CONTINUE/HOLD 填 0，非零值也不会触发复位。
+故障复位入口不对外提供，所有业务故障统一通过四参数 watchdog_report_fault 上报；普通调用对 CONTINUE/HOLD 填 0，非零值也不会触发复位。
+业务显式要求重启时使用 watchdog_reboot(delay_ms)：它复用同一 request_reset 路径和复位定时器，
+只停止检查与喂狗，不通知故障回调、不锁存 FAULT_LOCKED，也不要求 watchdog_init 已绑定回调。
 
 ## 简化后的控制路径
 

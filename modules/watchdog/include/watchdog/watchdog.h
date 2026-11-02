@@ -89,6 +89,16 @@ int watchdog_init(watchdog_fault_cb_t notify);
  */
 int watchdog_report_fault(
     int error, const char *description, watchdog_action_t action, uint32_t reset_delay_ms);
+
+/**
+ * @brief 主动重启：停止任务检查与硬件喂狗，并在延时后冷复位。
+ * @note 不经过故障回调、不锁存故障，用于保存或配置命令等业务显式重启；
+ *       故障处理仍只能通过 watchdog_report_fault。
+ * @note 线程和 ISR 可用；延时使用模块复位定时器，不依赖系统 workqueue；0 立即复位，
+ *       超过 60 秒按 60 秒处理。
+ */
+void watchdog_reboot(uint32_t delay_ms);
+
 /** @brief 非阻塞停止，可在 ISR 调用；不能重新启用任务监控。 */
 void watchdog_stop(watchdog_stop_mode_t mode);
 /** @brief 在线程中登记任务，配置值复制，名称与上下文保持常驻。 */
