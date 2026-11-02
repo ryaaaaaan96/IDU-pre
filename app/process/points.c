@@ -9,7 +9,7 @@
 
 LOG_MODULE_REGISTER(app_points, LOG_LEVEL_INF);
 
-/* 重启/出厂命令先回写响应再动作；200 ms 足够当前帧发完，主站不会只看到超时。 */
+/* 命令 1 在回响应前完成保存；复位和出厂擦除延后 200 ms 执行，避免主站只看到超时。 */
 #define OPERATION_DELAY_MS 200
 
 static void run_factory_reset(struct k_work *work);
@@ -38,9 +38,15 @@ static void run_factory_reset(struct k_work *work)
 int points_operation_command(const dp_callback_context_t *context)
 {
     switch (context->value->u16) {
-    case 1:
+    case 1: {
+        /* 先确认所有待保存参数已落盘，再安排复位；失败时保持运行并返回异常。 */
+        int err = dp_flush();
+        if (err) {
+            return err;
+        }
         watchdog_reboot(OPERATION_DELAY_MS);
         break;
+    }
     case 2: {
         int err = dp_restore_defaults(context->device_id);
         if (err) {

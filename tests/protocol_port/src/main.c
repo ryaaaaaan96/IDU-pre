@@ -104,6 +104,25 @@ ZTEST(protocol_port, test_product_uart_thread_and_direction)
         exchange_register(3, 18, 1, &response);
         zassert_equal(response.fc, 3);
         zassert_equal(sys_get_be16(response.data + 1), 0);
+
+        /* 命令 1 先保存；注入写失败时必须返回异常 04 且不复位。 */
+        exchange_register(6, 0, 700, &response);
+        zassert_equal(response.fc, 6);
+        flash_simulator_set_callbacks(
+            DEVICE_DT_GET(DT_CHOSEN(zephyr_flash_controller)), &flash_callbacks);
+        fail_flash_write = true;
+        flash_writes = 0;
+        exchange_register(6, 18, 1, &response);
+        zassert_equal(response.fc, 0x86);
+        zassert_equal(response.data[0], MODBUS_EXC_SERVER_DEVICE_FAILURE);
+        zassert_true(flash_writes > 0);
+        fail_flash_write = false;
+        flash_simulator_set_callbacks(
+            DEVICE_DT_GET(DT_CHOSEN(zephyr_flash_controller)), NULL);
+
+        /* 失败后的待保存值必须可由下一次保存写入，供第三次启动验证。 */
+        exchange_register(6, 0, CONFIG_IDU_SAMPLE_PERIOD_MS, &response);
+        zassert_equal(response.fc, 6);
         exchange_register(6, 16, 1, &response);
         zassert_equal(response.fc, 6);
         return;

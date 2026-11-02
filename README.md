@@ -39,7 +39,7 @@ bash applications/IDU-pre/tests/run.sh
 主动重启前需停止修改并调用 `dp_flush()`；布局不匹配会清空 DP 参数区并重建，重新使用配置初值。
 接口与存储布局见 [DP 模块](modules/dataprocess/README.md)。
 保持寄存器 16 写 1 可同步保存；地址 0 为持久采样周期，17 为非持久对照值，
-18 为操作命令（1 重启、2 恢复默认、3 恢复出厂）。
+18 为操作命令（1 保存后重启、2 恢复默认、3 恢复出厂）。
 重启对比报文见 [Modbus 手动测试](docs/modbus-test.md)。
 
 ## 串口调试命令

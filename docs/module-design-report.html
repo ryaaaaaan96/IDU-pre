@@ -593,11 +593,12 @@ int demo_adc_read(int16_t *raw)
 </tbody></table></div>
       <h3>5.2 保存命令与对照点验证</h3>
 <p>保持寄存器 0 为持久采样周期，17 为非持久对照点，16 写 1 同步保存，
-18 为操作命令（1 冷重启、2 恢复默认、3 清除全部 DP 参数后重启）。
+18 为操作命令（1 保存后冷重启、2 恢复默认、3 清除全部 DP 参数后重启）。
 两点均写成 600 并保存后，模拟器跨启动验证持久点为 600、非持久点恢复初值 500；
 随后命令 2 立即恢复 500，再保存并第三次启动确认默认值已持久化。
 产品点表、保存失败/重试、非法保存与操作命令、无变化重复保存验证通过；
-命令 1 复用 watchdog 复位定时器，不锁存故障且不依赖系统 workqueue；命令 3 按手动测试验证；
+命令 1 先同步 flush，成功后复用 watchdog 复位定时器冷重启，不锁存故障且不依赖系统 workqueue；
+保存失败返回异常 04 且不复位。命令 3 按手动测试验证；
 IAP 完整升级组合回归通过。
 完整范围见 <a href="testing.md">验证说明</a>，报文见 <a href="modbus-test.md">手动测试</a>。</p>
 <h3>5.3 固件构建与资源结果</h3>
@@ -606,7 +607,7 @@ IAP 完整升级组合回归通过。
 <div class="table-wrap"><table>
 <thead><tr><th>对象</th><th>Flash 使用量</th><th>RAM 使用量</th></tr></thead>
 <tbody>
-<tr><td>IDU-pre 应用</td><td>106868 B</td><td>78000 B</td></tr>
+<tr><td>IDU-pre 应用</td><td>106876 B</td><td>78000 B</td></tr>
 <tr><td>MCUboot</td><td>37672 B</td><td>18176 B</td></tr>
 </tbody></table></div>
       <p>导出目录为 <code>build/hex/IDU-pre-mcuboot-iapv3/</code>，
