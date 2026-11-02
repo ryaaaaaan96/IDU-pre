@@ -17,7 +17,7 @@
 | `gd32e505` | SoC/DTS | GD32E505 时钟、ADC 和板级支持 |
 
 `modules/modules.cmake` 只登记上述模块。transmit/vport 已按新设计重新实现，collect 仍未恢复；DP 不包含通信描述符。
-APP 的 protocol/port.c 创建线程并装配硬件，模块不创建通信线程。
+APP 的 protocol/protocol.c 装配协议并创建线程，rs485_1.c 提供物理收发与事件采集；模块不创建通信线程。
 
 ## DP 使用
 

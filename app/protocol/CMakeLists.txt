@@ -3,6 +3,6 @@ target_include_directories(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/inc)
 target_sources(app PRIVATE
   tables/process.c
   protocol.c
-  port.c
+  rs485_1.c
   tables/forward.c
 )

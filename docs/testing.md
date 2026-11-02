@@ -1168,7 +1168,7 @@ LED 播放改为每个指示状态独立的亮灭/持续时间步骤表，重复
 ## 新转发接入（2026-10-31）
 
 `tests/transmit_stream` 覆盖锁定轮转、接收恢复、标准 Modbus 映射和 common 放缩，
-`tests/protocol_port` 在 UART/GPIO 模拟器上运行 APP 的 port.c 线程；均已加入 tests/run.sh。
+`tests/protocol_port` 在 UART/GPIO 模拟器上运行 APP 的 protocol.c 线程及 rs485_1.c 收发；均已加入 tests/run.sh。
 带 ASan/UBSan 的构建可另选目录并传 `-DCONFIG_ASAN=y -DCONFIG_UBSAN=y`，
 运行时按环境使用 `ASAN_OPTIONS=detect_leaks=0`。
 模拟器没有证明 GD32 的实际中断延迟、RS485 方向时序或持续满速输入。

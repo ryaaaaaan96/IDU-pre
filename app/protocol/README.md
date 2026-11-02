@@ -8,7 +8,14 @@ protocol_init() 先初始化 DP，登记 21 行本地 process，再初始化 APP
 
 ## UART 接入
 
-`port.c` 持有协议线程、ISR 接收队列及 RS485 发送控制。
+`protocol.c` 持有协议线程、站号、RTU 间隔、转发配置和运行状态判断。
+`rs485_1.c` 管理 RS485-1 的 UART/GPIO、中断收发、接收队列、单调时间戳和发送超时，
+只交付 vport 字节/错误/轮询事件，不依赖 DP、Modbus、IAP 或 status。
+内部头文件 rs485_1.h 只提供 init、start、receive；发送通过 init 填入的 vport 回调完成。
+receive 为单线程接口，最多等待 1 ms，DATA 指针必须在下次 receive 前同步消费；
+队列竞争时返回 -EAGAIN，协议线程继续读取，避免 POLL 越过已接收字节。
+初始化依次准备硬件、装配并登记 transmit、创建暂不运行的协议线程、开放接收并启动线程。
+硬件初始化或协议登记失败时不开启接收。
 `idu-forward` 指向 `idu,forward-port` 节点，默认使用父 UART，也可通过 uart 属性显式引用控制器。
 本板为 USART2，115200 8N1、PA15 方向控制；USART0 Shell 保持独立。
 标准功能码委托 Zephyr RAW 服务端；MODBUS_SERIAL 禁用，物理 UART 仍由 APP 独占。

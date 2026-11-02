@@ -23,7 +23,7 @@
 - 点表行使用 dp_point_config_t，保留 DP_POINT_FLAG_CHECK_RANGE 和 DP_POINT_FLAG_SKIP_DEFAULTS；回调结果校验成功后保存 RAM。配置行数组常驻只读，初值为内嵌 value_t。
 - DP 接口为 dp_init、dp_register_device/remove_device、dp_set_para_by_key/get_para_by_key、dp_set_para_by_index/get_para_by_index、dp_restore_defaults、dp_factory_reset 和 dp_flush。回调在锁外，点值使用快照锁；登记/删除与保存共用设备锁，调用方须先停止并等待全部 DP 业务访问结束。
 - DP 始终包含参数持久化能力，要求 dp-params 别名。详情见 [DP 模块](modules/dataprocess/README.md) 和 [ADR 0015](docs/adr/0015-dp-device-storage.md)：dp-params 总分区内部管理 NVS 与设备槽位，5 秒保存线程、dirty/已保存值比较、阻塞 flush。set 成功只表示 RAM 更新；重启前由应用停止修改并 flush。IAP 自身 NVS 独立，不恢复旧 DP 门禁。
-- `app/main.c` 启动状态、硬件和可选 IAP 后调用 `protocol_init()`；protocol 登记 DP 后由 port.c 初始化转发实例和 APP 串口线程。保留采样周期和休眠，终止后主线程留驻并每 5 秒查询打印最近故障。`acquisition` 只按硬件 spec 与 device_id/signal_key 映射读取 DI 位图和 ADC，并用 `dp_set_para_by_key()` 同步写点。
+- `app/main.c` 启动状态、硬件和可选 IAP 后调用 `protocol_init()`；protocol.c 登记 DP、装配转发实例并创建协议线程；rs485_1.c 只负责物理收发与事件采集。保留采样周期和休眠，终止后主线程留驻并每 5 秒查询打印最近故障。`acquisition` 只按硬件 spec 与 device_id/signal_key 映射读取 DI 位图和 ADC，并用 `dp_set_para_by_key()` 同步写点。
 - `app/process/points.c` 只保留 points_sample_period_ms()。
 - 状态与 LED 归 `app/status/`；看门狗实现在 `modules/watchdog`；IAP 归 `modules/iap`，调用方直接使用 `<iap/iap.h>`。
 - IAP 通过 forward.c 的完整 ADU 地址段回调接入 transmit，在标准功能码校验前调用 `iap_route()`，保留旧超长 FC16。修改上传路由前读 modules/iap/README.md；模拟器组合测试已通过，实板上传及旧上位机互通仍待验证。

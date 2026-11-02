@@ -8,7 +8,7 @@ DP 显式类型接口、transmit/vport、Modbus 标准点表及 APP UART 接入�
 
 | 部分 | 职责 |
 | --- | --- |
-| APP protocol/port.c | 创建和管理线程，物理接入、虚拟端口分发、CAN ID、分片重组、回复目标和发送互斥 |
+| APP protocol/protocol.c、rs485_1.c | 前者装配协议、管理线程及运行策略；后者提供 RS485-1 物理收发与字节事件，未来 CAN 路由仍归 APP |
 | vport | 统一端口输入输出，传递字节块与接收事件，不解释协议或 CAN ID |
 | transmit | 对外从机协议编排，接收缓存、协议锁定轮转、转发表、放缩偏移和响应处理 |
 | modbus | RTU 判帧及编解码、Zephyr RAW 服务端、标准请求解析和响应、公共寄存器转换 |
