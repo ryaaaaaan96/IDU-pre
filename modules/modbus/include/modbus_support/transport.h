@@ -2,7 +2,7 @@
  * @file
  * @brief Modbus 串口接入与有界事务接口。
  *
- * Zephyr 4.4.2 构建期适配；不依赖 transmit 服务或业务表。
+ * Zephyr 4.5.0 构建期适配；不依赖 transmit 服务或业务表。
  */
 #ifndef MODBUS_SUPPORT_TRANSPORT_H
 #define MODBUS_SUPPORT_TRANSPORT_H

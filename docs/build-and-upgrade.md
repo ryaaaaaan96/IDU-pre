@@ -8,6 +8,11 @@
 
 ## 配置选择
 
+当前依赖为 Zephyr v4.5.0；已使用 Zephyr SDK 1.0.1 的 ARM GNU 工具链完成构建。
+本机 SDK 位于 `/home/ryan/Tools/zephyr-sdk/zephyr-sdk-1.0.1/`，已注册到 CMake。
+切换工具链或 Zephyr 版本后首次使用 `--pristine always`，避免沿用旧 CMake 缓存。
+Modbus 的构建副本适配仅接受已审查的 v4.5.0 源码，哈希或锚点变化时必须重新审查。
+
 | 需求 | 命令 |
 | --- | --- |
 | 默认 MCUboot + IAPv3 | `./applications/IDU-pre/scripts/build.sh` |

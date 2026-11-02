@@ -163,7 +163,7 @@ int mb_support_submit_work(struct k_work *work)
     struct modbus_context *ctx = CONTAINER_OF(work, struct modbus_context, server_work);
     mb_server_t *server = find_server(modbus_iface_get_by_ctx(ctx));
     if (!server) {
-        return k_work_submit(work);
+        return modbus_work_submit(work);
     }
     if (atomic_ptr_get(&server->owner) != k_current_get()) {
         return -EACCES;

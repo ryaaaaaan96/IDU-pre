@@ -12,7 +12,7 @@ uint8_t mb_support_exception_code(struct modbus_context *ctx, uint8_t exception)
 #else
 static inline int mb_support_submit_work(struct k_work *work)
 {
-    return k_work_submit(work);
+    return modbus_work_submit(work);
 }
 
 static inline int mb_support_raw_claim(struct modbus_context *ctx)

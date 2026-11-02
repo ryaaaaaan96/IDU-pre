@@ -1,4 +1,4 @@
-"""仅在构建目录中适配 Zephyr 4.4.2，
+"""仅在构建目录中适配 Zephyr 4.5.0，
 绝不修改 West 检出的源码。锚点须严格匹配；Zephyr 升级时，
 必须先审查 RX 调度、完整 PDU 写入和 RAW 异常校验，
 才能接受不同的源码。
@@ -10,9 +10,9 @@ import sys
 from server_fixes import apply_server_fixes
 
 EXPECTED_SHA256 = {
-    "modbus_core.c": "c9a503faa301f003fea86899126fbedd4e736d0f37883b864e0c90310dabcbb0",
-    "modbus_raw.c": "8fbec5199b086db07ddebb776c2b5aaa2bb2eff6819c7e261f311b844a3d6e7f",
-    "modbus_serial.c": "65c1e0b3b4b012b7ebb6aabaf0e8f6daef23fbd448dc78d79b2e9a5a5d6fed87",
+    "modbus_core.c": "24896be1a56640420b221ddcb6d8a4ee316924ca2900efadbdbbfce717cc143a",
+    "modbus_raw.c": "c031e5b73b79c794c9f232424b3dada6c657695d6ddf8b180b5b5c7595d61d9e",
+    "modbus_serial.c": "0a37912c5e996552c83de8064c47e42b6cf374491416dc47ef2cf1e814fa52be",
     "modbus_server.c": "3a049c8e971032ba17574fd6d3c69635600ab84371f009fa8d7200697117e5dd",
 }
 
@@ -30,7 +30,7 @@ for name in EXPECTED_SHA256:
     original = (base / "subsys/modbus" / name).read_text()
     if hashlib.sha256(original.encode()).hexdigest() != EXPECTED_SHA256[name]:
         raise SystemExit(
-            f"{name} differs from reviewed Zephyr 4.4.2; review IDU compat before building"
+            f"{name} differs from reviewed Zephyr 4.5.0; review IDU compat before building"
         )
     source = replace_once(
         original,
@@ -40,7 +40,7 @@ for name in EXPECTED_SHA256:
     if name in ("modbus_raw.c", "modbus_serial.c"):
         source = replace_once(
             source,
-            "k_work_submit(&ctx->server_work)",
+            "modbus_work_submit(&ctx->server_work)",
             "mb_support_submit_work(&ctx->server_work)",
             1 if name == "modbus_raw.c" else 3,
         )
@@ -48,11 +48,11 @@ for name in EXPECTED_SHA256:
         source = replace_once(source, "(MODBUS_RTU_MIN_MSG_SIZE - 2)", "1")
         source = replace_once(
             source,
-            "ctx->rx_adu.length < MODBUS_RAW_MIN_MSG_SIZE ||\n\t    ctx->rx_adu.length > MODBUS_RAW_BUFFER_SIZE",
+            "ctx->rx_adu.length < MODBUS_RAW_MIN_MSG_SIZE ||\n"
+            "\t    ctx->rx_adu.length > sizeof(ctx->rx_adu.data)",
             "(ctx->client && ctx->rx_adu.length < MODBUS_RAW_MIN_MSG_SIZE) ||\n"
-            "\t    ctx->rx_adu.length > MODBUS_RAW_BUFFER_SIZE",
+            "\t    ctx->rx_adu.length > sizeof(ctx->rx_adu.data)",
         )
-        source = replace_once(source, "(CONFIG_MODBUS_BUFFER_SIZE - 2)", "sizeof(ctx->rx_adu.data)")
         source = replace_once(
             source,
             "\tctx->rawcb.raw_tx_cb(iface, &ctx->tx_adu, ctx->rawcb.user_data);\n\n\treturn 0;",

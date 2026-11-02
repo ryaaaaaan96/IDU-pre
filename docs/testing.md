@@ -1200,3 +1200,22 @@ RAW 专项还验证外部提交在复制前被拒绝、其他 RAW 接口保持 w
 验证真实接收器解包、验签、备用槽内容和试升级请求。详见
 [任务记录](../.scratch/transmit-redesign/issues/14-iap-address-routes.md)。
 模拟器与固件构建不能替代实板串口上传和上位机互通验证。
+
+## 2026-11-02：Zephyr 4.5.0 Modbus 适配
+
+工作区由用户更新至 v4.5.0，SDK 1.0.1 已安装。构建副本适配按新版
+modbus_work_submit 调度；自有 RAW 保持 APP 线程同步，其余接口遵循官方系统/专用队列。
+复用上游 RAW 缓冲长度修复，保留服务端边界校验和完整 ADU 的 IAP 接入。
+
+- Modbus 默认与专用队列变体各 6 项通过，验证同步回调、其他 RAW 的实际队列归属、
+  非法长度/数量、异常响应、递归与请求所有权保护。
+- transmit_stream 21 项、protocol_port 1 项、iap-transmit 指定完整升级用例 1 项通过；
+  后者其余 10 项因用例过滤跳过，不算本轮执行。
+- 新增上游源码改动探针：哈希不匹配会拒绝生成；最终生成内容与已测试版本一致。
+- SDK 1.0.1 ARM GCC 14.3.0 下默认 MCUboot + IAPv3 构建、验签及 SGZ 导出通过。
+  应用 Flash 105524 B、RAM 77944 B；MCUboot Flash 37560 B、RAM 18184 B。
+- 构建仍提示现有自定义 vendor prefix 与 Flash 设备树地址单元警告，未在本轮修改。
+- 未执行完整回归或实板串口、外部看门狗、Flash 掉电、旧上位机上传验收。
+
+日志在 /tmp/idu-modbus45-*-{build,test}.log，详情见
+[适配记录](../.scratch/zephyr45/issues/01-modbus-compat.md)。

@@ -19,7 +19,7 @@ RAW 输入是完整 ADU，不能直接接收 UART 字节，也不提供 RTU 静�
 
 `mb_server_open(unit, &server)` 在启动时占用一个官方 RAW 接口，
 `mb_server_process()` 调用官方 modbus_raw_submit_rx，`mb_server_close()` 只用于启动失败回退。
-配置数量由 MODBUS_NUMOF_RAW_ADU 决定，Zephyr 4.4.2 支持 1–4，当前产品配置 1。
+配置数量由 MODBUS_NUMOF_RAW_ADU 决定，Zephyr 4.5.0 支持 1–4，当前产品配置 1。
 模块默认预算 4，其他 RAW 使用者已占用的接口不会被抢占；不足返回 -ENOSPC。
 成功绑定后由 APP 串行调用，递归或同实例并发返回 -EBUSY，关闭正在处理的实例也返回 -EBUSY。
 
@@ -36,20 +36,26 @@ RAW 输入是完整 ADU，不能直接接收 UART 字节，也不提供 RTU 静�
 
 ## 固定版本兼容
 
-Zephyr 原生 modbus_raw_submit_rx 默认投递系统 workqueue。本模块在构建副本中使用受控扩展：
+Zephyr 原生 modbus_raw_submit_rx 默认投递系统 workqueue；4.5.0 新增
+CONFIG_MODBUS_WORKQUEUE，可改为官方 Modbus 专用队列。本模块在构建副本中使用受控扩展：
 仅本适配器拥有的 RAW 接口在调用线程执行原工作处理函数，未绑定接口保留官方异步投递。
 自有 RAW 在复制入站数据前检查调用线程并占用缓冲，防止绕过适配器的提交覆盖活动请求。
 这不是官方 RAW 的默认同步能力，不创建额外模块线程。
 
-compat 对四个 Zephyr 4.4.2 源文件校验 SHA256 及替换锚点，只生成构建目录副本，不修改 west 仓库。
+compat 对四个 Zephyr 4.5.0 源文件校验 SHA256 及替换锚点，只生成构建目录副本，不修改 west 仓库。
+相较 4.4.2，RAW 缓冲上限直接复用上游 sizeof(data) 修复，不重复替换。
+RAW/serial 的新 modbus_work_submit 入口仍经过同步适配；未绑定自有服务端的请求
+回到官方 modbus_work_submit，保留系统/专用队列选择，不强制提交系统队列。
 本轮 server_fixes.py 修复高地址在禁用 FP 后的读取循环、响应缓冲边界、非法线圈值、
 写数量上限与精确字节数校验，并将错误 PDU 长度统一返回异常 03。
 从机 RAW 允许零数据载荷，以便未知功能码或缺失参数交给服务端判断；客户端仍要求至少一个响应数据字节。
 只保留接收占用、同步投递、请求接受和异常码翻译内部钩子，移除旧转发框架的整笔替换/完成钩子。
 
 自有适配接口在访问后端前忽略广播读；广播写执行且官方不响应，其他站号也静默消费。
-产品范围、放缩及整笔访问规则仍由 transmit 决定；IAP 路由尚未接入。
+产品范围、放缩及整笔访问规则仍由 transmit 决定；完整 ADU 的 IAP 路由由 transmit
+在标准服务端之前分派，不经过这里的标准数量检查。
 独立验证见 tests/modbus_support/server.conf：链接官方 RAW 服务端，不启用 DP/transmit。
+叠加 workqueue.conf 验证专用队列分支，自有 RAW 的业务回调仍在调用线程同步运行。
 
 ## 数据区命名
 

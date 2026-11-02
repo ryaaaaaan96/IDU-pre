@@ -2,6 +2,7 @@
 #include <zephyr/ztest.h>
 #include <zephyr/sys/byteorder.h>
 #include <errno.h>
+#include <string.h>
 
 typedef struct {
     mb_server_t *server;
@@ -126,6 +127,13 @@ static int unowned_read(uint16_t address, uint16_t *value)
 {
     zassert_equal(address, 7);
     zassert_not_equal(k_current_get(), unowned_caller);
+    k_tid_t system_queue = k_work_queue_thread_get(&k_sys_work_q);
+    if (IS_ENABLED(CONFIG_MODBUS_WORKQUEUE)) {
+        zassert_not_equal(k_current_get(), system_queue);
+        zassert_equal(strcmp(k_thread_name_get(k_current_get()), "modbus_work_q"), 0);
+    } else {
+        zassert_equal(k_current_get(), system_queue);
+    }
     *value = 42;
     return 0;
 }

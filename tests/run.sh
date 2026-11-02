@@ -56,6 +56,12 @@ env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
     -DEXTRA_CONF_FILE=server.conf
 timeout 40s "$test_dir/modbus_support-server/zephyr/zephyr.exe"
 
+# Zephyr 4.5 专用队列：自有 RAW 仍同步，其他接口遵循官方队列配置。
+env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
+    applications/IDU-pre/tests/modbus_support -d "$test_dir/modbus_support-workqueue" -- \
+    '-DEXTRA_CONF_FILE=server.conf;workqueue.conf'
+timeout 40s "$test_dir/modbus_support-workqueue/zephyr/zephyr.exe"
+
 # 完整字节/事件路径及产品 APP 串口线程。
 for suite in transmit_stream protocol_port; do
     env ZEPHYR_TOOLCHAIN_VARIANT=host west build -p auto -b native_sim/native/64 \
