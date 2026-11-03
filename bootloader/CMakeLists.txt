@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.20.0)
 get_filename_component(IDU_APP ${CMAKE_CURRENT_LIST_DIR}/.. ABSOLUTE)
 list(APPEND BOARD_ROOT ${IDU_APP})
 list(APPEND DTS_ROOT ${IDU_APP})
+# MCUboot 是独立子工程，需显式传入产品绑定和厂商前缀目录。
+set(mcuboot_DTS_ROOT ${IDU_APP} CACHE STRING "IDU MCUboot devicetree roots")
 # 在 Sysbuild 中发现 SoC，并将其模块传递给两个子镜像。
 include(${IDU_APP}/modules/hardware.cmake)
 set(ZEPHYR_EXTRA_MODULES "${ZEPHYR_EXTRA_MODULES}" CACHE STRING "IDU hardware modules" FORCE)

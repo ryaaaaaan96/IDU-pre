@@ -24,6 +24,8 @@
 `modules/hardware.cmake` 在 Sysbuild 发现板与镜像之前注册
 [`gd32e505`](../modules/gd32e505/README.md)，模块清单经缓存传入 MCUboot 和主应用。
 SoC 根由模块元数据提供，无需把芯片路径写入镜像配置。
+`mcuboot_DTS_ROOT` 默认指向产品根目录，使 MCUboot 也能读取产品绑定和
+`dts/bindings/vendor-prefixes.txt` 中的 `idu`、`app` 前缀。
 这里的镜像选择、签名配置和分区是 IDU 产品策略，继续保存在本目录。
 `mcuboot_EXTRA_DTC_OVERLAY_FILE` 仅在未指定时设置默认值，
 保留调用者的自定义值及 overlay 列表；自定义文件需包含必要的启动分区布局。

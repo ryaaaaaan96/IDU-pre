@@ -18,6 +18,10 @@ Python 3.12/3.13 的离线依赖解析检查通过，未在这两个解释器上
 环境完成解压和虚拟环境安装。Ubuntu、Debian、Fedora 的包管理器分派通过模拟命令
 验证，未实际执行 apt/dnf。Python 保留 Zephyr 要求的最低 3.12，移除人为上限。
 
+设备树警告修正：SDK 1.0.1 下 MCUboot + IAPv3 pristine 构建和签名校验通过，
+两个镜像不再报告 `unknown vendor prefix` 或 `avoid_unnecessary_addr_size`。
+生成的 Flash 分区地址与容量保持不变；5 项 Sysbuild 配置测试通过。
+
 ## 测试入口
 
 所有命令在 West 工作区根目录执行。完整回归：

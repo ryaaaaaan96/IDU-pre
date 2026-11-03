@@ -128,6 +128,9 @@
 };
 
 &flash0 {
+    /* 分区地址单元由 partitions 节点定义，Flash 本身无直接寻址子节点。 */
+    /delete-property/ #address-cells;
+    /delete-property/ #size-cells;
     reg = <0x08000000 DT_SIZE_K(512)>;
     write-block-size = <4>; /* E505 FMC 支持按字编程。 */
     erase-block-size = <8192>; /* 参见 GD32E50x 用户手册第 2.3.1 节。 */
