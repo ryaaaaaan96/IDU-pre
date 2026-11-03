@@ -32,6 +32,20 @@ SDK 1.0.1 ARM GCC、CMake/Ninja 和 Python 3.12–3.14 离线 wheel。
 
 新 Ubuntu 安装一次系统前置依赖，随后编译不需要联网：
 
+工作区根目录的 `install-offline.sh` 可自动完成系统依赖安装、压缩包校验、解压和
+虚拟环境准备。将它、压缩包和 `.sha256` 文件一起复制到新电脑后执行：
+
+```bash
+./install-offline.sh
+# 准备完成后立即编译
+./install-offline.sh --dest ./idu-build --build
+```
+
+默认解压到脚本旁的 `IDU-pre-offline/`，已有目录不会覆盖。
+`--skip-system-deps` 适用于系统依赖已经安装的机器；首次 apt 安装需要网络和 sudo。
+脚本源文件保存在 `scripts/install-offline.sh`，根目录副本可独立运行。
+如需手动准备，执行：
+
 ```bash
 sudo apt update
 sudo apt install python3 python3-venv git device-tree-compiler
