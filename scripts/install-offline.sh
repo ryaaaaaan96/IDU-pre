@@ -14,11 +14,13 @@ usage() {
 Usage: ./install-offline.sh [options]
   --archive FILE       Offline archive (default: next to this script)
   --dest DIRECTORY     Extracted workspace (default: ./IDU-pre-offline next to script)
-  --skip-system-deps   Skip apt installation; check existing dependencies instead
+  --skip-system-deps   Skip system installation; check existing dependencies instead
   --build              Build firmware after preparing the environment
   -h, --help           Show this help
 
-Requires Linux x86_64 / WSL2 Ubuntu with Python 3.12-3.14.
+Requires Linux x86_64 with Python >= 3.12 (required by Zephyr).
+Ubuntu/Debian use apt-get; Fedora uses dnf.
+IDU_PYTHON can select a specific Python executable.
 System package installation requires network access and sudo.
 Python dependencies and firmware builds use only bundled files.
 EOF
@@ -66,22 +68,66 @@ if [[ -f "$archive.sha256" ]]; then
     )
 fi
 
-if $install_system; then
-    if ! command -v apt-get >/dev/null; then
-        echo "Automatic system setup requires apt-get (Ubuntu/Debian)." >&2
-        echo "Install Python 3.12-3.14 with venv, git and dtc; then use --skip-system-deps." >&2
-        exit 2
+# 优先复用系统解释器；显式指定时不静默切换到其他版本。
+select_python() {
+    local candidate
+    local candidates=(python3 python3.14 python3.13 python3.12)
+    if [[ -n "${IDU_PYTHON:-}" ]]; then
+        candidates=("$IDU_PYTHON")
+    fi
+    for candidate in "${candidates[@]}"; do
+        if command -v "$candidate" >/dev/null && "$candidate" -c '
+import sys
+sys.exit(0 if sys.version_info >= (3, 12) else 1)
+' 2>/dev/null; then
+            python_bin="$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+dependencies_ready() {
+    select_python && command -v git >/dev/null && command -v dtc >/dev/null &&
+        "$python_bin" -c 'import venv, ensurepip' 2>/dev/null
+}
+
+if $install_system && ! dependencies_ready; then
+    distro_id=""
+    distro_like=""
+    if [[ -r /etc/os-release ]]; then
+        distro_id="$(. /etc/os-release; printf '%s' "${ID:-}")"
+        distro_like="$(. /etc/os-release; printf '%s' "${ID_LIKE:-}")"
     fi
     elevate=()
     if [[ "$EUID" -ne 0 ]]; then
         elevate=(sudo)
     fi
-    "${elevate[@]}" apt-get update
-    "${elevate[@]}" apt-get install -y \
-        python3 python3-venv git device-tree-compiler libstdc++6
+    case " $distro_id $distro_like " in
+        *" ubuntu "*|*" debian "*)
+            echo "Installing system dependencies with apt-get..."
+            "${elevate[@]}" apt-get update
+            "${elevate[@]}" apt-get install -y \
+                python3 python3-venv git device-tree-compiler libstdc++6
+            ;;
+        *" fedora "*|*" rhel "*)
+            echo "Installing system dependencies with dnf..."
+            "${elevate[@]}" dnf install -y python3 python3-pip git dtc libstdc++
+            ;;
+        *)
+            echo "Unsupported automatic system setup: ${distro_id:-unknown distribution}." >&2
+            echo "Install Python >= 3.12 with venv/ensurepip, git and dtc," >&2
+            echo "then use --skip-system-deps." >&2
+            exit 2
+            ;;
+    esac
 fi
 
-python_bin="${IDU_PYTHON:-python3}"
+if ! select_python; then
+    echo "Zephyr requires Python >= 3.12; no suitable interpreter was found." >&2
+    echo "Install a newer interpreter or set IDU_PYTHON=/path/to/python3." >&2
+    exit 2
+fi
 for command in "$python_bin" git dtc tar sha256sum; do
     if ! command -v "$command" >/dev/null; then
         echo "Required command not found: $command" >&2
@@ -90,9 +136,10 @@ for command in "$python_bin" git dtc tar sha256sum; do
 done
 "$python_bin" -c '
 import sys
-if not (3, 12) <= sys.version_info[:2] <= (3, 14):
-    sys.exit("Python 3.12-3.14 required; use Ubuntu 24.04+ or set IDU_PYTHON.")
-import venv
+if sys.version_info < (3, 12):
+    sys.exit("Zephyr requires Python >= 3.12.")
+import venv, ensurepip
+print("Selected Python:", sys.executable, sys.version.split()[0])
 '
 
 # 先完整解压、校验再发布目标目录；虚拟环境必须在最终路径创建。
@@ -115,8 +162,13 @@ mv -- "$extracted" "$destination"
 rmdir -- "$temporary_dir"
 temporary_dir=""
 "$python_bin" -m venv "$destination/.venv"
-"$destination/.venv/bin/python" -m pip --disable-pip-version-check install \
-    --no-index --find-links "$destination/wheels" -r "$destination/requirements.txt"
+if ! "$destination/.venv/bin/python" -m pip --disable-pip-version-check install \
+    --no-index --find-links "$destination/wheels" -r "$destination/requirements.txt"; then
+    echo "Offline dependency installation failed. Check the pip error above." >&2
+    echo "This bundle includes native wheels for Python 3.12, 3.13 and 3.14." >&2
+    echo "Other interpreters may require additional compatible wheels." >&2
+    exit 1
+fi
 "$destination/toolchain/gnu/arm-zephyr-eabi/bin/arm-zephyr-eabi-gcc" --version
 
 echo "Environment ready: $destination"

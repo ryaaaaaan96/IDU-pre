@@ -107,7 +107,8 @@ def main():
     (stage / "VERSIONS.json").write_text(json.dumps(versions, indent=2))
     (stage / "README.md").write_text(
         "# IDU-pre 离线编译包\n\n"
-        "适用 Linux x86_64 / WSL2 Ubuntu，Python 3.12–3.14，glibc >= 2.35。\n"
+        "适用 Linux x86_64 / WSL2，Python >= 3.12，glibc >= 2.35。\n"
+        "原生 wheel 已提供 Python 3.12/3.13/3.14 版本，其他版本可能需补充 wheel。\n"
         "不适用 Windows PowerShell 原生环境或 ARM Mac。\n\n"
         "新 Ubuntu 首次准备（需要联网，仅安装系统前置依赖）：\n\n"
         "```bash\nsudo apt update\n"

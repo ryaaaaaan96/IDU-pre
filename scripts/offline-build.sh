@@ -11,7 +11,10 @@ if [[ "$(uname -sm)" != 'Linux x86_64' ]]; then
     exit 2
 fi
 python_bin="${IDU_PYTHON:-python3}"
-"$python_bin" -c 'import sys; assert (3, 12) <= sys.version_info[:2] <= (3, 14), "Use Python 3.12-3.14"'
+if [[ -x "$bundle_dir/.venv/bin/python" ]]; then
+    python_bin="$bundle_dir/.venv/bin/python"
+fi
+"$python_bin" -c 'import sys; assert sys.version_info >= (3, 12), "Zephyr requires Python >= 3.12"'
 for command in git dtc; do
     if ! command -v "$command" >/dev/null; then
         echo "Missing $command. Install: sudo apt install python3-venv git device-tree-compiler" >&2

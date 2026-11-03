@@ -27,7 +27,7 @@
 
 `scripts/package-offline.py` 可生成工作区根目录的
 `IDU-pre-offline-linux-x86_64.tar.gz`。包内包含当前源码快照、必要 west 依赖、
-SDK 1.0.1 ARM GCC、CMake/Ninja 和 Python 3.12–3.14 离线 wheel。
+SDK 1.0.1 ARM GCC、CMake/Ninja 和 Python 3.12/3.13/3.14 离线 wheel。
 不携带 Git 历史、旧构建结果和现有签名私钥；仅支持 Linux x86_64 / WSL2。
 
 新 Ubuntu 安装一次系统前置依赖，随后编译不需要联网：
@@ -42,7 +42,11 @@ SDK 1.0.1 ARM GCC、CMake/Ninja 和 Python 3.12–3.14 离线 wheel。
 ```
 
 默认解压到脚本旁的 `IDU-pre-offline/`，已有目录不会覆盖。
-`--skip-system-deps` 适用于系统依赖已经安装的机器；首次 apt 安装需要网络和 sudo。
+依赖已满足时自动跳过系统安装；Ubuntu/Debian 使用 apt-get，Fedora 使用 dnf。
+`--skip-system-deps` 显式禁止系统安装；需要安装时要求网络和 sudo。
+Python 最低 3.12 是 Zephyr 的要求，没有人为设置上限；包内原生 wheel 覆盖
+3.12/3.13/3.14，其他版本可能需要补齐 wheel。
+默认查找系统解释器及版本化命令，也可用 `IDU_PYTHON=/path/to/python3` 指定。
 脚本源文件保存在 `scripts/install-offline.sh`，根目录副本可独立运行。
 如需手动准备，执行：
 
