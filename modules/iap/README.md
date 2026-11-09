@@ -98,7 +98,9 @@ CCACHE_DISABLE=1 ./applications/IDU-pre/scripts/build.sh --mcuboot --iapv3
 集成方式参考 Zephyr 官方的 [Modules](https://docs.zephyrproject.org/latest/develop/modules.html)、
 [Flash map](https://docs.zephyrproject.org/latest/services/storage/flash_map/flash_map.html)
 和 [DFU](https://docs.zephyrproject.org/latest/services/device_mgmt/dfu.html) 文档；
-实现按工作区固定的 Zephyr 4.4.2 API 验证。模拟器与构建结果不替代实板升级验证。
+当前依赖基线为 Zephyr 4.5.0；该版本的专项验证范围见
+[验证说明](../../docs/testing.md)，不代表 IAP 全部模式已完成回归。
+模拟器与构建结果不替代实板升级验证。
 
 新增传输组合测试复用产品 forward.c 的地址段表，经逐字节 vport 输入、transmit 路由、
 真实 IAP 接收器完成签名镜像升级并逐字节核对备用槽。
