@@ -1,1 +1,1 @@
-# 看门狗开关由 modules/watchdog/Kconfig 提供。
+# 看门狗开关由 modules/func/watchdog/Kconfig 提供。

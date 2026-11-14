@@ -1,144 +1,21 @@
 #include "process_table.h"
 #include "signal_keys.h"
-#include "process/points.h"
-#include <dataprocess/dataprocess.h>
+#include "dp_callbacks/dp_callbacks.h"
 #include <zephyr/sys/util.h>
-
-/* 逐行配置测点；省略的初值和标志为零，未启用范围检查时不填写上下限。 */
 static const dp_point_config_t local_process_rows[PROCESS_SIGNAL_COUNT] = {
-    [PROCESS_SAMPLE_PERIOD] =
-        {
-            .signal_key = SIGNAL_SAMPLE_PERIOD,
-            .size = 2,
-            .flags = DP_POINT_FLAG_CHECK_RANGE | DP_POINT_FLAG_PERSISTENT,
-            .type = VALUE_TYPE_U16,
-            .data =
-                {
-                    .initial.u16 = CONFIG_IDU_SAMPLE_PERIOD_MS,
-                    .minimum.u16 = 100,
-                    .maximum.u16 = 1000,
-                },
-        },
-    [PROCESS_LABEL] =
-        {
-            .signal_key = SIGNAL_LABEL,
-            .size = 16,
-            .flags = DP_POINT_FLAG_PERSISTENT,
-            .type = VALUE_TYPE_WORDS,
-            .data.initial.words = {0x4944, 0x552d, 0x7072, 0x6500, 0, 0, 0, 0},
-        },
-    [PROCESS_SAVED_ADDRESS] =
-        {
-            .signal_key = SIGNAL_SAVED_ADDRESS,
-            .size = 2,
-            .flags = DP_POINT_FLAG_CHECK_RANGE | DP_POINT_FLAG_PERSISTENT,
-            .type = VALUE_TYPE_U16,
-            .data =
-                {
-                    .initial.u16 = 1,
-                    .minimum.u16 = 1,
-                    .maximum.u16 = 246,
-                },
-        },
-    [PROCESS_DEVICE_PROPERTIES] =
-        {
-            .signal_key = 2503,
-            .size = 2,
-            .flags = DP_POINT_FLAG_CHECK_RANGE,
-            .type = VALUE_TYPE_U16,
-            .data =
-                {
-                    .initial.u16 = 3,
-                    .minimum.u16 = 0,
-                    .maximum.u16 = UINT16_MAX,
-                },
-        },
-    [PROCESS_MANUFACTURER] =
-        {
-            .signal_key = 2504,
-            .size = 20,
-            .type = VALUE_TYPE_WORDS,
-            .data.initial.words = {0x5347, 0x2d46, 0x4143, 0x544f, 0x5259, 0, 0, 0, 0, 0},
-        },
-    [PROCESS_FIRMWARE_VERSION] =
-        {
-            .signal_key = 2581,
-            .size = 30,
-            .type = VALUE_TYPE_WORDS,
-            .data.initial.words =
-                {0x4944, 0x552d, 0x7072, 0x655f, 0x302e, 0x312e, 0x3000, 0, 0, 0, 0, 0, 0, 0, 0},
-        },
-    [PROCESS_HARDWARE_VERSION] =
-        {
-            .signal_key = 2568,
-            .size = 8,
-            .type = VALUE_TYPE_WORDS,
-            .data.initial.words = {0x3031, 0x4152, 3, 0x0103},
-        },
     [PROCESS_DEVICE_TYPE] =
         {
-            .signal_key = 8149,
+            .signal_key = SIGNAL_DEVICE_TYPE,
             .size = 2,
-            .flags = DP_POINT_FLAG_CHECK_RANGE,
             .type = VALUE_TYPE_U16,
-            .data =
-                {
-                    .initial.u16 = DEVICE_TYPE,
-                    .minimum.u16 = 0,
-                    .maximum.u16 = UINT16_MAX,
-                },
+            .data.initial.u16 = DEVICE_TYPE,
         },
     [PROCESS_PROTOCOL] =
         {
             .signal_key = SIGNAL_PROTOCOL,
             .size = 4,
-            .flags = DP_POINT_FLAG_CHECK_RANGE,
             .type = VALUE_TYPE_U32,
-            .data =
-                {
-                    .initial.u32 = PROTOCOL_VERSION,
-                    .minimum.u32 = 0,
-                    .maximum.u32 = UINT32_MAX,
-                },
-        },
-    [PROCESS_PRODUCT_CODE] =
-        {
-            .signal_key = 5486,
-            .size = 2,
-            .flags = DP_POINT_FLAG_CHECK_RANGE,
-            .type = VALUE_TYPE_U16,
-            .data =
-                {
-                    .initial.u16 = 0x1204,
-                    .minimum.u16 = 0,
-                    .maximum.u16 = UINT16_MAX,
-                },
-        },
-    [PROCESS_VIRTUAL_MODE] =
-        {
-            .signal_key = SIGNAL_VIRTUAL_MODE,
-            .size = 2,
-            .flags = DP_POINT_FLAG_CHECK_RANGE,
-            .type = VALUE_TYPE_U16,
-            .data =
-                {
-                    .initial.u16 = IS_ENABLED(CONFIG_IDU_TEST_FIXTURES),
-                    .minimum.u16 = 0,
-                    .maximum.u16 = UINT16_MAX,
-                },
-        },
-    [PROCESS_ADDRESS] =
-        {
-            .signal_key = SIGNAL_ADDRESS,
-            .size = 2,
-            .flags = DP_POINT_FLAG_CHECK_RANGE,
-            .type = VALUE_TYPE_U16,
-            .data =
-                {
-                    .initial.u16 = 1,
-                    .minimum.u16 = 1,
-                    .maximum.u16 = 246,
-                },
+            .data.initial.u32 = PROTOCOL_VERSION,
         },
     [PROCESS_DI] =
         {
@@ -146,85 +23,388 @@ static const dp_point_config_t local_process_rows[PROCESS_SIGNAL_COUNT] = {
             .size = 2,
             .type = VALUE_TYPE_U16,
         },
-    [PROCESS_CURRENT_1] =
+    [PROCESS_FAN_DET] =
         {
-            .signal_key = SIGNAL_CURRENT_1,
+            .signal_key = SIGNAL_FAN_DET,
             .size = 2,
             .type = VALUE_TYPE_U16,
+            .access_callback = points_unavailable,
         },
-    [PROCESS_CURRENT_2] =
+    [PROCESS_FAN_COMM_FAULT] =
         {
-            .signal_key = SIGNAL_CURRENT_2,
+            .signal_key = SIGNAL_FAN_COMM_FAULT,
             .size = 2,
             .type = VALUE_TYPE_U16,
+            .access_callback = points_unavailable,
         },
-    [PROCESS_CURRENT_3] =
+    [PROCESS_FAN_FAULT_1] =
         {
-            .signal_key = SIGNAL_CURRENT_3,
+            .signal_key = SIGNAL_FAN_FAULT_1,
             .size = 2,
             .type = VALUE_TYPE_U16,
+            .access_callback = points_unavailable,
         },
-    [PROCESS_CURRENT_4] =
+    [PROCESS_FAN_FAULT_2] =
         {
-            .signal_key = SIGNAL_CURRENT_4,
+            .signal_key = SIGNAL_FAN_FAULT_2,
             .size = 2,
             .type = VALUE_TYPE_U16,
+            .access_callback = points_unavailable,
         },
-    [PROCESS_CURRENT_5] =
+    [PROCESS_FAN_FAULT_3] =
         {
-            .signal_key = SIGNAL_CURRENT_5,
+            .signal_key = SIGNAL_FAN_FAULT_3,
             .size = 2,
             .type = VALUE_TYPE_U16,
+            .access_callback = points_unavailable,
         },
-    [PROCESS_CURRENT_6] =
+    [PROCESS_FAN_FAULT_4] =
         {
-            .signal_key = SIGNAL_CURRENT_6,
+            .signal_key = SIGNAL_FAN_FAULT_4,
             .size = 2,
             .type = VALUE_TYPE_U16,
+            .access_callback = points_unavailable,
         },
-    [PROCESS_CURRENT_7] =
+    [PROCESS_FAN_FAULT_5] =
         {
-            .signal_key = SIGNAL_CURRENT_7,
+            .signal_key = SIGNAL_FAN_FAULT_5,
             .size = 2,
             .type = VALUE_TYPE_U16,
+            .access_callback = points_unavailable,
         },
-    [PROCESS_CURRENT_8] =
+    [PROCESS_FAN_FAULT_6] =
         {
-            .signal_key = SIGNAL_CURRENT_8,
+            .signal_key = SIGNAL_FAN_FAULT_6,
             .size = 2,
             .type = VALUE_TYPE_U16,
+            .access_callback = points_unavailable,
         },
-    [PROCESS_SAVE_PARAMETERS] =
+    [PROCESS_FAN_FAULT_7] =
         {
-            .signal_key = SIGNAL_SAVE_PARAMETERS,
+            .signal_key = SIGNAL_FAN_FAULT_7,
             .size = 2,
             .type = VALUE_TYPE_U16,
-            .write_callback = points_save_parameters,
+            .access_callback = points_unavailable,
         },
-    [PROCESS_VOLATILE_VALUE] =
+    [PROCESS_FAN_FAULT_8] =
         {
-            .signal_key = SIGNAL_VOLATILE_VALUE,
+            .signal_key = SIGNAL_FAN_FAULT_8,
             .size = 2,
+            .type = VALUE_TYPE_U16,
+            .access_callback = points_unavailable,
+        },
+    [PROCESS_FAN_SPEED_1] =
+        {
+            .signal_key = SIGNAL_FAN_SPEED_1,
+            .size = 2,
+            .type = VALUE_TYPE_U16,
+            .access_callback = points_fan_feedback_read,
+        },
+    [PROCESS_FAN_SPEED_2] =
+        {
+            .signal_key = SIGNAL_FAN_SPEED_2,
+            .size = 2,
+            .type = VALUE_TYPE_U16,
+            .access_callback = points_fan_feedback_read,
+        },
+    [PROCESS_FAN_SPEED_3] =
+        {
+            .signal_key = SIGNAL_FAN_SPEED_3,
+            .size = 2,
+            .type = VALUE_TYPE_U16,
+            .access_callback = points_fan_feedback_read,
+        },
+    [PROCESS_FAN_SPEED_4] =
+        {
+            .signal_key = SIGNAL_FAN_SPEED_4,
+            .size = 2,
+            .type = VALUE_TYPE_U16,
+            .access_callback = points_fan_feedback_read,
+        },
+    [PROCESS_FAN_SPEED_5] =
+        {
+            .signal_key = SIGNAL_FAN_SPEED_5,
+            .size = 2,
+            .type = VALUE_TYPE_U16,
+            .access_callback = points_fan_feedback_read,
+        },
+    [PROCESS_FAN_SPEED_6] =
+        {
+            .signal_key = SIGNAL_FAN_SPEED_6,
+            .size = 2,
+            .type = VALUE_TYPE_U16,
+            .access_callback = points_fan_feedback_read,
+        },
+    [PROCESS_FAN_SPEED_7] =
+        {
+            .signal_key = SIGNAL_FAN_SPEED_7,
+            .size = 2,
+            .type = VALUE_TYPE_U16,
+            .access_callback = points_fan_feedback_read,
+        },
+    [PROCESS_FAN_SPEED_8] =
+        {
+            .signal_key = SIGNAL_FAN_SPEED_8,
+            .size = 2,
+            .type = VALUE_TYPE_U16,
+            .access_callback = points_fan_feedback_read,
+        },
+    [PROCESS_TEMPERATURE_1] =
+        {
+            .signal_key = SIGNAL_TEMPERATURE_1,
+            .size = 2,
+            .type = VALUE_TYPE_S16,
+            .access_callback = points_analog_read,
+        },
+    [PROCESS_TEMPERATURE_2] =
+        {
+            .signal_key = SIGNAL_TEMPERATURE_2,
+            .size = 2,
+            .type = VALUE_TYPE_S16,
+            .access_callback = points_analog_read,
+        },
+    [PROCESS_TEMPERATURE_3] =
+        {
+            .signal_key = SIGNAL_TEMPERATURE_3,
+            .size = 2,
+            .type = VALUE_TYPE_S16,
+            .access_callback = points_analog_read,
+        },
+    [PROCESS_TEMPERATURE_4] =
+        {
+            .signal_key = SIGNAL_TEMPERATURE_4,
+            .size = 2,
+            .type = VALUE_TYPE_S16,
+            .access_callback = points_analog_read,
+        },
+    [PROCESS_TEMPERATURE_5] =
+        {
+            .signal_key = SIGNAL_TEMPERATURE_5,
+            .size = 2,
+            .type = VALUE_TYPE_S16,
+            .access_callback = points_analog_read,
+        },
+    [PROCESS_TEMPERATURE_6] =
+        {
+            .signal_key = SIGNAL_TEMPERATURE_6,
+            .size = 2,
+            .type = VALUE_TYPE_S16,
+            .access_callback = points_analog_read,
+        },
+    [PROCESS_TEMPERATURE_7] =
+        {
+            .signal_key = SIGNAL_TEMPERATURE_7,
+            .size = 2,
+            .type = VALUE_TYPE_S16,
+            .access_callback = points_analog_read,
+        },
+    [PROCESS_TEMPERATURE_8] =
+        {
+            .signal_key = SIGNAL_TEMPERATURE_8,
+            .size = 2,
+            .type = VALUE_TYPE_S16,
+            .access_callback = points_analog_read,
+        },
+    [PROCESS_TEMPERATURE_9] =
+        {
+            .signal_key = SIGNAL_TEMPERATURE_9,
+            .size = 2,
+            .type = VALUE_TYPE_S16,
+            .access_callback = points_analog_read,
+        },
+    [PROCESS_TEMPERATURE_10] =
+        {
+            .signal_key = SIGNAL_TEMPERATURE_10,
+            .size = 2,
+            .type = VALUE_TYPE_S16,
+            .access_callback = points_analog_read,
+        },
+    [PROCESS_TEMPERATURE_11] =
+        {
+            .signal_key = SIGNAL_TEMPERATURE_11,
+            .size = 2,
+            .type = VALUE_TYPE_S16,
+            .access_callback = points_analog_read,
+        },
+    [PROCESS_TEMPERATURE_12] =
+        {
+            .signal_key = SIGNAL_TEMPERATURE_12,
+            .size = 2,
+            .type = VALUE_TYPE_S16,
+            .access_callback = points_analog_read,
+        },
+    [PROCESS_TEMPERATURE_13] =
+        {
+            .signal_key = SIGNAL_TEMPERATURE_13,
+            .size = 2,
+            .type = VALUE_TYPE_S16,
+            .access_callback = points_analog_read,
+        },
+    [PROCESS_TEMPERATURE_14] =
+        {
+            .signal_key = SIGNAL_TEMPERATURE_14,
+            .size = 2,
+            .type = VALUE_TYPE_S16,
+            .access_callback = points_analog_read,
+        },
+    [PROCESS_TEMPERATURE_15] =
+        {
+            .signal_key = SIGNAL_TEMPERATURE_15,
+            .size = 2,
+            .type = VALUE_TYPE_S16,
+            .access_callback = points_analog_read,
+        },
+    [PROCESS_TEMPERATURE_16] =
+        {
+            .signal_key = SIGNAL_TEMPERATURE_16,
+            .size = 2,
+            .type = VALUE_TYPE_S16,
+            .access_callback = points_analog_read,
+        },
+    [PROCESS_TEMPERATURE_17] =
+        {
+            .signal_key = SIGNAL_TEMPERATURE_17,
+            .size = 2,
+            .type = VALUE_TYPE_S16,
+            .access_callback = points_analog_read,
+        },
+    [PROCESS_TEMPERATURE_18] =
+        {
+            .signal_key = SIGNAL_TEMPERATURE_18,
+            .size = 2,
+            .type = VALUE_TYPE_S16,
+            .access_callback = points_analog_read,
+        },
+    [PROCESS_TEMPERATURE_19] =
+        {
+            .signal_key = SIGNAL_TEMPERATURE_19,
+            .size = 2,
+            .type = VALUE_TYPE_S16,
+            .access_callback = points_analog_read,
+        },
+    [PROCESS_TEMPERATURE_20] =
+        {
+            .signal_key = SIGNAL_TEMPERATURE_20,
+            .size = 2,
+            .type = VALUE_TYPE_S16,
+            .access_callback = points_analog_read,
+        },
+    [PROCESS_TEMPERATURE_21] =
+        {
+            .signal_key = SIGNAL_TEMPERATURE_21,
+            .size = 2,
+            .type = VALUE_TYPE_S16,
+            .access_callback = points_analog_read,
+        },
+    [PROCESS_FAN_PWM_1] =
+        {
+            .signal_key = SIGNAL_FAN_PWM_1,
+            .size = 2,
+            .type = VALUE_TYPE_U16,
+            .access_callback = points_fan_pwm,
             .flags = DP_POINT_FLAG_CHECK_RANGE,
-            .type = VALUE_TYPE_U16,
-            .data =
-                {
-                    .initial.u16 = CONFIG_IDU_SAMPLE_PERIOD_MS,
-                    .minimum.u16 = 100,
-                    .maximum.u16 = 1000,
-                },
+            .data.initial.u16 = 0,
+            .data.minimum.u16 = 0,
+            .data.maximum.u16 = 1000,
         },
-    [PROCESS_OPERATION_COMMAND] =
+    [PROCESS_FAN_PWM_2] =
         {
-            .signal_key = SIGNAL_OPERATION_COMMAND,
+            .signal_key = SIGNAL_FAN_PWM_2,
             .size = 2,
             .type = VALUE_TYPE_U16,
-            .write_callback = points_operation_command,
+            .access_callback = points_fan_pwm,
+            .flags = DP_POINT_FLAG_CHECK_RANGE,
+            .data.initial.u16 = 0,
+            .data.minimum.u16 = 0,
+            .data.maximum.u16 = 1000,
+        },
+    [PROCESS_FAN_PWM_3] =
+        {
+            .signal_key = SIGNAL_FAN_PWM_3,
+            .size = 2,
+            .type = VALUE_TYPE_U16,
+            .access_callback = points_fan_pwm,
+            .flags = DP_POINT_FLAG_CHECK_RANGE,
+            .data.initial.u16 = 0,
+            .data.minimum.u16 = 0,
+            .data.maximum.u16 = 1000,
+        },
+    [PROCESS_FAN_PWM_4] =
+        {
+            .signal_key = SIGNAL_FAN_PWM_4,
+            .size = 2,
+            .type = VALUE_TYPE_U16,
+            .access_callback = points_fan_pwm,
+            .flags = DP_POINT_FLAG_CHECK_RANGE,
+            .data.initial.u16 = 0,
+            .data.minimum.u16 = 0,
+            .data.maximum.u16 = 1000,
+        },
+    [PROCESS_FAN_PWM_5] =
+        {
+            .signal_key = SIGNAL_FAN_PWM_5,
+            .size = 2,
+            .type = VALUE_TYPE_U16,
+            .access_callback = points_fan_pwm,
+            .flags = DP_POINT_FLAG_CHECK_RANGE,
+            .data.initial.u16 = 0,
+            .data.minimum.u16 = 0,
+            .data.maximum.u16 = 1000,
+        },
+    [PROCESS_FAN_PWM_6] =
+        {
+            .signal_key = SIGNAL_FAN_PWM_6,
+            .size = 2,
+            .type = VALUE_TYPE_U16,
+            .access_callback = points_fan_pwm,
+            .flags = DP_POINT_FLAG_CHECK_RANGE,
+            .data.initial.u16 = 0,
+            .data.minimum.u16 = 0,
+            .data.maximum.u16 = 1000,
+        },
+    [PROCESS_FAN_PWM_7] =
+        {
+            .signal_key = SIGNAL_FAN_PWM_7,
+            .size = 2,
+            .type = VALUE_TYPE_U16,
+            .access_callback = points_fan_pwm,
+            .flags = DP_POINT_FLAG_CHECK_RANGE,
+            .data.initial.u16 = 0,
+            .data.minimum.u16 = 0,
+            .data.maximum.u16 = 1000,
+        },
+    [PROCESS_FAN_PWM_8] =
+        {
+            .signal_key = SIGNAL_FAN_PWM_8,
+            .size = 2,
+            .type = VALUE_TYPE_U16,
+            .access_callback = points_fan_pwm,
+            .flags = DP_POINT_FLAG_CHECK_RANGE,
+            .data.initial.u16 = 0,
+            .data.minimum.u16 = 0,
+            .data.maximum.u16 = 1000,
+        },
+    [PROCESS_FAN_TYPE] =
+        {
+            .signal_key = SIGNAL_FAN_TYPE,
+            .size = 2,
+            .type = VALUE_TYPE_U16,
+            .access_callback = points_fan_type,
+            .flags = DP_POINT_FLAG_CHECK_RANGE,
+            .data.initial.u16 = 0,
+            .data.minimum.u16 = 0,
+            .data.maximum.u16 = 1,
+        },
+    [PROCESS_UNIT_ID] =
+        {
+            .signal_key = SIGNAL_UNIT_ID,
+            .size = 2,
+            .type = VALUE_TYPE_U16,
+            .flags = DP_POINT_FLAG_CHECK_RANGE | DP_POINT_FLAG_PERSISTENT,
+            .data.initial.u16 = 1,
+            .data.minimum.u16 = 1,
+            .data.maximum.u16 = 246,
         },
 };
-
-/* 与测点表在同一编译单元，只读表不包含设备 ID 和运行数据；仅供 protocol.c 使用。 */
 const dp_table_t protocol_local_table = {
-    .points = local_process_rows,
-    .point_count = ARRAY_SIZE(local_process_rows),
-};
+    .points = local_process_rows, .point_count = ARRAY_SIZE(local_process_rows)};

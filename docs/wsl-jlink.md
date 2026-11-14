@@ -123,7 +123,7 @@ Zephyr RTOS 插件；不需要线程视图则使用 --no-rtos。conf/debug.conf 
 调试配置仅设置 CONFIG_WATCHDOG_EXTERNAL=n，软件监控和显式 RESET 仍有效。
 长期断点会使 CPU 和 k_timer 停止，不能依赖定时器继续喂外部看门狗。
 MCUboot 早期将 PC13 浮空，调试固件需从 MCUboot 复位启动后才沿用这一状态。
-实际硬件是否因此禁用外狗须核对电路；软件监控暂停接口见[watchdog 模块](../modules/watchdog/README.md)。
+实际硬件是否因此禁用外狗须核对电路；软件监控暂停接口见[watchdog 模块](../modules/func/watchdog/README.md)。
 
 ## 常用诊断
 

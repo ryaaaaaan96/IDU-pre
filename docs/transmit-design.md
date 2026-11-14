@@ -145,7 +145,7 @@ CUSTOM 的检查和执行通过固定配置回调接入；当前内容判帧测�
 
 数组每行 count 为寄存器数，WORDS 按 words 编码，BYTES/STRING 按原始字节编码；
 位点行映射整数低 count 位。完整约束、异常码及缓存占用见
-[transmit 契约](../modules/transmit/README.md)。固定接收容量限制每次恢复的最大数据量。
+[transmit 契约](../modules/func/transmit/README.md)。固定接收容量限制每次恢复的最大数据量。
 
 验证包括拆帧/多帧、RTU 间隔、锁定环形轮转、噪声及损坏恢复、广播、其他站号、
 地址/对象类别/部分写、非事务失败、读取先转换后放缩及写入先逆放缩后收窄、发送失败不重放及模拟 UART 方向控制。
@@ -158,4 +158,4 @@ CUSTOM 的检查和执行通过固定配置回调接入；当前内容判帧测�
 先把命中地址段的完整 ADU 同步交给回调，未命中才进入标准 RAW 服务端。
 这样保留旧版超长 FC16 的 16 位寄存器计数及截断字节计数；IAP 自行严格检查载荷。
 地址段只代表起始地址归属，不套用普通寄存器访问长度和数据区规则。
-具体契约见 [transmit 模块](../modules/transmit/README.md)，地址见[产品协议](../app/protocol/README.md)。
+具体契约见 [transmit 模块](../modules/func/transmit/README.md)，地址见[产品协议](../app/protocol/README.md)。

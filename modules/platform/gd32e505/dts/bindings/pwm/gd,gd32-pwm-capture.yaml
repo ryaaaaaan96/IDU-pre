@@ -1,0 +1,24 @@
+description: GD32 dedicated timer period capture through the standard PWM API
+compatible: "gd,gd32-pwm-capture"
+include: [base.yaml, pwm-controller.yaml, pinctrl-device.yaml]
+properties:
+  capture-channel:
+    type: int
+    default: 0
+    enum: [0, 1, 2, 3]
+    description: Physical timer channel owned by this capture device.
+  capture-prescaler:
+    type: int
+    default: 1
+    enum: [1, 2, 4, 8]
+    description: Capture once every N edges; reported period remains one input period.
+  pinctrl-0:
+    required: true
+  pinctrl-names:
+    required: true
+  "#pwm-cells":
+    const: 3
+pwm-cells:
+  - channel
+  - period
+  - flags

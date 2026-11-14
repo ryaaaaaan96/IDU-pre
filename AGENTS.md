@@ -2,11 +2,11 @@
 
 ## Git 工作流
 
-- 每次完成一轮修改并执行相应验证后，自动在 `applications/IDU-pre/` 创建本地 Git 提交。
-- 仅允许修改 `applications/` 下的应用仓库。工作区根目录下的 `manifest/`、`zephyr/`、`modules/`、`bootloader/` 等仓库保持只读。
-- 当前项目仅在 `applications/IDU-pre/` 创建本地提交，复用现有 Git 仓库，不在工作区根目录初始化仓库。推送需用户明确要求。
+- 修改完成后先运行相关校验，报告结果，并将改动留在工作区供用户检查。禁止自动创建本地 Git 提交；只有校验通过且用户检查后明确批准，才允许提交。
+- 仅允许修改 `applications/IDU-pre/` 当前应用仓库。工作区根目录下的 `manifest/`、`zephyr/`、`modules/`、`bootloader/` 等仓库保持只读。
+- 当前项目仅在 `applications/IDU-pre/` 创建本地提交，复用现有 Git 仓库，不在工作区根目录初始化仓库。禁止推送，除非用户另行明确授权。
 - 修改前检查 `git status --short`，保留用户已有的暂存和未暂存改动；只暂存、提交当前任务的文件或修改块。
-- 提交说明简洁描述行为变化，完成后报告提交哈希和验证结果。无法完成验证或提交时如实说明原因。
+- 获准提交时，提交说明简洁描述行为变化，并报告提交哈希和验证结果。校验未通过时如实记录失败及影响，不得以提交代替校验。
 
 ## 代码与构建
 
@@ -16,17 +16,17 @@
 - 运行时字符串、故障描述、日志和命令行／配置帮助使用英文；注释及 Doxygen 说明使用中文。
 - 产品代码、板级支持和点表模块保存在本应用内；依赖版本由工作区 `manifest/west.yml` 管理。
 - `modules/gd32e505` 通过 Zephyr `soc_root` / `dts_root` 提供 E505 SoC、设备树时钟配置和 ADC0 驱动；本板保持 20 MHz bypass / 180 MHz；`modules/hardware.cmake` 供应用和 Sysbuild 共用。
-- 通用模块以 [modules/README.md](modules/README.md) 为准。transmit/vport 按 [通信设计](docs/transmit-design.md) 重新实现；collect 仍未恢复，不恢复旧通信框架。修改接收、协议轮转、放缩或串口归属前先读 [transmit 契约](modules/transmit/README.md) 和 [产品端口](app/protocol/README.md)。
+- 通用模块以 [modules/README.md](modules/README.md) 为准。transmit/vport 按 [通信设计](docs/transmit-design.md) 重新实现；collect 仍未恢复，不恢复旧通信框架。修改接收、协议轮转、放缩或串口归属前先读 [transmit 契约](modules/func/transmit/README.md) 和 [产品端口](app/protocol/README.md)。
 - `modules/dataprocess` 是最小原子核心，接口为 `dp_*`：点表登记、单点同步 RAM 写读、回调和范围检查。不要恢复异步样本队列、业务线程、定时器、参考表目录、`data_process.h` 字节适配层或 collect/transmit 描述符。
-- Modbus 功能码与标准响应复用 Zephyr RAW 服务端；同步适配和整笔访问接口在 modules/modbus，DP 访问与转发表在 transmit。RAW 默认异步，本项目的固定版本构建期扩展保持 APP 线程同步执行；修改前读 modules/modbus/README.md。
+- Modbus 功能码与标准响应复用 Zephyr RAW 服务端；同步适配和整笔访问接口在 modules/modbus，DP 访问与转发表在 transmit。RAW 默认异步，本项目的固定版本构建期扩展保持 APP 线程同步执行；修改前读 modules/func/modbus/README.md。
 - common/scale.h 提供 value_scale_t 和整数换算；转发表 scale 指针为 NULL 时跳过，不维护独立放缩标志。
 - 点表行使用 dp_point_config_t，保留 DP_POINT_FLAG_CHECK_RANGE 和 DP_POINT_FLAG_SKIP_DEFAULTS；回调结果校验成功后保存 RAM。配置行数组常驻只读，初值为内嵌 value_t。
 - DP 接口为 dp_init、dp_register_device/remove_device、dp_set_para_by_key/get_para_by_key、dp_set_para_by_index/get_para_by_index、dp_restore_defaults、dp_factory_reset 和 dp_flush。回调在锁外，点值使用快照锁；登记/删除与保存共用设备锁，调用方须先停止并等待全部 DP 业务访问结束。
-- DP 始终包含参数持久化能力，要求 dp-params 别名。详情见 [DP 模块](modules/dataprocess/README.md)：dp-params 总分区内部管理 NVS 与设备槽位，5 秒保存线程、dirty/已保存值比较、阻塞 flush。set 成功只表示 RAM 更新；重启前由应用停止修改并 flush。IAP 自身 NVS 独立，不恢复旧 DP 门禁。
+- DP 始终包含参数持久化能力，要求 dp-params 别名。详情见 [DP 模块](modules/func/dataprocess/README.md)：dp-params 总分区内部管理 NVS 与设备槽位，5 秒保存线程、dirty/已保存值比较、阻塞 flush。set 成功只表示 RAM 更新；重启前由应用停止修改并 flush。IAP 自身 NVS 独立，不恢复旧 DP 门禁。
 - `app/main.c` 启动状态、硬件和可选 IAP 后调用 `protocol_init()`；protocol.c 登记 DP、装配转发实例并创建协议线程；rs485_1.c 只负责物理收发与事件采集。保留采样周期和休眠，终止后主线程留驻并每 5 秒查询打印最近故障。`acquisition` 只按硬件 spec 与 device_id/signal_key 映射读取 DI 位图和 ADC，并用 `dp_set_para_by_key()` 同步写点。
 - `app/process/points.c` 提供采样周期读取以及参数保存、操作命令写回调；保持寄存器 16 写 1 同步 flush，17 为非持久对照值，18 为操作命令（1 保存后冷重启、2 恢复默认值、3 清除全部 DP 参数后重启）。
 - 状态与 LED 归 `app/status/`；看门狗实现在 `modules/watchdog`；IAP 归 `modules/iap`，调用方直接使用 `<iap/iap.h>`。
-- IAP 通过 forward.c 的完整 ADU 地址段回调接入 transmit，在标准功能码校验前调用 `iap_route()`，保留旧超长 FC16。修改上传路由前读 modules/iap/README.md；模拟器组合测试已通过，实板上传及旧上位机互通仍待验证。
+- IAP 通过 forward.c 的完整 ADU 地址段回调接入 transmit，在标准功能码校验前调用 `iap_route()`，保留旧超长 FC16。修改上传路由前读 modules/func/iap/README.md；模拟器组合测试已通过，实板上传及旧上位机互通仍待验证。
 
 ## 构建与验证
 

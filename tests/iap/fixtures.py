@@ -54,7 +54,7 @@ for name, blob in (
 subprocess.run(
     [
         sys.executable,
-        str(app / "modules/iap/scripts/public_key.py"),
+        str(app / "modules/func/iap/scripts/public_key.py"),
         str(root / "bootloader/mcuboot/root-ec-p256.pem"),
         str(out / "iap_keys.h"),
         packer.legacy_key(config).hex(),

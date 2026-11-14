@@ -106,7 +106,7 @@ python3 applications/IDU-pre/scripts/package-offline.py \
 
 slot0 包含 512 B MCUboot 头与交换尾部。导出器保留 8 KiB 尾部，签名升级文件不超过 440 KiB。
 DP 区含布局、管理 NVS 和默认六个设备槽位。布局不兼容会清空 DP 区，
-不影响 IAP 与镜像；真实读取失败不触发格式重建。详情见[DP 契约](../modules/dataprocess/README.md)。
+不影响 IAP 与镜像；真实读取失败不触发格式重建。详情见[DP 契约](../modules/func/dataprocess/README.md)。
 
 ## 烧录与启动
 
@@ -151,7 +151,7 @@ APP 的 forward.c 登记完整 ADU 地址段，transmit 先验证 CRC、站号�
 
 IAP 专用线程完成 AES 解密、SGZ/QuickLZ 解包、CRC、MCUboot 头/向量、SHA256 和 P-256 验签，
 成功后写日志、请求试升级并等待 500 ms 重启。单 Cortex-M 镜像，不支持差分、多镜像或下挂升级。
-详细配置见[IAP 模块](../modules/iap/README.md)。
+详细配置见[IAP 模块](../modules/func/iap/README.md)。
 
 默认流程尚未接入 DP 的 prepare_reboot/cancel_reboot 保存门禁，
 最近未落盘参数可能丢失。需要保留时，由 APP 先冻结修改并 dp_flush，再提交升级。

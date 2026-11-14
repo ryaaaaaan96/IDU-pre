@@ -1,0 +1,32 @@
+config RS485
+    bool "RS485 byte I/O with software or hardware DE"
+    depends on SERIAL && GPIO
+    depends on UART_INTERRUPT_DRIVEN || UART_ASYNC_API
+    select UART_USE_RUNTIME_CONFIGURE
+    help
+      Unified read/write access for GPIO-controlled or UART-controlled DE.
+      No protocol events, timestamps or business threads. The asynchronous
+      interface uses caller-owned UART receive buffers.
+
+if RS485
+
+choice RS485_BACKEND
+    prompt "RS485 UART interface"
+    default RS485_ASYNC if UART_ASYNC_API
+    default RS485_INTERRUPT
+
+config RS485_INTERRUPT
+    bool "Interrupt-driven UART"
+    depends on UART_INTERRUPT_DRIVEN
+
+config RS485_ASYNC
+    bool "Standard asynchronous UART"
+    depends on UART_ASYNC_API
+    help
+      DMA belongs to the UART driver. Use caller-owned RX buffers and standard
+      UART events. Synchronous write waits on the same asynchronous TX path;
+      synchronous read polls UART only when asynchronous RX is inactive.
+
+endchoice
+
+endif

@@ -1,9 +1,9 @@
-mainmenu "IDU-pre"
+mainmenu "IDU-Transformer"
 
 source "Kconfig.zephyr"
 rsource "app/Kconfig"
 
-config IDU_PRE
+config IDU_TRANSFORMER
     bool
     default y
     select REBOOT

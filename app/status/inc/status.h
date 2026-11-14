@@ -5,10 +5,12 @@
  * 状态由模块内部单例持有，每次上电只初始化一次，故障复位前不可清除。
  * watchdog 故障通道仅用于本次启动不可恢复的终止故障：HOLD 等待人工重启，RESET 自动重启。
  * 可恢复异常由业务模块处理，不进入整机故障锁存；重启不保证排除实际故障原因。
- * 业务线程设置运行状态，LED 指示独立调度，不表示采样进度。
+ * 启动线程设置运行状态，LED 指示独立调度，不表示采样进度。
  */
 #ifndef STATUS_H
 #define STATUS_H
+
+#include <zephyr/toolchain.h>
 
 /* 整机状态与故障接口。 */
 
@@ -42,5 +44,13 @@ void status_set_phase(status_phase_t phase);
 
 /** @brief 读取当前阶段，可在线程或 ISR 中调用。 */
 status_phase_t status_phase_get(void);
+
+/**
+ * @brief 终止故障留驻，每五秒打印最近故障，不返回且不恢复业务。
+ * @param error 没有故障快照时打印的原始错误码。
+ * @note 初始化失败由 main 调用；采样停止由采集线程调用，不从 ISR 或工作队列调用。
+ * @note 多个调用者仅第一个持续打印，其余永久休眠，避免启动故障重复诊断。
+ */
+FUNC_NORETURN void status_fault_wait(int error);
 
 #endif

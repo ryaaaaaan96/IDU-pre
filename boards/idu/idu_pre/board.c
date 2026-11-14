@@ -4,7 +4,7 @@
 
 void board_early_init_hook(void)
 {
-    /* PA15 驱动 RS485 DE：外设引脚初始化前释放 JTAG，保留 SWD。 */
+    /* PB3/PB4 为 RS485-3 DE 和 DI32：释放 JTAG，保留 PA13/PA14 SWD。 */
     rcu_periph_clock_enable(RCU_AF);
     gpio_pin_remap_config(GPIO_SWJ_SWDPENABLE_REMAP, ENABLE);
 

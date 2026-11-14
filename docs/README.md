@@ -10,10 +10,10 @@
 | --- | --- |
 | 通用模块设计报告、API 与示例 | [Word](module-design-report.docx)、[HTML](module-design-report.html) |
 | 编译、签名、Flash 分区与 IAP 升级 | [构建与升级](build-and-upgrade.md) |
-| 设备点表、参数持久化 | [DP 模块](../modules/dataprocess/README.md)、[产品点表](../app/protocol/README.md) |
-| 通信架构、协议选择与数值转换 | [通信设计](transmit-design.md)、[transmit 契约](../modules/transmit/README.md)、[Modbus 适配](../modules/modbus/README.md) |
-| 故障动作、任务监控与指示灯 | [产品故障策略](fault-policy.md)、[watchdog 模块](../modules/watchdog/README.md) |
-| 硬件、时钟、引脚和采样 | [硬件说明](hardware.md)、[GD32E505 模块](../modules/gd32e505/README.md) |
+| 设备点表、参数持久化 | [DP 模块](../modules/func/dataprocess/README.md)、[产品点表](../app/protocol/README.md) |
+| 通信架构、协议选择与数值转换 | [通信设计](transmit-design.md)、[transmit 契约](../modules/func/transmit/README.md)、[Modbus 适配](../modules/func/modbus/README.md) |
+| 故障动作、任务监控与指示灯 | [产品故障策略](fault-policy.md)、[watchdog 模块](../modules/func/watchdog/README.md) |
+| 硬件、时钟、引脚和采样 | [硬件说明](hardware.md)、[GD32E505 模块](../modules/platform/gd32e505/README.md) |
 | 堆、线程栈、缓存与容量 | [内存管理](memory-management.md) |
 | 测试入口、当前结果与实板待验 | [验证说明](testing.md) |
 | Modbus 实板读写与 DP 测试报文 | [手动测试](modbus-test.md) |

@@ -1,0 +1,4 @@
+name: iap
+build:
+  cmake: .
+  kconfig: Kconfig

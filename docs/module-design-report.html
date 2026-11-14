@@ -146,7 +146,7 @@ int common_example(void)
     return output == 344 ? 0 : -1;
 }</code></pre></div><p class="example-note">该示例用于说明数值转换与放缩规则，无硬件依赖。调用者始终初始化整个 value_t，并按声明类型访问对应成员。</p></div>
         <p class="source">接口：<code>value_convert()</code>、<code>value_scale_apply()</code> ·
-          <a href="../modules/common/README.md">设计说明</a></p>
+          <a href="../modules/func/common/README.md">设计说明</a></p>
       </article>
 
       <article class="module" id="dp">
@@ -233,7 +233,7 @@ int demo_dp_update(void)
 }</code></pre></div><p class="example-note">前提：CONFIG_DATAPROCESS=y，DTS 存在 dp-params 别名且容量满足槽位要求。示例的设备、key、index 仅用于示例，不替换产品表。所有 DP 业务入口在线程上下文调用。</p></div>
         <p class="source">接口：<code>dp_init</code>、<code>dp_register_device</code>、
           <code>dp_*_para_by_key/index</code>、<code>dp_flush</code>、恢复与删除接口 ·
-          <a href="../modules/dataprocess/README.md">设计说明</a></p>
+          <a href="../modules/func/dataprocess/README.md">设计说明</a></p>
       </article>
 
       <article class="module" id="vport">
@@ -279,7 +279,7 @@ int demo_poll(uint64_t now_us)
     return vport_input(&amp;demo_port, &amp;event);
 }</code></pre></div><p class="example-note">此片段与下文 transmit 共用 demo_port。APP 先设置发送回调，tr_register 成功后再启动接收。app_uart_send 是产品适配入口，不是模块自带 API。</p></div>
         <p class="source">接口：<code>vport_bind/input/output</code> ·
-          <a href="../modules/vport/README.md">设计说明</a></p>
+          <a href="../modules/func/vport/README.md">设计说明</a></p>
       </article>
 
       <article class="module" id="transmit">
@@ -354,7 +354,7 @@ int demo_protocol_start(void)
  * 写单个寄存器只覆盖该点一半，按当前规则拒绝。
  */</code></pre></div><p class="example-note">依赖 CONFIG_TRANSMIT、Zephyr MODBUS_SERVER / RAW 及足够堆预算。这里只配置普通短帧；接入 IAP 必须扩大 max_frame、rx_capacity、MODBUS_BUFFER_SIZE 和堆预算，参照产品真实配置。</p></div>
         <p class="source">入口：<code>tr_register()</code> ·
-          <a href="../modules/transmit/README.md">设计说明</a> ·
+          <a href="../modules/func/transmit/README.md">设计说明</a> ·
           <a href="transmit-design.md">完整通信方案</a></p>
       </article>
 
@@ -424,7 +424,7 @@ int demo_mb_handle(const uint8_t *frame, size_t size,
     return mb_rtu_encode(&amp;response, output, capacity, output_size);
 }</code></pre></div><p class="example-note">这是不依赖 DP / transmit 的独立服务端用法，与前面的 transmit 示例二选一，不能抢占同一个 RAW 槽位。调用方保证完整帧、参数非空、实例串行及发送完成；正式产品无需自行再调用此链路。</p></div>
         <p class="source">接口：<code>mb_server_*</code>、<code>mb_rtu_*</code> 与寄存器转换 ·
-          <a href="../modules/modbus/README.md">设计说明</a></p>
+          <a href="../modules/func/modbus/README.md">设计说明</a></p>
       </article>
 
       <article class="module" id="watchdog">
@@ -476,7 +476,7 @@ int demo_terminal_fault(int error)
 }</code></pre></div><p class="example-note">该例展示独立接入模式。当前产品已在 status_init 内完成 watchdog_init 和回调绑定，不能再次调用 demo_watchdog_start。business_stopped 只是示例门禁，APP 必须在业务入口读取它才会停止业务。</p></div>
         <p class="source">入口：<code>watchdog_init</code>、任务登记/心跳、
           <code>watchdog_report_fault</code>、诊断查询 ·
-          <a href="../modules/watchdog/README.md">设计说明</a></p>
+          <a href="../modules/func/watchdog/README.md">设计说明</a></p>
       </article>
 
       <article class="module" id="iap">
@@ -514,7 +514,7 @@ int demo_iap_start(void)
  * tx_capacity 为 256，调整线程栈与转发堆预算，参照产品 conf/iapv3.conf。
  */</code></pre></div><p class="example-note">产品 forward.c 已使用此路由方式，不应重复注册。路由只匹配请求起始地址，count 不是上传载荷数量上限。CRC 与站号由 transmit 过滤，功能码/载荷/会话由 IAP 校验；此例不包含尚待落实的 DP 保存门禁。</p></div>
         <p class="source">接口：<code>iap_init</code>、<code>iap_init_config</code>、<code>iap_route</code> ·
-          <a href="../modules/iap/README.md">设计说明</a> · <a href="build-and-upgrade.md">构建与升级</a></p>
+          <a href="../modules/func/iap/README.md">设计说明</a> · <a href="build-and-upgrade.md">构建与升级</a></p>
       </article>
 
       <article class="module" id="quicklz"><h3>3.8 quicklz — 解压算法支撑</h3><div class="deep-dive"><h4>设计方案</h4><div class="design-prose"><p>算法接口只处理一个完整块，不保留跨块历史，不需要线程、堆和端口。输入/输出由调用者控制，便于主机验证。</p><p>输入格式错误和输出空间不足统一返回 -EBADMSG；成功返回实际字节数。失败不保证目标内容，因此应在成功后才消费输出。</p></div><h4>对外接口</h4><div class="table-wrap"><table><thead><tr><th>接口</th><th>作用与调用约束</th></tr></thead><tbody><tr><td><code>qlz_decode_level3(src, len, dst, cap)</code></td><td>QuickLZ 1.5 level 3 完整块解码；缓冲不可重叠，cap 必须能用 int 表示。</td></tr></tbody></table></div><div class="example"><h4>调用示例</h4><pre><code>#include &lt;quicklz/quicklz.h&gt;
@@ -529,7 +529,7 @@ int demo_decode_block(const uint8_t *compressed, size_t compressed_size,
     }
     /* 仅在成功后消费 plain[0..size)，不能假设总是填满缓冲。 */
     return size;
-}</code></pre></div><p class="example-note">compressed 必须是完整合法块，不能直接传未解密 SGZ 容器。IAP 已处理容器与工作区，产品业务通常不直接调用解压函数。</p></div><p class="source"><a href="../modules/quicklz/">模块目录</a></p></article>
+}</code></pre></div><p class="example-note">compressed 必须是完整合法块，不能直接传未解密 SGZ 容器。IAP 已处理容器与工作区，产品业务通常不直接调用解压函数。</p></div><p class="source"><a href="../modules/func/quicklz/">模块目录</a></p></article>
 <article class="module" id="gd32e505"><h3>3.9 gd32e505 — 硬件平台适配</h3><div class="deep-dive"><h4>设计方案</h4><div class="design-prose"><p>以 Zephyr 模块的 soc_root / dts_root 提供缺失的芯片描述与绑定，硬件配置由 DTS 生成，避免应用包含厂商初始化代码。</p><p>应用和 MCUboot 通过同一硬件模块获得时钟来源。20 MHz 有源旁路、PLL /5×45 等配置在构建时做约束检查。</p></div><h4>对外接口</h4><div class="table-wrap"><table><thead><tr><th>接口</th><th>作用与调用约束</th></tr></thead><tbody><tr><td><code>模块接入：ZEPHYR_EXTRA_MODULES / hardware.cmake</code></td><td>find_package(Zephyr) 前登记；不是应用运行期 API。SoC 和 ADC 由标准设备初始化机制启动。</td></tr><tr><td><code>adc_is_ready_dt(spec)</code></td><td>Zephyr 官方就绪检查，确认底层设备可用。</td></tr><tr><td><code>adc_channel_setup_dt(spec)</code></td><td>Zephyr 官方通道配置接口，设置引脚对应通道、增益、参考等；应用读取前调用。</td></tr><tr><td><code>adc_sequence_init_dt(spec, sequence)</code></td><td>Zephyr 官方辅助接口，从通道描述填写 sequence 的通道、分辨率、过采样配置。</td></tr><tr><td><code>adc_read_dt(spec, sequence)</code></td><td>Zephyr 官方同步采样；E505 后端目前只支持单通道。GPIO 继续使用官方 gpio_* 接口。</td></tr></tbody></table></div><div class="example"><h4>调用示例</h4><pre><code>#include &lt;zephyr/drivers/adc.h&gt;
 #include &lt;errno.h&gt;
 
@@ -555,7 +555,7 @@ int demo_adc_read(int16_t *raw)
         return err;
     }
     return adc_read_dt(&amp;current, &amp;sequence);
-}</code></pre></div><p class="example-note">示例返回原始 ADC 数值。正式产品在启动时 setup 一次、周期内重复读取，并在 acquisition 中完成平均和工程量换算。通道引用依赖当前板 DTS。该模块没有自定义的 gd32_* 产品 API。</p></div><p class="source"><a href="../modules/gd32e505/README.md">设计说明</a></p></article>
+}</code></pre></div><p class="example-note">示例返回原始 ADC 数值。正式产品在启动时 setup 一次、周期内重复读取，并在 acquisition 中完成平均和工程量换算。通道引用依赖当前板 DTS。该模块没有自定义的 gd32_* 产品 API。</p></div><p class="source"><a href="../modules/platform/gd32e505/README.md">设计说明</a></p></article>
     </section>
 
     <section id="integration">

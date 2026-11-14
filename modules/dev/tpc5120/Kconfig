@@ -1,0 +1,15 @@
+config ADC_TPC5120
+    bool "3PEAK TPC5120 SPI ADC"
+    default y
+    depends on ADC && SPI && DT_HAS_THREEPEAK_TPC5120_ENABLED
+    help
+      Synchronous 12-bit acquisition through the standard Zephyr ADC API.
+      Supports all 16 single-ended channels and external reference ranges
+      of 0 to VREF or 0 to 2 x VREF. No dedicated thread or heap allocation.
+
+config ADC_TPC5120_INIT_PRIORITY
+    int "TPC5120 initialization priority"
+    default 80
+    depends on ADC_TPC5120
+    help
+      Must be greater than SPI_INIT_PRIORITY.

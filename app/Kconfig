@@ -1,15 +1,9 @@
 rsource "status/Kconfig"
 
-config IDU_SAMPLE_PERIOD_MS
-    int "Acquisition period in milliseconds"
-    default 500
-    range 100 1000
-
-config IDU_ADC_AVERAGE_COUNT
-    int "Samples averaged per product analog input"
-    depends on ADC
-    default 10
-    range 1 64
+config IDU_ACQUISITION_STACK_SIZE
+    int "Acquisition thread stack size"
+    default 4096
+    range 2048 16384
 
 config IDU_IAPV3
     bool "MV-IO IAPv3 AES/SGZ receiver"

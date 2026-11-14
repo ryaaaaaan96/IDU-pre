@@ -1,0 +1,8 @@
+config FAN
+    bool "Fan PWM control and speed feedback"
+    depends on PWM
+    select PWM_CAPTURE
+    help
+      Instance-based PWM outputs and period feedback using the standard
+      Zephyr PWM API. One shared input thread processes capture notifications.
+      No shell, protocol or vendor registers.

@@ -1,6 +1,6 @@
 # 硬件与本地采样
 
-[文档导航](README.md) · [GD32E505 模块](../modules/gd32e505/README.md)
+[文档导航](README.md) · [GD32E505 模块](../modules/platform/gd32e505/README.md)
 
 ## 平台配置
 

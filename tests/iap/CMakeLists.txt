@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.20.0)
 get_filename_component(IDU_APP ../.. ABSOLUTE)
-list(APPEND ZEPHYR_EXTRA_MODULES ${IDU_APP}/modules/quicklz ${IDU_APP}/modules/iap
-  ${IDU_APP}/modules/dataprocess ${IDU_APP}/modules/modbus)
-list(APPEND ZEPHYR_EXTRA_MODULES ${IDU_APP}/modules/common
-  ${IDU_APP}/modules/transmit ${IDU_APP}/modules/vport)
+list(APPEND ZEPHYR_EXTRA_MODULES ${IDU_APP}/modules/func/quicklz ${IDU_APP}/modules/func/iap
+  ${IDU_APP}/modules/func/dataprocess ${IDU_APP}/modules/func/modbus)
+list(APPEND ZEPHYR_EXTRA_MODULES ${IDU_APP}/modules/func/common
+  ${IDU_APP}/modules/func/transmit ${IDU_APP}/modules/func/vport)
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(iap_receiver_tests)
 target_include_directories(app PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
@@ -21,7 +21,7 @@ execute_process(COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_CURRENT_LIST_DIR}/fixtures.
   ${IAP_FIXTURE_CONFIG} COMMAND_ERROR_IS_FATAL ANY)
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
   ${CMAKE_CURRENT_LIST_DIR}/fixtures.py ${IDU_APP}/tools/pack_sgz.py
-  ${IDU_APP}/modules/iap/scripts/public_key.py ${IDU_APP}/conf/iapv3.conf)
+  ${IDU_APP}/modules/func/iap/scripts/public_key.py ${IDU_APP}/conf/iapv3.conf)
 target_sources(app PRIVATE src/main.c)
 zephyr_ld_options(-Wl,--wrap=boot_is_img_confirmed -Wl,--wrap=boot_request_upgrade
                   -Wl,--wrap=sys_reboot)

@@ -1,0 +1,4 @@
+name: rs485
+build:
+  cmake: .
+  kconfig: Kconfig

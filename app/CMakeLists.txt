@@ -4,10 +4,10 @@ set(required_services
   DATAPROCESS
   TRANSMIT
   UART_INTERRUPT_DRIVEN
-  GPIO ADC)
+  GPIO ADC PWM FAN)
 foreach(feature IN LISTS required_services)
   if(NOT CONFIG_${feature})
-    message(FATAL_ERROR "IDU-pre requires CONFIG_${feature}=y")
+    message(FATAL_ERROR "IDU-Transformer requires CONFIG_${feature}=y")
   endif()
 endforeach()
 
@@ -16,4 +16,7 @@ target_sources(app PRIVATE main.c)
 add_subdirectory(protocol)
 add_subdirectory(acquisition)
 add_subdirectory(status)
-add_subdirectory(process)
+add_subdirectory(dp_callbacks)
+if(CONFIG_FAN)
+  add_subdirectory(fan_control)
+endif()

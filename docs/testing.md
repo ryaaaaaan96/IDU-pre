@@ -1,3 +1,20 @@
+# 本次同步验证（2026-11-14）
+
+同步来源：`/home/ryan/Document/IDU-Transformer`。应用模块按 `func/dev/platform` 分层；
+CMSIS 和 GigaDevice HAL 继续使用工作区 west 管理的官方依赖。
+本地实际验证基线为 Zephyr v4.5.0、Zephyr SDK 1.0.1，未修改工作区依赖。
+
+- 默认 MCUboot + IAPv3 产品构建、镜像验签及 SGZ 导出通过。
+- `native_sim/native/64`：`modbus_support` 3 项、`dp_access` 1 项通过。
+- 旧 `dp_core` 仍引用 `dp_*_para_*`、`is_write` 及独立读写回调，编译失败；
+  完整 `tests/run.sh` 尚未适配新 DP API，不能将本次验证视为完整回归通过。
+- 新 DP 测试覆盖按 key 读写、GET/SET 回调、越界拒绝及失败后原值保持。
+- 尚未进行实板启动、风机 PWM/反馈、温度/DI、串口转发与 IAP 上传验证。
+
+以下为同步前的验证资料，其产品接口与点表应以当前源码为准。
+
+---
+
 # 测试与验证
 
 [文档导航](README.md) · [构建与升级](build-and-upgrade.md)

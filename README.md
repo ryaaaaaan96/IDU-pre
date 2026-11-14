@@ -37,7 +37,7 @@ bash applications/IDU-pre/tests/run.sh
 设置项（采样周期、标签、保存地址）保存在 `dp-params` 总分区内的设备 NVS。
 当前点表 24 行，DI/AI 等非持久点只存 RAM。参数更新后默认五秒延后保存，
 主动重启前需停止修改并调用 `dp_flush()`；布局不匹配会清空 DP 参数区并重建，重新使用配置初值。
-接口与存储布局见 [DP 模块](modules/dataprocess/README.md)。
+接口与存储布局见 [DP 模块](modules/func/dataprocess/README.md)。
 保持寄存器 16 写 1 可同步保存；地址 0 为持久采样周期，17 为非持久对照值，
 18 为操作命令（1 保存后重启、2 恢复默认、3 恢复出厂）。
 重启对比报文见 [Modbus 手动测试](docs/modbus-test.md)。
@@ -72,14 +72,14 @@ app/main.c                    启动、采样周期、故障留驻
   ├─ app/acquisition/         读取 DI/AI，同步写 DP
   ├─ app/process/points.c     读取采样周期
   └─ app/status/              整机状态、LED、故障
-modules/dataprocess/          点值、回调、本机参数 NVS
-modules/common/               共享数值类型、转换与放缩
-modules/vport/                字节与事件输入、同步发送回调
-modules/transmit/             协议识别、转发表与 DP 映射
-modules/iap/                  IAPv3/SGZ 接收和解包
-modules/modbus/               无分配 RTU 编解码和构建兼容
-modules/watchdog/             任务监控与外部喂狗
-modules/gd32e505/             SoC、时钟、ADC
+modules/func/dataprocess/          点值、回调、本机参数 NVS
+modules/func/common/               共享数值类型、转换与放缩
+modules/func/vport/                字节与事件输入、同步发送回调
+modules/func/transmit/             协议识别、转发表与 DP 映射
+modules/func/iap/                  IAPv3/SGZ 接收和解包
+modules/func/modbus/               无分配 RTU 编解码和构建兼容
+modules/func/watchdog/             任务监控与外部喂狗
+modules/platform/gd32e505/             SoC、时钟、ADC
 ```
 
 启动顺序：`status_init()` → `acquisition_inputs_init()` → 可选 `iap_init()` →
@@ -93,9 +93,9 @@ modules/gd32e505/             SoC、时钟、ADC
 | 要做的事 | 文档 |
 | --- | --- |
 | 维护点表和参数映射 | [协议点表](app/protocol/README.md) |
-| 使用 DP 接口 | [DP 模块](modules/dataprocess/README.md) |
+| 使用 DP 接口 | [DP 模块](modules/func/dataprocess/README.md) |
 | 调整堆、点值或参数容量 | [内存管理](docs/memory-management.md) |
 | 构建、签名、分区 | [构建与升级](docs/build-and-upgrade.md) |
 | 核对硬件 | [硬件说明](docs/hardware.md) |
 | 运行测试 | [验证说明](docs/testing.md) |
-| 故障与看门狗 | [故障策略](docs/fault-policy.md)、[watchdog 模块](modules/watchdog/README.md) |
+| 故障与看门狗 | [故障策略](docs/fault-policy.md)、[watchdog 模块](modules/func/watchdog/README.md) |

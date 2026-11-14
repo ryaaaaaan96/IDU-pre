@@ -1,185 +1,92 @@
-#include "acquisition/acquisition.h"
-#include "protocol/inc/signal_keys.h"
-#include <dataprocess/dataprocess.h>
-#include <zephyr/drivers/adc.h>
-#include <zephyr/drivers/gpio.h>
+#include "acquisition.h"
+#include "acquisition_internal.h"
+#include "status/inc/status.h"
+#include <watchdog/watchdog.h>
+#include <zephyr/kernel.h>
 #include <errno.h>
 
-#define IO_NODE DT_NODELABEL(idu_io)
+static K_THREAD_STACK_DEFINE(acquisition_stack, CONFIG_IDU_ACQUISITION_STACK_SIZE);
+static struct k_thread acquisition_thread;
+static bool initialized;
 
-/* 每路 AI 的硬件配置和目标测点直接放在同一行配置中。 */
-struct analog_point {
-    struct adc_dt_spec spec;
-    uint16_t device_id;
-    uint16_t signal_key;
-};
-
-static const struct analog_point analog_inputs[] = {
-    {
-        .spec = ADC_DT_SPEC_GET_BY_NAME(IO_NODE, current_1),
-        .device_id = DEVICE_LOCAL,
-        .signal_key = SIGNAL_CURRENT_1,
-    },
-    {
-        .spec = ADC_DT_SPEC_GET_BY_NAME(IO_NODE, current_2),
-        .device_id = DEVICE_LOCAL,
-        .signal_key = SIGNAL_CURRENT_2,
-    },
-    {
-        .spec = ADC_DT_SPEC_GET_BY_NAME(IO_NODE, current_3),
-        .device_id = DEVICE_LOCAL,
-        .signal_key = SIGNAL_CURRENT_3,
-    },
-    {
-        .spec = ADC_DT_SPEC_GET_BY_NAME(IO_NODE, current_4),
-        .device_id = DEVICE_LOCAL,
-        .signal_key = SIGNAL_CURRENT_4,
-    },
-    {
-        .spec = ADC_DT_SPEC_GET_BY_NAME(IO_NODE, current_5),
-        .device_id = DEVICE_LOCAL,
-        .signal_key = SIGNAL_CURRENT_5,
-    },
-    {
-        .spec = ADC_DT_SPEC_GET_BY_NAME(IO_NODE, current_6),
-        .device_id = DEVICE_LOCAL,
-        .signal_key = SIGNAL_CURRENT_6,
-    },
-    {
-        .spec = ADC_DT_SPEC_GET_BY_NAME(IO_NODE, current_7),
-        .device_id = DEVICE_LOCAL,
-        .signal_key = SIGNAL_CURRENT_7,
-    },
-    {
-        .spec = ADC_DT_SPEC_GET_BY_NAME(IO_NODE, current_8),
-        .device_id = DEVICE_LOCAL,
-        .signal_key = SIGNAL_CURRENT_8,
-    },
-};
-
-/* 16 路 DI 合成为一个位图测点；不是每路 DI 分别写一次测点。 */
-static const struct {
-    struct gpio_dt_spec spec[SAMPLE_DI_COUNT];
-    uint16_t device_id;
-    uint16_t signal_key;
-} digital_inputs = {
-    .spec =
-        {
-            GPIO_DT_SPEC_GET(IO_NODE, di1_gpios),
-            GPIO_DT_SPEC_GET(IO_NODE, di2_gpios),
-            GPIO_DT_SPEC_GET(IO_NODE, di3_gpios),
-            GPIO_DT_SPEC_GET(IO_NODE, di4_gpios),
-            GPIO_DT_SPEC_GET(IO_NODE, di5_gpios),
-            GPIO_DT_SPEC_GET(IO_NODE, di6_gpios),
-            GPIO_DT_SPEC_GET(IO_NODE, di7_gpios),
-            GPIO_DT_SPEC_GET(IO_NODE, di8_gpios),
-            GPIO_DT_SPEC_GET(IO_NODE, di9_gpios),
-            GPIO_DT_SPEC_GET(IO_NODE, di10_gpios),
-            GPIO_DT_SPEC_GET(IO_NODE, di11_gpios),
-            GPIO_DT_SPEC_GET(IO_NODE, di12_gpios),
-            GPIO_DT_SPEC_GET(IO_NODE, di13_gpios),
-            GPIO_DT_SPEC_GET(IO_NODE, di14_gpios),
-            GPIO_DT_SPEC_GET(IO_NODE, di15_gpios),
-            GPIO_DT_SPEC_GET(IO_NODE, di16_gpios),
-        },
-    .device_id = DEVICE_LOCAL,
-    .signal_key = SIGNAL_DI,
-};
-
-int acquisition_inputs_init(void)
+static void run(void *arg1, void *arg2, void *arg3)
 {
-    /* 电流换算沿用 12 位、3.3 V、单端且无硬件过采样的配置。 */
-    for (size_t i = 0; i < ARRAY_SIZE(analog_inputs); ++i) {
-        const struct adc_dt_spec *spec = &analog_inputs[i].spec;
-        if (!adc_is_ready_dt(spec)) {
-            return -ENODEV;
-        }
-        if (spec->vref_mv != 3300) {
-            return -EINVAL;
-        }
-        if (spec->resolution != 12) {
-            return -EINVAL;
-        }
-        if (spec->channel_cfg.gain != ADC_GAIN_1) {
-            return -EINVAL;
-        }
-        if (spec->channel_cfg.reference != ADC_REF_VDD_1) {
-            return -EINVAL;
-        }
-        if (spec->channel_cfg.differential || spec->oversampling) {
-            return -EINVAL;
-        }
-    }
+    ARG_UNUSED(arg1);
+    ARG_UNUSED(arg2);
+    ARG_UNUSED(arg3);
+    int err = 0;
 
-    for (size_t i = 0; i < ARRAY_SIZE(digital_inputs.spec); ++i) {
-        if (!gpio_is_ready_dt(&digital_inputs.spec[i])) {
-            return -ENODEV;
-        }
-        int err = gpio_pin_configure_dt(&digital_inputs.spec[i], GPIO_INPUT);
-        if (err) {
-            return err;
-        }
+    /* 线程随模块初始化启动；镜像确认和启动等待结束前不执行采样。 */
+    while (status_phase_get() == STATUS_STARTING) {
+        k_msleep(10);
     }
+    while (status_phase_get() == STATUS_RUN) {
+        int64_t next_di, next_analog, next_fan = ACQUISITION_IDLE_DEADLINE;
+#ifdef CONFIG_FAN
+        err = fan_feedback_acquire(&next_fan);
+#endif
+        if (!err) {
+            err = di_acquire(&next_di);
+        }
+        if (!err) {
+            err = analog_acquire(&next_analog);
+        }
+        if (err) {
+            /* 保留原始采样错误，即使通知返回 0 也不能继续采样。 */
+            watchdog_report_fault(err, "Acquisition failed", WATCHDOG_ACTION_RESET, 200);
+            break;
+        }
+        if (status_phase_get() != STATUS_RUN) {
+            break;
+        }
+        const int64_t next = MIN(MIN(next_di, next_analog), next_fan);
+        /* 限制等待长度，以便及时响应整机停止；唤醒不代表必须采样。 */
+        const int64_t delay = MIN(next - k_uptime_get(), 100);
 
-    for (size_t i = 0; i < ARRAY_SIZE(analog_inputs); ++i) {
-        int err = adc_channel_setup_dt(&analog_inputs[i].spec);
-        if (err) {
-            return err;
+        if (delay > 0) {
+            k_sleep(K_MSEC(delay));
         }
     }
-    return 0;
+#ifdef CONFIG_FAN
+    fan_feedback_stop();
+#endif
+    analog_stop();
+    status_fault_wait(err);
 }
 
-int acquisition_cycle(void)
+int acquisition_init(void)
 {
-    uint16_t digital = 0;
-    value_t point_value = {0};
-
-    for (size_t i = 0; i < ARRAY_SIZE(digital_inputs.spec); ++i) {
-        int value = gpio_pin_get_dt(&digital_inputs.spec[i]);
-        if (value < 0) {
-            return value;
-        }
-        size_t bit =
-            DT_ENUM_IDX(IO_NODE, di_bit_order) == 0 ? i : ARRAY_SIZE(digital_inputs.spec) - 1 - i;
-        digital |= (uint16_t)((uint32_t)value << bit);
+    if (initialized) {
+        return -EALREADY;
     }
-    point_value.u16 = digital;
-    int err = dp_set_para_by_key(
-        digital_inputs.device_id, digital_inputs.signal_key, VALUE_TYPE_U16, &point_value);
+    const status_phase_t phase = status_phase_get();
+    if (phase != STATUS_STARTING && phase != STATUS_RUN) {
+        return -EACCES;
+    }
+    int err = di_init();
+    if (!err) {
+        err = analog_init();
+    }
+#ifdef CONFIG_FAN
+    if (!err) {
+        err = fan_feedback_init();
+    }
+#endif
     if (err) {
         return err;
     }
-
-    for (size_t i = 0; i < ARRAY_SIZE(analog_inputs); ++i) {
-        const struct analog_point *input = &analog_inputs[i];
-        uint16_t raw;
-        uint32_t sum = 0;
-        struct adc_sequence sequence = {
-            .buffer = &raw,
-            .buffer_size = sizeof(raw),
-        };
-        err = adc_sequence_init_dt(&input->spec, &sequence);
-        if (err) {
-            return err;
-        }
-        for (uint32_t n = 0; n < CONFIG_IDU_ADC_AVERAGE_COUNT; ++n) {
-            err = adc_read_dt(&input->spec, &sequence);
-            if (err) {
-                return err;
-            }
-            sum += raw;
-        }
-        /* 原电流公式：raw / 4096 * 3.3 / 0.24 * 50 * 100，超限饱和。 */
-        uint32_t value = (sum / CONFIG_IDU_ADC_AVERAGE_COUNT) * 68750U / 4096U;
-        if (value > UINT16_MAX) {
-            value = UINT16_MAX;
-        }
-        point_value.u16 = (uint16_t)value;
-        err = dp_set_para_by_key(input->device_id, input->signal_key, VALUE_TYPE_U16, &point_value);
-        if (err) {
-            return err;
-        }
-    }
+    k_thread_create(&acquisition_thread,
+        acquisition_stack,
+        K_THREAD_STACK_SIZEOF(acquisition_stack),
+        run,
+        NULL,
+        NULL,
+        NULL,
+        7,
+        0,
+        K_FOREVER);
+    k_thread_name_set(&acquisition_thread, "acquisition");
+    initialized = true;
+    k_thread_start(&acquisition_thread);
     return 0;
 }

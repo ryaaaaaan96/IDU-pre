@@ -6,4 +6,4 @@ if(CONFIG_LOG_BLOCK_IN_THREAD)
   message(FATAL_ERROR "status requires CONFIG_LOG_BLOCK_IN_THREAD=n")
 endif()
 
-target_sources(app PRIVATE status.c status_led.c)
+target_sources(app PRIVATE status.c status_led.c fault_wait.c)

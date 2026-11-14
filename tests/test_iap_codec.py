@@ -36,7 +36,7 @@ def module(name, file):
 
 
 packer = module("pack_sgz", APP / "tools/pack_sgz.py")
-pubtool = module("iap_public_key", APP / "modules/iap/scripts/public_key.py")
+pubtool = module("iap_public_key", APP / "modules/func/iap/scripts/public_key.py")
 READ = C.CFUNCTYPE(C.c_int, C.c_void_p, C.c_uint32, C.c_void_p, C.c_size_t)
 WRITE = C.CFUNCTYPE(C.c_int, C.c_void_p, C.c_void_p, C.c_size_t)
 
@@ -45,9 +45,9 @@ def build():
     BUILD.mkdir(parents=True, exist_ok=True)
     subprocess.run([sys.executable, str(APP / "tests/iap/fixtures.py"), str(BUILD)], check=True)
     sources = [
-        APP / "modules/iap/src/sgz.c",
-        APP / "modules/iap/src/verify_rng.c",
-        APP / "modules/quicklz/src/quicklz.c",
+        APP / "modules/func/iap/src/sgz.c",
+        APP / "modules/func/iap/src/verify_rng.c",
+        APP / "modules/func/quicklz/src/quicklz.c",
     ] + [
         TINY / f"source/{x}.c"
         for x in ("aes_encrypt", "aes_decrypt", "sha256", "utils", "ecc", "ecc_dsa")
@@ -58,9 +58,9 @@ def build():
         "-Wextra",
         "-Werror",
         "-I",
-        str(APP / "modules/iap/include"),
+        str(APP / "modules/func/iap/include"),
         "-I",
-        str(APP / "modules/quicklz/include"),
+        str(APP / "modules/func/quicklz/include"),
         "-I",
         str(TINY / "include"),
     ]

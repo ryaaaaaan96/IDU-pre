@@ -1,6 +1,6 @@
 # 内存与容量配置
 
-[文档导航](README.md) · [DP 模块](../modules/dataprocess/README.md) · [验证说明](testing.md)
+[文档导航](README.md) · [DP 模块](../modules/func/dataprocess/README.md) · [验证说明](testing.md)
 
 ## 系统堆
 

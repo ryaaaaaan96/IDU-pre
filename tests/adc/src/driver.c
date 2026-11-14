@@ -1,6 +1,6 @@
 #include <zephyr/ztest.h>
 /* 通过 adc_*() 测试真实后端，仅替换硬件。 */
-#include "../../../modules/gd32e505/drivers/adc/adc_gd32e50x.c"
+#include "../../../modules/platform/gd32e505/drivers/adc/adc_gd32e50x.c"
 
 int test_pin_error;
 static uint32_t ctl1, calibration_stall, bus_rate;

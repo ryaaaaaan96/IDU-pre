@@ -1,0 +1,20 @@
+description: |
+  3PEAK TPC5120 16-channel 12-bit SAR ADC with an external reference.
+  Uses SPI mode 0, MSB first. Each conversion requires a separate
+  16-clock CS frame. Channel results follow commands by two frames.
+  Channel gain ADC_GAIN_1 selects 0..VREF; ADC_GAIN_1_2 selects 0..2*VREF.
+  Only ADC_REF_EXTERNAL0 and ADC_ACQ_TIME_DEFAULT are supported.
+  https://static.3peak.com/res/doc/ds/Datasheet_TPC512x.pdf
+
+compatible: "threepeak,tpc5120"
+
+include: [adc-controller.yaml, spi-device.yaml]
+
+properties:
+  spi-max-frequency:
+    description: SPI clock frequency in Hz, not greater than 20000000.
+  "#io-channel-cells":
+    const: 1
+
+io-channel-cells:
+  - input

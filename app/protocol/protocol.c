@@ -1,22 +1,10 @@
 #include "inc/protocol.h"
 #include "inc/process_table.h"
 #include "inc/signal_keys.h"
-#include "rs485_1.h"
 #include "status/inc/status.h"
 #include <transmit/transmit.h>
-#include <zephyr/logging/log.h>
 #include <errno.h>
 
-LOG_MODULE_REGISTER(app_protocol, LOG_LEVEL_INF);
-
-#define FORWARD_NODE DT_ALIAS(idu_forward)
-#if DT_NODE_HAS_PROP(FORWARD_NODE, uart)
-#define FORWARD_UART DT_PHANDLE(FORWARD_NODE, uart)
-#else
-#define FORWARD_UART DT_PARENT(FORWARD_NODE)
-#endif
-#define FORWARD_BAUD DT_PROP(FORWARD_UART, current_speed)
-#define FORWARD_GAP_US (FORWARD_BAUD > 19200 ? 1750 : DIV_ROUND_UP(35000000U, FORWARD_BAUD))
 #ifdef CONFIG_IDU_IAPV3
 #define FORWARD_FRAME_SIZE CONFIG_MODBUS_BUFFER_SIZE
 extern const tr_modbus_route_t protocol_upgrade_routes[];
@@ -26,46 +14,39 @@ extern const size_t protocol_upgrade_route_count;
 #endif
 extern const tr_modbus_point_t protocol_forward_points[];
 extern const size_t protocol_forward_point_count;
-
-static vport_t forward_port;
-static K_THREAD_STACK_DEFINE(protocol_stack, 8192);
-static struct k_thread protocol_thread;
-
-/* 启动时读取站号并填充，绑定后不再修改。 */
+static tr_engine_t *engine;
+static tr_session_t **sessions;
+static size_t session_count;
 static tr_protocol_t protocols[] = {
-    {.type = TR_PROTOCOL_MODBUS,
-        .max_frame = FORWARD_FRAME_SIZE,
-        .timeout_us = 500000,
-        .modbus = {.gap_us = FORWARD_GAP_US}},
-};
-static const tr_config_t ports[] = {
-    {.port = &forward_port,
-        .protocols = protocols,
-        .protocol_count = ARRAY_SIZE(protocols),
-        .rx_capacity = FORWARD_FRAME_SIZE,
-        .tx_capacity = 256,
-        .send_timeout_ms = 100},
+    {.type = TR_PROTOCOL_MODBUS, .max_frame = FORWARD_FRAME_SIZE, .timeout_us = 500000},
 };
 
-static void run(void *a, void *b, void *c)
+static bool accept_event(void *context, const vport_event_t *event)
 {
-    ARG_UNUSED(a);
-    ARG_UNUSED(b);
-    ARG_UNUSED(c);
-    while (true) {
-        vport_event_t event;
-        int err = rs485_1_receive(&event);
-        if (err || status_phase_get() != STATUS_RUN) {
-            continue;
-        }
-        err = vport_input(&forward_port, &event);
-        if (err && err != -EIO) {
-            LOG_WRN("RS485-1 event failed (%d)", err);
-        }
+    ARG_UNUSED(context);
+    ARG_UNUSED(event);
+    return status_phase_get() == STATUS_RUN;
+}
+
+uint8_t protocol_unit(void)
+{
+    return protocols[0].modbus.unit;
+}
+
+void protocol_deinit(void)
+{
+    while (session_count) {
+        (void)tr_session_destroy(sessions[--session_count]);
+    }
+    k_free(sessions);
+    sessions = NULL;
+    if (engine) {
+        (void)tr_engine_destroy(engine);
+        engine = NULL;
     }
 }
 
-int protocol_init(void)
+static int init_data(void)
 {
     int err = dp_init();
     if (err) {
@@ -75,46 +56,75 @@ int protocol_init(void)
     if (err) {
         return err;
     }
-    err = rs485_1_init(&forward_port);
-    if (err) {
-        return err;
-    }
+    return 0;
+}
+
+static int configure_protocol(void)
+{
     value_t address = {0};
-    err = dp_get_para_by_index(DEVICE_LOCAL, PROCESS_SAVED_ADDRESS, VALUE_TYPE_U8, &address);
+    int err = dp_get_value_by_index(&(dp_index_access_t){.device_id = DEVICE_LOCAL,
+                                        .signal_index = PROCESS_UNIT_ID,
+                                        .value_type = VALUE_TYPE_U16,
+                                        .flags = DP_ACCESS_FLAG_NONE},
+        &address);
     if (err) {
         return err;
     }
-    value_t current = {.u16 = address.u8};
-    err = dp_set_para_by_index(DEVICE_LOCAL, PROCESS_ADDRESS, VALUE_TYPE_U16, &current);
-    if (err) {
-        return err;
-    }
-    protocols[0].modbus.unit = address.u8;
+    protocols[0].modbus.unit = (uint8_t)address.u16;
     protocols[0].modbus.points = protocol_forward_points;
     protocols[0].modbus.point_count = protocol_forward_point_count;
 #ifdef CONFIG_IDU_IAPV3
     protocols[0].modbus.routes = protocol_upgrade_routes;
     protocols[0].modbus.route_count = protocol_upgrade_route_count;
 #endif
-    for (size_t i = 0; i < ARRAY_SIZE(ports); ++i) {
-        err = tr_register(&ports[i]);
+    return 0;
+}
+
+int protocol_init(
+    vport_t *port, const protocol_channel_config_t *configs, size_t count, uint32_t gap_us)
+{
+    if (!port || !configs || !count || !gap_us) {
+        return -EINVAL;
+    }
+    if (engine || sessions) {
+        return -EALREADY;
+    }
+    int err = init_data();
+    if (!err) {
+        err = configure_protocol();
+    }
+    if (err) {
+        return err;
+    }
+    protocols[0].modbus.gap_us = gap_us;
+    tr_engine_config_t config = {.port = port,
+        .protocols = protocols,
+        .protocol_count = ARRAY_SIZE(protocols),
+        .send_timeout_ms = 100};
+    err = tr_engine_create(&config, &engine);
+    if (err) {
+        return err;
+    }
+    sessions = k_calloc(count, sizeof(*sessions));
+    if (!sessions) {
+        protocol_deinit();
+        return -ENOMEM;
+    }
+    for (size_t i = 0; i < count; ++i) {
+        tr_session_config_t session = {
+            .channel_id = configs[i].channel_id,
+            .rx_capacity = configs[i].upgrade ? FORWARD_FRAME_SIZE : 256,
+            .tx_capacity = 256,
+            .max_frame = configs[i].upgrade ? FORWARD_FRAME_SIZE : 256,
+            .allow_routes = configs[i].upgrade,
+            .accept = accept_event,
+        };
+        err = tr_session_create(engine, &session, &sessions[i]);
         if (err) {
+            protocol_deinit();
             return err;
         }
+        ++session_count;
     }
-    k_thread_create(&protocol_thread,
-        protocol_stack,
-        K_THREAD_STACK_SIZEOF(protocol_stack),
-        run,
-        NULL,
-        NULL,
-        NULL,
-        8,
-        0,
-        K_FOREVER);
-    k_thread_name_set(&protocol_thread, "protocol");
-    rs485_1_start();
-    k_thread_start(&protocol_thread);
-    LOG_INF("Modbus unit %u ready on RS485-1", address.u8);
     return 0;
 }

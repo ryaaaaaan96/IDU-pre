@@ -1,0 +1,18 @@
+# 构建和测试输出
+build/
+build-*/
+twister-out*/
+
+# Python 环境和缓存
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+
+# 编辑器和系统临时文件
+*.swp
+*.swo
+*~
+.DS_Store

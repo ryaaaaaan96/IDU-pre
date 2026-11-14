@@ -1,0 +1,45 @@
+config PWM_CAPTURE_GD32
+    bool "GD32 standard PWM period capture API"
+    default y
+    depends on PWM && SOC_GD32E505 && DT_HAS_GD_GD32_PWM_CAPTURE_ENABLED
+    select PWM_CAPTURE
+    select PINCTRL
+    select RESET
+    help
+      Dedicated 16-bit or 32-bit timer capture device. Implements standard
+      PWM period capture on a selected channel in single or continuous mode.
+      Pulse width capture and PWM output are unsupported on this device.
+
+config PWM_CAPTURE_GD32_DIAGNOSTICS
+    bool "GD32 capture timeout register diagnostics"
+    depends on PWM_CAPTURE_GD32 && LOG
+    help
+      Log timer, clock, pin routing and interrupt state when stopping an
+      unfinished capture from thread context. Intended for board bring-up.
+
+config ADC_GD32E50X
+    bool "GD32E50x synchronous ADC driver"
+    default y
+    depends on ADC && SOC_GD32E505
+    depends on DT_HAS_GD_GD32E50X_ADC_ENABLED
+    select PINCTRL
+    select RESET
+    select USE_GD32_ADC
+    help
+      Bounded polling driver for ADC0 external channels. Supports single-channel
+      synchronous reads, 6/8/10/12-bit resolution and explicit calibration.
+      DMA, asynchronous reads, sequence options and oversampling are unsupported.
+
+config UART_GD32_ASYNC
+    bool "GD32 UART standard asynchronous API"
+    default y if UART_ASYNC_API
+    depends on SOC_GD32E505 && USART_GD32 && DMA_GD32 && UART_ASYNC_API
+    select UART_INTERRUPT_DRIVEN
+    help
+      Platform extension of the upstream GD32 UART driver with DMA TX.
+      DMA RX uses hardware receiver timeout and caller-owned double buffers.
+      UART instances without RX DMA retain interrupt-based async reception.
+
+# 按硬件能力声明；不能依赖 DMA 开关，否则与其他驱动的 select DMA 形成环。
+config SERIAL_SUPPORT_ASYNC
+    default y if SOC_GD32E505 && USART_GD32 && DT_HAS_GD_GD32_DMA_ENABLED

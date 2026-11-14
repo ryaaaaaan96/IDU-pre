@@ -1,0 +1,4 @@
+name: fan
+build:
+  cmake: .
+  kconfig: Kconfig

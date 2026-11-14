@@ -1,13 +1,17 @@
+#include <zephyr/dt-bindings/dma/gd32_dma.h>
 /dts-v1/;
 
 #include <mem.h>
 #include <arm/gd/gd32e505.dtsi>
+#include <zephyr/dt-bindings/gpio/gpio.h>
 #include <zephyr/dt-bindings/adc/adc.h>
-#include "idu_pre-pinctrl.dtsi"
+#include <zephyr/dt-bindings/pwm/pwm.h>
+#include <dt-bindings/pwm/gd32e505-pwm.h>
+#include <dt-bindings/pinctrl/gd32e505v(e-c)xx-pinctrl.h>
 
 / {
-    model = "IDU-pre MV-IO GD32E505";
-    compatible = "idu,pre";
+    model = "IDU-Transformer MV-IO GD32E505";
+    compatible = "idu,transformer";
 
     hxtal: hxtal-clock {
         compatible = "fixed-clock";
@@ -40,88 +44,87 @@
     aliases {
         dp-params = &dp_params;
         led0 = &run_led;
-        idu-forward = &forward_port;
-        /* CO/TR 共用此 RS485 链路，用于单总线性能测试。 */
+        rs485-1 = &usart2;
+        rs485-2 = &usart5;
+        rs485-3 = &usart1;
+        di1 = &di1;
+        di2 = &di2;
+        di3 = &di3;
+        di4 = &di4;
+        di5 = &di5;
+        di6 = &di6;
+        di7 = &di7;
+        di8 = &di8;
+        di9 = &di9;
+        di10 = &di10;
     };
 
     leds {
         compatible = "gpio-leds";
-        run_led: run-led { gpios = <&gpioa 8 GPIO_ACTIVE_LOW>; };
+        run_led: run-led {};
     };
 
-    idu_io: idu-io {
-        compatible = "idu,pre-io";
-        di-bit-order = "lsb-first";
-        address-bit-order = "msb-first";
-        address-offset = <1>;
-        io-channels = <&adc0 13>, <&adc0 0>, <&adc0 1>, <&adc0 2>, <&adc0 3>, <&adc0 4>, <&adc0 11>, <&adc0 12>;
-        io-channel-names = "current-1", "current-2", "current-3", "current-4", "current-5", "current-6", "current-7", "current-8";
-        di1-gpios = <&gpioc 6 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-        di2-gpios = <&gpioc 7 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-        di3-gpios = <&gpioc 8 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-        di4-gpios = <&gpioc 9 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-        di5-gpios = <&gpiob 1 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-        di6-gpios = <&gpiob 2 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-        di7-gpios = <&gpiob 10 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-        di8-gpios = <&gpiob 11 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-        di9-gpios = <&gpioe 1 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-        di10-gpios = <&gpiob 8 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-        di11-gpios = <&gpiob 9 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-        di12-gpios = <&gpioe 0 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-        di13-gpios = <&gpioe 2 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-        di14-gpios = <&gpioe 3 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-        di15-gpios = <&gpioe 4 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-        di16-gpios = <&gpioe 5 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-        address1-gpios = <&gpiod 8 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-        address2-gpios = <&gpiod 9 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-        address3-gpios = <&gpiod 10 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
-        address4-gpios = <&gpiod 11 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
+    zephyr,user {
+        rs485-1-de-gpios = <&gpiod 10 GPIO_ACTIVE_HIGH>;
+        rs485-2-de-gpios = <&gpioc 8 GPIO_ACTIVE_HIGH>;
+        rs485-3-de-gpios = <&gpiob 3 GPIO_ACTIVE_HIGH>;
+        /* 风扇反馈选择线 A/B/C，逻辑位顺序为低位到高位。 */
+        fan-select-gpios = <&gpioe 13 GPIO_ACTIVE_HIGH>, <&gpioe 14 GPIO_ACTIVE_HIGH>,
+                           <&gpioe 15 GPIO_ACTIVE_HIGH>;
+        io-channels = <&adc0 10>, <&adc0 11>, <&adc0 12>, <&adc0 13>,
+                      <&adc0 4>, <&adc0 5>, <&adc0 6>, <&adc0 7>,
+                      <&adc0 14>, <&adc0 15>, <&adc0 8>, <&adc0 9>,
+                      <&pt_adc 0>, <&pt_adc 1>, <&pt_adc 2>, <&pt_adc 3>,
+                      <&pt_adc 4>, <&pt_adc 5>, <&pt_adc 6>, <&pt_adc 7>;
+        io-channel-names = "pt1", "pt2", "pt3", "pt4", "pt5", "pt6", "pt7", "pt8",
+                           "pt9", "pt10", "pt11", "pt12", "pt13", "pt14", "pt15", "pt16",
+                           "pt17", "pt18", "pt19", "pt20";
+        pwms = <&timer8_pwm 0 PWM_HZ(10000) PWM_POLARITY_NORMAL>,
+               <&timer8_pwm 1 PWM_HZ(10000) PWM_POLARITY_NORMAL>,
+               <&timer4_pwm 0 PWM_HZ(10000) PWM_POLARITY_NORMAL>,
+               <&timer4_pwm 1 PWM_HZ(10000) PWM_POLARITY_NORMAL>,
+               <&timer4_pwm 2 PWM_HZ(10000) PWM_POLARITY_NORMAL>,
+               <&timer4_pwm 3 PWM_HZ(10000) PWM_POLARITY_NORMAL>,
+               <&timer0_pwm 1 PWM_HZ(10000) PWM_POLARITY_NORMAL>,
+               <&timer0_pwm 2 PWM_HZ(10000) GD32_PWM_COMPLEMENTARY>,
+               <&fan_capture 3 0 PWM_POLARITY_NORMAL>;
+        pwm-names = "fan0", "fan1", "fan2", "fan3", "fan4", "fan5", "fan6", "fan7", "fan-feedback";
+
     };
 
-    soc {
-        spi1: spi@40003800 {
-            compatible = "gd,gd32-spi";
-            reg = <0x40003800 0x400>;
-            interrupts = <36 0>;
-            clocks = <&cctl GD32_CLOCK_SPI1>;
-            resets = <&rctl GD32_RESET_SPI1>;
+};
+
+&spi1 {
+    status = "okay";
+    external_flash: flash@0 {
+        compatible = "jedec,spi-nor";
+        reg = <0>;
+        spi-max-frequency = <10000000>;
+        spi-cpol;
+        spi-cpha;
+        size = <DT_SIZE_M(8)>; /* GD25Q64：64 Mbit / 8 MiB。 */
+        partitions {
+            compatible = "fixed-partitions";
             #address-cells = <1>;
-            #size-cells = <0>;
-            pinctrl-0 = <&flash_spi_default>;
-            pinctrl-names = "default";
-            cs-gpios = <&gpiob 12 GPIO_ACTIVE_LOW>;
-            status = "okay";
-            external_flash: flash@0 {
-                compatible = "jedec,spi-nor";
-                reg = <0>;
-                spi-max-frequency = <10000000>;
-                spi-cpol;
-                spi-cpha;
-                size = <33554432>; /* W25Q32：32 Mbit，需核对实际装配型号。 */
-                partitions {
-                    compatible = "fixed-partitions";
-                    #address-cells = <1>;
-                    #size-cells = <1>;
-                    legacy_params: partition@10000 {
-                        label = "legacy-dp-params";
-                        reg = <0x10000 0x4000>;
-                        read-only;
-                    };
-                    /* IAPv3 结果日志；偏移与既有设备保持一致，不参与参数清空。 */
-                    iap_journal: partition@18000 {
-                        label = "idu-iap-journal";
-                        reg = <0x18000 0x4000>;
-                    };
-                    /* SGZ 暂存上限与 CONFIG_IAP_MAX_CONTAINER_SIZE 成对维护。 */
-                    dp_params: partition@1c000 {
-                        label = "dp-params";
-                        reg = <0x1c000 0x10000>;
-                    };
-                    iap_staging: partition@201000 {
-                        label = "idu-iap-sgz";
-                        reg = <0x201000 0x80000>;
-                    };
-                };
+            #size-cells = <1>;
+            legacy_params: partition@10000 {
+                label = "legacy-dp-params";
+                reg = <0x10000 0x4000>;
+                read-only;
+            };
+            /* IAPv3 结果日志；偏移与既有设备保持一致，不参与参数清空。 */
+            iap_journal: partition@18000 {
+                label = "idu-iap-journal";
+                reg = <0x18000 0x4000>;
+            };
+            /* SGZ 暂存上限与 CONFIG_IAP_MAX_CONTAINER_SIZE 成对维护。 */
+            dp_params: partition@1c000 {
+                label = "dp-params";
+                reg = <0x1c000 0x10000>;
+            };
+            iap_staging: partition@201000 {
+                label = "idu-iap-sgz";
+                reg = <0x201000 0x80000>;
             };
         };
     };
@@ -144,89 +147,161 @@
 &usart0 {
     status = "okay";
     current-speed = <115200>;
-    pinctrl-0 = <&debug_uart_default>;
-    pinctrl-names = "default";
 };
+&dma0 {
+    status = "okay";
+};
+
 &usart2 {
+    dmas = <&dma0 1 GD32_DMA_PRIORITY_HIGH>,
+           <&dma0 2 GD32_DMA_PRIORITY_HIGH>;
+    dma-names = "tx", "rx";
     status = "okay";
     current-speed = <115200>;
-    pinctrl-0 = <&rs485_uart_default>;
-    pinctrl-names = "default";
-    forward_port: forwarding-port {
-        compatible = "idu,forward-port";
-        de-gpios = <&gpioa 15 GPIO_ACTIVE_HIGH>;
-        status = "okay";
-    };
 };
+
+&dma1 {
+    status = "okay";
+};
+
+&usart5 {
+    dmas = <&dma1 4 GD32_DMA_PRIORITY_HIGH>,
+           <&dma1 2 GD32_DMA_PRIORITY_HIGH>;
+    dma-names = "tx", "rx";
+    status = "okay";
+    current-speed = <115200>;
+};
+
+&usart1 {
+    dmas = <&dma0 6 GD32_DMA_PRIORITY_HIGH>,
+           <&dma0 5 GD32_DMA_PRIORITY_HIGH>;
+    dma-names = "tx", "rx";
+    status = "okay";
+    current-speed = <115200>;
+};
+
+/* 原 PWM/捕获引脚在本板改作 ADC 和 DO。 */
+&timer0 { status = "disabled"; };
+&timer1 { status = "disabled"; };
+&timer2 { status = "disabled"; };
+&timer4 { status = "disabled"; };
 
 &adc0 {
     status = "okay";
-    clock-prescaler = <6>;
+    clock-prescaler = <8>;
     vdda-millivolts = <3300>;
-    pinctrl-0 = <&analog_default>;
+    pinctrl-0 = <&adc_default>;
     pinctrl-names = "default";
     channel@0 {
         reg = <0>;
         zephyr,gain = "ADC_GAIN_1";
         zephyr,reference = "ADC_REF_VDD_1";
-        zephyr,vref-mv = <3300>;
-        zephyr,acquisition-time = <ADC_ACQ_TIME(ADC_ACQ_TIME_TICKS, 72)>;
+        zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
         zephyr,resolution = <12>;
     };
     channel@1 {
         reg = <1>;
         zephyr,gain = "ADC_GAIN_1";
         zephyr,reference = "ADC_REF_VDD_1";
-        zephyr,vref-mv = <3300>;
-        zephyr,acquisition-time = <ADC_ACQ_TIME(ADC_ACQ_TIME_TICKS, 72)>;
+        zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
         zephyr,resolution = <12>;
     };
     channel@2 {
         reg = <2>;
         zephyr,gain = "ADC_GAIN_1";
         zephyr,reference = "ADC_REF_VDD_1";
-        zephyr,vref-mv = <3300>;
-        zephyr,acquisition-time = <ADC_ACQ_TIME(ADC_ACQ_TIME_TICKS, 72)>;
+        zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
         zephyr,resolution = <12>;
     };
     channel@3 {
         reg = <3>;
         zephyr,gain = "ADC_GAIN_1";
         zephyr,reference = "ADC_REF_VDD_1";
-        zephyr,vref-mv = <3300>;
-        zephyr,acquisition-time = <ADC_ACQ_TIME(ADC_ACQ_TIME_TICKS, 72)>;
+        zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
         zephyr,resolution = <12>;
     };
     channel@4 {
         reg = <4>;
         zephyr,gain = "ADC_GAIN_1";
         zephyr,reference = "ADC_REF_VDD_1";
-        zephyr,vref-mv = <3300>;
-        zephyr,acquisition-time = <ADC_ACQ_TIME(ADC_ACQ_TIME_TICKS, 72)>;
+        zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+        zephyr,resolution = <12>;
+    };
+    channel@5 {
+        reg = <5>;
+        zephyr,gain = "ADC_GAIN_1";
+        zephyr,reference = "ADC_REF_VDD_1";
+        zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+        zephyr,resolution = <12>;
+    };
+    channel@6 {
+        reg = <6>;
+        zephyr,gain = "ADC_GAIN_1";
+        zephyr,reference = "ADC_REF_VDD_1";
+        zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+        zephyr,resolution = <12>;
+    };
+    channel@7 {
+        reg = <7>;
+        zephyr,gain = "ADC_GAIN_1";
+        zephyr,reference = "ADC_REF_VDD_1";
+        zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+        zephyr,resolution = <12>;
+    };
+    channel@8 {
+        reg = <8>;
+        zephyr,gain = "ADC_GAIN_1";
+        zephyr,reference = "ADC_REF_VDD_1";
+        zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+        zephyr,resolution = <12>;
+    };
+    channel@9 {
+        reg = <9>;
+        zephyr,gain = "ADC_GAIN_1";
+        zephyr,reference = "ADC_REF_VDD_1";
+        zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+        zephyr,resolution = <12>;
+    };
+    channel@a {
+        reg = <10>;
+        zephyr,gain = "ADC_GAIN_1";
+        zephyr,reference = "ADC_REF_VDD_1";
+        zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
         zephyr,resolution = <12>;
     };
     channel@b {
         reg = <11>;
         zephyr,gain = "ADC_GAIN_1";
         zephyr,reference = "ADC_REF_VDD_1";
-        zephyr,vref-mv = <3300>;
-        zephyr,acquisition-time = <ADC_ACQ_TIME(ADC_ACQ_TIME_TICKS, 72)>;
+        zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
         zephyr,resolution = <12>;
     };
     channel@c {
         reg = <12>;
         zephyr,gain = "ADC_GAIN_1";
         zephyr,reference = "ADC_REF_VDD_1";
-        zephyr,vref-mv = <3300>;
-        zephyr,acquisition-time = <ADC_ACQ_TIME(ADC_ACQ_TIME_TICKS, 72)>;
+        zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
         zephyr,resolution = <12>;
     };
     channel@d {
         reg = <13>;
         zephyr,gain = "ADC_GAIN_1";
         zephyr,reference = "ADC_REF_VDD_1";
-        zephyr,vref-mv = <3300>;
-        zephyr,acquisition-time = <ADC_ACQ_TIME(ADC_ACQ_TIME_TICKS, 72)>;
+        zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+        zephyr,resolution = <12>;
+    };
+    channel@e {
+        reg = <14>;
+        zephyr,gain = "ADC_GAIN_1";
+        zephyr,reference = "ADC_REF_VDD_1";
+        zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+        zephyr,resolution = <12>;
+    };
+    channel@f {
+        reg = <15>;
+        zephyr,gain = "ADC_GAIN_1";
+        zephyr,reference = "ADC_REF_VDD_1";
+        zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
         zephyr,resolution = <12>;
     };
 };
@@ -237,8 +312,246 @@
 / {
     external_watchdog: external-watchdog {
         compatible = "app,gpio-watchdog";
-        feed-gpios = <&gpioc 13 GPIO_ACTIVE_HIGH>;
         feed-interval-ms = <10>;
         status = "okay";
+    };
+};
+
+/*
+ * IDU-Transformer 板级引脚分配：
+ * - 外设引脚复用和重映射；
+ * - 普通 GPIO 的板级接线、有效电平和上下拉；
+ * - 与具体引脚方案配套的 pinctrl、cs-gpios、de-gpios 等属性。
+ */
+
+&pinctrl {
+    adc_default: adc-default {
+        analog {
+            pinmux = <ADC01_IN4_PA4>, <ADC01_IN5_PA5>,
+                     <ADC01_IN6_PA6>, <ADC01_IN7_PA7>, <ADC01_IN8_PB0>,
+                     <ADC01_IN9_PB1>, <ADC01_IN10_PC0>, <ADC01_IN11_PC1>,
+                     <ADC01_IN12_PC2>, <ADC01_IN13_PC3>, <ADC01_IN14_PC4>,
+                     <ADC01_IN15_PC5>;
+        };
+    };
+    debug_uart_default: debug-uart-default {
+        tx { pinmux = <USART0_TX_PA9_NORMP>; };
+        rx { pinmux = <USART0_RX_PA10_NORMP>; };
+    };
+    rs485_uart_default: rs485-uart-default {
+        tx { pinmux = <USART2_TX_PD8_FRMP>; };
+        rx { pinmux = <USART2_RX_PD9_FRMP>; };
+    };
+    rs485_2_uart_default: rs485-2-uart-default {
+        tx { pinmux = <USART5_TX_PC6>; };
+        rx { pinmux = <USART5_RX_PC7>; };
+    };
+    rs485_3_uart_default: rs485-3-uart-default {
+        tx { pinmux = <USART1_TX_PD5_RMP>; };
+        rx { pinmux = <USART1_RX_PD6_RMP>; };
+    };
+    flash_spi_default: flash-spi-default {
+        output { pinmux = <SPI1_SCK_PB13_OUT>, <SPI1_MOSI_PB15_OUT>; };
+        input { pinmux = <SPI1_MISO_PB14_INP>; };
+    };
+};
+
+&usart0 {
+    pinctrl-0 = <&debug_uart_default>;
+    pinctrl-names = "default";
+};
+
+&usart2 {
+    pinctrl-0 = <&rs485_uart_default>;
+    pinctrl-names = "default";
+};
+
+&usart5 {
+    pinctrl-0 = <&rs485_2_uart_default>;
+    pinctrl-names = "default";
+};
+
+&usart1 {
+    pinctrl-0 = <&rs485_3_uart_default>;
+    pinctrl-names = "default";
+};
+
+&spi1 {
+    pinctrl-0 = <&flash_spi_default>;
+    pinctrl-names = "default";
+    cs-gpios = <&gpiob 12 GPIO_ACTIVE_LOW>;
+};
+
+&run_led {
+    gpios = <&gpiod 11 GPIO_ACTIVE_HIGH>;
+};
+
+/ {
+    gpio-keys {
+        compatible = "gpio-keys";
+        di1: di1 { gpios = <&gpioe 2 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>; };
+        di2: di2 { gpios = <&gpioe 3 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>; };
+        di3: di3 { gpios = <&gpiod 12 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>; };
+        di4: di4 { gpios = <&gpiod 13 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>; };
+        di5: di5 { gpios = <&gpiod 14 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>; };
+        di6: di6 { gpios = <&gpiod 15 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>; };
+        di7: di7 { gpios = <&gpioc 9 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>; };
+        di8: di8 { gpios = <&gpioa 8 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>; };
+        di9: di9 { gpios = <&gpioa 11 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>; };
+        di10: di10 { gpios = <&gpioa 12 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>; };
+    };
+};
+
+&external_watchdog {
+    feed-gpios = <&gpioc 13 GPIO_ACTIVE_HIGH>;
+};
+
+
+&timer8 {
+    status = "okay";
+    prescaler = <0>;
+    timer8_pwm: pwm {
+        status = "okay";
+        pinctrl-0 = <&fan8_default>;
+        pinctrl-names = "default";
+    };
+};
+&pinctrl {
+    fan8_default: fan8-default {
+        outputs { pinmux = <TIMER8_CH0_PE5_OUT_RMP>, <TIMER8_CH1_PE6_OUT_RMP>; };
+    };
+};
+
+&timer4 {
+    status = "okay";
+    prescaler = <0>;
+    timer4_pwm: pwm {
+        status = "okay";
+        pinctrl-0 = <&fan4_default>;
+        pinctrl-names = "default";
+    };
+};
+&pinctrl {
+    fan4_default: fan4-default {
+        outputs { pinmux = <TIMER4_CH0_PA0_OUT>, <TIMER4_CH1_PA1_OUT>, <TIMER4_CH2_PA2_OUT>, <TIMER4_CH3_PA3_OUT>; };
+    };
+};
+
+&timer0 {
+    status = "okay";
+    prescaler = <0>;
+    timer0_pwm: pwm {
+        status = "okay";
+        pinctrl-0 = <&fan0_default>;
+        pinctrl-names = "default";
+    };
+};
+&pinctrl {
+    fan0_default: fan0-default {
+        outputs { pinmux = <TIMER0_CH1_PE11_OUT_FRMP>, <TIMER0_CH2_ON_PE12_FRMP>; };
+    };
+};
+
+/* SPI2 接 TPC5120；Mode 0，保守使用 1 MHz，量程先选 0..VREF。 */
+&spi2 {
+    pinctrl-0 = <&pt_spi_default>;
+    pinctrl-names = "default";
+    cs-gpios = <&gpioa 15 GPIO_ACTIVE_LOW>;
+    status = "okay";
+
+    pt_adc: adc@0 {
+        compatible = "threepeak,tpc5120";
+        reg = <0>;
+        spi-max-frequency = <1000000>;
+        spi-cs-setup-delay-ns = <1000>;
+        spi-cs-hold-delay-ns = <1000>;
+        #io-channel-cells = <1>;
+        #address-cells = <1>;
+        #size-cells = <0>;
+        channel@0 {
+            reg = <0>;
+            zephyr,gain = "ADC_GAIN_1";
+            zephyr,reference = "ADC_REF_EXTERNAL0";
+            zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+            zephyr,resolution = <12>;
+        };
+        channel@1 {
+            reg = <1>;
+            zephyr,gain = "ADC_GAIN_1";
+            zephyr,reference = "ADC_REF_EXTERNAL0";
+            zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+            zephyr,resolution = <12>;
+        };
+        channel@2 {
+            reg = <2>;
+            zephyr,gain = "ADC_GAIN_1";
+            zephyr,reference = "ADC_REF_EXTERNAL0";
+            zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+            zephyr,resolution = <12>;
+        };
+        channel@3 {
+            reg = <3>;
+            zephyr,gain = "ADC_GAIN_1";
+            zephyr,reference = "ADC_REF_EXTERNAL0";
+            zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+            zephyr,resolution = <12>;
+        };
+        channel@4 {
+            reg = <4>;
+            zephyr,gain = "ADC_GAIN_1";
+            zephyr,reference = "ADC_REF_EXTERNAL0";
+            zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+            zephyr,resolution = <12>;
+        };
+        channel@5 {
+            reg = <5>;
+            zephyr,gain = "ADC_GAIN_1";
+            zephyr,reference = "ADC_REF_EXTERNAL0";
+            zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+            zephyr,resolution = <12>;
+        };
+        channel@6 {
+            reg = <6>;
+            zephyr,gain = "ADC_GAIN_1";
+            zephyr,reference = "ADC_REF_EXTERNAL0";
+            zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+            zephyr,resolution = <12>;
+        };
+        channel@7 {
+            reg = <7>;
+            zephyr,gain = "ADC_GAIN_1";
+            zephyr,reference = "ADC_REF_EXTERNAL0";
+            zephyr,acquisition-time = <ADC_ACQ_TIME_DEFAULT>;
+            zephyr,resolution = <12>;
+        };
+    };
+};
+&pinctrl {
+    pt_spi_default: pt-spi-default {
+        output { pinmux = <SPI2_SCK_PC10_OUT_RMP>, <SPI2_MOSI_PC12_OUT_RMP>; };
+        input { pinmux = <SPI2_MISO_PC11_INP_RMP>; };
+    };
+};
+
+/* TIMER1 独占 PB11 CH3 捕获；PWM 输出已移至 TIMER4。 */
+&timer1 {
+    status = "okay";
+    prescaler = <179>;
+    fan_capture: capture {
+        compatible = "gd,gd32-pwm-capture";
+        capture-channel = <3>;
+        capture-prescaler = <1>;
+        #pwm-cells = <3>;
+        pinctrl-0 = <&fan_capture_default>;
+        pinctrl-names = "default";
+        status = "okay";
+    };
+};
+&pinctrl {
+    fan_capture_default: fan-capture-default {
+        input {
+            pinmux = <TIMER1_CH3_PB11_INP_PRMP2>;
+            bias-pull-down;
+        };
     };
 };

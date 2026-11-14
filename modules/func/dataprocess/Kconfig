@@ -1,0 +1,77 @@
+menuconfig DATAPROCESS
+    bool "Point tables and deferred NVS parameters"
+    select KERNEL_MEM_POOL
+    select SYS_HASH_MAP
+    select SYS_HASH_MAP_OA_LP
+    select SYS_HASH_FUNC32
+    select REBOOT
+    select FLASH
+    select FLASH_MAP
+    select FLASH_PAGE_LAYOUT
+    select NVS
+    select NVS_DATA_CRC
+    select NVS_LOOKUP_CACHE
+
+if DATAPROCESS
+
+config DP_SHELL
+    bool "DP point access shell commands"
+    depends on SHELL
+    default n
+    help
+      Provide get-key/set-key with callbacks, peek-key/poke-key without
+      callbacks, and flush. Input and output types come from point tables.
+      Stop shell access and wait for commands before device registration
+      or removal, as for other DP business access.
+
+config DP_HASH_LOOKUP
+    bool "Use hashmap index for device lookup"
+    default n
+    help
+      Keep a device_id-to-table index in RAM for average O(1) device lookup.
+      Disabled uses linear device lookup. Signals within a device always
+      use linear lookup. Includes additional buckets and resize memory.
+      Both modes preserve point-table row order. Device traversal order
+      is unspecified.
+
+# 存储容量：设备数量由配置决定，每槽大小根据设备树总区域计算。
+config DP_STORAGE_SLOT_COUNT
+    int "Maximum number of persistent devices"
+    default 6
+    range 1 255
+    help
+      Divide the dp-params region into this many device NVS slots after
+      reserving layout and management space. Each slot is rounded down to
+      whole 4096-byte sectors and must contain at least two sectors.
+      Changing this count changes the on-flash layout. A layout mismatch
+      erases all DP parameters and reinitializes the region at startup.
+
+config HEAP_MEM_POOL_ADD_SIZE_DATAPROCESS
+    int "System heap budget for registered devices and point data (bytes)"
+    default 4096
+    range 256 65536
+    help
+      Each device registration allocates one private node with its point data.
+      Include the node, point_count times sizeof(dp_point_data_t), and heap overhead.
+      Persistent points also reserve a value_t snapshot in the same allocation.
+      Snapshot pointers and validity flags are part of dp_point_data_t.
+      Registration uses a temporary hashmap for duplicate keys. Include its
+      bucket allocation and resize peak in addition to previously registered data.
+
+# 保存线程：间隔是每轮保存结束后的等待时间。
+config DP_SAVE_INTERVAL_MS
+    int "Delay between parameter save passes (ms)"
+    default 5000
+    range 10 3600000
+
+config DP_SAVE_STACK_SIZE
+    int "Parameter save thread stack size"
+    default 2048
+    range 1024 16384
+
+config DP_SAVE_PRIORITY
+    int "Parameter save thread priority"
+    default 10
+    range 0 14
+
+endif

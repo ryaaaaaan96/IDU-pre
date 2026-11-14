@@ -1,6 +1,6 @@
 # 产品故障策略与状态指示
 
-[文档导航](README.md) · [watchdog 契约](../modules/watchdog/README.md)
+[文档导航](README.md) · [watchdog 契约](../modules/func/watchdog/README.md)
 
 ## 职责与初始化
 

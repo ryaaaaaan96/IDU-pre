@@ -1,5 +1,5 @@
 identifier: idu_pre
-name: IDU-pre MV-IO GD32E505
+name: IDU-Transformer MV-IO GD32E505
 type: mcu
 arch: arm
 ram: 128
